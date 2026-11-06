@@ -28,7 +28,10 @@ vi.mock("@/lib/trpc", () => {
         return build(t).map(() => view.loading ? { data: undefined, isLoading: true, error: null } : { data: view.page, isLoading: false, error: null, refetch: vi.fn() });
       },
       admin: {
-        appointments: { updateStatus: { useMutation: mutation }, refund: { useMutation: mutation }, refundUnconfirmedSession: { useMutation: mutation } },
+        appointments: {
+          agenda: { useQuery: () => ({ data: { items: [], truncated: false }, isLoading: false, error: null }) },
+          updateStatus: { useMutation: mutation }, refund: { useMutation: mutation }, refundUnconfirmedSession: { useMutation: mutation },
+        },
         contacts: { markRead: { useMutation: mutation }, delete: { useMutation: mutation } },
       },
     },
@@ -75,7 +78,8 @@ describe("ADM-02 — recherche dans les réservations", () => {
     view.loading = true;
     vi.advanceTimersByTime(ADMIN_SEARCH_DELAY_MS);
     let tree = render();
-    expect(view.requests).toEqual([{ search: "aptvol000010", limit: 50, offset: 0 }]);
+    // The default view, without the abandoned bookings (ADM-18).
+    expect(view.requests).toEqual([{ excludeAbandoned: true, search: "aptvol000010", limit: 50, offset: 0 }]);
     // The new search is loading: the field (and its focus) stays, above the skeleton.
     const loadingHtml = renderToStaticMarkup(tree);
     expect(loadingHtml).toContain('value="aptvol000010"');

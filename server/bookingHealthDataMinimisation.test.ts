@@ -55,6 +55,8 @@ function appointmentRow(overrides: Record<string, unknown> = {}) {
     appointmentStatus: "confirmed",
     emailSent: 0,
     reminderSent: 0,
+    // Booked a week ago: its reminder is not left to its confirmation (RES-12).
+    createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
     ...overrides,
   };
 }

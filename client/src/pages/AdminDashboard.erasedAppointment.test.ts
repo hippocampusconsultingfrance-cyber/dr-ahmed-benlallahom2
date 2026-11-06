@@ -32,7 +32,7 @@ vi.mock("@/lib/trpc", () => {
   const invalidate = { invalidate: vi.fn() };
   return {
     trpc: {
-      useUtils: () => ({ admin: { appointments: { list: invalidate }, stats: invalidate, attention: invalidate } }),
+      useUtils: () => ({ admin: { appointments: { list: invalidate, agenda: invalidate }, stats: invalidate, attention: invalidate } }),
       useQueries: (build: (t: unknown) => unknown[]) => build({ admin: { appointments: { list: () => "appointments" } } }).map(() => ({ data: view.page, isLoading: false, error: null })),
       admin: { appointments: { updateStatus: mutation("updateStatus"), refund: mutation("refund"), refundUnconfirmedSession: mutation("refundUnconfirmedSession") } },
     },

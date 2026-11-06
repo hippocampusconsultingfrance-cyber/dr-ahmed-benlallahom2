@@ -8,8 +8,10 @@ import { eq, and, sql, isNotNull, ne } from "drizzle-orm";
  * « À traiter » en tête du tableau de bord, lu depuis la base (EXPL-02) :
  * envois après paiement en échec (tentatives épuisées, refus du service
  * d’envoi, ou nouvel essai automatique en attente), envois pas encore
- * partis quelques minutes après le paiement (ABUS-03), et paiements reçus
- * sans rendez-vous confirmé (patient à contacter, puis à rembourser).
+ * partis quelques minutes après le paiement (ABUS-03), emails acceptés puis
+ * refusés par la messagerie du patient (EXPL-13, avec son téléphone), et
+ * paiements reçus sans rendez-vous confirmé (patient à contacter, puis à
+ * rembourser).
  */
 export const adminAttentionProcedure = adminProcedure.query(async () => {
   const db = await getDb();
@@ -30,6 +32,7 @@ export const adminAttentionProcedure = adminProcedure.query(async () => {
     refusedDeliveries: deliveries.refused,
     retryingDeliveries: deliveries.retrying,
     waitingDeliveries: deliveries.waiting,
+    bouncedDeliveries: deliveries.bounced,
     unconfirmedPayments: { total: Number(unconfirmedCount?.count ?? 0), items: unconfirmedItems },
   };
 });

@@ -688,7 +688,7 @@ describe("EXPL-02 — encart « À traiter »", () => {
   it("est vide quand tout est parti", async () => {
     const paid = seedAppointment("APTTODO00006");
     seedJob(paid.id, "confirmation", { status: "completed", attempts: 1 });
-    await expect(admin().attention()).resolves.toEqual({ failedDeliveries: { total: 0, items: [] }, refusedDeliveries: { total: 0, items: [] }, retryingDeliveries: { total: 0, items: [] }, waitingDeliveries: { total: 0, items: [] }, unconfirmedPayments: { total: 0, items: [] } });
+    await expect(admin().attention()).resolves.toEqual({ failedDeliveries: { total: 0, items: [] }, refusedDeliveries: { total: 0, items: [] }, retryingDeliveries: { total: 0, items: [] }, waitingDeliveries: { total: 0, items: [] }, bouncedDeliveries: { total: 0, items: [] }, unconfirmedPayments: { total: 0, items: [] } });
   });
 
   it("liste les envois pas encore partis quelques minutes après le paiement (traitement immédiat à court de temps), sans les compter en échec (ABUS-03)", async () => {

@@ -8,6 +8,7 @@ import { pauseBeforeNewTry, reportResendQuotaError, resendDeliveryFailureCode, r
 import { waitFitsDeadline } from "../processingDeadline";
 import {
   buildResendApplicationTags,
+  buildResendAppointmentTags,
   RESEND_APPLICATION_ACTIVATION_KIND,
   RESEND_APPLICATION_INVITATION_KIND,
 } from "../resendWebhookCorrelation";
@@ -305,7 +306,7 @@ async function sendPatientEmail(
   errors: { rejected: string; failed: string },
   to: string,
   email: PatientEmail,
-  options: { idempotencyKey?: string; attachments?: PatientEmailAttachment[] } = {},
+  options: { idempotencyKey?: string; attachments?: PatientEmailAttachment[]; tags?: ReturnType<typeof buildResendAppointmentTags> } = {},
 ) {
   const contact = resolveConsultationContact();
   return sendPostPaymentEmail(errors, {
@@ -316,6 +317,8 @@ async function sendPatientEmail(
     html: email.html,
     text: email.text,
     ...(options.attachments ? { attachments: options.attachments } : {}),
+    // EXPL-13: a bounce of this email is traced back to its appointment.
+    ...(options.tags ? { tags: options.tags } : {}),
   }, options.idempotencyKey);
 }
 
@@ -463,7 +466,7 @@ export async function sendConfirmationEmail(
 ) {
   try {
     const { attachments, ...email } = buildBookingConfirmationEmail({ customerName, trackingId, appointmentDate, finalPrice, meetLink, language: delivery.language, confirmedAt: delivery.confirmedAt });
-    await sendPatientEmail({ rejected: "confirmation_email_rejected", failed: "confirmation_email_failed" }, customerEmail, email, { idempotencyKey: delivery.idempotencyKey, attachments });
+    await sendPatientEmail({ rejected: "confirmation_email_rejected", failed: "confirmation_email_failed" }, customerEmail, email, { idempotencyKey: delivery.idempotencyKey, attachments, tags: buildResendAppointmentTags(trackingId, "confirmation") });
     console.log("Confirmation email sent successfully");
   } catch (error) {
     throw new Error("confirmation_email_failed", { cause: error });
@@ -536,6 +539,7 @@ export async function sendInvoiceEmail(
           content: invoicePdfBuffer.toString("base64"),
         },
       ],
+      tags: buildResendAppointmentTags(trackingId, "invoice"),
     });
 
     console.log("Invoice email sent successfully");
@@ -665,7 +669,7 @@ export async function sendRefundConfirmationEmail(
 ) {
   try {
     const email = buildRefundEmail({ customerName, trackingId, appointmentDate, refundAmount, context: details.context, reason: details.reason, language: details.language });
-    await sendPatientEmail({ rejected: "refund_email_rejected", failed: "refund_email_failed" }, customerEmail, email, { idempotencyKey: details.idempotencyKey });
+    await sendPatientEmail({ rejected: "refund_email_rejected", failed: "refund_email_failed" }, customerEmail, email, { idempotencyKey: details.idempotencyKey, tags: buildResendAppointmentTags(trackingId, "refund") });
     console.log("Refund email sent successfully");
   } catch (error) {
     throw new Error("refund_email_failed", { cause: error });
@@ -737,6 +741,7 @@ export async function sendReminderEmail(
     // One reminder per appointment: the key makes a retried claim harmless.
     await sendPatientEmail({ rejected: "reminder_email_rejected", failed: "reminder_email_failed" }, customerEmail, email, {
       idempotencyKey: `appointment-reminder-${trackingId}`,
+      tags: buildResendAppointmentTags(trackingId, "reminder"),
     });
     console.log("Reminder email sent successfully");
   } catch (error) {

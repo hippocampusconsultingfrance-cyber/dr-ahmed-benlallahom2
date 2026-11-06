@@ -4,7 +4,8 @@ import { trpc } from "@/lib/trpc";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { DELIVERY_JOB_LABELS, PATIENT_JOBS, type AppointmentDeliveryJob } from "./AppointmentDeliveries";
 
-const parisTime = (date: string | Date) => new Date(date).toLocaleString("fr-FR", { timeZone: "Europe/Paris" });
+/** « 27/10/2026 07:20 », Paris time, without the seconds (ADM-18). */
+const parisTime = (date: string | Date) => new Date(date).toLocaleString("fr-FR", { timeZone: "Europe/Paris", dateStyle: "short", timeStyle: "short" });
 /**
  * « Confirmation, Facture (stockage Vercel Blob indisponible) »: the invoice
  * storage is named on the label of the very job it kept from going out, not
@@ -46,6 +47,15 @@ export function waitingDetail(item: { jobTypes: string[]; dueSince: string | Dat
   return `${jobLabels(item.jobTypes)} · en attente depuis le ${parisTime(item.dueSince)}, essai à la prochaine exécution planifiée`;
 }
 
+/**
+ * « Confirmation · email non reçu par le patient : appelez-le au … »
+ * (EXPL-13): the email was accepted, then bounced by the patient's mailbox;
+ * the doctor calls, then corrects the address and « Renvoyer » sends it again.
+ */
+export function bouncedDetail(item: { jobTypes: string[]; customerPhone: string }): string {
+  return `${jobLabels(item.jobTypes)} · email non reçu par le patient : appelez-le au ${item.customerPhone} ; sur le rendez-vous, « Corriger l’email du patient », puis « Renvoyer » l’envoie à la nouvelle adresse.`;
+}
+
 type AttentionItem = { trackingId: string; customerName: string; appointmentDate: string | Date; detail?: string };
 
 function AttentionList({ id, title, description, items, total }: { id: string; title: string; description: string; items: AttentionItem[]; total: number }) {
@@ -71,7 +81,8 @@ function AttentionList({ id, title, description, items, total }: { id: string; t
  * post-payment emails whose attempts ran out, that the email service refused
  * (no new automatic attempt), or that failed and wait for their next
  * automatic attempt (possibly the next day), those still not sent a few
- * minutes after the payment (ABUS-03), and payments received
+ * minutes after the payment (ABUS-03), those the patient's mailbox bounced
+ * after the email service accepted them (EXPL-13), and payments received
  * without a confirmed appointment. It no longer depends on an alert email,
  * sent through the very channel that may have failed.
  */
@@ -92,8 +103,9 @@ export default function AdminAttentionPanel({ onOpenAppointments }: { onOpenAppo
   const refused = data?.refusedDeliveries ?? { total: 0, items: [] };
   const retrying = data?.retryingDeliveries ?? { total: 0, items: [] };
   const waiting = data?.waitingDeliveries ?? { total: 0, items: [] };
+  const bounced = data?.bouncedDeliveries ?? { total: 0, items: [] };
   const unconfirmed = data?.unconfirmedPayments ?? { total: 0, items: [] };
-  if (failed.total === 0 && refused.total === 0 && retrying.total === 0 && waiting.total === 0 && unconfirmed.total === 0) {
+  if (failed.total === 0 && refused.total === 0 && retrying.total === 0 && waiting.total === 0 && bounced.total === 0 && unconfirmed.total === 0) {
     return (
       <section aria-labelledby="admin-attention-title" className="flex items-start gap-3 rounded-2xl border border-border bg-card p-5">
         <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-green-400" aria-hidden="true" />
@@ -131,6 +143,15 @@ export default function AdminAttentionPanel({ onOpenAppointments }: { onOpenAppo
             description="Le service d’envoi a refusé l’email (adresse refusée ou invalide, ou contenu de l’email refusé). Ce refus n’est pas passager : aucun nouvel essai automatique n’a lieu. La marche à suivre, qui dépend de l’envoi refusé, est indiquée sous chaque rendez-vous."
             total={refused.total}
             items={refused.items.map(item => ({ ...item, detail: refusedDetail(item) }))}
+          />
+        )}
+        {bounced.total > 0 && (
+          <AttentionList
+            id="admin-attention-bounced"
+            title="Emails refusés après acceptation"
+            description="Le service d’envoi a accepté l’email, puis la messagerie du patient l’a refusé (adresse inexistante ou boîte pleine, email signalé comme indésirable, ou adresse bloquée) : le patient ne l’a pas reçu. Appelez-le au numéro indiqué pour vérifier son adresse ; « Renvoyer » ne l’envoie qu’à une adresse corrigée."
+            total={bounced.total}
+            items={bounced.items.map(item => ({ ...item, detail: bouncedDetail(item) }))}
           />
         )}
         {retrying.total > 0 && (

@@ -267,6 +267,26 @@ describe("EXPL-02 — envois après paiement sur la fiche du rendez-vous", () =>
     expect(state.emailMutate).not.toHaveBeenCalled();
   });
 
+  it("dit « refusé après acceptation » un email que la messagerie du patient a refusé, propose la correction et « Renvoyer », qui ne repart qu’à une adresse corrigée (EXPL-13)", async () => {
+    const bounced = [delivery("owner", "sent"), delivery("confirmation", "bounced"), delivery("invoice", "sent")];
+    const html = renderToStaticMarkup(createElement(AppointmentDeliveries, { trackingId: "APTUI0000013", paymentStatus: "completed", invoiceNumber: null, deliveries: bounced, customerEmail: "patient@exemple.fr" }));
+    expect(html).toContain("Confirmation : refusée après acceptation, non reçue par le patient");
+    expect(html).toContain("Corriger l’email du patient");
+    expect(html).toContain("Renvoyer");
+    expect(deliveryLabel(delivery("refund", "bounced"))).toBe("Email de remboursement : refusé après acceptation, non reçu par le patient");
+    expect(canCorrectPatientEmail([delivery("refund", "bounced")], "refunded", "patient@exemple.fr")).toBe(true);
+    // A refunded appointment's confirmation is no longer sent again.
+    expect(canRetryDeliveries([delivery("confirmation", "bounced")], "refunded")).toBe(false);
+
+    // Not corrected yet: the server puts nothing back in the queue, and the toast says why.
+    const tree = AppointmentDeliveries({ trackingId: "APTUI0000013", paymentStatus: "completed", invoiceNumber: null, deliveries: bounced, customerEmail: "patient@exemple.fr" });
+    button(tree, "Renvoyer")();
+    await state.retryOptions!.onSuccess!({ requeued: 0, requeuedJobTypes: [], deliveries: bounced } as never);
+    expect(state.toasts.at(-1)).toEqual(["warning", "L’email refusé après acceptation n’est renvoyé qu’à une adresse corrigée : à la même adresse, il ne partirait pas de nouveau. Appelez le patient, puis « Corriger l’email du patient » et « Renvoyer »."]);
+    await state.retryOptions!.onSuccess!({ requeued: 0, requeuedJobTypes: [], deliveries: [delivery("confirmation", "sent")] } as never);
+    expect(state.toasts.at(-1)).toEqual(["info", "Aucun envoi à relancer pour ce rendez-vous."]);
+  });
+
   it("dit, avant et après la correction, que la facture déjà émise garde ses mentions (EXPL-02)", async () => {
     const prompt = vi.fn(() => "patient.corrige@exemple.fr");
     vi.stubGlobal("window", { confirm: vi.fn(() => true), prompt });
@@ -366,7 +386,7 @@ describe("EXPL-02 — encart « À traiter » du tableau de bord", () => {
     expect(html).toContain("Envois en échec, nouvel essai prévu (2)");
     expect(html).toContain("« Renvoyer » sur le rendez-vous relance l’envoi tout de suite");
     expect(html).toContain("APTTODOUI003");
-    expect(retryingDetail({ jobTypes: ["confirmation", "invoice"], nextAttemptAt: "2026-10-27T06:20:00.000Z" })).toBe("Confirmation, Facture · nouvel essai automatique au plus tôt le 27/10/2026 07:20:00");
+    expect(retryingDetail({ jobTypes: ["confirmation", "invoice"], nextAttemptAt: "2026-10-27T06:20:00.000Z" })).toBe("Confirmation, Facture · nouvel essai automatique au plus tôt le 27/10/2026 07:20");
     expect(retryingDetail({ jobTypes: ["confirmation"], nextAttemptAt: null })).toBe("Confirmation · envoi interrompu, nouvel essai à la prochaine exécution planifiée");
     expect(retryingDetail({ jobTypes: ["refund", "refund_owner"], nextAttemptAt: null })).toBe("Email de remboursement, Alerte remboursement · envoi interrompu, nouvel essai à la prochaine exécution planifiée");
   });
@@ -390,6 +410,26 @@ describe("EXPL-02 — encart « À traiter » du tableau de bord", () => {
     expect(html).toContain("APTTODOUI005");
     expect(html).toContain("Confirmation, Facture");
     expect(html).not.toContain("nouvel essai automatique au plus tôt");
+  });
+
+  it("liste à part les emails refusés après acceptation, avec le téléphone du patient à appeler (EXPL-13)", () => {
+    state.attention = {
+      isLoading: false,
+      error: null,
+      data: {
+        failedDeliveries: { total: 0, items: [] },
+        refusedDeliveries: { total: 0, items: [] },
+        retryingDeliveries: { total: 0, items: [] },
+        waitingDeliveries: { total: 0, items: [] },
+        bouncedDeliveries: { total: 1, items: [{ trackingId: "APTTODOUI009", customerName: "Jeanne Martin", appointmentDate: "2026-11-08T09:00:00.000Z", customerPhone: "+33611223344", jobTypes: ["confirmation", "invoice"] }] },
+        unconfirmedPayments: { total: 0, items: [] },
+      },
+    };
+    const html = renderToStaticMarkup(createElement(AdminAttentionPanel, { onOpenAppointments: vi.fn() }));
+    expect(html).not.toContain("Rien à traiter");
+    expect(html).toContain("Emails refusés après acceptation (1)");
+    expect(html).toContain("APTTODOUI009");
+    expect(html).toContain("Confirmation, Facture · email non reçu par le patient : appelez-le au +33611223344 ; sur le rendez-vous, « Corriger l’email du patient », puis « Renvoyer » l’envoie à la nouvelle adresse.");
   });
 
   it("ne demande de corriger l’email du patient que pour un envoi au patient : la notification médecin va à l’adresse du site (EXPL-02)", () => {
@@ -431,8 +471,8 @@ describe("EXPL-02 — encart « À traiter » du tableau de bord", () => {
     expect(html).toContain("n’a pas pu les envoyer dans le temps qui lui est donné (temps écoulé, service d’envoi lent ou saturé, traitement interrompu)");
     expect(html).toContain("« Renvoyer » sur le rendez-vous les envoie tout de suite.");
     expect(html).toContain("APTTODOUI006");
-    expect(waitingDetail({ jobTypes: ["confirmation", "invoice"], dueSince: "2026-10-26T10:02:00.000Z" })).toBe("Confirmation, Facture · en attente depuis le 26/10/2026 11:02:00, essai à la prochaine exécution planifiée");
-    expect(html).toContain("Confirmation, Facture · en attente depuis le 26/10/2026 11:02:00");
+    expect(waitingDetail({ jobTypes: ["confirmation", "invoice"], dueSince: "2026-10-26T10:02:00.000Z" })).toBe("Confirmation, Facture · en attente depuis le 26/10/2026 11:02, essai à la prochaine exécution planifiée");
+    expect(html).toContain("Confirmation, Facture · en attente depuis le 26/10/2026 11:02");
   });
 
   it("nomme le stockage des factures quand c’est lui qui a retenu la facture, sur le rendez-vous et dans « À traiter » (EXPL-02)", () => {
@@ -471,8 +511,8 @@ describe("EXPL-02 — encart « À traiter » du tableau de bord", () => {
     // Named on the invoice alone, not after the list as if the confirmation had been held too.
     expect(html).toContain(">Confirmation, Facture (stockage Vercel Blob indisponible)<");
     expect(html).toContain(">Confirmation<");
-    expect(html).toContain(">Facture (stockage Vercel Blob indisponible) · nouvel essai automatique au plus tôt le 27/10/2026 07:20:00<");
-    expect(html).toContain(">Confirmation · nouvel essai automatique au plus tôt le 27/10/2026 07:20:00<");
+    expect(html).toContain(">Facture (stockage Vercel Blob indisponible) · nouvel essai automatique au plus tôt le 27/10/2026 07:20<");
+    expect(html).toContain(">Confirmation · nouvel essai automatique au plus tôt le 27/10/2026 07:20<");
     expect(html.match(/stockage Vercel Blob indisponible/g)).toHaveLength(2);
   });
 

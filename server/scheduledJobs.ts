@@ -21,6 +21,33 @@ function safeErrorName(error: unknown) {
   return error instanceof Error ? error.name : "UnknownError";
 }
 
+/**
+ * A booking made this recently has just received its confirmation (RES-12):
+ * the daily run, at a fixed hour, would otherwise send its reminder right
+ * after it. Read from the booking's creation, a few minutes before its
+ * payment: no column dates the payment.
+ */
+export const REMINDER_MIN_BOOKING_AGE_MS = 12 * HOUR_MS;
+/**
+ * How far ahead the next daily run still reaches: Hobby crons fire anywhere
+ * within their hour, so it comes at most 25 h later, and looks from 1 h ahead.
+ */
+const NEXT_DAILY_RUN_REACH_MS = 25 * HOUR_MS + DAILY_REMINDER_WINDOW.fromMs;
+
+/**
+ * Whether this run leaves out the reminder of a booking whose patient has just
+ * received the confirmation (RES-12): the confirmation, sent within the
+ * reminder's window before the consultation, stands for it (booked the day
+ * before); or the next daily run still has the consultation in its window
+ * and sends it then, away from the confirmation. Any other booking keeps its
+ * reminder in this run, the last one before its consultation.
+ */
+function confirmationStandsForReminder(apt: { createdAt: Date; appointmentDate: Date }, window: ReminderWindow, now: Date) {
+  if (now.getTime() - apt.createdAt.getTime() >= REMINDER_MIN_BOOKING_AGE_MS) return false;
+  return apt.appointmentDate.getTime() - apt.createdAt.getTime() < window.toMs
+    || apt.appointmentDate.getTime() - now.getTime() >= NEXT_DAILY_RUN_REACH_MS;
+}
+
 export function reminderWindowBounds(window: ReminderWindow, now = new Date()) {
   return { from: new Date(now.getTime() + window.fromMs), to: new Date(now.getTime() + window.toMs) };
 }
@@ -45,7 +72,9 @@ export const REMINDER_RESERVATION_RETAKE_LIMIT_MS = 23 * HOUR_MS;
  * reserved before its email (the hourly Heartbeat and the daily cron never both
  * send it) and marked sent after (DATA-02). A reservation a stopped run left
  * behind, without its email recorded as sent, is taken back by a later run,
- * under the same idempotency key; `onlyReserved` takes back those alone.
+ * under the same idempotency key; `onlyReserved` takes back those alone. A
+ * booking whose patient has just received the confirmation gets its reminder
+ * from a later run, or none when the confirmation stands for it (RES-12).
  */
 export async function sendDueAppointmentReminders(window: ReminderWindow, now = new Date(), options: { onlyReserved?: boolean } = {}) {
   const db = await getDb();
@@ -57,7 +86,7 @@ export async function sendDueAppointmentReminders(window: ReminderWindow, now = 
     gt(appointments.updatedAt, new Date(now.getTime() - REMINDER_RESERVATION_RETAKE_LIMIT_MS)),
   );
 
-  const upcoming = await db.select().from(appointments).where(
+  const due = await db.select().from(appointments).where(
     and(
       eq(appointments.paymentStatus, "completed"),
       eq(appointments.appointmentStatus, "confirmed"),
@@ -66,6 +95,8 @@ export async function sendDueAppointmentReminders(window: ReminderWindow, now = 
       lte(appointments.appointmentDate, to)
     )
   );
+  // A reservation left by a stopped run is taken back: that run chose to send it.
+  const upcoming = due.filter(apt => apt.reminderSent !== 0 || !confirmationStandsForReminder(apt, window, now));
 
   console.log(`[Reminder] Found ${upcoming.length} appointments to remind`);
 

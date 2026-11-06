@@ -84,6 +84,34 @@ describe("envoi des rappels", () => {
     expect(memory.rows(appointments).map(row => row.reminder_sent)).toEqual([1, 1, 1, 0]);
   });
 
+  it("n’envoie pas le rappel d’une réservation faite moins de 12 h avant le passage, qui vient d’en recevoir la confirmation (RES-12)", async () => {
+    // For tomorrow 09:00 UTC; the run is at 16:45 UTC.
+    seedAppointment(1, { createdAt: "2026-10-07 15:00:00.000", updatedAt: "2026-10-07 15:00:00.000" });
+    seedAppointment(2, { createdAt: "2026-10-07 04:46:00.000", updatedAt: "2026-10-07 04:46:00.000" });
+    seedAppointment(3, { createdAt: "2026-10-07 04:45:00.000", updatedAt: "2026-10-07 04:45:00.000" });
+
+    expect(await sendDueAppointmentReminders(DAILY_REMINDER_WINDOW, NOW)).toEqual({ reminded: 1, sent: 1, failed: 0 });
+
+    expect(remindedTrackingIds()).toEqual(["APT-3"]);
+    expect(memory.rows(appointments).map(row => row.reminder_sent)).toEqual([0, 0, 1]);
+  });
+
+  it("garde le rappel d’une réservation faite le matin pour le lendemain soir, et reporte au passage suivant celui d’une réservation qu’il atteint encore (RES-12)", async () => {
+    // Booked at 05:00 for tomorrow 17:00, 36 h ahead: the next run (window from tomorrow 17:45) no longer reaches it.
+    seedAppointment(1, { appointment_date: new Date("2026-10-08T17:00:00Z"), createdAt: "2026-10-07 05:00:00.000", updatedAt: "2026-10-07 05:00:00.000" });
+    // Booked at 16:00 for tomorrow 21:00 (29 h ahead) and at 16:40 for tomorrow 22:40 (30 h ahead): the next run reaches both.
+    seedAppointment(2, { appointment_date: new Date("2026-10-08T21:00:00Z"), createdAt: "2026-10-07 16:00:00.000", updatedAt: "2026-10-07 16:00:00.000" });
+    seedAppointment(3, { appointment_date: new Date("2026-10-08T22:40:00Z"), createdAt: "2026-10-07 16:40:00.000", updatedAt: "2026-10-07 16:40:00.000" });
+
+    expect(await sendDueAppointmentReminders(DAILY_REMINDER_WINDOW, NOW)).toEqual({ reminded: 1, sent: 1, failed: 0 });
+    expect(remindedTrackingIds()).toEqual(["APT-1"]);
+
+    // The next day's run, as late in its hour as a Hobby cron fires.
+    expect(await sendDueAppointmentReminders(DAILY_REMINDER_WINDOW, new Date(NOW.getTime() + 24 * HOUR + 59 * 60 * 1000))).toEqual({ reminded: 2, sent: 2, failed: 0 });
+    expect(remindedTrackingIds()).toEqual(["APT-1", "APT-2", "APT-3"]);
+    expect(memory.rows(appointments).map(row => row.reminder_sent)).toEqual([1, 1, 1]);
+  });
+
   it("envoie le rappel en anglais pour une réservation faite dans une autre langue que le français (EN-01)", async () => {
     seedAppointment(4, { language: "zh" });
 

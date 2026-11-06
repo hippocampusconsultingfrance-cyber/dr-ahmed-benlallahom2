@@ -24,7 +24,7 @@ export default function AdminConfigurationBanner() {
   if (!data || data.ok || data.missing.length === 0) return null;
 
   return (
-    <div role="alert" className="mb-6 rounded-xl border border-amber-500/50 bg-amber-500/10 p-4 text-sm text-foreground">
+    <div role="alert" className="mb-6 rounded-xl border border-amber-500/50 bg-amber-500/10 p-4 text-sm text-foreground print:hidden">
       <div className="flex items-start gap-3">
         <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" aria-hidden="true" />
         <div className="min-w-0">

@@ -4,10 +4,28 @@ import { z } from "zod";
 import { getDb } from "../../db";
 import { appointments } from "../../../drizzle/schema";
 import { isLastingStorageError } from "../../storage";
-import { eq, and, sql, desc } from "drizzle-orm";
+import { eq, and, sql, desc, gte, inArray, isNotNull, lt, ne, or } from "drizzle-orm";
 import { logSecurityEvent } from "../../candidateSecurity";
 import { adminSearchCondition, adminSearchInput } from "../../adminSearch";
 import { getStripeClient, bookingCustomerEmail } from "../appointments";
+import { calendarDateInput, getParisDateRange } from "../parisTime";
+
+/** Paris days the agenda reads at most at once: the 30-day view, and a month to print (ADM-18). */
+const AGENDA_MAX_DAYS = 31;
+/** Far above a month of 30-minute consultations; past it, the agenda says it is cut. */
+const AGENDA_MAX_ROWS = 500;
+
+/**
+ * Bookings that never became one (ADM-18), hidden from the list by default: a
+ * slot held without payment, a failed payment, or a pending payment for which
+ * Stripe never sent one. A payment received without a confirmed slot (« Paiement
+ * à régulariser ») stays listed.
+ */
+const notAbandoned = and(
+  ne(appointments.appointmentStatus, "held"),
+  ne(appointments.paymentStatus, "failed"),
+  or(ne(appointments.paymentStatus, "pending"), isNotNull(appointments.stripePaymentIntentId)),
+);
 
 // List all appointments with pagination
 export const adminAppointmentsRouter = router({
@@ -17,6 +35,8 @@ export const adminAppointmentsRouter = router({
         limit: z.number().min(1).max(100).optional().default(50),
         offset: z.number().min(0).optional().default(0),
         status: z.enum(["pending", "completed", "failed", "refunded"]).optional(),
+        /** The list's default view (ADM-18): without the bookings that never became one. */
+        excludeAbandoned: z.boolean().optional(),
         /** Patient name, email or booking reference (ADM-02). */
         search: adminSearchInput,
       })
@@ -29,6 +49,7 @@ export const adminAppointmentsRouter = router({
       if (input.status) {
         conditions.push(eq(appointments.paymentStatus, input.status));
       }
+      if (input.excludeAbandoned) conditions.push(notAbandoned);
       const search = adminSearchCondition(input.search, [appointments.customerName, appointments.customerEmail, appointments.trackingId], { fullName: appointments.customerName });
       if (search) conditions.push(search);
 
@@ -63,6 +84,46 @@ export const adminAppointmentsRouter = router({
       }));
 
       return { items, total: Number(countResult[0]?.count ?? 0) };
+    }),
+
+  /**
+   * Agenda of the consultations (ADM-18), read by consultation date over
+   * whole Paris days, from `from` to `to` included (today, 7 or 30 days in
+   * the dashboard): the paid appointments still held, done or missed, never a
+   * slot held without payment, a cancellation or a refund, whenever they were
+   * booked.
+   */
+  agenda: adminProcedure
+    .input(
+      z.object({ from: calendarDateInput, to: calendarDateInput })
+        .refine(({ from, to }) => from <= to, { message: "La date de fin doit suivre la date de début.", path: ["to"] })
+        // Calendar days, whatever the clock change in between.
+        .refine(({ from, to }) => Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`) < AGENDA_MAX_DAYS * 86_400_000, { message: `L’agenda couvre au plus ${AGENDA_MAX_DAYS} jours.`, path: ["to"] })
+    )
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return { items: [], truncated: false, limit: AGENDA_MAX_ROWS };
+      const rows = await db
+        .select({
+          id: appointments.id,
+          trackingId: appointments.trackingId,
+          customerName: appointments.customerName,
+          customerPhone: appointments.customerPhone,
+          appointmentDate: appointments.appointmentDate,
+          duration: appointments.duration,
+          appointmentStatus: appointments.appointmentStatus,
+          language: appointments.language,
+        })
+        .from(appointments)
+        .where(and(
+          eq(appointments.paymentStatus, "completed"),
+          inArray(appointments.appointmentStatus, ["confirmed", "completed", "no_show"]),
+          gte(appointments.appointmentDate, getParisDateRange(input.from).start),
+          lt(appointments.appointmentDate, getParisDateRange(input.to).end),
+        ))
+        .orderBy(appointments.appointmentDate, appointments.id)
+        .limit(AGENDA_MAX_ROWS + 1);
+      return { items: rows.slice(0, AGENDA_MAX_ROWS), truncated: rows.length > AGENDA_MAX_ROWS, limit: AGENDA_MAX_ROWS };
     }),
 
   /** « Renvoyer » : relance tout de suite les envois après paiement qui n’ont pas abouti (EXPL-02). */

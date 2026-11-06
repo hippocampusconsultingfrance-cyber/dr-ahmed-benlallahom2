@@ -1,8 +1,8 @@
 import { and, desc, eq, isNotNull, isNull, lt, or } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
-import { cvApplications, recruitmentCampaignRecipients, recruitmentEmailEvents, type RecruitmentCampaignRecipient } from "../drizzle/schema";
+import { appointments, cvApplications, recruitmentCampaignRecipients, recruitmentEmailEvents, type RecruitmentCampaignRecipient } from "../drizzle/schema";
 import { getDb } from "./db";
-import { resendApplicationReferenceFromTags, resendRecipientMatchesApplication } from "./resendWebhookCorrelation";
+import { resendApplicationReferenceFromTags, resendAppointmentEmailFromTags, resendRecipientMatchesApplication } from "./resendWebhookCorrelation";
 
 type Database = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 type DeliveryStatus = "sent" | "delivered" | "delayed" | "bounced" | "complained" | "failed" | "suppressed";
@@ -19,6 +19,17 @@ const DELIVERY_STATUS_BY_EVENT: Record<string, DeliveryStatus | undefined> = {
 
 /** After these, the address receives no more recruitment offers (marketing consent withdrawn). */
 const SUPPRESSING_STATUSES = new Set<DeliveryStatus>(["bounced", "complained", "suppressed"]);
+
+/** After these, a patient email Resend had accepted did not reach the patient (EXPL-13). */
+const UNDELIVERED_STATUSES = new Set<DeliveryStatus>(["bounced", "complained", "failed", "suppressed"]);
+
+/**
+ * Time the webhook gives the owner's alert of a patient email that bounced to
+ * go out before it answers (EXPL-13), well under the time Resend waits for the
+ * answer. Past it, the alert stays queued for the next processing: never sent
+ * after the answer.
+ */
+const RESEND_BOUNCE_ALERT_BUDGET_MS = 5_000;
 
 export type ResendWebhookEvent = { type: string; created_at?: string; data?: Record<string, any> };
 
@@ -71,7 +82,10 @@ function eventEffects(db: Database, input: {
  * answers an error and Resend's next delivery applies the whole event again.
  * An event already recorded whose suppression is missing (recorded before its
  * effects, by an earlier version of this handler) gets it now instead of being
- * answered as a duplicate.
+ * answered as a duplicate. A patient email of a booking, tagged with it, that
+ * bounced after Resend accepted it (EXPL-13) is marked on its appointment and
+ * its owner alert queued, in the same batch; that alert is then sent within
+ * RESEND_BOUNCE_ALERT_BUDGET_MS.
  */
 export async function recordResendEmailEvent(input: { providerEventId: string; event: ResendWebhookEvent; payload: string }): Promise<{ duplicate: boolean }> {
   const db = await getDb();
@@ -122,6 +136,18 @@ export async function recordResendEmailEvent(input: { providerEventId: string; e
     ? taggedApplication.id
     : null;
   const applicationId = recipient?.applicationId || trackedEmail?.applicationId || taggedApplicationId || null;
+  // A patient email of a booking that did not reach the patient (EXPL-13),
+  // about the address the appointment holds now: a late bounce of an address
+  // corrected since is left alone, and an erased booking has none.
+  const appointmentEmail = deliveryStatus && UNDELIVERED_STATUSES.has(deliveryStatus) ? resendAppointmentEmailFromTags(data.tags) : null;
+  const [taggedAppointment] = appointmentEmail
+    ? await db.select({ id: appointments.id, customerEmail: appointments.customerEmail }).from(appointments).where(eq(appointments.trackingId, appointmentEmail.trackingId)).limit(1)
+    : [];
+  const bouncedAppointment = appointmentEmail && taggedAppointment && resendRecipientMatchesApplication(recipientEmail, taggedAppointment.customerEmail)
+    ? { ...taggedAppointment, email: appointmentEmail.email }
+    : null;
+  // Loaded only for such a bounce.
+  const appointmentFulfillment = bouncedAppointment ? await import("./appointmentFulfillment") : null;
 
   const statements: BatchItem<"pg">[] = [];
   if (applicationId && providerEmailId) {
@@ -130,6 +156,9 @@ export async function recordResendEmailEvent(input: { providerEventId: string; e
       .where(and(eq(recruitmentEmailEvents.providerEmailId, providerEmailId), isNull(recruitmentEmailEvents.applicationId))));
   }
   statements.push(...eventEffects(db, { deliveryStatus, data, occurredAt, recipient, applicationId }));
+  if (bouncedAppointment && appointmentFulfillment) {
+    statements.push(...appointmentFulfillment.appointmentEmailBounceEffects(db, { appointmentId: bouncedAppointment.id, customerEmail: bouncedAppointment.customerEmail, email: bouncedAppointment.email }));
+  }
   // Last, in the same batch: a recorded event always has its effects.
   statements.push(db.insert(recruitmentEmailEvents).values({
     providerEventId,
@@ -142,5 +171,12 @@ export async function recordResendEmailEvent(input: { providerEventId: string; e
     occurredAt,
   }));
   await db.batch(nonEmpty(statements));
+  if (bouncedAppointment) {
+    // The owner's alert goes out now, through the send slots and within the
+    // budget, before the webhook answers (never after: what is left stays
+    // queued for the next processing). It never throws.
+    const { processFulfillmentBestEffort } = await import("./appointmentPaymentWebhook");
+    await processFulfillmentBestEffort(bouncedAppointment.id, RESEND_BOUNCE_ALERT_BUDGET_MS);
+  }
   return { duplicate: false };
 }

@@ -31,6 +31,7 @@ vi.mock("@/lib/trpc", () => {
       admin: {
         stats: { useQuery: () => ({ data: view.stats, isLoading: false, error: null }) },
         appointments: {
+          agenda: { useQuery: () => ({ data: { items: [], truncated: false }, isLoading: false, error: null }) },
           updateStatus: mutation(),
           refund: mutation(),
           refundUnconfirmedSession: mutation(),
