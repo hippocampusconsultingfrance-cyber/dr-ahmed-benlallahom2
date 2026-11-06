@@ -101,15 +101,31 @@ function namesLanguage(folded: string, entry: (typeof LANGUAGE_NAMES)[number]) {
   });
 }
 
+const OPENING_BRACKETS = "([{（［";
+const CLOSING_BRACKETS = ")]}）］";
+
+/** A text with what it says between brackets blanked out, character for character: « Anglais (C1/C2) » is split, or compared, as « Anglais ». */
+function blankBrackets(text: string) {
+  if (!OPENING_BRACKETS.split("").some(bracket => text.includes(bracket))) return text;
+  let depth = 0;
+  return text.split("").map(character => {
+    if (OPENING_BRACKETS.includes(character)) depth += 1;
+    const kept = depth > 0 ? "\u0000" : character;
+    if (CLOSING_BRACKETS.includes(character) && depth > 0) depth -= 1;
+    return kept;
+  }).join("");
+}
+
 /**
  * The texts already compared, folded, with the codes of the languages they
- * name. The same few names come back for every dossier (the form's fixed
- * list, the names the AI reads), and a mission ranks up to 2 000 candidates,
- * a profile checks up to 10 000 dossiers, at each request: each is folded and
- * looked up once. Only texts the length of a language mention, and emptied
- * once full.
+ * name and their words outside brackets (`core`, « wolof » for « Wolof
+ * (courant) »). The same few names come back for every dossier (the form's
+ * fixed list, the names the AI reads), and a mission ranks up to 2 000
+ * candidates, a profile checks up to 10 000 dossiers, at each request: each is
+ * folded and looked up once. Only texts the length of a language mention, and
+ * emptied once full.
  */
-type ComparedText = { folded: string; codes: readonly RecruitmentLanguageCode[] };
+type ComparedText = { folded: string; core: string; codes: readonly RecruitmentLanguageCode[] };
 const COMPARED_TEXTS = new Map<string, ComparedText>();
 const COMPARED_TEXTS_LIMIT = 2_000;
 const COMPARED_TEXT_MAX_LENGTH = 200;
@@ -123,7 +139,8 @@ function comparedText(text: string): ComparedText {
   for (const entry of LANGUAGE_NAMES) {
     if (!codes.includes(entry.code) && namesLanguage(searched, entry)) codes.push(entry.code);
   }
-  const compared = { folded, codes: Object.freeze(codes) };
+  const core = blankBrackets(folded).replaceAll("\u0000", " ").replace(/\s+/g, " ").trim() || folded.trim();
+  const compared = { folded, core, codes: Object.freeze(codes) };
   if (text.length <= COMPARED_TEXT_MAX_LENGTH) {
     if (COMPARED_TEXTS.size >= COMPARED_TEXTS_LIMIT) COMPARED_TEXTS.clear();
     COMPARED_TEXTS.set(text, compared);
@@ -144,48 +161,91 @@ export function recruitmentLanguageCodes(text: string): readonly RecruitmentLang
 /**
  * A language a matching profile, a mission or the Langue filter requires
  * (IA-02): the codes of the languages of the table it names, none for one the
- * table does not know (« Wolof »), then compared by its words.
+ * table does not know (« Wolof »), then compared by its words. `anyOf`: the
+ * languages of an alternative (« Anglais ou arabe »: Anglais, arabe), any one
+ * of which meets it; none when it requires all its languages.
  */
-export type RecruitmentLanguageRequirement = { text: string; codes: readonly RecruitmentLanguageCode[] };
+export type RecruitmentLanguageRequirement = { text: string; codes: readonly RecruitmentLanguageCode[]; anyOf: readonly string[] };
 
 /**
  * What separates two required languages: a comma, a slash, a plus, an
- * ampersand… or « et », « and », « und », « y », « e », « 和 », « 、 ».
+ * ampersand… or « et », « and », « und », « y », « e », « 、 ».
  */
-const REQUIREMENT_SEPARATOR = "[,;/+&|\\n、，；／＋＆]|\\s(?:et|and|und|y|e)\\s|[和及与與]";
-const OPENING_BRACKETS = "([{（［";
-const CLOSING_BRACKETS = ")]}）］";
+const REQUIREMENT_SEPARATOR = new RegExp("[,;/+&|\\n、，；／＋＆]|\\s(?:et|and|und|y|e)\\s", "giu");
+/** A conjunction between two Chinese names (« 英语和阿拉伯语 »), that may also be a character of one (埃及, Egypt, in « 埃及阿拉伯语 »). */
+const CHINESE_CONJUNCTION = new RegExp("[和及与與]", "gu");
+/** What makes a required text an alternative: « ou », « or », « oder », « o », « et/ou », « and/or », « 或 ». */
+const ALTERNATIVE = new RegExp("(?:^|[\\s/／])(?:ou|or|oder|o)(?=[\\s/／]|$)|或", "iu");
+/** What separates the languages of an alternative: a separator above, « ou », « or », « oder », « o », « 或 », « 或者 »… */
+const OPTION_SEPARATOR = new RegExp(`${REQUIREMENT_SEPARATOR.source}|\\s(?:ou|or|oder|o)\\s|或者?`, "giu");
+/** The word left at either end of a language by a separator in « et/ou », « and/or ». */
+const OPTION_CONNECTOR = new RegExp("^(?:et|and|und|y|e|ou|or|oder|o)\\s+|\\s+(?:et|and|und|y|e|ou|or|oder|o)$", "giu");
+
+/** The required texts already split, as the compared texts above. */
+const READ_REQUIREMENTS = new Map<string, readonly RecruitmentLanguageRequirement[]>();
+
+/** The parts of a text between the separators found outside its brackets, each trimmed, those with a letter or a digit. */
+function partsOutsideBrackets(text: string, separator: RegExp) {
+  const parts: string[] = [];
+  let start = 0;
+  const outside = blankBrackets(text);
+  separator.lastIndex = 0;
+  for (let found = separator.exec(outside); found; found = separator.exec(outside)) {
+    parts.push(text.slice(start, found.index));
+    start = found.index + found[0].length;
+  }
+  parts.push(text.slice(start));
+  return parts.map(part => part.trim()).filter(part => LETTER_OR_DIGIT.test(part));
+}
 
 /**
  * The languages a required text names, each a requirement of its own
  * (« Anglais/Arabe », « anglais et arabe », « Englisch und Arabisch »,
  * « 英语和阿拉伯语 »: two), so that the matching profiles, the missions and
  * the Langue filter count them alike. Not split inside brackets (« Anglais
- * (C1/C2) » is one). A part that names several languages without a separator
- * (« anglais arabe ») requires them all.
+ * (C1/C2) » is one), nor at a Chinese conjunction unless each side names a
+ * language. A part that names several languages without a separator
+ * (« anglais arabe ») requires them all; a text that offers a choice
+ * (« Anglais ou arabe », « anglais et/ou arabe ») is one requirement, met by
+ * any of its languages.
  */
-export function recruitmentLanguageRequirements(required: string): RecruitmentLanguageRequirement[] {
-  let depth = 0;
-  const outsideBrackets = required.split("").map(character => {
-    if (OPENING_BRACKETS.includes(character)) depth += 1;
-    const kept = depth > 0 ? "\u0000" : character;
-    if (CLOSING_BRACKETS.includes(character) && depth > 0) depth -= 1;
-    return kept;
-  }).join("");
-  const parts: string[] = [];
-  const separators = new RegExp(REQUIREMENT_SEPARATOR, "giu");
-  let start = 0;
-  for (let separator = separators.exec(outsideBrackets); separator; separator = separators.exec(outsideBrackets)) {
-    parts.push(required.slice(start, separator.index));
-    start = separator.index + separator[0].length;
+export function recruitmentLanguageRequirements(required: string): readonly RecruitmentLanguageRequirement[] {
+  // A profile reads its requirements again for each of its 10 000 dossiers: each text is split once.
+  const cached = READ_REQUIREMENTS.get(required);
+  if (cached) return cached;
+  let requirements: RecruitmentLanguageRequirement[];
+  if (ALTERNATIVE.test(blankBrackets(required))) {
+    const text = required.trim();
+    const anyOf = partsOutsideBrackets(text, OPTION_SEPARATOR).map(option => option.replace(OPTION_CONNECTOR, "")).filter(option => LETTER_OR_DIGIT.test(option));
+    requirements = anyOf.length ? [{ text, codes: recruitmentLanguageCodes(text), anyOf }] : [];
+  } else {
+    requirements = partsOutsideBrackets(required, REQUIREMENT_SEPARATOR).flatMap(part => {
+      const named = partsOutsideBrackets(part, CHINESE_CONJUNCTION);
+      return named.length > 1 && named.every(name => recruitmentLanguageCodes(name).length) ? named : [part];
+    }).map(text => ({ text, codes: recruitmentLanguageCodes(text), anyOf: [] }));
   }
-  parts.push(required.slice(start));
-  return parts.map(part => part.trim()).filter(part => LETTER_OR_DIGIT.test(part)).map(text => ({ text, codes: recruitmentLanguageCodes(text) }));
+  if (required.length <= COMPARED_TEXT_MAX_LENGTH) {
+    if (READ_REQUIREMENTS.size >= COMPARED_TEXTS_LIMIT) READ_REQUIREMENTS.clear();
+    READ_REQUIREMENTS.set(required, Object.freeze(requirements));
+  }
+  return requirements;
+}
+
+/**
+ * The codes of the languages one of whose names starts with this text, from
+ * its third letter (« angl », « arab », « fran »): the Langue filter of the
+ * Candidatures, which looks as the admin types, finds the language before its
+ * name is typed whole. None for a shorter text.
+ */
+export function recruitmentLanguagePrefixCodes(text: string): RecruitmentLanguageCode[] {
+  const folded = foldLanguageText(text).trim();
+  if (folded.split("").filter(character => LETTER_OR_DIGIT.test(character)).length < 3) return [];
+  return Array.from(new Set(LANGUAGE_NAMES.filter(entry => entry.folded.startsWith(folded)).map(entry => entry.code)));
 }
 
 /** Whether these folded words (a language the table does not know) are found whole in this folded name: « wolof » in « Wolof courant », not « fran » in « français ». */
 function containsWords(folded: string, words: string) {
-  if (!words) return false;
+  if (!LETTER_OR_DIGIT.test(words)) return false;
   if (!SPACED_SCRIPT.test(words)) return folded.includes(words);
   for (let index = folded.indexOf(words); index >= 0; index = folded.indexOf(words, index + 1)) {
     if (startsWord(folded, index) && !LETTER_OR_DIGIT.test(folded[index + words.length] ?? "")) return true;
@@ -193,26 +253,34 @@ function containsWords(folded: string, words: string) {
   return false;
 }
 
+/** Whether a name gives a language the table does not know by its words: those of one whole in the other's, what they say between brackets aside. */
+function givesByWords(name: ComparedText, required: ComparedText) {
+  return !required.codes.length && (containsWords(name.folded, required.core) || (!name.codes.length && containsWords(required.folded, name.core)));
+}
+
 /**
  * Whether this name (one of a candidate's languages) gives a language of the
  * requirement: one of its codes (« Arabic » for « Arabe », not « English
- * (polished) » for « Polonais » nor « Germany » for « Allemand »), or the
- * words of one the table does not know, whole.
+ * (polished) » for « Polonais » nor « Germany » for « Allemand »), or, for a
+ * language the table does not know, the words of one whole in the other's,
+ * what they say between brackets aside (« Wolof » for « Wolof courant » or
+ * « Wolof (courant) », and the reverse; not « Wolofs »). An alternative
+ * (« Wolof ou anglais ») is given by any of its languages.
  */
 export function givesRequiredLanguage(name: string, requirement: RecruitmentLanguageRequirement) {
   const compared = comparedText(name);
-  return requirement.codes.length
-    ? compared.codes.some(code => requirement.codes.includes(code))
-    : containsWords(compared.folded, comparedText(requirement.text).folded.trim());
+  if (compared.codes.some(code => requirement.codes.includes(code))) return true;
+  if (requirement.anyOf.length) return requirement.anyOf.some(option => givesByWords(compared, comparedText(option)));
+  return givesByWords(compared, comparedText(requirement.text));
 }
 
 /**
  * Whether these names (a candidate's languages) meet the requirement, each of
- * its languages given by one of them: « anglais arabe » by « English » and
- * « العربية ».
+ * its languages given by one of them (« anglais arabe » by « English » and
+ * « العربية »), or one of them for an alternative.
  */
 export function meetsRequiredLanguage(names: string[], requirement: RecruitmentLanguageRequirement) {
-  return requirement.codes.length
+  return requirement.codes.length && !requirement.anyOf.length
     ? requirement.codes.every(code => names.some(name => recruitmentLanguageCodes(name).includes(code)))
     : names.some(name => givesRequiredLanguage(name, requirement));
 }

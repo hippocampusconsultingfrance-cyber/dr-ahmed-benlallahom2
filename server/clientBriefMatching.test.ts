@@ -95,9 +95,27 @@ describe("matching mission–candidat", () => {
     // The language itself, declared or read in the CV, still scores.
     expect(match("German", ["Germany"], ["Deutsch"]).languages).toEqual([{ name: "Deutsch", origins: ["extracted"] }]);
     expect(match("Polish", ["Polski"]).breakdown.languages).toBe(15);
-    // A language the table does not know: its words, whole.
+    // A language the table does not know: its words, whole, in the name or the name's in the requirement.
     expect(match("Wolof", ["Wolof (courant)"]).breakdown.languages).toBe(15);
-    expect(match("Wolof courant", ["Wolof"]).breakdown.languages).toBe(0);
+    expect(match("Wolof courant", ["Wolof"]).breakdown.languages).toBe(15);
+    expect(match("Wolof (courant)", ["Wolof"]).breakdown.languages).toBe(15);
+    expect(match("Swahili courant", ["Swahili"]).breakdown.languages).toBe(15);
+    expect(match("Créole haïtien", ["Créole"]).breakdown.languages).toBe(15);
+    expect(match("Wolof courant", ["Wolofs", "Bambara courant"]).breakdown.languages).toBe(0);
+  });
+
+  it("donne tous les points d’une exigence qui laisse le choix à l’une de ses langues, et ne coupe pas un nom chinois à 及 (IA-02)", () => {
+    const candidate = { specialty: "Anesthésie-réanimation", targetCountries: '["Émirats arabes unis"]' };
+    const languagePoints = (requiredLanguages: string, declared: string[]) =>
+      computeBriefCandidateMatch({ specialtyNeeded: "Anesthésie-réanimation", country: "Émirats arabes unis", requiredCertifications: null, requiredLanguages }, { ...candidate, languageFacts: languageFacts(JSON.stringify(declared), []) }).breakdown.languages;
+    for (const required of ["English or Arabic", "Anglais ou arabe", "anglais et/ou arabe", "英语或阿拉伯语"]) {
+      expect(languagePoints(required, ["Arabic"]), required).toBe(15);
+      expect(languagePoints(required, ["English"]), required).toBe(15);
+      expect(languagePoints(required, ["French"]), required).toBe(0);
+    }
+    expect(languagePoints("Wolof ou anglais", ["Wolof"])).toBe(15);
+    // 埃及阿拉伯语, Egyptian Arabic: one language, Arabic.
+    expect(languagePoints("埃及阿拉伯语", ["Arabic"])).toBe(15);
   });
 
   it("une certification déclarée par le candidat compte, elle aussi, une fois confirmée", () => {

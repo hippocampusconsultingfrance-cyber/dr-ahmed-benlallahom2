@@ -209,14 +209,26 @@ describe("Candidatures — profil de matching et filtres de la liste (IA-02)", (
       ["allemand", ["Deutschdecl"]], ["German", ["Deutschdecl"]], ["Deutsch", ["Deutschdecl"]],
       ["anglais, arabe", ["Cvarabisch", "Enarboth"]], ["Anglais/Arabe", ["Cvarabisch", "Enarboth"]], ["anglais et arabe", ["Cvarabisch", "Enarboth"]],
       ["arabe", ["Cvarabisch", "Enarboth"]],
-      // A language the table does not know: its words, whole, among the languages and not their quotes.
-      ["wolof", ["Wolofcourant"]], ["germany", ["Germanyonly"]], ["lived", []],
+      // A language the table does not know: its words, whole, among the languages and not their quotes,
+      // or the words of one of these languages whole in the term, what it says between brackets aside.
+      ["wolof", ["Wolofcourant"]], ["germany", ["Germanyonly"]], ["lived", []], ["Wolof (natif)", ["Wolofcourant"]], ["wolof courant", ["Wolofcourant"]],
+      // A choice: any one of its languages.
+      ["anglais ou arabe", ["Anglaisseul", "Cvarabisch", "Enarboth", "Polished"]], ["Allemand et/ou wolof", ["Deutschdecl", "Wolofcourant"]],
     ];
     for (const [language, names] of expected) {
       expect(await filtered(language), `filtre ${language}`).toEqual(names);
       expect(await profiled(language), `profil ${language}`).toEqual(names);
       expect(await missioned(language), `mission ${language}`).toEqual(names);
     }
+
+    // As the admin types, the filter finds a language from the third letter of one of its names,
+    // where a profile or a mission requires the name whole; a term with no letter finds nothing.
+    for (const language of ["angl", "Engl", "anglais"]) expect(await filtered(language), language).toEqual(["Anglaisseul", "Cvarabisch", "Enarboth", "Polished"]);
+    expect(await filtered("arab")).toEqual(["Cvarabisch", "Enarboth"]);
+    expect(await filtered("angl, arab")).toEqual(["Cvarabisch", "Enarboth"]);
+    expect(await filtered("pol")).toEqual([]);
+    expect(await profiled("angl")).toEqual([]);
+    for (const language of ["-", "()", "an"]) expect(await filtered(language), language).toEqual([]);
   });
 
   it("ne lit les langues tirées du CV, et leurs citations, que pour un profil qui exige des langues (IA-02)", async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { givesRequiredLanguage, meetsRequiredLanguage, recruitmentLanguageCodes, recruitmentLanguageRequirements, RECRUITMENT_LANGUAGES } from "../shared/recruitmentLanguages";
+import { givesRequiredLanguage, meetsRequiredLanguage, recruitmentLanguageCodes, recruitmentLanguagePrefixCodes, recruitmentLanguageRequirements, RECRUITMENT_LANGUAGES } from "../shared/recruitmentLanguages";
 import { professionalLanguageOptions } from "../client/src/pages/RecruitmentPage";
 
 // Each text the table compares is folded through the admin search's folding: counted here.
@@ -77,9 +77,37 @@ describe("langues du recrutement comparées par code (IA-02)", () => {
     }
     expect(texts("Anglais (C1/C2), arabe")).toEqual(["Anglais (C1/C2)", "arabe"]);
     // Several languages without a separator: one requirement, all of them required.
-    expect(recruitmentLanguageRequirements("anglais arabe")).toEqual([{ text: "anglais arabe", codes: ["en", "ar"] }]);
-    expect(recruitmentLanguageRequirements("Wolof")).toEqual([{ text: "Wolof", codes: [] }]);
+    expect(recruitmentLanguageRequirements("anglais arabe")).toEqual([{ text: "anglais arabe", codes: ["en", "ar"], anyOf: [] }]);
+    expect(recruitmentLanguageRequirements("Wolof")).toEqual([{ text: "Wolof", codes: [], anyOf: [] }]);
     expect(recruitmentLanguageRequirements(" , / ")).toEqual([]);
+    // A Chinese conjunction separates two names only: 及 is also the second character of 埃及, Egypt.
+    expect(recruitmentLanguageRequirements("埃及阿拉伯语")).toEqual([{ text: "埃及阿拉伯语", codes: ["ar"], anyOf: [] }]);
+    expect(recruitmentLanguageRequirements("英语及阿拉伯语").map(requirement => requirement.codes)).toEqual([["en"], ["ar"]]);
+  });
+
+  it("lit une exigence qui laisse le choix comme une seule, tenue par l’une de ses langues (IA-02)", () => {
+    const choices: Array<[string, string[], string[]]> = [
+      ["Anglais ou arabe", ["en", "ar"], ["Anglais", "arabe"]], ["English or Arabic", ["en", "ar"], ["English", "Arabic"]],
+      ["Englisch oder Arabisch", ["en", "ar"], ["Englisch", "Arabisch"]], ["anglais et/ou arabe", ["en", "ar"], ["anglais", "arabe"]],
+      ["English and/or Arabic", ["en", "ar"], ["English", "Arabic"]], ["英语或阿拉伯语", ["en", "ar"], ["英语", "阿拉伯语"]], ["英语或者阿拉伯语", ["en", "ar"], ["英语", "阿拉伯语"]],
+      ["Español o árabe", ["ar", "es"], ["Español", "árabe"]], ["Português e/ou árabe", ["ar", "pt"], ["Português", "árabe"]],
+      ["Anglais, français ou arabe", ["fr", "en", "ar"], ["Anglais", "français", "arabe"]],
+    ];
+    for (const [required, codes, anyOf] of choices) {
+      const requirements = recruitmentLanguageRequirements(required);
+      expect(requirements, required).toEqual([{ text: required, codes, anyOf }]);
+      expect(meetsRequiredLanguage(["Arabic"], requirements[0]!), required).toBe(true);
+      expect(meetsRequiredLanguage(["Deutsch", "Wolof"], requirements[0]!), required).toBe(false);
+    }
+    expect(meetsRequiredLanguage(["Anglais"], recruitmentLanguageRequirements("English or Arabic")[0]!)).toBe(true);
+    // A language the table does not know among them, by its words.
+    const [wolofOrEnglish] = recruitmentLanguageRequirements("Wolof ou anglais");
+    expect(meetsRequiredLanguage(["Wolof (courant)"], wolofOrEnglish!)).toBe(true);
+    expect(meetsRequiredLanguage(["Wolof courant"], recruitmentLanguageRequirements("Allemand et/ou wolof")[0]!)).toBe(true);
+    expect(meetsRequiredLanguage(["Wolofs"], wolofOrEnglish!)).toBe(false);
+    expect(givesRequiredLanguage("Arabic", wolofOrEnglish!)).toBe(false);
+    // Between brackets, a choice is a qualifier: « Anglais (ou arabe) » requires English.
+    expect(recruitmentLanguageRequirements("Anglais (ou arabe)")).toEqual([{ text: "Anglais (ou arabe)", codes: ["en", "ar"], anyOf: [] }]);
   });
 
   it("dit si les langues d’un candidat tiennent une exigence : par code, ou par les mots entiers d’une langue hors table", () => {
@@ -92,6 +120,15 @@ describe("langues du recrutement comparées par code (IA-02)", () => {
     expect(meetsRequiredLanguage(["Arabic"], both!)).toBe(false);
     expect(meetsRequiredLanguage(["Wolof (courant)"], wolof!)).toBe(true);
     expect(meetsRequiredLanguage(["Wolofs"], wolof!)).toBe(false);
+    // Its words whole in the name, or the name's in its own, what either says between brackets aside.
+    for (const [required, name] of [["Wolof courant", "Wolof"], ["Wolof (courant)", "Wolof"], ["Wolof courant", "Wolof (C1)"], ["Swahili courant", "Swahili"], ["Créole haïtien", "Créole"], ["Wolof", "wolof courant"]]) {
+      expect(meetsRequiredLanguage([name], recruitmentLanguageRequirements(required)[0]!), `${required} / ${name}`).toBe(true);
+    }
+    for (const [required, name] of [["Wolof courant", "Wolofs"], ["Wolof courant", "Bambara courant"], ["Créole haïtien", "Créoles"]]) {
+      expect(meetsRequiredLanguage([name], recruitmentLanguageRequirements(required)[0]!), `${required} / ${name}`).toBe(false);
+    }
+    // A language of the table is compared by its code only, not by its name within one the table does not know.
+    expect(meetsRequiredLanguage(["Mandarin"], recruitmentLanguageRequirements("Mandarin Oriental")[0]!)).toBe(false);
     expect(meetsRequiredLanguage(["Français"], partial!)).toBe(false);
     // The names that give it: those of one of its languages, not another.
     expect(["Arabic", "English (polished)", "Germany", "Arabisch"].filter(name => givesRequiredLanguage(name, both!))).toEqual(["Arabic", "English (polished)", "Arabisch"]);
@@ -99,6 +136,13 @@ describe("langues du recrutement comparées par code (IA-02)", () => {
     expect(givesRequiredLanguage("English (polished)", polish!)).toBe(false);
     expect(givesRequiredLanguage("Germany", german!)).toBe(false);
     expect(givesRequiredLanguage("Deutsch", german!)).toBe(true);
+  });
+
+  it("trouve les langues dont un nom commence par un texte d’au moins trois lettres, comme le filtre Langue pendant la frappe (IA-02)", () => {
+    for (const [typed, codes] of [["angl", ["en"]], ["Arab", ["ar"]], ["fran", ["fr"]], ["deu", ["de"]], ["阿拉伯", ["ar"]], ["anglais", ["en"]]] as const) {
+      expect(recruitmentLanguagePrefixCodes(typed), typed).toEqual(codes);
+    }
+    for (const typed of ["an", "fr", " - ", "wol", "germany", "polished"]) expect(recruitmentLanguagePrefixCodes(typed), typed).toEqual([]);
   });
 
   it("ne replie et ne cherche chaque texte qu’une fois, avec le même résultat ensuite (IA-02)", () => {

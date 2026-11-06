@@ -258,7 +258,8 @@ export function computeBriefCandidateMatch(brief: BriefForMatching, candidate: C
   // « Arabe » asked, « Arabic » declared in the form, and not « Polish » by
   // « English (polished) ». Each language a term names counts on its own
   // (« Anglais/Arabe », « anglais et arabe »: two), as for a matching profile
-  // and the Langue filter; one the table does not know by its words, whole.
+  // and the Langue filter, a choice once (« anglais ou arabe », by either);
+  // one the table does not know by its words, whole.
   const requiredLanguages = parseTerms(brief.requiredLanguages).flatMap(recruitmentLanguageRequirements);
   const candidateLanguages = candidate.languageFacts || [];
   const candidateLanguageNames = candidateLanguages.map(fact => fact.name);
