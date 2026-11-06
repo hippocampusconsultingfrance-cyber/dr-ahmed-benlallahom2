@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { RECRUITMENT_CV_MAX_BYTES } from "../shared/recruitmentCvLimits";
 import { RECRUITMENT_CV_FORMAT_MESSAGE } from "./recruitmentFileValidation";
+import { safeCandidateDocumentName } from "./candidateDocumentValidation";
 import { listen, validPdfBuffer } from "./testSupport/candidateUploadApp";
 import { libreOfficeCvPdf, packPdfIntoObjectStream } from "./testing/pdfFixture";
 import { recruitmentSubmissionErrorMessage } from "../client/src/lib/recruitmentSubmissionErrors";
@@ -108,6 +109,18 @@ describe("POST /api/recruitment/apply — réception du CV (multer) et validatio
     const result = await apply({ cvs: [{ buffer: validPdfBuffer(), name: "Diplôme d’État.pdf" }] });
     expect(result.status).toBe(503);
     expect(vi.mocked(validateCvFile).mock.calls.map(([file]) => file.originalName)).toEqual(["Dipl_me_d__tat.pdf"]);
+  });
+
+  it("garde le même nom pour un CV au nom décomposé (NFD, macOS) que pour le même nom composé, comme le coffre", async () => {
+    vi.mocked(validateCvFile).mockClear();
+    const name = "Diplôme_médecine_été.pdf";
+    for (const form of ["NFC", "NFD"] as const) {
+      const result = await apply({ cvs: [{ buffer: validPdfBuffer(), name: name.normalize(form) }] });
+      expect(result.status).toBe(503);
+    }
+    // One « _ » per accented letter, not its base letter followed by a « _ » (« Diplo_me »).
+    expect(vi.mocked(validateCvFile).mock.calls.map(([file]) => file.originalName)).toEqual(["Dipl_me_m_decine__t_.pdf", "Dipl_me_m_decine__t_.pdf"]);
+    expect(safeCandidateDocumentName(name.normalize("NFD"))).toBe("Dipl_me_m_decine__t_.pdf");
   });
 
   it("exige le CV", async () => {

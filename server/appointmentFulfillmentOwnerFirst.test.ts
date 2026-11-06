@@ -608,7 +608,7 @@ describe("page de statut aux valeurs de production : un 429 passager garde son n
       await vi.advanceTimersByTimeAsync(10_000);
       await next;
     }
-    expect(alerts().map(call => call.options?.idempotencyKey)).toEqual(["appointment-confirmation-failure-APTOWNER0001-refused", "appointment-confirmation-failure-APTOWNER0001-refused"]);
+    expect(alerts().map(call => call.options?.idempotencyKey)).toEqual([patientEmailIdempotencyKey("appointment-confirmation-failure-APTOWNER0001-refused", "patient@example.test"), patientEmailIdempotencyKey("appointment-confirmation-failure-APTOWNER0001-refused", "patient@example.test")]);
     expect(alerts()[1].message.text).toBe(alerts()[0].message.text);
     expect(jobs.find(row => row.jobType === "confirmation_failure_alert")).toMatchObject({ status: "completed", attempts: 1 });
   });
@@ -706,7 +706,7 @@ describe("alertes au médecin envoyées depuis un job : dans le créneau d’env
     const sends = timeline(startedAt);
     expect(sends.map(send => send.subject)).toEqual(["Nouvelle", "Nouvelle", "Confirmation", "Facture", "Échec"]);
     for (let index = 1; index < sends.length; index += 1) expect(sends[index].startedAt - sends[index - 1].startedAt).toBeGreaterThanOrEqual(PACING_DELAY_MS);
-    expect(resend.calls.at(-1)?.options?.idempotencyKey).toBe("appointment-confirmation-failure-APTOWNER0001-refused");
+    expect(resend.calls.at(-1)?.options?.idempotencyKey).toBe(patientEmailIdempotencyKey("appointment-confirmation-failure-APTOWNER0001-refused", "patient@example.test"));
     expect(String(resend.calls.at(-1)?.message.text)).toContain("a été refusé par le service d’envoi");
     expect(jobs.find(row => row.jobType === "confirmation_failure_alert")).toMatchObject({ status: "completed", attempts: 1 });
   });
@@ -729,7 +729,7 @@ describe("alertes au médecin envoyées depuis un job : dans le créneau d’env
 
     await runTwice();
     expect(timeline(startedAt).map(send => send.subject)).toEqual(["Confirmation", "Échec"]);
-    expect(resend.calls[1].options?.idempotencyKey).toBe("appointment-confirmation-failure-APTOWNER0001-refused");
+    expect(resend.calls[1].options?.idempotencyKey).toBe(patientEmailIdempotencyKey("appointment-confirmation-failure-APTOWNER0001-refused", "patient@example.test"));
     expect(jobs.find(row => row.jobType === "confirmation_failure_alert")).toMatchObject({ status: "completed", attempts: 1 });
   });
 
@@ -778,7 +778,7 @@ describe("alerte « Échec d’envoi » remise en file (ABUS-03) : écrite à so
     Object.assign(jobs.find(row => row.id === 2)!, { status: "retry", scheduledFor: new Date(Date.now() + 60 * 60_000) });
     await processDueAppointmentFulfillmentJobs();
     expect(subjects()).toEqual(["Échec d’envoi après paiement (APTOWNER0001)"]);
-    expect(resend.calls[0].options?.idempotencyKey).toBe("appointment-confirmation-failure-APTOWNER0001-first");
+    expect(resend.calls[0].options?.idempotencyKey).toBe(patientEmailIdempotencyKey("appointment-confirmation-failure-APTOWNER0001-first", "patient@example.test"));
     expect(String(resend.calls[0].message.text)).toContain("vient d’échouer (tentative 1 sur 3)");
     expect(jobs.find(row => row.id === 4)).toMatchObject({ status: "completed", attempts: 1 });
   });

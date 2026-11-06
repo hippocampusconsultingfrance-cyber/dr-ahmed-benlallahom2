@@ -474,7 +474,10 @@ type PatientEmailFailure = Pick<FulfillmentJob, "attempts" | "maxAttempts" | "la
  * (the next automatic attempt may only come with the next scheduled run), at
  * a refusal, for which no new attempt is promised, and when retries are
  * exhausted. One key per wording: a refusal may follow a first failure of the
- * same job.
+ * same job. And per address, which the alert quotes: once it is corrected
+ * (« Corriger l’email du patient »), a new failure is told under a new key,
+ * which Resend would otherwise refuse for 24 h as reused with another content
+ * (409); the same address refused again keeps its key, and a single alert.
  */
 function failureAlertOf(jobType: PatientJobType, appointment: Appointment, failure: PatientEmailFailure) {
   const { refused, terminal, attempts, maxAttempts } = failure;
@@ -491,7 +494,7 @@ function failureAlertOf(jobType: PatientJobType, appointment: Appointment, failu
           ? `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} a échoué ${attempts} fois${cause}. ${recorded} ; un envoi manuel au patient est nécessaire. ${patientContact(appointment)}`
           : `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} vient d’échouer (tentative ${attempts} sur ${maxAttempts})${cause}. ${recorded}. Un nouvel essai automatique aura lieu lors de la prochaine exécution planifiée ; en attendant, vous pouvez contacter le patient. ${patientContact(appointment)}`,
     },
-    idempotencyKey: `appointment-${jobType}-failure-${appointment.trackingId}-${refused ? "refused" : terminal ? "final" : "first"}${storage ? "-storage" : ""}`,
+    idempotencyKey: patientEmailIdempotencyKey(`appointment-${jobType}-failure-${appointment.trackingId}-${refused ? "refused" : terminal ? "final" : "first"}${storage ? "-storage" : ""}`, appointment.customerEmail),
   };
 }
 
@@ -610,7 +613,8 @@ async function runJob(id: number) {
     } else {
       // The owner's failure alert of a patient email, queued when it could not
       // leave right after that failure (ABUS-03): written from the email's job
-      // as it stands, under the key it had then.
+      // and the appointment as they stand now; its key follows the address the
+      // appointment now holds, which it quotes (failureAlertOf).
       const patientJobType = alertedPatientJob(jobType)!;
       const [patientJob] = await db.select().from(appointmentFulfillmentJobs)
         .where(and(eq(appointmentFulfillmentJobs.appointmentId, appointment.id), eq(appointmentFulfillmentJobs.jobType, patientJobType))).limit(1);
@@ -664,8 +668,8 @@ async function runJob(id: number) {
       // a pause after the email that failed (ABUS-03). When that slot may come
       // after the end of the immediate budget, or Resend does not take it, it
       // is queued as a job of its own, sent by the next processing under the
-      // same key: never without its slot nor after the page or the webhook has
-      // answered, and not lost.
+      // same key while the address is unchanged: never without its slot nor
+      // after the page or the webhook has answered, and not lost.
       const alert = failureAlertOf(jobType, appointment, { attempts: job.attempts, maxAttempts: job.maxAttempts, lastError, refused, terminal });
       const delivered = (await alertSendSlot()) && (await notifyOwner(alert.payload, { idempotencyKey: alert.idempotencyKey, stopAtDeadline: true }).catch(() => false));
       if (!delivered) {

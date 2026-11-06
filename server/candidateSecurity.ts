@@ -3,6 +3,7 @@ import { and, eq, gt, gte, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { candidateSecurityRateLimits, securityEvents } from "../drizzle/schema";
 import { getDb } from "./db";
 import { notifyOwner } from "./_core/notification";
+import { alertSendSlot } from "./_core/resendDelivery";
 
 const HIBP_CACHE_TTL_MS = 10 * 60 * 1000;
 const pwnedSuffixCache = new Map<string, { expiresAt: number; suffixes: Set<string> }>();
@@ -92,6 +93,14 @@ async function notifyOwnerOfSecurityAlert(input: {
       inArray(securityEvents.severity, ["high", "critical"]),
     )).limit(10_000);
     const windowMinutes = Math.round(SECURITY_ALERT_EMAIL_WINDOW_MS / 60_000);
+    // Raised during a processing that spaces its sends (a used-up quota met by
+    // a post-payment email or alert, ABUS-03): the alert takes its send slot, a
+    // pause after the email Resend just refused, rather than reach Resend a few
+    // milliseconds after it. When that slot would come after the end of the
+    // immediate budget, it is not sent now: the event stays recorded, the next
+    // one of its category sends the alert, and the daily security review
+    // names a used-up quota (runSecurityPostureReview).
+    if (!(await alertSendSlot())) return null;
     return notifyOwner({
       title: `Alerte sécurité — ${input.category} — Hippocampus Consulting`,
       content: [
@@ -120,10 +129,11 @@ export const OWNER_ALERT_RETRY_AFTER_FAILURE_MS = 5 * 60 * 1000;
  * the whole window (blockMs from the delivery); when `send` reports a failure
  * (Resend down, still rate-limited after its retry, quota used up), it opens
  * again OWNER_ALERT_RETRY_AFTER_FAILURE_MS later, whatever simultaneous callers
- * counted meanwhile, and the next caller sends the alert. Returns whether this
- * call delivered it.
+ * counted meanwhile, and the next caller sends the alert. When `send` reports
+ * null, the alert was not tried (its send slot came too late): it opens again
+ * at once, for the next caller. Returns whether this call delivered it.
  */
-export async function sendOwnerAlertOncePerWindow(slot: Omit<PersistentRateLimitPolicy, "maxAttempts">, send: () => Promise<boolean>): Promise<boolean> {
+export async function sendOwnerAlertOncePerWindow(slot: Omit<PersistentRateLimitPolicy, "maxAttempts">, send: () => Promise<boolean | null>): Promise<boolean> {
   const policy = { ...slot, maxAttempts: 1 };
   const state = await recordPersistentRateLimitAttempt(policy);
   if (state.blocked || state.attemptCount > 1) return false;
@@ -132,10 +142,10 @@ export async function sendOwnerAlertOncePerWindow(slot: Omit<PersistentRateLimit
   const now = new Date();
   await db?.update(candidateSecurityRateLimits).set({
     attemptCount: policy.maxAttempts + 1,
-    blockedUntil: new Date(now.getTime() + (delivered ? policy.blockMs : OWNER_ALERT_RETRY_AFTER_FAILURE_MS)),
+    blockedUntil: new Date(now.getTime() + (delivered === null ? 0 : delivered ? policy.blockMs : OWNER_ALERT_RETRY_AFTER_FAILURE_MS)),
     lastAttemptAt: now,
   }).where(and(eq(candidateSecurityRateLimits.action, policy.action), eq(candidateSecurityRateLimits.subjectHash, hashSecurityValue(policy.subject))));
-  return delivered;
+  return delivered === true;
 }
 
 /**

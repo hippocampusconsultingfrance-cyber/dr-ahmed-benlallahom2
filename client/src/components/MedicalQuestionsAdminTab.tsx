@@ -214,7 +214,7 @@ export default function MedicalQuestionsAdminTab() {
           <p className="mt-4 text-destructive">{error.message}</p>
         ) : (
           <>
-            <p className="mt-3 break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">
+            <p className="mt-3 wrap-anywhere text-sm text-muted-foreground">
               {adminListCount(items.length, total, "question(s)")}{search ? ` pour « ${search} »` : ""}{queue === "todo" ? " · de la plus ancienne à la plus récente" : ""}
             </p>
             <div className="mt-4 space-y-3">
@@ -233,14 +233,14 @@ export default function MedicalQuestionsAdminTab() {
                     <span className="rounded-full border border-border px-2 py-1 text-xs text-muted-foreground">{STATUS_LABELS[question.status] ?? question.status}</span>
                   </div>
                   <p className="mt-1 font-mono text-xs text-muted-foreground">{question.trackingId}</p>
-                  <p className="mt-2 line-clamp-2 break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">{question.question}</p>
+                  <p className="mt-2 line-clamp-2 wrap-anywhere text-sm text-muted-foreground">{question.question}</p>
                   <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Clock3 className="h-3.5 w-3.5" />
                     {new Date(question.createdAt).toLocaleString("fr-FR")}
                   </p>
                 </button>
               ))}
-              {items.length === 0 && <p className="rounded-2xl border border-border p-5 break-words text-muted-foreground [overflow-wrap:anywhere]">{search ? `Aucune question ne correspond à « ${search} » dans cette liste.` : MEDICAL_QUESTION_QUEUES[queue].empty}</p>}
+              {items.length === 0 && <p className="rounded-2xl border border-border p-5 wrap-anywhere text-muted-foreground">{search ? `Aucune question ne correspond à « ${search} » dans cette liste.` : MEDICAL_QUESTION_QUEUES[queue].empty}</p>}
             </div>
             <AdminLoadMore shown={items.length} total={total} loading={isLoadingMore} onLoadMore={loadMore} error={loadMoreError} onRetry={retryLoadMore} />
           </>

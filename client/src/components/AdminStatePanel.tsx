@@ -20,7 +20,7 @@ export function AdminEmptyState({ icon: Icon, title, description }: { icon: Icon
         <Icon className="h-7 w-7" aria-hidden={true} />
       </span>
       <h2 className="font-semibold text-foreground">{title}</h2>
-      <p className="mx-auto mt-1 max-w-md break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">{description}</p>
+      <p className="mx-auto mt-1 max-w-md wrap-anywhere text-sm text-muted-foreground">{description}</p>
     </section>
   );
 }
