@@ -135,6 +135,7 @@ export default function GDPRRequestForm({ onBack }: GDPRRequestFormProps) {
                   <input
                     type="text"
                     id={gdprFieldIds.name}
+                    autoComplete="name"
                     required
                     placeholder={content.gdpr.form.namePlaceholder}
                     value={formData.name}
@@ -149,6 +150,7 @@ export default function GDPRRequestForm({ onBack }: GDPRRequestFormProps) {
                   <input
                     type="email"
                     id={gdprFieldIds.email}
+                    autoComplete="email"
                     required
                     placeholder={content.gdpr.form.emailPlaceholder}
                     value={formData.email}
@@ -165,6 +167,7 @@ export default function GDPRRequestForm({ onBack }: GDPRRequestFormProps) {
                 <input
                   type="tel"
                   id={gdprFieldIds.phone}
+                  autoComplete="tel"
                   placeholder={content.gdpr.form.phonePlaceholder}
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}

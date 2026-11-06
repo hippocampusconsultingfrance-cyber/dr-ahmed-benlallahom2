@@ -116,3 +116,15 @@ describe("GDPRRequestForm — refus traduits (ABUS-01)", () => {
     ]);
   });
 });
+
+describe("GDPRRequestForm — remplissage automatique (A11Y-16)", () => {
+  it("laisse le navigateur remplir le nom, l’email et le téléphone", async () => {
+    const { gdprFieldIds } = await import("./GDPRRequestForm");
+    view.language = "fr";
+    view.error = null;
+    const html = renderToStaticMarkup(createElement(GDPRRequestForm));
+    const autocomplete = (id: string) => /autocomplete="([^"]*)"/i.exec(new RegExp(`<input[^>]*id="${id}"[^>]*>`).exec(html)?.[0] ?? "")?.[1];
+
+    expect([gdprFieldIds.name, gdprFieldIds.email, gdprFieldIds.phone].map(autocomplete)).toEqual(["name", "email", "tel"]);
+  });
+});
