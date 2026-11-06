@@ -4,7 +4,7 @@
  * raw header (REC-18). Written without words so that every language of the
  * portal can show it; null when neither the browser nor the system is
  * recognised, which the portal shows as its translated "Browser". Sessions
- * stored before keep their raw User-Agent.
+ * stored before keep their raw User-Agent, read the same way when listed.
  */
 
 // First match wins: Edge, Opera and Samsung Internet also announce Chrome, and Chrome announces Safari.
@@ -36,4 +36,22 @@ export function candidateDeviceLabel(userAgent: unknown): string | null {
   const system = SYSTEMS.find(([pattern]) => pattern.test(header))?.[1];
   if (browser && system) return `${browser} (${system})`;
   return browser ?? system ?? null;
+}
+
+// Every label candidateDeviceLabel can give.
+const LABELS = new Set([
+  ...BROWSERS.map(([, browser]) => browser),
+  ...SYSTEMS.map(([, system]) => system),
+  ...BROWSERS.flatMap(([, browser]) => SYSTEMS.map(([, system]) => `${browser} (${system})`)),
+]);
+
+/**
+ * Label of a stored session as the portal lists it. A session stored before
+ * REC-18 holds the raw User-Agent (cut at 180 characters) or the French
+ * "Navigateur inconnu": it is named as a new one would be, without changing
+ * what is stored.
+ */
+export function readableCandidateDeviceLabel(stored: string | null): string | null {
+  if (stored === null || LABELS.has(stored)) return stored;
+  return candidateDeviceLabel(stored);
 }

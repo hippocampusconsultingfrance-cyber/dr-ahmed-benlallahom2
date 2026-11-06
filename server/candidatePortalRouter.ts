@@ -34,7 +34,7 @@ import {
 } from "./_core/notifications";
 import { PublicErrorReason, publicProcedure, router } from "./_core/trpc";
 import { candidateRequestIp, verifyCandidateTurnstile } from "./candidateTurnstile";
-import { candidateDeviceLabel } from "./candidateDeviceLabel";
+import { candidateDeviceLabel, readableCandidateDeviceLabel } from "./candidateDeviceLabel";
 import { clearPersistentRateLimit, enforcePersistentRateLimit, hashSecurityValue, isCompromisedPassword, logSecurityEvent, recordPersistentRateLimitAttempt, requestIpHash } from "./candidateSecurity";
 import { buildCandidatePortalActivationEmailEvent } from "./recruitmentEmailTrace";
 import { enforcePublicEmailIpRateLimit } from "./publicFormRateLimit";
@@ -700,7 +700,7 @@ export const candidatePortalRouter = router({
     const currentToken = candidateCookieToken(ctx.req);
     const currentTokenHash = currentToken ? hashCandidateToken(currentToken, "session") : null;
     const sessions = await db.select({ id: candidateSessions.id, deviceLabel: candidateSessions.deviceLabel, createdAt: candidateSessions.createdAt, lastSeenAt: candidateSessions.lastSeenAt, expiresAt: candidateSessions.expiresAt, tokenHash: candidateSessions.tokenHash }).from(candidateSessions).where(and(eq(candidateSessions.candidateId, candidate.id), isNull(candidateSessions.revokedAt), gt(candidateSessions.expiresAt, new Date()))).orderBy(desc(candidateSessions.lastSeenAt));
-    return sessions.map(({ tokenHash, ...session }) => ({ ...session, current: tokenHash === currentTokenHash }));
+    return sessions.map(({ tokenHash, ...session }) => ({ ...session, deviceLabel: readableCandidateDeviceLabel(session.deviceLabel), current: tokenHash === currentTokenHash }));
   }),
 
   revokeSession: publicProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ input, ctx }) => {
