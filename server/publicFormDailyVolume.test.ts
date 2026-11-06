@@ -145,6 +145,8 @@ describe("seuil quotidien global : demandes gardées, effets coûteux coupés (A
     expect(state.sent.flatMap(email => email.to)).not.toEqual(expect.arrayContaining(["au-dela2@test.local"]));
     const [[alert]] = vi.mocked(notifyOwner).mock.calls;
     expect(alert.content).toContain("Le formulaire reste ouvert");
+    // The owner knows the visitors past the threshold get no reference by email either.
+    expect(alert.content).toContain("sans accusé de réception à l’adresse saisie");
     expect(alert.content).toContain("Attack Challenge Mode");
   });
 
@@ -177,6 +179,19 @@ describe("seuil quotidien global : demandes gardées, effets coûteux coupés (A
     const lastQuestion = db().rows(medicalQuestions).find(row => row.email === "cible@test.local");
     expect(db().rows(medicalQuestionAuditLogs).filter(log => log.medicalQuestionId === lastQuestion?.id).map(log => log.action))
       .toEqual(["submitted", "acknowledgement_skipped_daily_volume"]);
+  });
+
+  it("coupe les accusés de brief employeur au-delà de leur plafond du jour, et le dit une seule fois au propriétaire (REC-12)", async () => {
+    const { countClientBriefAcknowledgement } = await import("./publicFormAcknowledgements");
+    const counted: boolean[] = [];
+    for (let index = 1; index <= 52; index += 1) counted.push(await countClientBriefAcknowledgement());
+
+    expect(counted.filter(Boolean)).toHaveLength(50);
+    expect(counted.slice(50)).toEqual([false, false]);
+    expect(ownerTitles()).toEqual(["Volume inhabituel : plus de 50 accusés de brief employeur en 24 heures"]);
+    const [[alert, options]] = vi.mocked(notifyOwner).mock.calls as unknown as Array<[{ content: string }, { idempotencyKey?: string }]>;
+    expect(alert.content).toContain("sans accusé de réception à l’adresse saisie");
+    expect(options.idempotencyKey).toMatch(/^owner-alert-public_client_brief_acknowledgement_daily_alert-/);
   });
 });
 

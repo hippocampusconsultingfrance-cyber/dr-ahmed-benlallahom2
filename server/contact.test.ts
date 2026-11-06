@@ -363,7 +363,7 @@ describe("message de contact : réponse au visiteur, catégorie et accusé de r�
     message: "Payez sur https://promo-phish.example/fr pour débloquer votre dossier.",
     gdprConsent: 1,
   };
-  const sentEmails = () => resend.send.mock.calls.map(([message, options]) => ({ message: message as { to: string[]; replyTo: string; subject: string; html: string; text: string }, options }));
+  const sentEmails = () => resend.send.mock.calls.map(([message, options]) => ({ message: message as { from: string; to: string[]; replyTo: string; subject: string; html: string; text: string }, options }));
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -374,13 +374,16 @@ describe("message de contact : réponse au visiteur, catégorie et accusé de r�
 
   it("fait répondre le cabinet au visiteur, et dit dans la notification qui écrit", async () => {
     const caller = appRouter.createCaller(createPublicContext());
-    await caller.contact.submit({ ...typed, category: "institution" });
+    await caller.contact.submit({ ...typed, category: "institution", language: "en" });
     await caller.contact.submit({ ...typed, email: "sans-categorie@example.com" });
 
     const [first, second] = vi.mocked(notifyOwner).mock.calls.map(([payload]) => payload);
     expect(first).toMatchObject({ replyTo: "victime@example.com" });
     expect(first!.content).toContain("**Vous êtes:** Établissement");
     expect(second!.content).toContain("**Vous êtes:** Non précisé");
+    // The language the visitor read, that of the acknowledgement: the owner replies in it.
+    expect(first!.content).toContain("**Langue de la page:** en");
+    expect(second!.content).toContain("**Langue de la page:** Non précisée");
     // The email the owner gets: « Répondre » writes to the visitor, not to the owner's own mailbox.
     const { buildOwnerNotificationEmail } = await vi.importActual<typeof import("./_core/notification")>("./_core/notification");
     const ownerEmail = buildOwnerNotificationEmail(first as NotificationPayload);
@@ -411,6 +414,26 @@ describe("message de contact : réponse au visiteur, catégorie et accusé de r�
     for (const part of [message.subject, message.html, message.text]) {
       for (const text of ["colis", "phish", "Payez", "23 45 67", "rappel urgent"]) expect(part).not.toContain(text);
     }
+  });
+
+  it("envoie l’accusé avec l’expéditeur et la boîte de réponse réglés pour les emails aux patients, comme celui des questions santé", async () => {
+    const submitWith = async (from: string, replyTo: string) => {
+      vi.stubEnv("CONSULTATION_FROM_EMAIL", from);
+      vi.stubEnv("CONSULTATION_REPLY_TO", replyTo);
+      try {
+        await appRouter.createCaller(createPublicContext()).contact.submit(typed);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    };
+    await submitWith("Dr Ahmed Ben Lallahom <consultation@drahmedbenlallahom.com>", "secretariat@drahmedbenlallahom.com");
+    await submitWith("", "");
+
+    expect(sentEmails().map(({ message }) => [message.from, message.replyTo])).toEqual([
+      ["Dr Ahmed Ben Lallahom <consultation@drahmedbenlallahom.com>", "secretariat@drahmedbenlallahom.com"],
+      // Unset: the transactional sender and the site's contact address.
+      ["Hippocampus Consulting <recrutement@drahmedbenlallahom.com>", siteConfig.email],
+    ]);
   });
 
   it("écrit l’accusé en anglais pour une page en anglais, allemand ou chinois", async () => {

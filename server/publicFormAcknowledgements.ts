@@ -1,9 +1,9 @@
 import { siteConfig } from "../client/src/data/site-config";
-import { getResendClient } from "./_core/notification";
+import { getResendClient, notifyOwner } from "./_core/notification";
 import { buildHippocampusEmailShell } from "./_core/notifications";
 import { reportResendQuotaError, sendWithRateLimitRetry } from "./_core/resendDelivery";
-import { recordPersistentRateLimitAttempt } from "./candidateSecurity";
-import { DEFAULT_TRANSACTIONAL_FROM } from "./consultationContact";
+import { dailyOwnerAlertIdempotencyKey, recordPersistentRateLimitAttempt, sendOwnerAlertOncePerWindow } from "./candidateSecurity";
+import { DEFAULT_TRANSACTIONAL_FROM, resolveConsultationContact } from "./consultationContact";
 import { emailLanguageFor, type EmailLanguage } from "./emailLanguage";
 
 /**
@@ -11,10 +11,13 @@ import { emailLanguageFor, type EmailLanguage } from "./emailLanguage";
  * (REC-12): the reference of the request and what happens next, in French for
  * a French page, in English otherwise. Sent once the request is stored, to an
  * address nobody has verified yet: they never copy a text the visitor typed
- * (name, organisation, message, notes), only the reference (MAIL-01). Replies
- * go to the public contact address of the site. A send that fails is logged
- * and never fails the request; the idempotency key ack-<reference> keeps a
- * retried request from sending a second one.
+ * (name, organisation, message, notes), only the reference (MAIL-01). The
+ * contact's sender and Reply-To are those of the patient emails
+ * (CONSULTATION_FROM_EMAIL, CONSULTATION_REPLY_TO), as for the health
+ * question acknowledgement; the brief's replies go to the public contact
+ * address the Employers page gives. A send that fails is logged and never
+ * fails the request; the idempotency key ack-<reference> keeps a retried
+ * request from sending a second one.
  *
  * Texts to have the owner read before production (lot 6 decision).
  */
@@ -101,10 +104,11 @@ function buildAcknowledgementEmail(input: { kind: PublicFormAcknowledgementKind;
     <p style="margin:20px 0;padding:14px;border-radius:10px;background:#f1f5f9;font-family:monospace;font-size:16px;font-weight:700;color:#0f172a;">${escapeHtml(referenceLine)}</p>
     ${text.footer.map(line => `<p style="font-size:12px;color:#64748b;">${escapeHtml(line)}</p>`).join("\n    ")}
   `, input.language);
+  const { from, replyTo } = input.kind === "contact" ? resolveConsultationContact() : { from: DEFAULT_TRANSACTIONAL_FROM, replyTo: siteConfig.email };
   return {
-    from: DEFAULT_TRANSACTIONAL_FROM,
+    from,
     to: [input.email],
-    replyTo: siteConfig.email,
+    replyTo,
     subject: text.subject,
     html,
     text: [...text.lines, referenceLine, ...text.footer].join("\n\n"),
@@ -137,14 +141,28 @@ export async function sendPublicFormAcknowledgement(input: { kind: PublicFormAck
 
 /**
  * Counts one employer brief acknowledgement in the day's cap; false past it,
- * the email then skipped. A counter that cannot be read cuts nothing, as for
- * the daily volume of the other forms.
+ * the email then skipped. The owner gets one alert a day once it is reached,
+ * as for the daily volume of the other forms (publicFormRateLimit.ts). A
+ * counter that cannot be read cuts nothing.
  */
 export async function countClientBriefAcknowledgement(): Promise<boolean> {
+  let state: Awaited<ReturnType<typeof recordPersistentRateLimitAttempt>>;
   try {
-    return !(await recordPersistentRateLimitAttempt(CLIENT_BRIEF_ACKNOWLEDGEMENT_DAILY_LIMIT)).blocked;
+    state = await recordPersistentRateLimitAttempt(CLIENT_BRIEF_ACKNOWLEDGEMENT_DAILY_LIMIT);
   } catch (error) {
     console.error("client_brief_acknowledgement_volume_unavailable", error instanceof Error ? error.name : "UnknownError");
     return true;
   }
+  if (!state.blocked) return true;
+  const { action, maxAttempts } = CLIENT_BRIEF_ACKNOWLEDGEMENT_DAILY_LIMIT;
+  const alertAction = `${action}_alert`;
+  await sendOwnerAlertOncePerWindow({ action: alertAction, subject: "global", windowMs: DAY_MS, blockMs: DAY_MS }, () => notifyOwner({
+    title: `Volume inhabituel : plus de ${maxAttempts} accusés de brief employeur en 24 heures`,
+    content: [
+      `Le plafond quotidien de ${maxAttempts} accusés de réception envoyés aux employeurs est atteint (moins de 24 heures, toutes adresses confondues).`,
+      "Le formulaire reste ouvert : pendant les 24 prochaines heures, les briefs suivants sont enregistrés et vous sont notifiés, sans accusé de réception à l’adresse saisie. Aucun autre email ne vous sera envoyé pour ce volume.",
+      "Consultez-les dans l’administration (onglet « Missions »). S’il s’agit d’envois automatisés, activez l’Attack Challenge Mode du pare-feu Vercel.",
+    ].join("\n\n"),
+  }, { idempotencyKey: dailyOwnerAlertIdempotencyKey(alertAction) })).catch(() => false);
+  return false;
 }

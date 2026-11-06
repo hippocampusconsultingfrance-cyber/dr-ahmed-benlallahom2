@@ -124,6 +124,8 @@ describe("POST /api/client-briefs — accusé à l’employeur et refus traduisi
 
     expect(result.status).toBe(200);
     expect(state.notifications).toEqual([expect.objectContaining({ replyTo: brief.email })]);
+    // The owner knows the employer read the page, and its acknowledgement, in English.
+    expect(state.notifications[0]!.content).toContain("Langue de la page : en");
     expect(sent()).toHaveLength(1);
     const [{ message, options }] = sent();
     expect(options).toEqual({ idempotencyKey: `ack-${briefId}` });

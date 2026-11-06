@@ -73,7 +73,7 @@ export const contactRouter = router({
         await Promise.all([
           notifyOwner({
             title: `Nouveau message de contact de ${input.name} (${trackingId})`,
-            content: `**Numéro de suivi:** ${trackingId}\n**De:** ${input.name}\n**Vous êtes:** ${input.category ? CONTACT_CATEGORY_LABELS[input.category] : "Non précisé"}\n**Email:** ${input.email}\n**Téléphone:** ${input.phone || "Non renseigné"}\n**Consentement RGPD:** ${input.gdprConsent === 1 ? "✅ Accepté" : "❌ Refusé"}\n\n**Message:**\n${input.message}`,
+            content: `**Numéro de suivi:** ${trackingId}\n**De:** ${input.name}\n**Vous êtes:** ${input.category ? CONTACT_CATEGORY_LABELS[input.category] : "Non précisé"}\n**Langue de la page:** ${input.language ?? "Non précisée"}\n**Email:** ${input.email}\n**Téléphone:** ${input.phone || "Non renseigné"}\n**Consentement RGPD:** ${input.gdprConsent === 1 ? "✅ Accepté" : "❌ Refusé"}\n\n**Message:**\n${input.message}`,
             // « Répondre » écrit au visiteur, et non plus au propriétaire lui-même (PUB-09).
             replyTo: input.email,
           }),

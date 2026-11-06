@@ -11,6 +11,8 @@ export function buildClientBriefOwnerNotification(input: {
   requiredCertifications?: string | null;
   timeline?: string | null;
   notes?: string | null;
+  /** Language of the page, that of the employer's acknowledgement (REC-12). */
+  language?: string | null;
   receivedAt?: Date;
   adminUrl?: string;
 }) {
@@ -30,6 +32,7 @@ export function buildClientBriefOwnerNotification(input: {
       `Certifications / exigences : ${optional(input.requiredCertifications)}`,
       `Calendrier : ${optional(input.timeline)}`,
       `Notes de l’employeur : ${optional(input.notes)}`,
+      `Langue de la page : ${input.language || "non précisée"}`,
       "",
       `Qualifier le brief et préparer la shortlist : ${input.adminUrl ?? "https://drahmedbenlallahom.com/admin"} (onglet « Missions »).`,
     ].join("\n"),
