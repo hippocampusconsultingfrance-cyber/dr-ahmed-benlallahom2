@@ -60,3 +60,14 @@ describe("A11Y-03 — question santé refusée avant l’envoi", () => {
     for (const field of fields.filter(candidate => candidate.focusId)) expect(html, field.label).toContain(`id="${field.focusId}"`);
   });
 });
+
+describe("A11Y-16 — remplissage automatique des coordonnées", () => {
+  it("laisse le navigateur remplir le prénom, le nom, l’email et le téléphone", () => {
+    view.language = "fr";
+    const html = renderToStaticMarkup(createElement(MedicalQuestionsPage));
+    const contactFields = medicalQuestionFieldsToCorrect(["firstName", "lastName", "email", "phone"], "fr");
+    const autocomplete = (id: string) => /autocomplete="([^"]*)"/i.exec(new RegExp(`<input[^>]*id="${id}"[^>]*>`).exec(html)?.[0] ?? "")?.[1];
+
+    expect(contactFields.map(field => autocomplete(field.focusId!))).toEqual(["given-name", "family-name", "email", "tel"]);
+  });
+});

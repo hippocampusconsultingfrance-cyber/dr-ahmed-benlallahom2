@@ -11,7 +11,12 @@ type SentEmail = { to: string[]; subject: string };
 const state = vi.hoisted(() => ({ db: null as unknown, sent: [] as SentEmail[], stored: [] as string[] }));
 
 vi.mock("./db", () => ({ getDb: async () => state.db }));
-vi.mock("./_core/notification", () => ({ notifyOwner: vi.fn(async (_payload: { title: string; content: string }) => true) }));
+// The contact acknowledgements (PUB-09) go through the stand-in Resend client below.
+vi.mock("./_core/notification", async () => {
+  const { Resend } = await import("resend");
+  const resend = new Resend("re_test_stand_in");
+  return { notifyOwner: vi.fn(async (_payload: { title: string; content: string }) => true), getResendClient: () => resend };
+});
 vi.mock("./candidateTurnstile", () => ({ verifyCandidateTurnstile: vi.fn(async () => undefined) }));
 vi.mock("./adminMfa", async importOriginal => ({
   ...await importOriginal<typeof import("./adminMfa")>(),
@@ -134,8 +139,14 @@ describe("seuil quotidien global : demandes gardées, effets coûteux coupés (A
 
     expect(state.stored).toHaveLength(threshold + 2);
     expect(ownerTitles()).toEqual([`Volume inhabituel : plus de ${threshold} messages de contact en 24 heures`]);
+    // Nor an acknowledgement to the address typed (PUB-09): one per message under the threshold only.
+    expect(state.sent).toHaveLength(threshold);
+    expect(state.sent.flatMap(email => email.to)).not.toEqual(expect.arrayContaining(["au-dela1@test.local"]));
+    expect(state.sent.flatMap(email => email.to)).not.toEqual(expect.arrayContaining(["au-dela2@test.local"]));
     const [[alert]] = vi.mocked(notifyOwner).mock.calls;
     expect(alert.content).toContain("Le formulaire reste ouvert");
+    // The owner knows the visitors past the threshold get no reference by email either.
+    expect(alert.content).toContain("sans accusé de réception à l’adresse saisie");
     expect(alert.content).toContain("Attack Challenge Mode");
   });
 
@@ -168,6 +179,19 @@ describe("seuil quotidien global : demandes gardées, effets coûteux coupés (A
     const lastQuestion = db().rows(medicalQuestions).find(row => row.email === "cible@test.local");
     expect(db().rows(medicalQuestionAuditLogs).filter(log => log.medicalQuestionId === lastQuestion?.id).map(log => log.action))
       .toEqual(["submitted", "acknowledgement_skipped_daily_volume"]);
+  });
+
+  it("coupe les accusés de brief employeur au-delà de leur plafond du jour, et le dit une seule fois au propriétaire (REC-12)", async () => {
+    const { countClientBriefAcknowledgement } = await import("./publicFormAcknowledgements");
+    const counted: boolean[] = [];
+    for (let index = 1; index <= 52; index += 1) counted.push(await countClientBriefAcknowledgement());
+
+    expect(counted.filter(Boolean)).toHaveLength(50);
+    expect(counted.slice(50)).toEqual([false, false]);
+    expect(ownerTitles()).toEqual(["Volume inhabituel : plus de 50 accusés de brief employeur en 24 heures"]);
+    const [[alert, options]] = vi.mocked(notifyOwner).mock.calls as unknown as Array<[{ content: string }, { idempotencyKey?: string }]>;
+    expect(alert.content).toContain("sans accusé de réception à l’adresse saisie");
+    expect(options.idempotencyKey).toMatch(/^owner-alert-public_client_brief_acknowledgement_daily_alert-/);
   });
 });
 

@@ -77,7 +77,7 @@ describe("formulaire de contact et vérification anti-robot (navigateur simulé)
     expect(sendButton()).toHaveProperty("disabled", true);
     // Submitting anyway (Enter in a field): the widget stops it and says that sending stays blocked.
     fireEvent.submit(field("contact-name").form!);
-    expect(await screen.findByText(getTurnstileWidgetCopy("fr").loadError)).toBeTruthy();
+    expect((await screen.findByRole("alert")).textContent).toContain(getTurnstileWidgetCopy("fr").loadError);
     expect(view.submit).not.toHaveBeenCalled();
   });
 
@@ -106,6 +106,7 @@ describe("formulaire de contact et vérification anti-robot (navigateur simulé)
     fireEvent.change(field("contact-name"), { target: { value: "Jeanne Martin" } });
     fireEvent.change(field("contact-email"), { target: { value: "jeanne@example.test" } });
     fireEvent.change(field("contact-message"), { target: { value: "Je souhaite organiser une consultation pré-anesthésique." } });
+    fireEvent.click(screen.getByRole("radio", { name: copy.categories.press_partner }));
     fireEvent.click(field("gdprConsent"));
 
     challenges[0]!.callback("single-use-token");
@@ -126,8 +127,49 @@ describe("formulaire de contact et vérification anti-robot (navigateur simulé)
       message: "Je souhaite organiser une consultation pré-anesthésique.",
       gdprConsent: 1,
       turnstileToken: "fresh-token",
+      category: "press_partner",
+      language: "fr",
     });
     expect(view.toasts).toEqual([copy.sent]);
+    // PUB-09: the confirmation gives the reference the server returned.
+    expect(screen.getByText("C1234567890AB").closest("p")!.textContent).toBe(`${copy.reference} C1234567890AB`);
+  });
+
+  it("après un refus de l’anti-robot, rend un nouveau défi et renvoie le message saisi avec son nouveau jeton, sans recharger la page (PUB-09)", async () => {
+    // The server checks the token first, whatever it answers next: that token is used up.
+    view.submit = vi.fn()
+      .mockRejectedValueOnce(Object.assign(new Error("Texte français écrit par le serveur."), { data: { code: "BAD_REQUEST", reason: "security_check_failed" } }))
+      .mockResolvedValueOnce({ success: true, trackingId: "C1234567890AB" });
+    mount();
+    fireEvent.focusIn(field("contact-name"));
+    await waitFor(() => expect(challenges).toHaveLength(1));
+    fireEvent.change(field("contact-name"), { target: { value: "Jeanne Martin" } });
+    fireEvent.change(field("contact-email"), { target: { value: "jeanne@example.test" } });
+    fireEvent.change(field("contact-message"), { target: { value: "Je souhaite organiser une consultation pré-anesthésique." } });
+    fireEvent.click(field("gdprConsent"));
+    challenges[0]!.callback("first-token");
+    await waitFor(() => expect(sendButton()).toHaveProperty("disabled", false));
+    fireEvent.click(sendButton());
+
+    expect((await screen.findByRole("alert")).textContent).toBe(copy.refusals.security_check_failed);
+    expect(view.toasts).toEqual([copy.refusals.security_check_failed]);
+    await waitFor(() => expect(challenges).toHaveLength(2));
+    expect(window.turnstile!.remove).toHaveBeenCalledWith("widget-1");
+    // Nothing leaves with the used token: sending waits for the new challenge.
+    expect(sendButton()).toHaveProperty("disabled", true);
+    fireEvent.submit(field("contact-name").form!);
+    expect(view.submit).toHaveBeenCalledTimes(1);
+
+    challenges[1]!.callback("second-token");
+    await waitFor(() => expect(sendButton()).toHaveProperty("disabled", false));
+    fireEvent.click(sendButton());
+
+    expect(await screen.findByText(copy.successTitle)).toBeTruthy();
+    expect(view.submit).toHaveBeenCalledTimes(2);
+    expect(view.submit.mock.calls.map(([input]) => input)).toEqual([
+      expect.objectContaining({ turnstileToken: "first-token" }),
+      expect.objectContaining({ name: "Jeanne Martin", email: "jeanne@example.test", message: "Je souhaite organiser une consultation pré-anesthésique.", gdprConsent: 1, turnstileToken: "second-token" }),
+    ]);
   });
 
   it("refuse l’envoi sans consentement, même avec un jeton", async () => {
@@ -149,5 +191,44 @@ describe("formulaire de contact et vérification anti-robot (navigateur simulé)
     await waitFor(() => expect(field("gdprConsent").getAttribute("aria-invalid")).toBe("true"));
     expect(view.toasts).toEqual([copy.consentRequired]);
     expect(view.submit).not.toHaveBeenCalled();
+  });
+});
+
+describe("formulaire de contact : qui écrit, données de santé et remplissage automatique", () => {
+  const linksOf = () => Array.from(document.querySelectorAll("fieldset a")).map(link => [link.textContent, link.getAttribute("href")]);
+
+  it("mène chaque visiteur vers la page faite pour sa demande, sans rien imposer à la presse (PUB-22)", () => {
+    mount();
+    expect(screen.getByRole("group", { name: copy.categoryLegend })).toBeTruthy();
+    expect(linksOf()).toEqual([]);
+
+    fireEvent.click(screen.getByRole("radio", { name: copy.categories.patient }));
+    expect(linksOf()).toEqual([[copy.categoryLinks.booking, "/booking"], [copy.categoryLinks.medicalQuestions, "/questions-anesthesie"]]);
+    fireEvent.click(screen.getByRole("radio", { name: copy.categories.health_professional }));
+    expect(linksOf()).toEqual([[copy.categoryLinks.recruitment, "/recruitment"]]);
+    fireEvent.click(screen.getByRole("radio", { name: copy.categories.institution }));
+    expect(linksOf()).toEqual([[copy.categoryLinks.employers, "/employers"]]);
+    fireEvent.click(screen.getByRole("radio", { name: copy.categories.press_partner }));
+    expect(linksOf()).toEqual([]);
+  });
+
+  it("demande, sous le message, de ne pas y écrire d’information médicale, et le lie au champ (PUB-22)", () => {
+    mount();
+    const notice = document.getElementById(field("contact-message").getAttribute("aria-describedby")!);
+    expect(notice?.textContent).toBe(copy.medicalNotice);
+  });
+
+  it("dans la page anglaise, propose les mêmes choix et la même mise en garde en anglais", () => {
+    localStorage.setItem("language", "en");
+    mount();
+    const english = getContactFormCopy("en");
+    fireEvent.click(screen.getByRole("radio", { name: english.categories.patient }));
+    expect(linksOf().map(([label]) => label)).toEqual([english.categoryLinks.booking, english.categoryLinks.medicalQuestions]);
+    expect(screen.getByText(english.medicalNotice)).toBeTruthy();
+  });
+
+  it("laisse le navigateur remplir le nom, le téléphone et l’email (A11Y-16)", () => {
+    mount();
+    expect(["contact-name", "contact-phone", "contact-email"].map(id => field(id).getAttribute("autocomplete"))).toEqual(["name", "tel", "email"]);
   });
 });

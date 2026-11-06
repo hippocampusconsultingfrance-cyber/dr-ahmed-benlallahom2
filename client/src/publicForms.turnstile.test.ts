@@ -198,10 +198,12 @@ describe("retours publics après soumission", () => {
     expect(toast.error).toHaveBeenCalledWith(copy.consentRequired);
     expect(view.mutations["contact.submit"]!.mutate).not.toHaveBeenCalled();
 
-    view.mutations["contact.submit"]!.options.onSuccess!();
+    (view.mutations["contact.submit"]!.options.onSuccess as (data: { success: true; trackingId: string }) => void)({ success: true, trackingId: "C1234567890AB" });
     const confirmation = elements(ContactSection);
     expect(confirmation.find(element => String(element.props.className ?? "").includes("success-panel"))).toBeDefined();
     expect(textOf(confirmation)).toContain(copy.successTitle);
+    // PUB-09: the reference of the message is on the confirmation.
+    expect(textOf(confirmation)).toContain(`${copy.reference} C1234567890AB`);
     expect(confirmation.find(element => element.type === "form")).toBeUndefined();
     expect(toast.success).toHaveBeenCalledWith(copy.sent);
   });
