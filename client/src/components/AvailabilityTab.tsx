@@ -4,11 +4,12 @@ import { Button } from "@/components/ui/button";
 import { XCircle, Plus, Trash } from "lucide-react";
 import { toast } from "sonner";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
+import { AdminErrorState } from "@/components/AdminStatePanel";
 
 export default function AvailabilityTab() {
   const utils = trpc.useUtils();
-  const { data: slots, isLoading: slotsLoading } = trpc.admin.availability.listSlots.useQuery();
-  const { data: blockedDates, isLoading: blockedLoading } = trpc.admin.availability.listBlockedDates.useQuery();
+  const { data: slots, isLoading: slotsLoading, error: slotsError, refetch: refetchSlots, isFetching: slotsFetching } = trpc.admin.availability.listSlots.useQuery();
+  const { data: blockedDates, isLoading: blockedLoading, error: blockedError, refetch: refetchBlockedDates, isFetching: blockedFetching } = trpc.admin.availability.listBlockedDates.useQuery();
 
   const [showSlotForm, setShowSlotForm] = useState(false);
   const [slotForm, setSlotForm] = useState({ dayOfWeek: 1, startTime: "09:00", endTime: "10:00" });
@@ -30,6 +31,7 @@ export default function AvailabilityTab() {
       toast.success("Créneau supprimé");
       utils.admin.availability.listSlots.invalidate();
     },
+    onError: (e) => toast.error(e.message),
   });
 
   const blockDate = trpc.admin.availability.addBlockedDate.useMutation({
@@ -116,6 +118,8 @@ export default function AvailabilityTab() {
           </div>
         )}
 
+        {/* ADM-10: a list that could not be loaded is not shown as an empty one. */}
+        {slotsError ? <AdminErrorState description={slotsError.message} onRetry={() => void refetchSlots()} retrying={slotsFetching} headingLevel={4} /> : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {slots?.map((slot) => (
             <div key={slot.id} className="bg-card border border-border rounded-lg p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -141,6 +145,7 @@ export default function AvailabilityTab() {
             <p className="text-muted-foreground col-span-full text-center py-4">Aucun créneau configuré</p>
           )}
         </div>
+        )}
       </section>
 
       {/* Dates bloquées */}
@@ -181,27 +186,36 @@ export default function AvailabilityTab() {
           </div>
         )}
 
+        {blockedError ? <AdminErrorState description={blockedError.message} onRetry={() => void refetchBlockedDates()} retrying={blockedFetching} headingLevel={4} /> : (
         <div className="space-y-2">
-          {blockedDates?.map((bd) => (
-            <div key={bd.id} className="bg-card border border-border rounded-lg p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex flex-col gap-1 sm:flex-row sm:items-center">
-                <span className="font-medium text-foreground">{new Date(bd.date + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</span>
-                {bd.reason && <span className="text-sm text-muted-foreground ml-3">{bd.reason}</span>}
+          {blockedDates?.map((bd) => {
+            const dateLabel = new Date(bd.date + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+            return (
+              <div key={bd.id} className="bg-card border border-border rounded-lg p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center">
+                  <span className="font-medium text-foreground">{dateLabel}</span>
+                  {bd.reason && <span className="text-sm text-muted-foreground ml-3">{bd.reason}</span>}
+                </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="min-h-10 self-start sm:min-h-0"
+                  onClick={() => {
+                    // ADM-11: unblocking reopens the day's weekly slots to booking.
+                    if (!window.confirm(`Débloquer le ${dateLabel} ? Les créneaux hebdomadaires de ce jour pourront de nouveau être réservés par les patients.`)) return;
+                    unblockDate.mutate({ id: bd.id });
+                  }}
+                >
+                  <XCircle className="w-4 h-4 text-red-400" />
+                </Button>
               </div>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="min-h-10 self-start sm:min-h-0"
-                onClick={() => unblockDate.mutate({ id: bd.id })}
-              >
-                <XCircle className="w-4 h-4 text-red-400" />
-              </Button>
-            </div>
-          ))}
+            );
+          })}
           {(!blockedDates || blockedDates.length === 0) && (
             <p className="text-muted-foreground text-center py-4">Aucune date bloquée</p>
           )}
         </div>
+        )}
       </section>
     </div>
   );

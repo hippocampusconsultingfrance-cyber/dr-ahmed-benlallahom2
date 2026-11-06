@@ -60,6 +60,19 @@ describe("ADM-01 — listes de l’admin par pages de 50", () => {
     expect(onLoadMore).not.toHaveBeenCalled();
   });
 
+  it("recharge la première page quand la liste entière n’a pas pu être chargée, et dit quand elle se recharge (ADM-10)", () => {
+    const refetch = [vi.fn(), vi.fn()];
+    const failed = mergeAdminPages([
+      { data: undefined, isLoading: false, isFetching: false, error: { message: "Session expirée" }, refetch: refetch[0] },
+      { data: undefined, isLoading: false, isFetching: false, error: { message: "Session expirée" }, refetch: refetch[1] },
+    ]);
+    expect(failed).toMatchObject({ error: { message: "Session expirée" }, retrying: false });
+    failed.retry();
+    expect(refetch.map(fn => fn.mock.calls.length)).toEqual([1, 0]);
+
+    expect(mergeAdminPages([{ data: { items: rows(0, 3), total: 3 }, isLoading: false, isFetching: true, error: { message: "Session expirée" } }]).retrying).toBe(true);
+  });
+
   it("annonce « 50 sur N » tant que des lignes restent à charger", () => {
     expect(adminListCount(50, 302, "réservation(s)")).toBe("50 sur 302 réservation(s)");
     expect(adminListCount(302, 302, "réservation(s)")).toBe("302 réservation(s)");

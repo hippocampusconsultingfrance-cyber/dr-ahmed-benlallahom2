@@ -11,6 +11,7 @@ export function adminPageOffsets(pageCount: number): number[] {
 type AdminPageQuery<T> = {
   data?: { items: T[]; total: number };
   isLoading: boolean;
+  isFetching?: boolean;
   error?: { message: string } | null;
   refetch?: () => unknown;
 };
@@ -19,7 +20,8 @@ type AdminPageQuery<T> = {
  * The loaded pages of a list as one list: rows in order, without the
  * duplicate a new row shifting the pages can cause; the total, read from the
  * first page; the loading state and error of the whole list (first page) and
- * of « Charger plus » (later pages: the rows already shown stay on screen).
+ * of « Charger plus » (later pages: the rows already shown stay on screen);
+ * the « Réessayer » of a list that could not be loaded (ADM-10).
  */
 export function mergeAdminPages<T extends { id: number }>(pages: AdminPageQuery<T>[]) {
   const seen = new Set<number>();
@@ -41,6 +43,8 @@ export function mergeAdminPages<T extends { id: number }>(pages: AdminPageQuery<
     retryLoadMore: () => {
       for (const page of pages.slice(1)) if (page.error) void page.refetch?.();
     },
+    retry: () => void pages[0]?.refetch?.(),
+    retrying: pages[0]?.isFetching ?? false,
   };
 }
 

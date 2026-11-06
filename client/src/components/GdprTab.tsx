@@ -14,7 +14,7 @@ export default function GdprTab() {
   const utils = trpc.useUtils();
   const { pageCount, loadMore } = useAdminPageCount("all");
   const pages = trpc.useQueries(t => adminPageOffsets(pageCount).map(offset => t.admin.gdprRequests.list({ limit: ADMIN_PAGE_SIZE, offset })));
-  const { items, total, isLoading, isLoadingMore, error, loadMoreError, retryLoadMore } = mergeAdminPages(pages);
+  const { items, total, isLoading, isLoadingMore, error, loadMoreError, retryLoadMore, retry, retrying } = mergeAdminPages(pages);
   // Note or reason being typed, per request (RGPD-12); the saved note otherwise.
   const [notes, setNotes] = useState<Record<number, string>>({});
   const [personalDataSearch, setPersonalDataSearch] = useState({ email: "", nonce: 0 });
@@ -29,7 +29,7 @@ export default function GdprTab() {
   });
 
   if (error) {
-    return <AdminErrorState description={error.message} />;
+    return <AdminErrorState description={error.message} onRetry={retry} retrying={retrying} />;
   }
 
   const statusColors: Record<string, string> = {

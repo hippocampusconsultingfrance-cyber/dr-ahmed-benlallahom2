@@ -4,6 +4,7 @@ import { trpc } from "@/lib/trpc";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import AdminLoadMore from "@/components/AdminLoadMore";
 import AdminSearchField from "@/components/AdminSearchField";
+import { AdminErrorState } from "@/components/AdminStatePanel";
 import { adminListCount, adminPageOffsets, ADMIN_PAGE_SIZE, mergeAdminPages, useAdminPageCount } from "@/components/adminPagination";
 import { adminSearchStatus, useAdminSearch } from "@/components/adminSearch";
 import { toast } from "sonner";
@@ -33,6 +34,44 @@ const STATUS_LABELS: Record<MedicalQuestionStatus, string> = {
   rejected: "Classée sans suite",
 };
 
+/** ADM-23: reason written in the question's journal when it is filed away, and shown on it; the patient is not emailed. */
+const REJECTION_REASONS = {
+  hors_champ: "Hors champ",
+  urgence_redirigee: "Urgence redirigée",
+  doublon: "Doublon",
+  abusif: "Abusive / spam",
+  autre: "Autre",
+} as const;
+
+type RejectionReason = keyof typeof REJECTION_REASONS;
+
+const SEND_EXCERPT_LENGTH = 160;
+
+/** What becomes of the anonymised version, said in the confirmation of a sending. */
+const SEND_PUBLICATION = {
+  publish: "La version anonymisée sera publiée dans la bibliothèque publique.",
+  private: "Rien ne sera publié : seule cette personne reçoit la réponse.",
+  resend: "Un nouvel email est envoyé ; la publication n’est pas modifiée.",
+} as const;
+
+/**
+ * ADM-11: what « Valider et envoyer » or « Renvoyer la réponse par email » is
+ * about to do, read back before the email leaves: who receives it, the start
+ * of the answer and what becomes of the anonymised version. A resend says
+ * when the text is no longer the one sent.
+ */
+function sendConfirmation(question: { firstName: string; lastName: string; email: string; adminResponse: string | null }, response: string, publication: keyof typeof SEND_PUBLICATION) {
+  const text = response.trim().replace(/\s+/g, " ");
+  const excerpt = text.length > SEND_EXCERPT_LENGTH ? `${text.slice(0, SEND_EXCERPT_LENGTH).trimEnd()}…` : text;
+  const resend = publication === "resend";
+  return [
+    `${resend ? "Renvoyer" : "Envoyer"} la réponse par email à ${question.firstName} ${question.lastName} (${question.email}) ?`,
+    `« ${excerpt} »`,
+    ...(resend && response.trim() !== question.adminResponse?.trim() ? ["Texte modifié depuis le dernier envoi."] : []),
+    SEND_PUBLICATION[publication],
+  ].join("\n\n");
+}
+
 /**
  * ADM-01: below the two-column layout (Tailwind lg, 64rem), the detail sits
  * under the whole list and its « Charger plus ». Touching a question brings
@@ -53,13 +92,14 @@ export default function MedicalQuestionsAdminTab() {
   const { pageCount, loadMore } = useAdminPageCount(JSON.stringify({ queue, search }));
   const { statuses, order } = MEDICAL_QUESTION_QUEUES[queue];
   const pages = trpc.useQueries(t => adminPageOffsets(pageCount).map(offset => t.medicalQuestions.admin.list({ statuses: statuses ? [...statuses] : undefined, order, search, limit: ADMIN_PAGE_SIZE, offset })));
-  const { items, total, isLoading, isLoadingMore, error, loadMoreError, retryLoadMore } = mergeAdminPages(pages);
+  const { items, total, isLoading, isLoadingMore, error, loadMoreError, retryLoadMore, retry, retrying } = mergeAdminPages(pages);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const detailRef = useRef<HTMLDivElement>(null);
   const [adminResponse, setAdminResponse] = useState("");
   const [publicQuestion, setPublicQuestion] = useState("");
   const [publicResponse, setPublicResponse] = useState("");
   const [publish, setPublish] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState<RejectionReason | "">("");
   const selected = trpc.medicalQuestions.admin.get.useQuery(
     { id: selectedId ?? 0 },
     { enabled: selectedId !== null }
@@ -134,6 +174,7 @@ export default function MedicalQuestionsAdminTab() {
     setPublicQuestion(selected.data.publicQuestion ?? "");
     setPublicResponse(selected.data.publicResponse ?? "");
     setPublish(selected.data.status === "published");
+    setRejectionReason("");
   }, [selected.data]);
 
   const responseLength = adminResponse.trim().length;
@@ -143,7 +184,8 @@ export default function MedicalQuestionsAdminTab() {
   // ADM-MQ-01: once the answer is sent, the main button cannot email again.
   const alreadySent = Boolean(selected.data?.responseSentAt);
   const sendDisabled = alreadySent || !responseReady || sendValidated.isPending || missingPublicContent;
-  const draftDisabled = !responseReady || saveDraft.isPending;
+  // ADM-23: a draft is kept at any length; only the sending asks for the minimum.
+  const draftDisabled = responseLength === 0 || saveDraft.isPending;
 
   const validationHint = !responseReady
     ? `Ajoutez encore ${remainingCharacters} caractère${remainingCharacters > 1 ? "s" : ""} à la réponse privée pour activer la validation.`
@@ -161,6 +203,7 @@ export default function MedicalQuestionsAdminTab() {
       toast.error("La question et la réponse anonymisées sont obligatoires pour publier.");
       return;
     }
+    if (!window.confirm(sendConfirmation(selected.data, adminResponse, publish ? "publish" : "private"))) return;
     sendValidated.mutate({
       id: selected.data.id,
       adminResponse,
@@ -172,7 +215,7 @@ export default function MedicalQuestionsAdminTab() {
 
   function handleResend() {
     if (!selected.data || !responseReady) return;
-    if (!window.confirm("Renvoyer la réponse par email au patient ? Un nouvel email sera envoyé ; la publication n’est pas modifiée.")) return;
+    if (!window.confirm(sendConfirmation(selected.data, adminResponse, "resend"))) return;
     sendValidated.mutate({ id: selected.data.id, adminResponse, publicQuestion, publicResponse, publish: false, resend: true });
   }
 
@@ -211,7 +254,7 @@ export default function MedicalQuestionsAdminTab() {
         {isLoading ? (
           <div className="mt-4"><PublicContentSkeleton cards={3} label="Chargement des questions médicales" /></div>
         ) : error ? (
-          <p className="mt-4 text-destructive">{error.message}</p>
+          <div className="mt-4"><AdminErrorState description={error.message} onRetry={retry} retrying={retrying} headingLevel={3} /></div>
         ) : (
           <>
             <p className="mt-3 wrap-anywhere text-sm text-muted-foreground">
@@ -266,7 +309,7 @@ export default function MedicalQuestionsAdminTab() {
               <span className="text-xs font-semibold uppercase tracking-wider">Données privées — administration uniquement</span>
             </div>
             <h3 className="mt-4 font-display text-2xl">{selected.data.firstName} {selected.data.lastName}</h3>
-            <p className="mt-1 text-sm text-muted-foreground">Référence <span className="font-mono text-foreground">{selected.data.trackingId}</span> · {STATUS_LABELS[selected.data.status] ?? selected.data.status}</p>
+            <p className="mt-1 text-sm text-muted-foreground">Référence <span className="font-mono text-foreground">{selected.data.trackingId}</span> · {STATUS_LABELS[selected.data.status] ?? selected.data.status}{selected.data.rejectionReason ? ` (motif : ${REJECTION_REASONS[selected.data.rejectionReason]})` : ""}</p>
             <div className="mt-3 grid gap-2 text-sm text-muted-foreground">
               <span className="flex items-center gap-2"><Mail className="h-4 w-4" />{selected.data.email}</span>
               <span className="flex items-center gap-2"><Phone className="h-4 w-4" />{selected.data.phone}</span>
@@ -373,19 +416,34 @@ export default function MedicalQuestionsAdminTab() {
                   </button>
                 )}
                 {!alreadySent && selected.data.status !== "rejected" && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (window.confirm(`Classer sans suite la question ${selected.data!.trackingId} ? Aucun email n’est envoyé ; la question quitte la liste « À traiter », le dossier privé et son journal sont conservés.`)) {
-                        reject.mutate({ id: selected.data!.id });
-                      }
-                    }}
-                    disabled={reject.isPending}
-                    className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    <Archive className="h-4 w-4" />
-                    {reject.isPending ? "Classement…" : "Classer sans suite"}
-                  </button>
+                  <>
+                    <label className="inline-flex items-center gap-2 text-sm text-muted-foreground" htmlFor="medical-question-rejection-reason">
+                      Motif du classement
+                      <select
+                        id="medical-question-rejection-reason"
+                        value={rejectionReason}
+                        onChange={event => setRejectionReason(event.target.value as RejectionReason | "")}
+                        className="h-9 rounded-md border border-border bg-background px-2 text-sm text-foreground"
+                      >
+                        <option value="">Sans motif</option>
+                        {(Object.keys(REJECTION_REASONS) as RejectionReason[]).map(reason => <option key={reason} value={reason}>{REJECTION_REASONS[reason]}</option>)}
+                      </select>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const reason = rejectionReason ? ` (motif : ${REJECTION_REASONS[rejectionReason]})` : "";
+                        if (window.confirm(`Classer sans suite la question ${selected.data!.trackingId}${reason} ? Aucun email n’est envoyé ; la question quitte la liste « À traiter », le dossier privé et son journal sont conservés.`)) {
+                          reject.mutate({ id: selected.data!.id, ...(rejectionReason ? { reason: rejectionReason } : {}) });
+                        }
+                      }}
+                      disabled={reject.isPending}
+                      className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <Archive className="h-4 w-4" />
+                      {reject.isPending ? "Classement…" : "Classer sans suite"}
+                    </button>
+                  </>
                 )}
                 <button
                   type="button"
