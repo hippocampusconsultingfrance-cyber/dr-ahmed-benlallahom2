@@ -11,6 +11,25 @@ export const CANDIDATE_DOCUMENT_MAX_BYTES = CANDIDATE_DOCUMENT_MAX_MEGABYTES * 1
 /** French error shown when a candidate document is too large (server and browser). */
 export const CANDIDATE_DOCUMENT_TOO_LARGE_MESSAGE = `Le document dépasse la taille maximale de ${CANDIDATE_DOCUMENT_MAX_MEGABYTES} Mo. Réduisez sa taille (scan en 150 à 200 dpi, PDF compressé ou photo moins lourde) puis réessayez.`;
 
+/**
+ * File types of the vault. The legacy Word format (.doc) is refused, as for
+ * CVs: its macros cannot be inspected reliably (REC-15).
+ */
+export const CANDIDATE_DOCUMENT_ACCEPTED_EXTENSIONS = ["pdf", "docx", "jpg", "jpeg", "png"] as const;
+/** Value for the `accept` attribute of the vault's file input. */
+export const CANDIDATE_DOCUMENT_ACCEPT_ATTRIBUTE = CANDIDATE_DOCUMENT_ACCEPTED_EXTENSIONS.map(extension => `.${extension}`).join(",");
+
+/**
+ * The extension decides in the browser. The server is stricter: it also
+ * requires an accepted MIME type (an empty or generic one, as some iOS /
+ * Android pickers give, is refused before the file is read), then checks the
+ * signature and content.
+ */
+export function isAcceptedCandidateDocumentName(name: string): boolean {
+  const extension = name.toLowerCase().split(".").pop() ?? "";
+  return name.includes(".") && (CANDIDATE_DOCUMENT_ACCEPTED_EXTENSIONS as readonly string[]).includes(extension);
+}
+
 /** Why the vault refused a document after opening it, read from the code /api/candidate/documents returns (REC-02). */
 export type CandidateDocumentRefusalReason = "tooLargeWhenOpened" | "pageLimit" | "passwordProtected" | "activeContent" | "invalidContent";
 

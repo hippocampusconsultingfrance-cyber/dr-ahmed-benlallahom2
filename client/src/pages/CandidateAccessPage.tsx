@@ -301,14 +301,26 @@ export function getCandidateInvitationToken(search: string): string | null {
   return getCandidateInvitationEntry(search).token;
 }
 
+/**
+ * Address to send a new activation link to, when the page is opened from a
+ * refused or expired activation link (?mode=activation&email=, REC-17): the
+ * form opens in that mode with the address filled in. Null otherwise.
+ */
+export function getCandidateActivationResendEmail(search: string): string | null {
+  const params = new URLSearchParams(search);
+  if (params.get("mode") !== "activation") return null;
+  return params.get("email")?.trim().slice(0, 320) ?? "";
+}
+
 export default function CandidateAccessPage() {
   const [, navigate] = useLocation();
   const { language } = useLanguage();
   const copy = candidateAccessCopy[(language in candidateAccessCopy ? language : "fr") as CandidateLanguage];
   const [invitationEntry] = useState(() => getCandidateInvitationEntry(typeof window === "undefined" ? "" : window.location.search));
   const invitationToken = invitationEntry.token;
-  const [mode, setMode] = useState<Mode>(() => invitationToken || invitationEntry.legacyEmail ? "register" : "login");
-  const [email, setEmail] = useState(() => invitationEntry.legacyEmail || "");
+  const [activationResendEmail] = useState(() => getCandidateActivationResendEmail(typeof window === "undefined" ? "" : window.location.search));
+  const [mode, setMode] = useState<Mode>(() => invitationToken || invitationEntry.legacyEmail ? "register" : activationResendEmail !== null ? "activation" : "login");
+  const [email, setEmail] = useState(() => invitationEntry.legacyEmail || activationResendEmail || "");
   const [password, setPassword] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -438,7 +450,7 @@ export default function CandidateAccessPage() {
               <form id="candidate-access-form" className="space-y-5" onSubmit={submit}>
                 {mode === "register" && <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><Label htmlFor="candidate-first-name">{copy.firstName}</Label><Input id="candidate-first-name" value={firstName} onChange={event => setFirstName(event.target.value)} required /></div><div className="space-y-2"><Label htmlFor="candidate-last-name">{copy.lastName}</Label><Input id="candidate-last-name" value={lastName} onChange={event => setLastName(event.target.value)} required /></div></div>}
                 <div className="space-y-2"><Label htmlFor="candidate-email">{copy.email}</Label><Input id="candidate-email" type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} readOnly={mode === "register" && Boolean(activeInvitationToken)} required /></div>
-                {mode === "login" && <div className="space-y-2"><Label htmlFor="candidate-password">{copy.password}</Label><Input id="candidate-password" type="password" autoComplete="current-password" aria-describedby="candidate-password-hint" value={password} onChange={event => setPassword(event.target.value)} minLength={15} required /><p id="candidate-password-hint" className="text-xs text-slate-500">{copy.passwordHint}</p></div>}
+                {mode === "login" && <div className="space-y-2"><Label htmlFor="candidate-password">{copy.password}</Label><Input id="candidate-password" type="password" autoComplete="current-password" aria-describedby="candidate-password-hint" value={password} onChange={event => setPassword(event.target.value)} minLength={15} required /><p id="candidate-password-hint" className="text-xs text-slate-400">{copy.passwordHint}</p></div>}
                 {mode === "register" && <div className="candidate-consent-panel space-y-3 rounded-xl border border-slate-700/90 bg-slate-900/75 p-4 text-sm"><label className={`candidate-consent-item ${consentAttempted && !terms ? "candidate-consent-item-invalid" : ""}`}><Checkbox className="candidate-consent-checkbox" checked={terms} aria-invalid={consentAttempted && !terms} onCheckedChange={value => { const next = value === true; setTerms(next); if (next && documentConsent) setConsentAttempted(false); }} /><span>{copy.termsParts[0]}<a href={candidateLegalLinks.terms} target="_blank" rel="noopener" onClick={event => event.stopPropagation()} className="font-medium text-cyan-300 underline underline-offset-2 hover:text-cyan-200">{copy.termsParts[1]}<span className="sr-only"> {copy.newTab}</span></a>{copy.termsParts[2]}<a href={candidateLegalLinks.privacy} target="_blank" rel="noopener" onClick={event => event.stopPropagation()} className="font-medium text-cyan-300 underline underline-offset-2 hover:text-cyan-200">{copy.termsParts[3]}<span className="sr-only"> {copy.newTab}</span></a>{copy.termsParts[4]}</span></label><label className={`candidate-consent-item ${consentAttempted && !documentConsent ? "candidate-consent-item-invalid" : ""}`}><Checkbox className="candidate-consent-checkbox" checked={documentConsent} aria-invalid={consentAttempted && !documentConsent} onCheckedChange={value => { const next = value === true; setDocumentConsent(next); if (next && terms) setConsentAttempted(false); }} /><span>{copy.documentConsent}</span></label><p className="text-xs leading-5 text-slate-400">{copy.legalNotice} <a href={candidateLegalLinks.legal} target="_blank" rel="noopener" className="text-cyan-300 underline underline-offset-2 hover:text-cyan-200">{copy.legalLinks.legal}<span className="sr-only"> {copy.newTab}</span></a> · <a href={candidateLegalLinks.privacy} target="_blank" rel="noopener" className="text-cyan-300 underline underline-offset-2 hover:text-cyan-200">{copy.legalLinks.privacy}<span className="sr-only"> {copy.newTab}</span></a></p></div>}
                 {(mode === "register" || mode === "forgot" || mode === "activation" || (mode === "login" && loginChallenge)) && <TurnstileWidget key={`${mode}-${turnstileKey}`} onToken={setTurnstileToken} />}
                 {notice && <p role="status" className="rounded-lg border border-cyan-800/50 bg-cyan-950/30 p-3 text-sm text-cyan-100">{notice}</p>}

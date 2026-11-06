@@ -11,6 +11,9 @@ import { CANDIDATE_UPLOADABLE_DOCUMENT_CATEGORIES, candidateDocumentAllowsAiAnal
 import { CANDIDATE_DOCUMENT_ACCOUNT_FOREIGN_KEY, isForeignKeyViolation } from "../databaseConstraints";
 import { safeErrorName, safeFileName } from "./routeHelpers";
 
+/** A type the vault does not take, a legacy .doc among them (REC-15): the validation's stable code, which the portal translates. */
+const CANDIDATE_DOCUMENT_TYPE_REFUSED = "candidate_document_type_mismatch";
+
 const candidateDocumentUpload = multer({
   storage: multer.memoryStorage(),
   // Browsers send the file name in UTF-8: read as latin1, each accented
@@ -19,7 +22,7 @@ const candidateDocumentUpload = multer({
   limits: { fileSize: CANDIDATE_DOCUMENT_MAX_BYTES, files: 1, fields: 8 },
   fileFilter: (_req, file, callback) => {
     if (!candidateDocumentMimeTypes.has(file.mimetype)) {
-      callback(new Error("Format de document non accepté."));
+      callback(new Error(CANDIDATE_DOCUMENT_TYPE_REFUSED));
       return;
     }
     callback(null, true);
@@ -34,6 +37,10 @@ export function registerCandidateDocumentRoutes(app: Express) {
   app.post("/api/candidate/documents", (req, res) => {
     candidateDocumentUpload.single("document")(req, res, async uploadError => {
       if (uploadError) {
+        if (uploadError instanceof Error && uploadError.message === CANDIDATE_DOCUMENT_TYPE_REFUSED) {
+          res.status(400).json({ error: candidateDocumentValidationMessage(CANDIDATE_DOCUMENT_TYPE_REFUSED), code: CANDIDATE_DOCUMENT_TYPE_REFUSED });
+          return;
+        }
         const message = uploadError instanceof multer.MulterError && uploadError.code === "LIMIT_FILE_SIZE"
           ? CANDIDATE_DOCUMENT_TOO_LARGE_MESSAGE
           : uploadError.message || "Le document n’a pas pu être reçu.";

@@ -1,8 +1,10 @@
 import { deflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
-import { candidateDocumentValidationMessage, safeCandidateDocumentName, validateCandidateDocument } from "./candidateDocumentValidation";
+import { CANDIDATE_DOCUMENT_ACCEPTED_EXTENSIONS } from "../shared/candidateDocumentLimits";
+import { candidateDocumentMimeTypes, candidateDocumentValidationMessage, safeCandidateDocumentName, validateCandidateDocument } from "./candidateDocumentValidation";
 import { DOCUMENT_DECOMPRESSION_LIMITS } from "./documentDecompressionLimits";
 import { appendWithoutXref, classicPdf, IMAGE_DATA_OBJ_KEYWORDS, libreOfficeChineseCvPdf, libreOfficeCvPdf, packPdfIntoObjectStream, pathologicalPdfs, pngPredict, saveIncrementally, scannedPdf, withObjectInStreamData } from "./testing/pdfFixture";
+import { buildZip } from "./testing/zipFixture";
 
 describe("validation des documents candidats", () => {
   it("nettoie les noms de fichiers et rejette les chemins", () => {
@@ -35,7 +37,53 @@ describe("validation des documents candidats", () => {
     const buffer = Buffer.concat([Buffer.from("%PDF-1.7\n/Type /Page\n"), Buffer.alloc(300, 1)]);
     expect(() => validateCandidateDocument({ buffer, mimeType: "image/png", originalName: "document.png", size: buffer.length })).toThrow("candidate_document_signature_invalid");
   });
+
+  it("refuse un document Word ancien (.doc), même sans macro, et accepte un DOCX (REC-15)", () => {
+    // A well-formed OLE container: the vault no longer takes the format at all, as for CVs.
+    const doc = Buffer.concat([Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]), Buffer.alloc(2048, 0)]);
+    for (const [mimeType, originalName] of [["application/msword", "diplome.doc"], ["application/msword", "diplome.DOC"], ["application/octet-stream", "diplome.doc"]]) {
+      expect(() => validateCandidateDocument({ buffer: doc, mimeType, originalName, size: doc.length }), `${mimeType} ${originalName}`).toThrow("candidate_document_type_mismatch");
+    }
+    // Declared as a DOCX, the old container is still not one.
+    expect(() => validateCandidateDocument({ buffer: doc, mimeType: DOCX, originalName: "diplome.docx", size: doc.length })).toThrow("candidate_document_signature_invalid");
+    expect(candidateDocumentValidationMessage("candidate_document_type_mismatch")).toContain("Réenregistrez-le en DOCX");
+    expect(candidateDocumentValidationMessage("candidate_document_type_mismatch")).not.toMatch(/\bDOC,/);
+
+    const docx = minimalDocx();
+    const accepted = validateCandidateDocument({ buffer: docx, mimeType: DOCX, originalName: "diplome.docx", size: docx.length });
+    expect(accepted.mimeType).toBe(DOCX);
+    expect(accepted.notes).not.toContain("legacy_doc");
+  });
+
+  it("accepte exactement les extensions que le portail laisse choisir (REC-15)", () => {
+    // Past the type check, an empty file of 300 bytes is refused for its signature only.
+    const passesTypeCheck = (mimeType: string, extension: string) => {
+      const buffer = Buffer.alloc(300, 0);
+      try {
+        validateCandidateDocument({ buffer, mimeType, originalName: `diplome.${extension}`, size: buffer.length });
+        return true;
+      } catch (error) {
+        return (error as Error).message !== "candidate_document_type_mismatch";
+      }
+    };
+    const candidates = new Set([...CANDIDATE_DOCUMENT_ACCEPTED_EXTENSIONS, "doc", "docm", "dot", "odt", "rtf", "txt", "gif", "webp", "heic", "tif", "tiff"]);
+    const serverExtensions = [...candidates].filter(extension => [...candidateDocumentMimeTypes].some(mimeType => passesTypeCheck(mimeType, extension)));
+    expect(serverExtensions.sort()).toEqual([...CANDIDATE_DOCUMENT_ACCEPTED_EXTENSIONS].sort());
+    // And every MIME type the upload filter lets through has an extension the portal offers.
+    for (const mimeType of candidateDocumentMimeTypes) {
+      expect(CANDIDATE_DOCUMENT_ACCEPTED_EXTENSIONS.some(extension => passesTypeCheck(mimeType, extension)), mimeType).toBe(true);
+    }
+  });
 });
+
+const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+function minimalDocx() {
+  return buildZip([
+    { name: "[Content_Types].xml", content: '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>' },
+    { name: "word/document.xml", content: '<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Diplôme d’État de docteur en médecine</w:t></w:r></w:p></w:body></w:document>' },
+  ]);
+}
 
 describe("REC-02 — PDF du coffre : mêmes lectures que pour les CV", () => {
   const validate = (buffer: Buffer) => validateCandidateDocument({ buffer, mimeType: "application/pdf", originalName: "diplome.pdf", size: buffer.length });
