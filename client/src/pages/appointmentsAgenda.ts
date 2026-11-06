@@ -1,9 +1,11 @@
+import { parisDay } from "@/lib/parisDay";
+
 export type AppointmentAgendaSource = {
   id: number;
   customerName: string;
+  customerPhone?: string;
   appointmentDate: Date | string | number;
   appointmentStatus: string;
-  paymentStatus: string;
   trackingId: string;
 };
 
@@ -13,36 +15,40 @@ export type AppointmentAgendaDay = {
   items: Array<AppointmentAgendaSource & { time: string }>;
 };
 
-function getDayKey(date: Date) {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Europe/Paris",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(date);
+/** The agenda's views (ADM-18): today, the next 7 days or the next 30 days, in Paris calendar days. */
+export type AgendaRange = "today" | "week" | "month";
+
+const AGENDA_RANGE_DAYS: Record<AgendaRange, number> = { today: 1, week: 7, month: 30 };
+
+/** The Paris days (YYYY-MM-DD, both included) the server reads for a view, from today in Paris. */
+export function agendaDays(range: AgendaRange, today = parisDay(new Date())): { from: string; to: string } {
+  const [year, month, day] = today.split("-").map(Number);
+  const last = new Date(Date.UTC(year, month - 1, day + AGENDA_RANGE_DAYS[range] - 1));
+  return { from: today, to: last.toISOString().slice(0, 10) };
 }
 
-export function buildAppointmentsAgenda(items: AppointmentAgendaSource[], now = new Date()): AppointmentAgendaDay[] {
+/**
+ * The agenda's consultations, as the server sorts them (by consultation
+ * date), grouped by Paris day; every day that has one, none left out.
+ */
+export function buildAppointmentsAgenda(items: AppointmentAgendaSource[]): AppointmentAgendaDay[] {
   const days = new Map<string, AppointmentAgendaDay>();
 
-  items
-    .filter((item) => item.appointmentStatus !== "cancelled" && new Date(item.appointmentDate).getTime() >= now.getTime())
-    .sort((left, right) => new Date(left.appointmentDate).getTime() - new Date(right.appointmentDate).getTime())
-    .forEach((item) => {
-      const date = new Date(item.appointmentDate);
-      const key = getDayKey(date);
-      const day = days.get(key) ?? {
-        key,
-        label: date.toLocaleDateString("fr-FR", { timeZone: "Europe/Paris", weekday: "short", day: "numeric", month: "short" }),
-        items: [],
-      };
+  items.forEach((item) => {
+    const date = new Date(item.appointmentDate);
+    const key = parisDay(date);
+    const day = days.get(key) ?? {
+      key,
+      label: date.toLocaleDateString("fr-FR", { timeZone: "Europe/Paris", weekday: "long", day: "numeric", month: "long" }),
+      items: [],
+    };
 
-      day.items.push({
-        ...item,
-        time: date.toLocaleTimeString("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit" }),
-      });
-      days.set(key, day);
+    day.items.push({
+      ...item,
+      time: date.toLocaleTimeString("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit" }),
     });
+    days.set(key, day);
+  });
 
-  return Array.from(days.values()).slice(0, 4);
+  return Array.from(days.values());
 }

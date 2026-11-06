@@ -22,6 +22,8 @@ vi.mock("@/lib/trpc", () => {
         .map(() => ({ data: { items: view.items, total: view.items.length }, isLoading: false, error: null, refetch: vi.fn() })),
       admin: {
         appointments: {
+          // The agenda reads the paid appointments from the server (ADM-18).
+          agenda: { useQuery: () => ({ data: { items: view.items.filter(item => item.paymentStatus === "completed"), truncated: false }, isLoading: false, error: null }) },
           updateStatus: mutation(),
           refund: mutation(),
           refundUnconfirmedSession: mutation(),
@@ -81,9 +83,9 @@ describe("statuts d’une réservation en français dans l’onglet Réservation
     expect(badges("APTLABEL0002")).toEqual(["Remboursé", "Annulé"]);
     expect(badges("APTLABEL0003")).toEqual(["Échoué", "Absent"]);
     // The agenda of the coming days, as the cards.
-    expect(html).toMatch(/Patient Test<\/span><span class="[^"]*">Confirmé</);
+    expect(html).toMatch(/APTLABEL0001<\/span><\/span><span class="[^"]*">Confirmé</);
     expect(html).not.toMatch(/>\s*(refunded|cancelled|confirmed|completed|failed|no_show)\s*</);
-    // The payment filters, in the same words as the badges.
-    expect(Array.from(html.matchAll(/<button[^>]*rounded-lg text-sm font-medium[^>]*>([^<]+)<\/button>/g), match => match[1])).toEqual(["Tous", "En attente", "Payé", "Échoué", "Remboursé"]);
+    // The agenda's periods, then the list's filters, the payment ones in the same words as the badges (ADM-18).
+    expect(Array.from(html.matchAll(/<button[^>]*rounded-lg text-sm font-medium[^>]*>([^<]+)<\/button>/g), match => match[1])).toEqual(["Aujourd’hui", "7 jours", "30 jours", "Sans les abandons", "Tout afficher", "En attente", "Payé", "Échoué", "Remboursé"]);
   });
 });
