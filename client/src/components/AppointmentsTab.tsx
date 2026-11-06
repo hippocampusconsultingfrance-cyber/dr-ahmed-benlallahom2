@@ -61,7 +61,7 @@ function AppointmentsAgenda() {
   const period = days.from === days.to ? `le ${parisLongDay(days.from)}` : `du ${parisLongDay(days.from)} au ${parisLongDay(days.to)}`;
 
   return (
-    <section aria-labelledby="appointments-agenda-title" className="mb-6 rounded-xl border border-primary/20 bg-primary/5 p-4 sm:p-5 print:border-0 print:p-0">
+    <section aria-labelledby="appointments-agenda-title" className="mb-6 rounded-xl border border-primary/20 bg-primary/5 p-4 sm:p-5 print:border-0 print:bg-transparent print:p-0">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <CalendarDays className="h-5 w-5 text-primary print:hidden" aria-hidden="true" />
@@ -105,13 +105,13 @@ function AppointmentsAgenda() {
                       {apt.customerPhone && <span className="text-muted-foreground"> · {apt.customerPhone}</span>}
                       <span className="font-mono text-xs text-muted-foreground"> · {apt.trackingId}</span>
                     </span>
-                    <span className={`shrink-0 rounded px-2 py-0.5 text-[11px] font-medium ${APPOINTMENT_STATUS_COLORS[apt.appointmentStatus] || "bg-muted text-muted-foreground"}`}>{APPOINTMENT_STATUS_LABELS[apt.appointmentStatus] ?? apt.appointmentStatus}</span>
+                    <span className={`shrink-0 rounded px-2 py-0.5 text-[11px] font-medium ${APPOINTMENT_STATUS_COLORS[apt.appointmentStatus] || "bg-muted text-muted-foreground"} print:bg-transparent print:px-0 print:text-foreground`}>{APPOINTMENT_STATUS_LABELS[apt.appointmentStatus] ?? apt.appointmentStatus}</span>
                   </li>
                 ))}
               </ul>
             </article>
           ))}
-          {data?.truncated && <p className="text-xs text-muted-foreground">Agenda limité aux 500 premières consultations de la période : choisissez une période plus courte.</p>}
+          {data?.truncated && <p className="text-xs text-muted-foreground">Agenda limité aux {data.limit} premières consultations de la période : choisissez une période plus courte.</p>}
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">Aucune consultation payée {period}.</p>
@@ -146,6 +146,8 @@ export default function AppointmentsTab() {
     onSuccess: () => {
       toast.success("Statut mis à jour");
       utils.admin.appointments.list.invalidate();
+      // Done, missed, back to confirmed or cancelled: the agenda above says it too (ADM-18).
+      utils.admin.appointments.agenda.invalidate();
       utils.admin.stats.invalidate();
     },
     onError: (mutationError) => {
@@ -159,6 +161,8 @@ export default function AppointmentsTab() {
     // Its patient email goes through the refund queue (EXPL-02): refused, or waiting for its next automatic attempt.
     else if (!patientNotified) toast.warning(refundEmailWarning(patientEmail), { duration: 10_000 });
     utils.admin.appointments.list.invalidate();
+    // A refunded consultation leaves the agenda (ADM-18).
+    utils.admin.appointments.agenda.invalidate();
     utils.admin.stats.invalidate();
     // Its post-payment emails waiting for a retry were just closed as not sent (EXPL-02).
     utils.admin.attention.invalidate();

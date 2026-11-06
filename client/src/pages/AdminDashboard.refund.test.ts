@@ -25,7 +25,7 @@ vi.mock("@/lib/trpc", () => {
   const invalidate = (name: string) => ({ invalidate: () => view.invalidated.push(name) });
   return {
     trpc: {
-      useUtils: () => ({ admin: { appointments: { list: invalidate("appointments.list") }, stats: invalidate("stats"), attention: invalidate("attention") } }),
+      useUtils: () => ({ admin: { appointments: { list: invalidate("appointments.list"), agenda: invalidate("appointments.agenda") }, stats: invalidate("stats"), attention: invalidate("attention") } }),
       useQueries: (build: (t: unknown) => unknown[]) => build({ admin: { appointments: { list: (input: unknown) => input } } }).map(() => ({ data: { items: [], total: 0 }, isLoading: false, error: null, refetch: vi.fn() })),
       admin: {
         appointments: {
@@ -58,7 +58,7 @@ describe("toasts d’un remboursement depuis le tableau de bord", () => {
       ["success", "Remboursement confirmé : 100,00 €"],
       ["success", "Remboursement confirmé : 1 250,50 €"],
     ]);
-    expect(view.invalidated).toEqual(expect.arrayContaining(["appointments.list", "stats", "attention"]));
+    expect(view.invalidated).toEqual(expect.arrayContaining(["appointments.list", "appointments.agenda", "stats", "attention"]));
   });
 
   it("dit si l’email au patient attend un nouvel essai automatique ou a été refusé", async () => {

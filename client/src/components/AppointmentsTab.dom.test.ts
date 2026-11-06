@@ -9,19 +9,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // défaut les réservations abandonnées (« Tout afficher » les montre), un
 // rendez-vous annulé dit son motif, son montant et sa date de remboursement,
 // les heures n’ont pas de secondes, et l’agenda, lu à part par le serveur sur
-// des journées de Paris, change de période et s’imprime.
+// des journées de Paris, change de période, s’imprime et se relit quand un
+// rendez-vous change de statut ou est remboursé.
 
 type Row = Record<string, unknown> & { id: number; paymentStatus: string; appointmentStatus: string; stripePaymentIntentId: string | null };
 const server = vi.hoisted(() => ({
   rows: [] as Row[],
   agenda: [] as Array<Record<string, unknown>>,
+  agendaLimit: null as number | null,
   listInputs: [] as Array<Record<string, unknown>>,
   agendaInputs: [] as Array<{ from: string; to: string }>,
+  mutations: [] as Array<{ procedure: string; input: Record<string, unknown> }>,
 }));
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() } }));
 vi.mock("@/lib/trpc", async () => {
-  const { useQueries, useQuery } = await import("@tanstack/react-query");
+  const { useQueries, useQuery, useQueryClient } = await import("@tanstack/react-query");
   /** The server's rule (server/routers/admin/appointments.ts): held, failed, or pending without a payment. */
   const abandoned = (row: Row) => row.appointmentStatus === "held" || row.paymentStatus === "failed" || (row.paymentStatus === "pending" && !row.stripePaymentIntentId);
   const list = async (input: { status?: string; excludeAbandoned?: boolean }) => {
@@ -30,9 +33,23 @@ vi.mock("@/lib/trpc", async () => {
     return { items, total: items.length };
   };
   const idle = { useMutation: () => ({ mutate: () => undefined, isPending: false }) };
+  /** The server accepts the change, then the tab's onSuccess runs as after a real answer. */
+  const accepted = (procedure: string, result: unknown) => ({
+    useMutation: (options?: { onSuccess?: (data: unknown) => void }) => ({
+      mutate: (input: Record<string, unknown>) => {
+        server.mutations.push({ procedure, input });
+        options?.onSuccess?.(result);
+      },
+      isPending: false,
+    }),
+  });
   return {
     trpc: {
-      useUtils: () => ({ admin: { appointments: { list: { invalidate: vi.fn() } }, stats: { invalidate: vi.fn() }, attention: { invalidate: vi.fn() } } }),
+      useUtils: () => {
+        const client = useQueryClient();
+        const invalidate = (key: string) => ({ invalidate: () => client.invalidateQueries({ queryKey: [key] }) });
+        return { admin: { appointments: { list: invalidate("appointments.list"), agenda: invalidate("appointments.agenda") }, stats: { invalidate: vi.fn() }, attention: { invalidate: vi.fn() } } };
+      },
       useQueries: (build: (t: unknown) => Array<Record<string, unknown>>) => useQueries({
         queries: build({ admin: { appointments: { list: (input: Record<string, unknown>) => input } } })
           .map(input => ({ queryKey: ["appointments.list", input], queryFn: () => list(input) })),
@@ -42,10 +59,17 @@ vi.mock("@/lib/trpc", async () => {
           agenda: {
             useQuery: (input: { from: string; to: string }) => useQuery({
               queryKey: ["appointments.agenda", input],
-              queryFn: async () => { server.agendaInputs.push(input); return { items: server.agenda, truncated: false }; },
+              queryFn: async () => {
+                server.agendaInputs.push(input);
+                // The server's limit, when the period holds more consultations than it.
+                const limit = server.agendaLimit ?? 500;
+                return { items: server.agenda.slice(0, limit), truncated: server.agenda.length > limit, limit };
+              },
             }),
           },
-          updateStatus: idle, refund: idle, refundUnconfirmedSession: idle, retryFulfillment: idle, invoicePdf: idle, updateCustomerEmail: idle,
+          updateStatus: accepted("updateStatus", {}),
+          refund: accepted("refund", { refundAmount: "100.00", patientNotified: true }),
+          refundUnconfirmedSession: idle, retryFulfillment: idle, invoicePdf: idle, updateCustomerEmail: idle,
         },
       },
     },
@@ -80,8 +104,10 @@ beforeEach(() => {
     booking(5, { paymentStatus: "pending", appointmentStatus: "cancelled" }),
   ];
   server.agenda = [];
+  server.agendaLimit = null;
   server.listInputs = [];
   server.agendaInputs = [];
+  server.mutations = [];
   vi.stubGlobal("print", vi.fn());
 });
 afterEach(() => {
@@ -139,5 +165,33 @@ describe("ADM-18 — onglet Réservations", () => {
 
     fireEvent.click(within(agenda).getByRole("button", { name: "Imprimer" }));
     expect(window.print).toHaveBeenCalledTimes(1);
+  });
+
+  it("dit la limite du serveur quand la période compte plus de consultations", async () => {
+    server.agendaLimit = 2;
+    server.agenda = [1, 2, 3].map(id => ({ id, trackingId: `APTDOM00000${id}`, customerName: `Patient agenda ${id}`, customerPhone: "+33611223344", appointmentDate: `2026-11-2${id}T09:00:00.000Z`, appointmentStatus: "confirmed", duration: 30, language: "fr" }));
+    mount();
+    const agenda = screen.getByRole("region", { name: "Agenda des consultations" });
+    expect(await within(agenda).findByText("Agenda limité aux 2 premières consultations de la période : choisissez une période plus courte.")).toBeTruthy();
+    expect(within(agenda).queryByText("Patient agenda 3", { exact: false })).toBeNull();
+  });
+
+  it("relit l’agenda quand une consultation est marquée terminée, puis quand une autre est annulée et remboursée", async () => {
+    // One consultation already held, one to come.
+    server.rows = [booking(1, { appointmentDate: "2026-01-05T09:00:00.000Z" }), booking(2, { appointmentDate: "2099-01-05T09:00:00.000Z" })];
+    vi.stubGlobal("confirm", vi.fn(() => true));
+    vi.stubGlobal("prompt", vi.fn(() => "Empêchement du praticien"));
+    mount();
+    expect(await screen.findByText("Patient 2")).toBeTruthy();
+    await waitFor(() => expect(server.agendaInputs).toHaveLength(1));
+
+    fireEvent.click(screen.getByRole("button", { name: "Terminer" }));
+    expect(server.mutations.at(-1)).toEqual({ procedure: "updateStatus", input: { trackingId: "APTDOM000001", appointmentStatus: "completed" } });
+    await waitFor(() => expect(server.agendaInputs).toHaveLength(2));
+
+    const upcoming = screen.getByText("Patient 2").closest<HTMLElement>(".rounded-lg")!;
+    fireEvent.click(within(upcoming).getByRole("button", { name: "Annuler (praticien) et rembourser" }));
+    expect(server.mutations.at(-1)).toEqual({ procedure: "refund", input: { trackingId: "APTDOM000002", reason: "Empêchement du praticien", initiator: "practitioner" } });
+    await waitFor(() => expect(server.agendaInputs).toHaveLength(3));
   });
 });

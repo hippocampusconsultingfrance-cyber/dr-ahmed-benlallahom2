@@ -386,7 +386,7 @@ describe("EXPL-02 — encart « À traiter » du tableau de bord", () => {
     expect(html).toContain("Envois en échec, nouvel essai prévu (2)");
     expect(html).toContain("« Renvoyer » sur le rendez-vous relance l’envoi tout de suite");
     expect(html).toContain("APTTODOUI003");
-    expect(retryingDetail({ jobTypes: ["confirmation", "invoice"], nextAttemptAt: "2026-10-27T06:20:00.000Z" })).toBe("Confirmation, Facture · nouvel essai automatique au plus tôt le 27/10/2026 07:20:00");
+    expect(retryingDetail({ jobTypes: ["confirmation", "invoice"], nextAttemptAt: "2026-10-27T06:20:00.000Z" })).toBe("Confirmation, Facture · nouvel essai automatique au plus tôt le 27/10/2026 07:20");
     expect(retryingDetail({ jobTypes: ["confirmation"], nextAttemptAt: null })).toBe("Confirmation · envoi interrompu, nouvel essai à la prochaine exécution planifiée");
     expect(retryingDetail({ jobTypes: ["refund", "refund_owner"], nextAttemptAt: null })).toBe("Email de remboursement, Alerte remboursement · envoi interrompu, nouvel essai à la prochaine exécution planifiée");
   });
@@ -471,8 +471,8 @@ describe("EXPL-02 — encart « À traiter » du tableau de bord", () => {
     expect(html).toContain("n’a pas pu les envoyer dans le temps qui lui est donné (temps écoulé, service d’envoi lent ou saturé, traitement interrompu)");
     expect(html).toContain("« Renvoyer » sur le rendez-vous les envoie tout de suite.");
     expect(html).toContain("APTTODOUI006");
-    expect(waitingDetail({ jobTypes: ["confirmation", "invoice"], dueSince: "2026-10-26T10:02:00.000Z" })).toBe("Confirmation, Facture · en attente depuis le 26/10/2026 11:02:00, essai à la prochaine exécution planifiée");
-    expect(html).toContain("Confirmation, Facture · en attente depuis le 26/10/2026 11:02:00");
+    expect(waitingDetail({ jobTypes: ["confirmation", "invoice"], dueSince: "2026-10-26T10:02:00.000Z" })).toBe("Confirmation, Facture · en attente depuis le 26/10/2026 11:02, essai à la prochaine exécution planifiée");
+    expect(html).toContain("Confirmation, Facture · en attente depuis le 26/10/2026 11:02");
   });
 
   it("nomme le stockage des factures quand c’est lui qui a retenu la facture, sur le rendez-vous et dans « À traiter » (EXPL-02)", () => {
@@ -511,8 +511,8 @@ describe("EXPL-02 — encart « À traiter » du tableau de bord", () => {
     // Named on the invoice alone, not after the list as if the confirmation had been held too.
     expect(html).toContain(">Confirmation, Facture (stockage Vercel Blob indisponible)<");
     expect(html).toContain(">Confirmation<");
-    expect(html).toContain(">Facture (stockage Vercel Blob indisponible) · nouvel essai automatique au plus tôt le 27/10/2026 07:20:00<");
-    expect(html).toContain(">Confirmation · nouvel essai automatique au plus tôt le 27/10/2026 07:20:00<");
+    expect(html).toContain(">Facture (stockage Vercel Blob indisponible) · nouvel essai automatique au plus tôt le 27/10/2026 07:20<");
+    expect(html).toContain(">Confirmation · nouvel essai automatique au plus tôt le 27/10/2026 07:20<");
     expect(html.match(/stockage Vercel Blob indisponible/g)).toHaveLength(2);
   });
 

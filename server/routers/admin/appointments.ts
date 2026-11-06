@@ -102,7 +102,7 @@ export const adminAppointmentsRouter = router({
     )
     .query(async ({ input }) => {
       const db = await getDb();
-      if (!db) return { items: [], truncated: false };
+      if (!db) return { items: [], truncated: false, limit: AGENDA_MAX_ROWS };
       const rows = await db
         .select({
           id: appointments.id,
@@ -123,7 +123,7 @@ export const adminAppointmentsRouter = router({
         ))
         .orderBy(appointments.appointmentDate, appointments.id)
         .limit(AGENDA_MAX_ROWS + 1);
-      return { items: rows.slice(0, AGENDA_MAX_ROWS), truncated: rows.length > AGENDA_MAX_ROWS };
+      return { items: rows.slice(0, AGENDA_MAX_ROWS), truncated: rows.length > AGENDA_MAX_ROWS, limit: AGENDA_MAX_ROWS };
     }),
 
   /** « Renvoyer » : relance tout de suite les envois après paiement qui n’ont pas abouti (EXPL-02). */

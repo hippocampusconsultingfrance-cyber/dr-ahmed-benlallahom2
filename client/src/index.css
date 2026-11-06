@@ -1835,6 +1835,22 @@ html[data-cookie-banner-open="true"] .mobile-navigation {
     padding: 0 !important;
   }
 
+  /*
+   * Ce que l'administration imprime (agenda des consultations, ADM-18) se lit sur papier : jetons
+   * du thème clair sur fond blanc, quel que soit le thème de l'écran (sombre par défaut), sans quoi
+   * print-color-adjust imprime ses fonds sombres sous des titres forcés en noir.
+   */
+  .print-paper {
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.15 0.02 250);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.15 0.02 250);
+    --primary: oklch(0.48 0.14 230);
+    --muted: oklch(0.93 0.005 250);
+    --muted-foreground: oklch(0.4 0.02 250);
+    --border: oklch(0.88 0.01 250);
+  }
+
   h1,
   h2,
   h3,

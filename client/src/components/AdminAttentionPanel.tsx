@@ -4,7 +4,8 @@ import { trpc } from "@/lib/trpc";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { DELIVERY_JOB_LABELS, PATIENT_JOBS, type AppointmentDeliveryJob } from "./AppointmentDeliveries";
 
-const parisTime = (date: string | Date) => new Date(date).toLocaleString("fr-FR", { timeZone: "Europe/Paris" });
+/** « 27/10/2026 07:20 », Paris time, without the seconds (ADM-18). */
+const parisTime = (date: string | Date) => new Date(date).toLocaleString("fr-FR", { timeZone: "Europe/Paris", dateStyle: "short", timeStyle: "short" });
 /**
  * « Confirmation, Facture (stockage Vercel Blob indisponible) »: the invoice
  * storage is named on the label of the very job it kept from going out, not
