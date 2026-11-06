@@ -6,6 +6,17 @@ import { notifyOwner } from "../_core/notification";
 import { sql } from "drizzle-orm";
 import { countPublicFormDailyVolume, releasePublicEmailIpRateLimit } from "../publicFormRateLimit";
 import { enforcePublicFormRateLimit, verifyPublicFormTurnstile, enforcePublicFormIpLimit, createPublicTrackingId } from "./publicForms";
+import { sendPublicFormAcknowledgement } from "../publicFormAcknowledgements";
+import { SITE_LANGUAGES } from "../emailLanguage";
+import { CONTACT_CATEGORIES, type ContactCategory } from "../../shared/contactCategories";
+
+/** Who wrote, as the owner's notification names it (PUB-22). */
+const CONTACT_CATEGORY_LABELS: Record<ContactCategory, string> = {
+  patient: "Patient",
+  health_professional: "Professionnel de santé",
+  institution: "Établissement",
+  press_partner: "Presse ou partenaire",
+};
 
 export const contactRouter = router({
   submit: publicProcedure
@@ -17,6 +28,10 @@ export const contactRouter = router({
         message: z.string().min(1, "Le message est requis").max(5000),
         gdprConsent: z.number().int().min(0).max(1),
         turnstileToken: z.string().min(20).max(4096).optional(),
+        // Chosen on the form (PUB-22), sent in the notification only: no column in the database.
+        category: z.enum(CONTACT_CATEGORIES).optional(),
+        // Language of the page: that of the acknowledgement (PUB-09).
+        language: z.enum(SITE_LANGUAGES).optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -52,12 +67,19 @@ export const contactRouter = router({
         }
       }
 
-      // ABUS-01 : au-delà du volume du jour, le message est gardé sans email au propriétaire.
+      // ABUS-01 : au-delà du volume du jour, le message est gardé sans email au
+      // propriétaire ni accusé de réception au visiteur.
       if (await countPublicFormDailyVolume("contact")) {
-        await notifyOwner({
-          title: `Nouveau message de contact de ${input.name} (${trackingId})`,
-          content: `**Numéro de suivi:** ${trackingId}\n**De:** ${input.name}\n**Email:** ${input.email}\n**Téléphone:** ${input.phone || "Non renseigné"}\n**Consentement RGPD:** ${input.gdprConsent === 1 ? "✅ Accepté" : "❌ Refusé"}\n\n**Message:**\n${input.message}`,
-        });
+        await Promise.all([
+          notifyOwner({
+            title: `Nouveau message de contact de ${input.name} (${trackingId})`,
+            content: `**Numéro de suivi:** ${trackingId}\n**De:** ${input.name}\n**Vous êtes:** ${input.category ? CONTACT_CATEGORY_LABELS[input.category] : "Non précisé"}\n**Email:** ${input.email}\n**Téléphone:** ${input.phone || "Non renseigné"}\n**Consentement RGPD:** ${input.gdprConsent === 1 ? "✅ Accepté" : "❌ Refusé"}\n\n**Message:**\n${input.message}`,
+            // « Répondre » écrit au visiteur, et non plus au propriétaire lui-même (PUB-09).
+            replyTo: input.email,
+          }),
+          // PUB-09 : la référence et la suite, sans recopier le message (MAIL-01) ; un échec ne fait pas échouer l’envoi.
+          sendPublicFormAcknowledgement({ kind: "contact", email: input.email, reference: trackingId, language: input.language }),
+        ]);
       }
 
       return { success: true, trackingId } as const;

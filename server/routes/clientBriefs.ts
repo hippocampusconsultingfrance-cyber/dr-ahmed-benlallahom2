@@ -3,9 +3,14 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { notifyOwner } from "../_core/notification";
 import { secureReference } from "../_core/secureReference";
+import { SITE_LANGUAGES } from "../emailLanguage";
 import { PUBLIC_APP_ORIGIN, safeErrorName } from "./routeHelpers";
 
-/** Employer brief form (public, JSON body). */
+/**
+ * Employer brief form (public, JSON body). A refusal of the limits or of an
+ * unavailable service carries a stable code (rate_limited,
+ * service_unavailable) that the page translates (REC-12).
+ */
 export function registerClientBriefRoute(app: Express) {
   const clientBriefSchema = z.object({
     organizationName: z.string().trim().min(1).max(180),
@@ -19,6 +24,8 @@ export function registerClientBriefRoute(app: Express) {
     timeline: z.string().trim().max(100).optional().default(""),
     notes: z.string().trim().max(3000).optional().default(""),
     website: z.string().max(200).optional().default(""),
+    // Language of the page: that of the acknowledgement (REC-12). Not stored.
+    language: z.enum(SITE_LANGUAGES).optional(),
   });
 
   app.post("/api/client-briefs", async (req, res) => {
@@ -44,19 +51,19 @@ export function registerClientBriefRoute(app: Express) {
         const rateLimited = protectionError instanceof Error && protectionError.message === "candidate_security_rate_limited";
         if (!rateLimited) {
           console.error("Client brief protection unavailable:", safeErrorName(protectionError));
-          res.status(503).json({ error: "Service temporairement indisponible." });
+          res.status(503).json({ error: "Service temporairement indisponible.", code: "service_unavailable" });
           return;
         }
         await logSecurityEvent({ actorKind: "anonymous", actorReference: parsed.data.email, category: "public_client_brief_rate_limited", outcome: "blocked", severity: "warning", ipHash: hashSecurityValue(clientIp) })
           .catch(securityLogError => console.error("Client brief protection log error:", safeErrorName(securityLogError)));
-        res.status(429).json({ error: "Trop de demandes ont été envoyées. Veuillez patienter avant de soumettre un nouveau brief." });
+        res.status(429).json({ error: "Trop de demandes ont été envoyées. Veuillez patienter avant de soumettre un nouveau brief.", code: "rate_limited" });
         return;
       }
 
       const briefId = secureReference("BRIEF", 12);
       const db = await (await import("../db")).getDb();
       if (!db) {
-        res.status(503).json({ error: "Service temporairement indisponible." });
+        res.status(503).json({ error: "Service temporairement indisponible.", code: "service_unavailable" });
         return;
       }
 
@@ -72,9 +79,21 @@ export function registerClientBriefRoute(app: Express) {
 
       try {
         const { buildClientBriefOwnerNotification } = await import("../clientBriefNotification");
-        await notifyOwner(buildClientBriefOwnerNotification({ briefId, ...parsed.data, adminUrl: `${PUBLIC_APP_ORIGIN}/admin` }));
+        // « Répondre » écrit à l’employeur, et non plus au propriétaire lui-même (PUB-09).
+        await notifyOwner({ ...buildClientBriefOwnerNotification({ briefId, ...parsed.data, adminUrl: `${PUBLIC_APP_ORIGIN}/admin` }), replyTo: parsed.data.email });
       } catch {
         // notification fail non bloquante
+      }
+
+      // REC-12 : accusé à l’employeur (référence, prochaines étapes), sous son
+      // plafond quotidien ; il ne fait jamais échouer le brief enregistré.
+      try {
+        const { countClientBriefAcknowledgement, sendPublicFormAcknowledgement } = await import("../publicFormAcknowledgements");
+        if (await countClientBriefAcknowledgement()) {
+          await sendPublicFormAcknowledgement({ kind: "clientBrief", email: parsed.data.email, reference: briefId, language: parsed.data.language });
+        }
+      } catch (acknowledgementError) {
+        console.warn("Client brief acknowledgement error:", safeErrorName(acknowledgementError));
       }
 
       res.json({ success: true, briefId });

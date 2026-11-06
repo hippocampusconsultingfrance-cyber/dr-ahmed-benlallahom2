@@ -22,7 +22,7 @@ const state = vi.hoisted(() => {
 });
 
 vi.mock("./db", () => ({ getDb: async () => state.db }));
-vi.mock("./_core/notification", () => ({ notifyOwner: vi.fn(async () => { state.notifications += 1; return true; }) }));
+vi.mock("./_core/notification", () => ({ notifyOwner: vi.fn(async () => { state.notifications += 1; return true; }), getResendClient: () => undefined }));
 // The form has no anti-bot widget: a token check would refuse every brief.
 vi.mock("./candidateTurnstile", () => ({ verifyCandidateTurnstile: vi.fn(async () => { throw new Error("candidate_turnstile_invalid"); }) }));
 vi.mock("@clerk/express", () => ({
@@ -36,7 +36,8 @@ const { verifyCandidateTurnstile } = await import("./candidateTurnstile");
 
 const dialect = new PgDialect();
 const HOUR_MS = 60 * 60 * 1000;
-const RATE_LIMITED = { error: "Trop de demandes ont été envoyées. Veuillez patienter avant de soumettre un nouveau brief." };
+// The page translates the refusal from its stable code (REC-12).
+const RATE_LIMITED = { error: "Trop de demandes ont été envoyées. Veuillez patienter avant de soumettre un nouveau brief.", code: "rate_limited" };
 
 let baseUrl = "";
 let close: () => Promise<void> = async () => undefined;

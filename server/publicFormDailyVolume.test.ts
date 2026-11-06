@@ -11,7 +11,12 @@ type SentEmail = { to: string[]; subject: string };
 const state = vi.hoisted(() => ({ db: null as unknown, sent: [] as SentEmail[], stored: [] as string[] }));
 
 vi.mock("./db", () => ({ getDb: async () => state.db }));
-vi.mock("./_core/notification", () => ({ notifyOwner: vi.fn(async (_payload: { title: string; content: string }) => true) }));
+// The contact acknowledgements (PUB-09) go through the stand-in Resend client below.
+vi.mock("./_core/notification", async () => {
+  const { Resend } = await import("resend");
+  const resend = new Resend("re_test_stand_in");
+  return { notifyOwner: vi.fn(async (_payload: { title: string; content: string }) => true), getResendClient: () => resend };
+});
 vi.mock("./candidateTurnstile", () => ({ verifyCandidateTurnstile: vi.fn(async () => undefined) }));
 vi.mock("./adminMfa", async importOriginal => ({
   ...await importOriginal<typeof import("./adminMfa")>(),
@@ -134,6 +139,10 @@ describe("seuil quotidien global : demandes gardées, effets coûteux coupés (A
 
     expect(state.stored).toHaveLength(threshold + 2);
     expect(ownerTitles()).toEqual([`Volume inhabituel : plus de ${threshold} messages de contact en 24 heures`]);
+    // Nor an acknowledgement to the address typed (PUB-09): one per message under the threshold only.
+    expect(state.sent).toHaveLength(threshold);
+    expect(state.sent.flatMap(email => email.to)).not.toEqual(expect.arrayContaining(["au-dela1@test.local"]));
+    expect(state.sent.flatMap(email => email.to)).not.toEqual(expect.arrayContaining(["au-dela2@test.local"]));
     const [[alert]] = vi.mocked(notifyOwner).mock.calls;
     expect(alert.content).toContain("Le formulaire reste ouvert");
     expect(alert.content).toContain("Attack Challenge Mode");
