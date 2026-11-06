@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { chromium, type Browser } from "playwright-core";
+import { chromium, type Browser, type Page } from "playwright-core";
 import superjson from "superjson";
 import { createServer, type ViteDevServer } from "vite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -257,6 +257,98 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
         expect(landed.heading, `${id} par ${trigger} à ${width} px`).toBeGreaterThanOrEqual(landed.header);
         await page.context().close();
       }
+    }
+  }, 120_000);
+
+  it("ouvre en haut la page qu'atteint un lien, sans sauter au changement d'onglet de /legal, et laisse ancres, Retour et Avance à leur place (PUB-01)", async () => {
+    /** Après une navigation : la route rendue, l'animation d'entrée finie, le défilement arrêté. */
+    const settled = (page: Page, address: string) => page.waitForFunction((expected) => location.pathname + location.search + location.hash === expected && !document.querySelector(".app-loading-shell") && document.querySelector("main") !== null, address)
+      .then(() => page.evaluate(() => Promise.all(document.getAnimations().filter((animation) => (animation as CSSAnimation).animationName === "page-transition-enter").map((animation) => animation.finished))))
+      .then(() => page.evaluate(scrollSettled));
+    const state = (page: Page) => page.evaluate(() => {
+      const tabs = document.querySelector('[role="tablist"]')?.getBoundingClientRect();
+      return {
+        scrollY: Math.round(window.scrollY),
+        tab: document.querySelector('[role="tab"][aria-selected="true"]')?.textContent?.trim() ?? null,
+        // The tabs are seen when they sit between the bottom of the fixed header and the bottom of the screen.
+        tabsSeen: tabs ? tabs.top >= document.querySelector("header.site-nav")!.getBoundingClientRect().bottom - 1 && tabs.bottom <= innerHeight : false,
+        entries: history.length,
+      };
+    });
+    const toBottom = (page: Page) => page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" }));
+    const footerLink = (page: Page, name: string) => page.locator("footer").getByRole("link", { name, exact: true });
+
+    for (const width of [1600, 390]) {
+      const where = `${width} px`;
+      const page = await open("/faq", { width, height: width < 768 ? 844 : 900, consent: true });
+      // A footer link to another page opens it at its top, its tabs in view.
+      await toBottom(page);
+      const faqY = await page.evaluate(() => window.scrollY);
+      expect(faqY, where).toBeGreaterThan(500);
+      await footerLink(page, contentFr.footer.privacy).click();
+      await settled(page, "/legal?tab=privacy");
+      expect(await state(page), where).toMatchObject({ scrollY: 0, tab: "Politique de Confidentialité", tabsSeen: true });
+
+      // A tab chosen on the page replaces the address and leaves the page where it is (the tabs well
+      // below the header, so that the focus the click gives them moves nothing either).
+      const tabsAt = await page.evaluate(() => Math.round(document.querySelector('[role="tablist"]')!.getBoundingClientRect().top + window.scrollY - document.querySelector("header.site-nav")!.getBoundingClientRect().bottom - 120));
+      await page.evaluate((top) => window.scrollTo({ top, behavior: "instant" }), tabsAt);
+      const before = await state(page);
+      await page.getByRole("tab", { name: "Conditions Générales" }).click();
+      await settled(page, "/legal?tab=terms");
+      expect(await state(page), where).toMatchObject({ scrollY: before.scrollY, tab: "Conditions Générales", entries: before.entries });
+      expect(before.scrollY, where).toBeGreaterThan(0);
+
+      // A footer link to the page shown, from its bottom: back at the top, on the tab it opens.
+      await toBottom(page);
+      const termsY = await page.evaluate(() => window.scrollY);
+      await footerLink(page, contentFr.footer.privacy).click();
+      await settled(page, "/legal?tab=privacy");
+      expect(await state(page), where).toMatchObject({ scrollY: 0, tab: "Politique de Confidentialité", tabsSeen: true });
+
+      // Back and Forward: the browser gives each page back where it was left, nothing sends it to the top.
+      await page.evaluate(() => history.back());
+      await settled(page, "/legal?tab=terms");
+      expect(Math.abs((await state(page)).scrollY - termsY), `${where}, retour sur /legal?tab=terms`).toBeLessThanOrEqual(2);
+      await page.evaluate(() => history.back());
+      await settled(page, "/faq");
+      expect(Math.abs((await state(page)).scrollY - faqY), `${where}, retour sur /faq`).toBeLessThanOrEqual(2);
+      await page.evaluate(() => history.forward());
+      await settled(page, "/legal?tab=terms");
+      expect((await state(page)).scrollY, `${where}, avance sur /legal?tab=terms`).toBeGreaterThan(0);
+
+      // Another route the code replaces or pushes opens at its top too.
+      await toBottom(page);
+      await page.evaluate(() => history.replaceState(null, "", "/employers"));
+      await settled(page, "/employers");
+      expect((await state(page)).scrollY, `${where}, /employers remplacée`).toBe(0);
+      await toBottom(page);
+      await page.evaluate(() => history.pushState(null, "", "/"));
+      await settled(page, "/");
+      expect((await state(page)).scrollY, `${where}, / poussée`).toBe(0);
+
+      // An address with an anchor is left to the page. Shown, the home page stays at the section it
+      // shows (once past the first 500 ms in which it brings up the section of its address).
+      await page.waitForTimeout(600);
+      await page.evaluate(() => window.scrollTo({ top: document.getElementById("services")!.getBoundingClientRect().top + window.scrollY, behavior: "instant" }));
+      const servicesY = await page.evaluate(() => window.scrollY);
+      expect(servicesY, where).toBeGreaterThan(500);
+      await page.evaluate(() => history.pushState(null, "", "/#contact"));
+      await settled(page, "/#contact");
+      expect((await state(page)).scrollY, `${where}, /#contact poussée sur l'accueil`).toBe(Math.round(servicesY));
+      // Reached from another page, it brings the section to the top of the screen, as before.
+      await page.evaluate(() => history.pushState(null, "", "/faq"));
+      await settled(page, "/faq");
+      await page.evaluate(() => history.pushState(null, "", "/#contact"));
+      await settled(page, "/#contact");
+      await page.waitForFunction(() => [...document.querySelectorAll(".fade-in-up, .parallax-subtle")]
+        .filter((node) => node.contains(document.getElementById("contact")))
+        .every((node) => node.classList.contains("visible")));
+      await page.evaluate(revealSettled);
+      await page.waitForTimeout(600);
+      await page.evaluate(scrollSettled);
+      expect(Math.abs(await page.evaluate(() => document.getElementById("contact")!.getBoundingClientRect().top)), `${where}, /#contact depuis /faq`).toBeLessThanOrEqual(1);
+      await page.context().close();
     }
   }, 120_000);
 

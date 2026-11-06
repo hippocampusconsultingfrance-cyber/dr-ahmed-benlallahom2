@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { candidateAccounts, cvApplications, cvCandidateCertifications, cvGoogleDriveExportJobs, recruitmentEmailEvents, recruitmentMatchProfiles } from "../drizzle/schema";
+import { candidateAccounts, clientBriefCandidates, clientBriefs, cvApplications, cvCandidateCertifications, cvCandidateLanguages, cvGoogleDriveExportJobs, recruitmentEmailEvents, recruitmentMatchProfiles } from "../drizzle/schema";
 import { createMemoryPg, type MemoryPg } from "./testing/memoryPgProxy";
 import type { TrpcContext } from "./_core/context";
 import { RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "./recruitmentAnalysis";
@@ -45,7 +45,7 @@ function seedCandidates(from: number, to: number, arabic: number) {
 let profileId = 0;
 
 beforeEach(() => {
-  memory = createMemoryPg([cvApplications, cvCandidateCertifications, recruitmentMatchProfiles, candidateAccounts, cvGoogleDriveExportJobs, recruitmentEmailEvents]);
+  memory = createMemoryPg([cvApplications, cvCandidateCertifications, cvCandidateLanguages, recruitmentMatchProfiles, candidateAccounts, cvGoogleDriveExportJobs, recruitmentEmailEvents, clientBriefs, clientBriefCandidates]);
   state.memory = memory;
   profileId = memory.seed(recruitmentMatchProfiles, [{ name: "Anesthésie arabophone", minimum_score: 0, specialty: "anesthésie", target_country: "France", required_languages: JSON.stringify(["arabe"]), active: 1 }])[0]!.id as number;
 });
@@ -128,7 +128,7 @@ describe("Candidatures — profil de matching et filtres de la liste (IA-02)", (
       cv_file_key: `recruitment/cv/lang${index}.pdf`, cv_original_name: "cv.pdf", cv_mime_type: "application/pdf", cv_size_bytes: 1000, ...extra,
     });
     const readInCv = JSON.stringify([{ language: "Français", proficiency: "native", evidence: "Langues : français", sourceLocation: "page 1", confidence: 90, evidenceVerified: true }]);
-    memory.seed(cvApplications, [
+    const [, , , readCurrent, readOlder] = memory.seed(cvApplications, [
       // From its French page as from its English one, the form records « French », « Arabic ».
       dossier("Formfr", 0, { languages: JSON.stringify(["French", "Arabic"]), language: "fr" }),
       dossier("Formen", 1, { languages: JSON.stringify(["French", "Arabic"]), language: "en" }),
@@ -137,6 +137,8 @@ describe("Candidatures — profil de matching et filtres de la liste (IA-02)", (
       dossier("LuDansLeCv", 3, { normalized_languages: readInCv, analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION }),
       dossier("AncienneAnalyse", 4, { normalized_languages: readInCv, analysis_prompt_version: "ancienne-version" }),
     ]);
+    // The analysis stores each language it reads as a row too, in the same batch.
+    memory.seed(cvCandidateLanguages, [readCurrent, readOlder].map(application => ({ application_id: application!.id, language: "Français", evidence: "Langues : français", source: "extracted" })));
     const profiled = async (requiredLanguages: string[]) => {
       const [profile] = memory.seed(recruitmentMatchProfiles, [{ name: requiredLanguages.join(" + "), minimum_score: 0, required_languages: JSON.stringify(requiredLanguages), active: 1 }]);
       const result = await caller().admin.recruitment.list({ profileId: profile!.id as number });
@@ -167,6 +169,66 @@ describe("Candidatures — profil de matching et filtres de la liste (IA-02)", (
     for (const language of ["anglais, arabe", "Anglais et arabe", "English Arabic"]) expect(await filtered(language), language).toEqual(["Bilingue"]);
     expect(lastNames((await caller().admin.recruitment.list({ profileId: profile!.id as number })).items)).toEqual(["Bilingue"]);
     expect(await filtered("arabe")).toEqual(["Arabophone", "Bilingue"]);
+  });
+
+  it("compare des langues entières, jamais les citations du CV, et garde les mêmes dossiers que le profil et la mission (IA-02)", async () => {
+    const dossier = (lastName: string, languages: string[]) => ({
+      tracking_id: `CVWHOLE${lastName}`, first_name: "Dr", last_name: lastName, email: `${lastName.toLowerCase()}@test.local`, specialty: "Anesthésie-réanimation",
+      target_countries: JSON.stringify(["Émirats arabes unis"]), languages: JSON.stringify(languages), analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION,
+      cv_file_key: `recruitment/cv/${lastName}.pdf`, cv_original_name: "cv.pdf", cv_mime_type: "application/pdf", cv_size_bytes: 1000,
+    });
+    const [polished, , , cvArabic, , , unknown] = memory.seed(cvApplications, [
+      dossier("Polished", ["English (polished)"]),
+      dossier("Germanyonly", ["Germany"]),
+      dossier("Deutschdecl", ["Deutsch"]),
+      dossier("Cvarabisch", ["English"]),
+      dossier("Enarboth", ["English", "Arabic"]),
+      dossier("Anglaisseul", ["Anglais"]),
+      dossier("Wolofcourant", ["French"]),
+    ]);
+    // What an analysis read in the CV: the language, its quote apart (« lived in Germany »).
+    const read = (application: typeof polished, language: string, evidence: string) => ({ application_id: application!.id, language, evidence, source: "extracted" });
+    memory.seed(cvCandidateLanguages, [read(polished, "English", "English (polished), lived in Germany"), read(cvArabic, "Arabisch", "Arabisch fließend"), read(unknown, "Wolof courant", "Wolof courant")]);
+    for (const [application, languages] of [[polished, ["English"]], [cvArabic, ["Arabisch"]], [unknown, ["Wolof courant"]]] as const) {
+      application!.normalized_languages = JSON.stringify(languages.map(language => ({ language, proficiency: "fluent", evidence: `${language}, lived in Germany`, evidenceVerified: true })));
+    }
+    // The dossier names of a filter, of a profile requiring the term, and of a mission giving all its language points.
+    const filtered = async (language: string) => lastNames((await caller().admin.recruitment.list({ language })).items).sort();
+    const profiled = async (language: string) => {
+      const [profile] = memory.seed(recruitmentMatchProfiles, [{ name: language, minimum_score: 0, required_languages: JSON.stringify([language]), active: 1 }]);
+      return lastNames((await caller().admin.recruitment.list({ profileId: profile!.id as number })).items).sort();
+    };
+    const missioned = async (language: string) => {
+      const [brief] = memory.seed(clientBriefs, [{ brief_id: `BRIEF-${memory.rows(clientBriefs).length}`, organization_name: "Hôpital", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie-réanimation", country: "Émirats arabes unis", required_languages: language }]);
+      const result = await caller().admin.clientBriefs.candidates({ briefId: brief!.id as number, limit: 50 });
+      return result.candidates.filter(candidate => candidate.match.breakdown.languages === 15).map(candidate => candidate.lastName).sort();
+    };
+
+    const expected: Array<[string, string[]]> = [
+      ["polonais", []], ["Polish", []],
+      ["allemand", ["Deutschdecl"]], ["German", ["Deutschdecl"]], ["Deutsch", ["Deutschdecl"]],
+      ["anglais, arabe", ["Cvarabisch", "Enarboth"]], ["Anglais/Arabe", ["Cvarabisch", "Enarboth"]], ["anglais et arabe", ["Cvarabisch", "Enarboth"]],
+      ["arabe", ["Cvarabisch", "Enarboth"]],
+      // A language the table does not know: its words, whole, among the languages and not their quotes,
+      // or the words of one of these languages whole in the term, what it says between brackets aside.
+      ["wolof", ["Wolofcourant"]], ["germany", ["Germanyonly"]], ["lived", []], ["Wolof (natif)", ["Wolofcourant"]], ["wolof courant", ["Wolofcourant"]],
+      // A choice: any one of its languages.
+      ["anglais ou arabe", ["Anglaisseul", "Cvarabisch", "Enarboth", "Polished"]], ["Allemand et/ou wolof", ["Deutschdecl", "Wolofcourant"]],
+    ];
+    for (const [language, names] of expected) {
+      expect(await filtered(language), `filtre ${language}`).toEqual(names);
+      expect(await profiled(language), `profil ${language}`).toEqual(names);
+      expect(await missioned(language), `mission ${language}`).toEqual(names);
+    }
+
+    // As the admin types, the filter finds a language from the third letter of one of its names,
+    // where a profile or a mission requires the name whole; a term with no letter finds nothing.
+    for (const language of ["angl", "Engl", "anglais"]) expect(await filtered(language), language).toEqual(["Anglaisseul", "Cvarabisch", "Enarboth", "Polished"]);
+    expect(await filtered("arab")).toEqual(["Cvarabisch", "Enarboth"]);
+    expect(await filtered("angl, arab")).toEqual(["Cvarabisch", "Enarboth"]);
+    expect(await filtered("pol")).toEqual([]);
+    expect(await profiled("angl")).toEqual([]);
+    for (const language of ["-", "()", "an"]) expect(await filtered(language), language).toEqual([]);
   });
 
   it("ne lit les langues tirées du CV, et leurs citations, que pour un profil qui exige des langues (IA-02)", async () => {

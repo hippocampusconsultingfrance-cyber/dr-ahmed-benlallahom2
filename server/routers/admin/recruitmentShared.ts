@@ -9,7 +9,8 @@ import { certificationFacts, languageFacts, type CertificationRow, type Language
 import { RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "../../recruitmentAnalysis";
 import { adminFilterContains } from "../../adminSearch";
 import type { CertificationRenewalRefusalReason, MissionAssociationRefusalReason, MissionConsentRefusalReason } from "../../../shared/recruitmentMissionRefusalReasons";
-import { recruitmentLanguageNames } from "../../../shared/recruitmentLanguages";
+import { givesRequiredLanguage, meetsRequiredLanguage, recruitmentLanguagePrefixCodes, recruitmentLanguageRequirements } from "../../../shared/recruitmentLanguages";
+import { parseRecruitmentJsonArray } from "../../recruitmentAudit";
 
 /**
  * Refus d’un accord de candidat pour une mission (RGPD-03), d’une association
@@ -107,19 +108,45 @@ export async function certificationFilterCondition(db: AdminDb, term: string, te
 }
 
 /**
- * The language filter of the Candidatures (IA-02): the term typed or, when it
- * names languages of the shared table, each of them under any of its names
- * (« arabe » finds « Arabic », which the form records even from its French
- * page), in the declared languages or in those an analysis of the current
- * version read in the CV, case and accents aside. A term that names several
- * (« anglais, arabe ») keeps the dossiers that have them all, as a matching
- * profile or a mission requires them all.
+ * The language filter of the Candidatures (IA-02): the dossiers that have
+ * every language the term names, as a matching profile requires them
+ * (shared/recruitmentLanguages.ts), declared (each name of the languages
+ * column) or read in the CV by an analysis of the current version
+ * (cv_candidate_languages, one row per language, without the CV's quotes).
+ * Whole languages are compared, never letters inside a word or a quote:
+ * « arabe » finds « Arabic », which the form records even from its French
+ * page, but « polonais » not « English (polished) », nor « allemand »
+ * « Germany »; a term the table does not know (« wolof ») by its words. As
+ * the field looks while the admin types, the start of a name (« angl »,
+ * « arab ») finds its language. A term with no letter finds nothing. The
+ * few names the dossiers use are read once (distinct), compared here, and
+ * those that match found by equality, the folded columns no longer scanned.
  */
-export function languageFilterCondition(term: string) {
-  const mentions = (name: string) =>
-    sql`((${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND ${adminFilterContains(cvApplications.normalizedLanguages, name)}) OR ${adminFilterContains(cvApplications.languages, name)})`;
-  const languages = recruitmentLanguageNames(term);
-  return languages.length ? or(mentions(term), and(...languages.map(names => or(...names.map(mentions))!))!)! : mentions(term);
+export async function languageFilterCondition(db: AdminDb, term: string) {
+  const [declaredValues, readLanguages] = await Promise.all([
+    db.selectDistinct({ languages: cvApplications.languages }).from(cvApplications).where(isNotNull(cvApplications.languages)),
+    db.selectDistinct({ language: cvCandidateLanguages.language }).from(cvCandidateLanguages),
+  ]);
+  const declared = declaredValues.map(row => ({ value: row.languages!, names: parseRecruitmentJsonArray(row.languages) }));
+  // One condition per language required: « anglais, arabe » is met by English
+  // declared and Arabic read in the CV. A name typed in part, by any language
+  // it starts, or by its words as one the table does not know.
+  const languages = recruitmentLanguageRequirements(term).flatMap(requirement => {
+    const typed = requirement.codes.length ? [] : recruitmentLanguagePrefixCodes(requirement.text);
+    if (typed.length) return [{ ...requirement, codes: typed, anyOf: [requirement.text] }];
+    return requirement.codes.length && !requirement.anyOf.length ? requirement.codes.map(code => ({ ...requirement, codes: [code] })) : [requirement];
+  });
+  return and(...languages.map(language => {
+    const declaredWith = declared.filter(item => meetsRequiredLanguage(item.names, language)).map(item => item.value);
+    const readWith = readLanguages.map(row => row.language).filter(name => givesRequiredLanguage(name, language));
+    return or(
+      declaredWith.length ? inArray(cvApplications.languages, declaredWith) : undefined,
+      readWith.length ? and(
+        eq(cvApplications.analysisPromptVersion, RECRUITMENT_ANALYSIS_PROMPT_VERSION),
+        inArray(cvApplications.id, db.select({ applicationId: cvCandidateLanguages.applicationId }).from(cvCandidateLanguages).where(inArray(cvCandidateLanguages.language, readWith))),
+      ) : undefined,
+    ) ?? sql`FALSE`;
+  })) ?? sql`FALSE`;
 }
 
 /** The languages an analysis of the current version retained (normalized_languages), none for an older one. */

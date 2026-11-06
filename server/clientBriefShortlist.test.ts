@@ -277,6 +277,8 @@ describe("missions employeurs : classement, certifications et accord du candidat
   it("filtre les candidatures par certification, langue et pays sans tenir compte des majuscules, comme le vivier (IA-02)", async () => {
     const declared = seedCandidate({ certifications: "Licence DHA", languages: '["Anglais"]', target_countries: '["Qatar"]' });
     const analysed = seedCandidate({ normalized_certifications: '[{"name":"Licence DHA"}]', normalized_languages: '[{"language":"Anglais"}]', target_countries: '["Émirats arabes unis","Qatar"]', ...scored(70) });
+    // The analysis stores each language it reads as a row too, in the same batch.
+    memory.seed(cvCandidateLanguages, [{ application_id: analysed.id, language: "Anglais", source: "extracted" }]);
     seedCandidate({ certifications: "BLS", languages: '["Arabe"]', target_countries: '["Suisse"]' });
     const idsOf = async (filters: { certification?: string; language?: string; country?: string }) => (await admin().admin.recruitment.list(filters)).items.map(item => item.id).sort();
     for (const certification of ["DHA", "dha", "licence dha"]) expect(await idsOf({ certification })).toEqual([declared.id, analysed.id]);
@@ -302,6 +304,7 @@ describe("missions employeurs : classement, certifications et accord du candidat
     const gulf = seedCandidate({ marketing_consent: 1, target_countries: '["Émirats arabes unis"]', mobility: "Péninsule arabique", languages: '["Français"]', certifications: "Échographie FAST" });
     const analysed = seedCandidate({ marketing_consent: 1, target_countries: '["Suisse"]', normalized_languages: '[{"language":"Español"}]', normalized_certifications: "[]", ...scored(70) });
     memory.seed(cvCandidateCertifications, [{ application_id: analysed.id, name: "Réanimation néonatale", source: "declared", confirmed_at: "2026-10-20 09:00:00.000" }]);
+    memory.seed(cvCandidateLanguages, [{ application_id: analysed.id, language: "Español", source: "extracted" }]);
     seedCandidate({ marketing_consent: 1, target_countries: '["Canada"]', languages: '["Anglais"]', certifications: "BLS" });
     const listed = async (filters: { country?: string; certification?: string; language?: string }) => (await admin().admin.recruitment.list(filters)).items.map(item => item.id).sort();
     const pooled = async (filters: { country?: string; mobility?: string; certification?: string }) => (await admin().admin.recruitment.pool.list(filters)).map(item => item.id).sort();
@@ -855,6 +858,42 @@ describe("missions employeurs : classement, certifications et accord du candidat
       { event: "mission_consent", briefId, consentDate: "2026-10-20" },
       { event: "mission_consent", briefId, consentDate: null },
     ]);
+  });
+
+  it("n’enregistre ni l’accord, ni la confirmation d’une certification, ni l’export quand la base refuse leur ligne d’audit : « rien n’a été modifié » est vrai (DATA-01)", async () => {
+    const candidate = seedCandidate({ createdAt: "2026-10-01 08:00:00.000", certifications: "BLS" });
+    const other = seedCandidate({ createdAt: "2026-10-01 08:00:00.000" });
+    const briefId = seedBrief({ created_at: "2026-10-02 08:00:00.000" }).id as number;
+    memory.seed(clientBriefCandidates, [
+      { brief_id: briefId, application_id: candidate.id, association_status: "shortlisted" },
+      { brief_id: briefId, application_id: other.id, association_status: "shortlisted", candidate_consent_at: "2026-10-03 12:00:00.000" },
+    ]);
+    const refuseNextAuditLine = () => memory.failNext(/^insert into "recruitment_audit_logs"/, 1, "23514");
+    const refusedAsUnchanged = { code: "BAD_REQUEST", cause: { reason: "value_not_allowed" } };
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    // The candidate's agreement: refused with its audit line, then recorded with it.
+    refuseNextAuditLine();
+    await expect(admin().admin.clientBriefs.setCandidateConsent({ briefId, applicationId: candidate.id as number, consentDate: "2026-10-20" })).rejects.toMatchObject(refusedAsUnchanged);
+    expect(memory.rows(clientBriefCandidates).find(row => row.application_id === candidate.id)!.candidate_consent_at).toBeNull();
+    await admin().admin.clientBriefs.setCandidateConsent({ briefId, applicationId: candidate.id as number, consentDate: "2026-10-20" });
+    expect(memory.rows(clientBriefCandidates).find(row => row.application_id === candidate.id)!.candidate_consent_at).toBe("2026-10-20 12:00:00.000");
+    expect(memory.rows(recruitmentAuditLogs)).toHaveLength(1);
+
+    // A certification the admin confirms, from the 360° sheet the mission opens.
+    refuseNextAuditLine();
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id: candidate.id as number, name: "BLS", confirmed: true })).rejects.toMatchObject(refusedAsUnchanged);
+    expect(memory.rows(cvCandidateCertifications)).toEqual([]);
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id: candidate.id as number, name: "BLS", confirmed: true })).resolves.toEqual({ success: true, changed: true });
+    expect(memory.rows(cvCandidateCertifications)).toMatchObject([{ name: "BLS", source: "declared" }]);
+    expect(memory.rows(recruitmentAuditLogs)).toHaveLength(2);
+
+    // The shortlist export: one line per candidate exported, all or none, and no file without them.
+    refuseNextAuditLine();
+    await expect(admin().admin.recruitment.exportCsv({ type: "shortlist", briefId })).rejects.toMatchObject(refusedAsUnchanged);
+    expect(memory.rows(recruitmentAuditLogs)).toHaveLength(2);
+    await expect(admin().admin.recruitment.exportCsv({ type: "shortlist", briefId })).resolves.toMatchObject({ count: 2 });
+    expect(memory.rows(recruitmentAuditLogs).filter(row => row.action === "export").map(row => row.application_id).sort()).toEqual([candidate.id, other.id].sort());
   });
 
   it("n’exporte que les présélectionnés ayant donné leur accord, en clair, avec l’origine de leurs certifications et langues, et dit combien sont exclus (RGPD-03, IA-02)", async () => {

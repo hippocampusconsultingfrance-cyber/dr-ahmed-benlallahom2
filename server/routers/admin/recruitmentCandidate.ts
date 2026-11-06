@@ -15,7 +15,7 @@ import {
 } from "../../../drizzle/schema";
 import { eq, sql, desc, getTableColumns, inArray } from "drizzle-orm";
 import { sendCandidatePortalAccessEmail, candidatePortalAccessEmailFailureCode } from "../../_core/notifications";
-import { logRecruitmentAction } from "../../recruitmentAudit";
+import { logRecruitmentAction, recruitmentAuditInsert } from "../../recruitmentAudit";
 import { analysedCertificationNames, CERTIFICATION_NAME_MAX_LENGTH, certificationFacts, declaredCertificationNames, sameRecruitmentFact } from "../../clientBriefMatching";
 import { certificationDateIsCurrent, latestCertificationRenewalDay, CERTIFICATION_RENEWAL_MAX_YEARS } from "../../../shared/recruitmentFactOrigins";
 import { createCandidateInvitationToken } from "../../candidateAuth";
@@ -205,23 +205,27 @@ export const adminRecruitmentCandidateRouter = router({
     const declaredConfirmation = input.confirmed && !factRows.length && !renewal;
     const renewalWithdrawn = !input.confirmed && renewalRows.length > 0;
     if (!changed.length && !renewalChanged && !declaredConfirmation && !renewalWithdrawn) return { success: true, changed: false };
-    if (updated.length) await db.update(cvCandidateCertifications).set({ confirmedAt: input.confirmed ? new Date() : null }).where(inArray(cvCandidateCertifications.id, updated.map(row => row.id)));
-    if (dropped.length) await db.delete(cvCandidateCertifications).where(inArray(cvCandidateCertifications.id, dropped.map(row => row.id)));
-    if (declaredConfirmation) await db.insert(cvCandidateCertifications).values({ applicationId: application.id, name: declared!.slice(0, CERTIFICATION_NAME_MAX_LENGTH), source: "declared", confirmedAt: new Date() });
-    if (renewal && renewalChanged) {
-      if (renewalRows.length) await db.update(cvCandidateCertifications).set({ expiresAt: renewal.expiresAt }).where(inArray(cvCandidateCertifications.id, renewalRows.map(row => row.id)));
-      else await db.insert(cvCandidateCertifications).values({ applicationId: application.id, name: (factRows[0]?.name ?? declared!).slice(0, CERTIFICATION_NAME_MAX_LENGTH), source: "renewed", confirmedAt: new Date(), expiresAt: renewal.expiresAt });
-    }
-    if (renewalWithdrawn) await db.delete(cvCandidateCertifications).where(inArray(cvCandidateCertifications.id, renewalRows.map(row => row.id)));
     const certification = factRows[0]?.name ?? declared;
-    await logRecruitmentAction({
-      applicationId: application.id,
-      adminOpenId: ctx.user.openId,
-      action: "status_update",
-      metadata: renewal
-        ? { event: "certification_renewed", certification, expiresAt: renewal.expiresAt, previousExpiresAt: Array.from(new Set((renewalRows.length ? renewalRows : [...readRows, ...expiryRows]).map(row => row.expiresAt))) }
-        : { event: input.confirmed ? "certification_confirmed" : "certification_unconfirmed", certification, ...(dropped.length ? { notRetainedByAnalysis: true } : {}) },
-    });
+    // The audit line and the rows in one batch, all or nothing (DATA-01):
+    // when the database refuses one, the confirmation is not recorded
+    // either, as the screen then says.
+    await db.batch([
+      recruitmentAuditInsert(db, [{
+        applicationId: application.id,
+        adminOpenId: ctx.user.openId,
+        action: "status_update",
+        metadata: renewal
+          ? { event: "certification_renewed", certification, expiresAt: renewal.expiresAt, previousExpiresAt: Array.from(new Set((renewalRows.length ? renewalRows : [...readRows, ...expiryRows]).map(row => row.expiresAt))) }
+          : { event: input.confirmed ? "certification_confirmed" : "certification_unconfirmed", certification, ...(dropped.length ? { notRetainedByAnalysis: true } : {}) },
+      }]),
+      ...(updated.length ? [db.update(cvCandidateCertifications).set({ confirmedAt: input.confirmed ? new Date() : null }).where(inArray(cvCandidateCertifications.id, updated.map(row => row.id)))] : []),
+      ...(dropped.length ? [db.delete(cvCandidateCertifications).where(inArray(cvCandidateCertifications.id, dropped.map(row => row.id)))] : []),
+      ...(declaredConfirmation ? [db.insert(cvCandidateCertifications).values({ applicationId: application.id, name: declared!.slice(0, CERTIFICATION_NAME_MAX_LENGTH), source: "declared", confirmedAt: new Date() })] : []),
+      ...(renewal && renewalChanged ? [renewalRows.length
+        ? db.update(cvCandidateCertifications).set({ expiresAt: renewal.expiresAt }).where(inArray(cvCandidateCertifications.id, renewalRows.map(row => row.id)))
+        : db.insert(cvCandidateCertifications).values({ applicationId: application.id, name: (factRows[0]?.name ?? declared!).slice(0, CERTIFICATION_NAME_MAX_LENGTH), source: "renewed", confirmedAt: new Date(), expiresAt: renewal.expiresAt })] : []),
+      ...(renewalWithdrawn ? [db.delete(cvCandidateCertifications).where(inArray(cvCandidateCertifications.id, renewalRows.map(row => row.id)))] : []),
+    ]);
     return { success: true, changed: true, ...(dropped.length ? { notRetainedByAnalysis: true } : {}) };
   }),
   markResponse: adminProcedure.input(z.object({ id: z.number().int().positive(), note: z.string().trim().max(1000).optional() })).mutation(async ({ input, ctx }) => {

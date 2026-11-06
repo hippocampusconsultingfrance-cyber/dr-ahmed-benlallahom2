@@ -1,5 +1,5 @@
 import { certificationDateIsCurrent, certificationExpiry, type RecruitmentFact, type RecruitmentFactOrigin } from "../shared/recruitmentFactOrigins";
-import { holdsRecruitmentLanguages, recruitmentLanguageCodes, sameRecruitmentLanguage } from "../shared/recruitmentLanguages";
+import { givesRequiredLanguage, meetsRequiredLanguage, recruitmentLanguageCodes, recruitmentLanguageRequirements } from "../shared/recruitmentLanguages";
 
 type BriefForMatching = {
   specialtyNeeded: string;
@@ -254,19 +254,21 @@ export function computeBriefCandidateMatch(brief: BriefForMatching, candidate: C
     breakdown.certifications = Math.round((matchedCertifications.length / requiredCertifications.length) * 20);
   }
 
-  // A required language is met by the same letters, or by any of its names
-  // (IA-02): « Arabe » asked, « Arabic » declared in the form.
-  const requiredLanguages = parseTerms(brief.requiredLanguages);
+  // A required language is met by any of its names, compared by code (IA-02):
+  // « Arabe » asked, « Arabic » declared in the form, and not « Polish » by
+  // « English (polished) ». Each language a term names counts on its own
+  // (« Anglais/Arabe », « anglais et arabe »: two), as for a matching profile
+  // and the Langue filter, a choice once (« anglais ou arabe », by either);
+  // one the table does not know by its words, whole.
+  const requiredLanguages = parseTerms(brief.requiredLanguages).flatMap(recruitmentLanguageRequirements);
   const candidateLanguages = candidate.languageFacts || [];
+  const candidateLanguageNames = candidateLanguages.map(fact => fact.name);
   const matchedLanguages: string[] = [];
   const languages: RecruitmentFact[] = [];
   for (const required of requiredLanguages) {
-    const written = factsMatching(required, candidateLanguages);
-    const named = holdsRecruitmentLanguages(candidateLanguages.map(fact => fact.name), required);
-    const facts = candidateLanguages.filter(fact => written.includes(fact) || (named && sameRecruitmentLanguage(fact.name, required)));
-    if (facts.length === 0) continue;
-    matchedLanguages.push(required);
-    addUnique(languages, facts);
+    if (!meetsRequiredLanguage(candidateLanguageNames, required)) continue;
+    matchedLanguages.push(required.text);
+    addUnique(languages, candidateLanguages.filter(fact => givesRequiredLanguage(fact.name, required)));
   }
   if (matchedLanguages.length > 0) {
     breakdown.languages = Math.round((matchedLanguages.length / requiredLanguages.length) * 15);

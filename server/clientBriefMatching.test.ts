@@ -60,11 +60,62 @@ describe("matching mission–candidat", () => {
 
     // A language required in German or Chinese, or several in one term.
     expect(computeBriefCandidateMatch({ ...mission, requiredLanguages: '["Englisch", "阿拉伯语"]' }, { ...candidate, languageFacts: languageFacts('["Anglais","Arabe"]', []) }).breakdown.languages).toBe(15);
-    expect(computeBriefCandidateMatch({ ...mission, requiredLanguages: "Anglais et arabe" }, { ...candidate, languageFacts: languageFacts('["English","Arabic"]', []) }).matchedLanguages).toEqual(["Anglais et arabe"]);
+    expect(computeBriefCandidateMatch({ ...mission, requiredLanguages: "Anglais et arabe" }, { ...candidate, languageFacts: languageFacts('["English","Arabic"]', []) }).matchedLanguages).toEqual(["Anglais", "arabe"]);
     // Another language, under any name, earns nothing.
     const none = computeBriefCandidateMatch(mission, { ...candidate, languageFacts: languageFacts('["French","Deutsch"]', []) });
     expect(none.breakdown.languages).toBe(0);
     expect(none.languages).toEqual([]);
+  });
+
+  it("compte chaque langue d’une exigence « Anglais/Arabe » ou « anglais et arabe », par code, comme un profil et le filtre Langue (IA-02)", () => {
+    const candidate = { specialty: "Anesthésie-réanimation", targetCountries: '["Émirats arabes unis"]' };
+    const languagePoints = (requiredLanguages: string, declared: string[]) =>
+      computeBriefCandidateMatch({ specialtyNeeded: "Anesthésie-réanimation", country: "Émirats arabes unis", requiredCertifications: null, requiredLanguages }, { ...candidate, languageFacts: languageFacts(JSON.stringify(declared), []) }).breakdown.languages;
+    for (const required of ["Anglais/Arabe", "anglais et arabe", "Englisch und Arabisch", "英语和阿拉伯语"]) {
+      // Half the points for one of the two languages, under any of its names; all of them for both.
+      expect(languagePoints(required, ["Anglais"]), required).toBe(8);
+      expect(languagePoints(required, ["English"]), required).toBe(8);
+      expect(languagePoints(required, ["French", "Arabic"]), required).toBe(8);
+      expect(languagePoints(required, ["English", "Arabic"]), required).toBe(15);
+      expect(languagePoints(required, ["French"]), required).toBe(0);
+    }
+  });
+
+  it("ne donne pas les points d’une langue à un mot qui commence comme elle, ni à un pays (IA-02)", () => {
+    const candidate = { specialty: "Anesthésie-réanimation", targetCountries: '["Émirats arabes unis"]' };
+    const match = (requiredLanguages: string, languages: string[], read: string[] = []) => computeBriefCandidateMatch(
+      { specialtyNeeded: "Anesthésie-réanimation", country: "Émirats arabes unis", requiredCertifications: null, requiredLanguages },
+      { ...candidate, languageFacts: languageFacts(JSON.stringify(languages), read.map(language => ({ language, source: "extracted" as const }))) },
+    );
+    expect(match("Polish", ["English (polished)"]).breakdown.languages).toBe(0);
+    expect(match("Polonais", ["English (polished)"]).languages).toEqual([]);
+    expect(match("German", ["Germany"]).breakdown.languages).toBe(0);
+    expect(match("Allemand", ["French"], ["Deutschland"]).breakdown.languages).toBe(0);
+    expect(match("Grec", ["expérience en Grèce"]).breakdown.languages).toBe(0);
+    // The language itself, declared or read in the CV, still scores.
+    expect(match("German", ["Germany"], ["Deutsch"]).languages).toEqual([{ name: "Deutsch", origins: ["extracted"] }]);
+    expect(match("Polish", ["Polski"]).breakdown.languages).toBe(15);
+    // A language the table does not know: its words, whole, in the name or the name's in the requirement.
+    expect(match("Wolof", ["Wolof (courant)"]).breakdown.languages).toBe(15);
+    expect(match("Wolof courant", ["Wolof"]).breakdown.languages).toBe(15);
+    expect(match("Wolof (courant)", ["Wolof"]).breakdown.languages).toBe(15);
+    expect(match("Swahili courant", ["Swahili"]).breakdown.languages).toBe(15);
+    expect(match("Créole haïtien", ["Créole"]).breakdown.languages).toBe(15);
+    expect(match("Wolof courant", ["Wolofs", "Bambara courant"]).breakdown.languages).toBe(0);
+  });
+
+  it("donne tous les points d’une exigence qui laisse le choix à l’une de ses langues, et ne coupe pas un nom chinois à 及 (IA-02)", () => {
+    const candidate = { specialty: "Anesthésie-réanimation", targetCountries: '["Émirats arabes unis"]' };
+    const languagePoints = (requiredLanguages: string, declared: string[]) =>
+      computeBriefCandidateMatch({ specialtyNeeded: "Anesthésie-réanimation", country: "Émirats arabes unis", requiredCertifications: null, requiredLanguages }, { ...candidate, languageFacts: languageFacts(JSON.stringify(declared), []) }).breakdown.languages;
+    for (const required of ["English or Arabic", "Anglais ou arabe", "anglais et/ou arabe", "英语或阿拉伯语"]) {
+      expect(languagePoints(required, ["Arabic"]), required).toBe(15);
+      expect(languagePoints(required, ["English"]), required).toBe(15);
+      expect(languagePoints(required, ["French"]), required).toBe(0);
+    }
+    expect(languagePoints("Wolof ou anglais", ["Wolof"])).toBe(15);
+    // 埃及阿拉伯语, Egyptian Arabic: one language, Arabic.
+    expect(languagePoints("埃及阿拉伯语", ["Arabic"])).toBe(15);
   });
 
   it("une certification déclarée par le candidat compte, elle aussi, une fois confirmée", () => {

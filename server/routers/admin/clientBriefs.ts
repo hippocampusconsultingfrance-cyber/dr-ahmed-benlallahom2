@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "../../db";
 import { cvApplications, clientBriefs, clientBriefCandidates } from "../../../drizzle/schema";
 import { eq, and, sql, desc, inArray } from "drizzle-orm";
-import { logRecruitmentAction } from "../../recruitmentAudit";
+import { recruitmentAuditInsert } from "../../recruitmentAudit";
 import { computeBriefCandidateMatch } from "../../clientBriefMatching";
 import { postgresErrorCode } from "../../languageColumns";
 import { parseAdminDate, getParisParts, pad, parisDateKey } from "../parisTime";
@@ -230,8 +230,13 @@ export const adminClientBriefsRouter = router({
           throw missionRefusal("BAD_REQUEST", earliest.reason, `La date de l’accord du candidat ne peut pas précéder ${earliest.event} ${earliest.day.split("-").reverse().join("/")}.`, earliest.day);
         }
       }
-      await db.update(clientBriefCandidates).set({ candidateConsentAt: consentAt, updatedAt: new Date() }).where(eq(clientBriefCandidates.id, association.id));
-      await logRecruitmentAction({ applicationId: input.applicationId, adminOpenId: ctx.user.openId, action: "status_update", metadata: { event: "mission_consent", briefId: input.briefId, consentDate: input.consentDate } });
+      // The agreement and its audit line in one batch, both or neither
+      // (DATA-01): when the database refuses the line, the screen says
+      // nothing was changed, and the agreement is indeed not recorded.
+      await db.batch([
+        db.update(clientBriefCandidates).set({ candidateConsentAt: consentAt, updatedAt: new Date() }).where(eq(clientBriefCandidates.id, association.id)),
+        recruitmentAuditInsert(db, [{ applicationId: input.applicationId, adminOpenId: ctx.user.openId, action: "status_update", metadata: { event: "mission_consent", briefId: input.briefId, consentDate: input.consentDate } }]),
+      ]);
       return { success: true, candidateConsentAt: consentAt };
     }),
 });
