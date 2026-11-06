@@ -31,7 +31,7 @@ export default function CandidateLegalFooter() {
         <Link href={candidateLegalLinks.terms} className="underline-offset-4 hover:text-cyan-200 hover:underline">{copy.terms}</Link>
         <Link href={candidateLegalLinks.cookies} className="underline-offset-4 hover:text-cyan-200 hover:underline">{copy.cookies}</Link>
       </nav>
-      <p className="mt-2 text-center text-slate-500">© {new Date().getFullYear()} Hippocampus Consulting · {copy.controller}</p>
+      <p className="mt-2 text-center text-slate-400">© {new Date().getFullYear()} Hippocampus Consulting · {copy.controller}</p>
     </footer>
   );
 }
