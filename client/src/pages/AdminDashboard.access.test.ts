@@ -44,7 +44,8 @@ const { default: ContactsTab } = await import("@/components/ContactsTab");
 const { default: GdprTab } = await import("@/components/GdprTab");
 const { default: AdminConfigurationBanner } = await import("@/components/AdminConfigurationBanner");
 const { default: MedicalQuestionsAdminTab } = await import("@/components/MedicalQuestionsAdminTab");
-const { default: RecruitmentTab } = await import("@/components/RecruitmentTab");
+// Candidatures is loaded on demand: the dashboard mounts its lazy component.
+const { RecruitmentTab } = await import("./adminLazyTabs");
 const { SignInButton } = await import("@clerk/react");
 
 const render = () => renderStateful(AdminDashboard) as ReactElement;
@@ -58,7 +59,7 @@ const textOf = (node: unknown): string => {
 };
 const allText = (tree: ReactElement) => textOf(tree);
 const buttonNamed = (tree: ReactElement, label: string) => elements(tree).find(element => typeof element.props.onClick === "function" && textOf(element).trim() === label);
-const renderedTabs = (tree: ReactElement) => elements(tree).map(element => element.type).filter(type => typeof type === "function");
+const renderedTabs = (tree: ReactElement) => elements(tree).map(element => element.type).filter(type => typeof type === "function" || (typeof type === "object" && type !== null));
 const tabNav = (tree: ReactElement) => elements(tree).find(element => element.props["aria-label"] === "Navigation des sections d’administration")!;
 const tabButtons = (tree: ReactElement) => elementsOf(tabNav(tree).props.children).filter(element => element.type === "button");
 

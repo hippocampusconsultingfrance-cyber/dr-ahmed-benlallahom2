@@ -1,17 +1,12 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { SignInButton, UserButton } from "@clerk/react";
 import { trpc } from "@/lib/trpc";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Calendar, MessageSquare, Shield, DollarSign, ArrowLeft, Star, CalendarDays, UserRound, BriefcaseBusiness, Send, UsersRound, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
-import RecruitmentTab from "@/components/RecruitmentTab";
-import EmployerBriefsTab from "@/components/EmployerBriefsTab";
-import VivierTab from "@/components/VivierTab";
-import MailingTab from "@/components/MailingTab";
-import CandidateDocumentsAdminTab from "@/components/CandidateDocumentsAdminTab";
 import SecurityOperationsTab from "@/components/SecurityOperationsTab";
 import MedicalQuestionsAdminTab from "@/components/MedicalQuestionsAdminTab";
 import OverviewTab from "@/components/OverviewTab";
@@ -23,6 +18,7 @@ import AvailabilityTab from "@/components/AvailabilityTab";
 import AdminConfigurationBanner from "@/components/AdminConfigurationBanner";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { getActiveAdminTabLabel } from "./adminDashboardMobileTabs";
+import { CandidateDocumentsAdminTab, EmployerBriefsTab, MailingTab, RecruitmentTab, VivierTab } from "./adminLazyTabs";
 
 export type Tab = "overview" | "appointments" | "contacts" | "gdpr" | "testimonials" | "availability" | "recruitment" | "candidateDocuments" | "security" | "vivier" | "mailing" | "employerBriefs" | "medicalQuestions";
 
@@ -183,12 +179,15 @@ export default function AdminDashboard() {
         {activeTab === "gdpr" && <GdprTab />}
         {activeTab === "testimonials" && <TestimonialsTab />}
         {activeTab === "availability" && <AvailabilityTab />}
-        {activeTab === "recruitment" && <RecruitmentTab />}
-        {activeTab === "candidateDocuments" && <CandidateDocumentsAdminTab />}
+        {/* The recruitment tabs load when first opened (adminLazyTabs.ts). */}
+        <Suspense fallback={<PublicContentSkeleton label="Chargement de la section" />}>
+          {activeTab === "recruitment" && <RecruitmentTab />}
+          {activeTab === "candidateDocuments" && <CandidateDocumentsAdminTab />}
+          {activeTab === "vivier" && <VivierTab onCompose={candidateIds => { setMailingSelectedIds(candidateIds); setActiveTab("mailing"); }} />}
+          {activeTab === "mailing" && <MailingTab initialSelectedIds={mailingSelectedIds} />}
+          {activeTab === "employerBriefs" && <EmployerBriefsTab />}
+        </Suspense>
         {activeTab === "security" && <SecurityOperationsTab />}
-        {activeTab === "vivier" && <VivierTab onCompose={candidateIds => { setMailingSelectedIds(candidateIds); setActiveTab("mailing"); }} />}
-        {activeTab === "mailing" && <MailingTab initialSelectedIds={mailingSelectedIds} />}
-        {activeTab === "employerBriefs" && <EmployerBriefsTab />}
         {activeTab === "medicalQuestions" && <MedicalQuestionsAdminTab />}
       </main>
     </div>

@@ -33,8 +33,9 @@ const adminGzip = await measure(adminFile);
 const cssGzip = cssMeasures.reduce((total, sheet) => total + sheet.gzip, 0);
 
 // Admin : 60 KiB jusqu'en octobre 2026, puis 80 KiB une fois retirés les attributs
-// data-loc de jsxLocPlugin (CODE-06), en attendant la décision du propriétaire sur le
-// découpage des onglets les plus lourds (voir PERFORMANCE_BUDGET.md).
+// data-loc de jsxLocPlugin (CODE-06). Depuis novembre 2026, les onglets du recrutement
+// sont chargés à la demande (client/src/pages/adminLazyTabs.ts) et chacun est mesuré
+// comme une route (voir PERFORMANCE_BUDGET.md).
 // Route : le même plafond pour chaque page chargée à la demande, et pour chaque
 // dépendance partagée, qui pèse sur toutes les pages qui l'importent. Aucune ne le
 // dépasse aujourd'hui (les plus lourdes : LegalPage et RecruitmentPage, environ

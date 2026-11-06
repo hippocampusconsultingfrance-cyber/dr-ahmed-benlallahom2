@@ -45,3 +45,15 @@ Jusqu’ici, seules neuf routes nommées étaient mesurées : une autre page (VV
 | Plus grandes routes différées (`LegalPage`, `RecruitmentPage`) | 19,2 KiB | 30 KiB | Conforme. |
 | Plus grande dépendance partagée (`candidateDocumentCategories`) | 17,4 KiB | 30 KiB | Conforme. |
 | Feuille de style | 26,6 KiB | 30 KiB | Conforme. |
+
+## Mesure du 6 novembre 2026 — onglets du recrutement chargés à la demande
+
+Les écrans ajoutés au tableau de bord par le lot 6 (agenda des consultations, confirmations, états d’erreur avec « Réessayer ») portaient le fichier du dashboard à 81,2 KiB, au-delà de son budget de 80 KiB. Plutôt que de relever le seuil, les cinq onglets du recrutement (Candidatures, Documents candidats, Vivier, Mailing, Missions) sont désormais chargés à leur première ouverture (`client/src/pages/adminLazyTabs.ts`) ; les onglets des consultations, des messages, des questions santé et du RGPD restent dans le fichier du dashboard et s’ouvrent immédiatement. Chaque onglet chargé à la demande est mesuré comme une route différée (30 KiB).
+
+| Groupe | Mesure gzip | Budget | Résultat |
+|---|---:|---:|---|
+| Entrée publique | 145,5 KiB | 160 KiB | Conforme. |
+| Dashboard administratif différé | 32,8 KiB | 80 KiB | Conforme. |
+| Plus lourd onglet chargé à la demande (`RecruitmentTab`) | 13,8 KiB | 30 KiB | Conforme. |
+| Autres onglets (`EmployerBriefsTab`, `MailingTab`, `CandidateDocumentsAdminTab`, `VivierTab`) | 12,6 / 11,0 / 6,5 / 6,1 KiB | 30 KiB | Conformes. |
+| Plus grande route publique (`RecruitmentPage`) | 19,2 KiB | 30 KiB | Conforme. |

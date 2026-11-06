@@ -25,8 +25,8 @@ vi.mock("@/lib/trpc", () => ({
 const { default: AdminDashboard } = await import("@/pages/AdminDashboard");
 const { default: OverviewTab } = await import("./OverviewTab");
 const { default: AppointmentsTab } = await import("./AppointmentsTab");
-const { default: RecruitmentTab } = await import("./RecruitmentTab");
-const { default: EmployerBriefsTab } = await import("./EmployerBriefsTab");
+// Candidatures and Missions are loaded on demand: the dashboard mounts their lazy components.
+const { RecruitmentTab, EmployerBriefsTab } = await import("@/pages/adminLazyTabs");
 const { default: AdminAttentionPanel } = await import("./AdminAttentionPanel");
 
 const textOf = (node: unknown): string => {
