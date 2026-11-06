@@ -17,9 +17,10 @@
  * (SUBSTITUTES): Liberation Sans for a sans serif font, Liberation Serif for
  * a serif one, Liberation Mono for a typewriter one, of each character the
  * wider of Liberation Sans and Serif when nothing tells which, the widest of
- * all for a script or decorative font, of Liberation Sans and Serif, Verdana
- * and Selawik for the Latin letters of an East Asian font. The DOCX
- * visibility check lays text out with them (IA-01).
+ * all for a script or decorative font; of an East Asian font, its Latin
+ * letters of half width or as the widest of Liberation Sans and Serif,
+ * Verdana and Selawik, and the characters of an ambiguous East Asian width a
+ * full em wide. The DOCX visibility check lays text out with them (IA-01).
  * Written compactly: a character as wide as its base letter (É as E), or a
  * slanted style as wide as its upright one, in a sign rather than two digits.
  *
@@ -48,9 +49,9 @@
  *     20200211, fonts-liberation2 2.1.5, fonts-dejavu-core 2.37.
  */
 import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { join } from "node:path";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inflateSync } from "node:zlib";
 
@@ -135,29 +136,56 @@ const STANDING_IN = [
 /**
  * The fonts Word draws a font it does not have with, given what its font
  * table (w:fontTable) says of it: of each character, the widest advance of
- * these fonts (`of`, all of them but the typewriter ones when none is given),
- * in each style, and their tallest line; Liberation Sans, Serif and Mono stand
- * for themselves. As wide, in each style, every character of `every` (in
- * thousandths of the size): the Latin letters of an East Asian font of half
- * width (MS Gothic, SimSun…); fonts of no width known, heavy or wide (Arial
- * Black, Wide Latin…) or embedded in the document, as wide as the widest
- * character the check allows (1 em), their line the tallest.
+ * these fonts (`of`: fonts measured or substitutes above; all fonts measured
+ * but the typewriter ones when none is given), in each style, and their
+ * tallest line; Liberation Sans, Serif and Mono stand for themselves. Of an
+ * East Asian font (`eastAsian`), the characters it draws a full em wide
+ * (FULL_WIDTH_IN_EAST_ASIAN) so, and the tallest line of all: its Latin
+ * letters proportional (Microsoft YaHei, Meiryo…: the widest of Arial, Times
+ * New Roman, Verdana and Segoe UI), or of half width (MS Gothic, SimSun,
+ * SimHei, MingLiU…: those of Basic Latin `basicLatin` wide, in thousandths of
+ * the size; the others, which such a font may lack, no narrower, and no
+ * narrower than Word draws them instead), or either (one not listed). As
+ * wide, every character of `every`: fonts of no width known, heavy or wide
+ * (Arial Black, Wide Latin…) or embedded in the document, as wide as the
+ * widest character the check allows (1 em), their line the tallest.
  */
 const SUBSTITUTES = [
   { key: "sans-or-serif", of: ["liberation-sans", "liberation-serif"] },
   { key: "widest", of: undefined },
-  { key: "east-asian-latin", of: ["liberation-sans", "liberation-serif", "verdana", "selawik"], tallest: true },
-  { key: "half-width", every: 500, tallest: true },
-  { key: "unmeasured", every: 1000, tallest: true },
+  { key: "east-asian-latin", of: ["liberation-sans", "liberation-serif", "verdana", "selawik"], eastAsian: true },
+  { key: "half-width", of: ["sans-or-serif"], basicLatin: 500, eastAsian: true },
+  { key: "east-asian", of: ["east-asian-latin", "half-width"], eastAsian: true },
+  { key: "unmeasured", every: 1000 },
 ];
+/**
+ * The characters measured an East Asian font draws a full em wide when it
+ * has them (SimSun's “…”, MS Gothic's ●…): those of an ambiguous East Asian
+ * width (A in Unicode's EastAsianWidth.txt, 15.1), accented letters among
+ * them, and the minus sign and the check mark, which they draw so too.
+ */
+const FULL_WIDTH_IN_EAST_ASIAN = new Set([
+  0xa1, 0xa4, 0xa7, 0xa8, 0xaa, 0xad, 0xae, ...range(0xb0, 0xb4), ...range(0xb6, 0xba), ...range(0xbc, 0xbf), 0xc6, 0xd0, 0xd7, 0xd8, ...range(0xde, 0xe1), 0xe6, 0xe8, 0xe9, 0xea, 0xec, 0xed,
+  0xf0, 0xf2, 0xf3, ...range(0xf7, 0xfa), 0xfc, 0xfe, 0x101, 0x111, 0x113, 0x11b, 0x126, 0x127, 0x12b, ...range(0x131, 0x133), 0x138, ...range(0x13f, 0x142), 0x144, ...range(0x148, 0x14b),
+  0x14d, 0x152, 0x153, 0x166, 0x167, 0x16b, 0x2010, ...range(0x2013, 0x2016), 0x2018, 0x2019, 0x201c, 0x201d, ...range(0x2020, 0x2022), ...range(0x2024, 0x2027), 0x2030, 0x2032, 0x2033, 0x20ac,
+  0x2122, ...range(0x2190, 0x2193), 0x2212, 0x2264, 0x2265, 0x25cf, 0x2713,
+]);
 /** Names of fonts of no width known: heavy or wide ones, drawn wider than any measured. */
 const UNMEASURED = ["arial black", "aptos black", "aptos extrabold", "segoe ui black", "wide latin"];
-/** Names of East Asian fonts whose Latin letters are all of half their width (half-width), or proportional (east-asian-latin), as NFKC writes them. */
-const HALF_WIDTH = ["ms gothic", "ms mincho", "simsun", "nsimsun", "ms ゴシック", "ms 明朝", "宋体", "新宋体"];
+/**
+ * Names of East Asian fonts whose Latin letters are all of half their width
+ * (half-width: of a fixed pitch, as SimHei, KaiTi, FangSong and MingLiU too),
+ * or proportional (east-asian-latin), as Word writes them: their Japanese
+ * names in full-width letters (ＭＳ), which Word does not take for others.
+ */
+const HALF_WIDTH = [
+  "MS Gothic", "MS Mincho", "ＭＳ ゴシック", "ＭＳ 明朝", "SimSun", "NSimSun", "宋体", "新宋体", "SimHei", "黑体", "KaiTi", "楷体", "KaiTi_GB2312", "楷体_GB2312", "FangSong", "仿宋",
+  "FangSong_GB2312", "仿宋_GB2312", "MingLiU", "細明體", "MingLiU_HKSCS", "細明體_HKSCS", "GulimChe", "굴림체", "DotumChe", "돋움체", "BatangChe", "바탕체", "GungsuhChe", "궁서체",
+];
 const EAST_ASIAN = [
-  "ms pgothic", "ms pmincho", "ms ui gothic", "ms pゴシック", "ms p明朝", "yu gothic", "yu gothic ui", "yu mincho", "游ゴシック", "游明朝", "meiryo", "meiryo ui", "メイリオ",
-  "microsoft yahei", "微软雅黑", "microsoft jhenghei", "微軟正黑體", "simhei", "黑体", "kaiti", "楷体", "fangsong", "仿宋", "dengxian", "等线",
-  "mingliu", "細明體", "pmingliu", "新細明體", "malgun gothic", "맑은 고딕", "gulim", "굴림", "dotum", "돋움", "batang", "바탕",
+  "MS PGothic", "MS PMincho", "MS UI Gothic", "ＭＳ Ｐゴシック", "ＭＳ Ｐ明朝", "Yu Gothic", "Yu Gothic UI", "Yu Mincho", "游ゴシック", "游明朝", "Meiryo", "Meiryo UI", "メイリオ",
+  "Microsoft YaHei", "微软雅黑", "Microsoft JhengHei", "微軟正黑體", "DengXian", "等线", "PMingLiU", "新細明體", "Malgun Gothic", "맑은 고딕", "Gulim", "굴림", "Dotum", "돋움", "Batang", "바탕",
+  "Gungsuh", "궁서",
 ];
 /** Basic Latin, Latin-1 and Latin Extended-A, and the punctuation and signs a CV writes beyond them. */
 const CHARACTERS = [
@@ -329,6 +357,8 @@ const publishedLine = name => {
 /** Of each font, its advances in each style (STYLES), in thousandths of its size, and its line; the names it stands for. */
 const fonts = {};
 const aliases = {};
+/** What is written of each font measured, standing in or substitute (DOCX_FONT_METRICS). */
+const metrics = {};
 for (const { key, family, names, ownLine, published } of FONTS) {
   const found = Object.fromEntries(Object.entries(STYLES).flatMap(([name, style]) => {
     const files = fontFiles(family, style);
@@ -343,10 +373,13 @@ for (const { key, family, names, ownLine, published } of FONTS) {
   fonts[key] = { line, advances, widest: FONTS.find(font => font.key === key).widest !== false };
   for (const name of names) aliases[name] = key;
 }
-/** Of each character, in each style, the widest advance of these fonts (0 when none has it). */
-const widestOf = keys => Object.fromEntries(Object.keys(STYLES).map(style => [style, Array.from(CHARACTERS, (_, at) => Math.max(0, ...keys.map(key => fonts[key].advances[style][at])))]));
+/** Of each character, in each style, the widest advance of these fonts, measured or substitutes written before (0 when none has it). */
+const widestOf = keys => Object.fromEntries(Object.keys(STYLES).map(style => [style, Array.from(CHARACTERS, (_, at) => Math.max(0, ...keys.map(key => (fonts[key] ?? metrics[key]).advances[style][at])))]));
 const measured = Object.keys(fonts).filter(key => fonts[key].widest);
-const widths = createRequire(import.meta.url)(join(folder ?? ".", "string-pixel-width/lib/widthsMap.js"));
+// From the folder given, or the current one (a path, not the name of a package).
+const widthsMap = resolve(folder ?? ".", "string-pixel-width/lib/widthsMap.js");
+if (!existsSync(widthsMap)) throw new Error(`${widthsMap}: not found; give a folder that holds string-pixel-width's table (string-pixel-width/lib/widthsMap.js)`);
+const widths = createRequire(import.meta.url)(widthsMap);
 const table = widths.default ?? widths;
 for (const { key, source, names } of PUBLISHED) {
   const published = table[source];
@@ -361,19 +394,27 @@ for (const { key, source, names } of PUBLISHED) {
   for (const name of names) aliases[name] = key;
 }
 const tallest = Math.max(...Object.values(fonts).map(({ line }) => line));
-const metrics = {};
 for (const [key, { line, advances }] of Object.entries(fonts)) metrics[key] = { line, advances };
 for (const { key, from, style, names } of STANDING_IN) {
   if (from) metrics[key] = { line: fonts[from].line, advances: Object.fromEntries(Object.keys(STYLES).map(name => [name, fonts[from].advances[/italic/i.test(name) ? `${style}Italic` : style]])) };
   for (const name of names) aliases[name] = key;
 }
-for (const { key, of, every, tallest: tall } of SUBSTITUTES) {
+for (const { key, of, every, basicLatin, eastAsian } of SUBSTITUTES) {
   const keys = of ?? Object.keys(fonts).filter(font => fonts[font].widest);
-  metrics[key] = every ? { line: tallest, every } : { line: tall ? tallest : Math.max(...keys.map(font => fonts[font].line)), advances: widestOf(keys) };
+  if (every) {
+    metrics[key] = { line: tallest, every };
+    continue;
+  }
+  const advances = Object.fromEntries(Object.entries(widestOf(keys)).map(([style, widest]) => [style, widest.map((width, at) => {
+    const code = CHARACTERS.charCodeAt(at);
+    if (eastAsian && FULL_WIDTH_IN_EAST_ASIAN.has(code)) return 1000;
+    return basicLatin && code < 0x7f ? basicLatin : Math.max(basicLatin ?? 0, width);
+  })]));
+  metrics[key] = { line: eastAsian ? tallest : Math.max(...keys.map(font => metrics[font].line)), advances };
 }
 for (const name of UNMEASURED) aliases[name] = "unmeasured";
-for (const name of HALF_WIDTH) aliases[name.normalize("NFKC")] = "half-width";
-for (const name of EAST_ASIAN) aliases[name.normalize("NFKC")] = "east-asian-latin";
+for (const name of HALF_WIDTH) aliases[name.toLowerCase()] = "half-width";
+for (const name of EAST_ASIAN) aliases[name.toLowerCase()] = "east-asian-latin";
 
 /** A font's styles written (digitsOf): its slanted ones only where not as wide as their upright one, as Word draws a slanted style it has. */
 function written({ line, advances, every }) {
@@ -418,13 +459,14 @@ ${Object.entries(metrics).map(([key, font]) => `  "${key}": {\n${written(font)}\
  * have with: a sans serif one (Arial), a serif one (Times New Roman), a
  * typewriter one (Courier New); of each character the wider of the first two,
  * when nothing tells which (\`unknown\`); the widest of all fonts measured but
- * the typewriter ones, for a script or decorative one; the Latin letters of an
- * East Asian font, proportional or of half width; a font of no width known,
- * every character 1 em wide.
+ * the typewriter ones, for a script or decorative one; an East Asian font, of
+ * proportional Latin letters, of half width, or either (\`eastAsian\`, one not
+ * listed), the characters of an ambiguous East Asian width a full em wide; a
+ * font of no width known, every character 1 em wide.
  */
-export const DOCX_SUBSTITUTE_FONTS = { sans: "liberation-sans", serif: "liberation-serif", typewriter: "liberation-mono", unknown: "sans-or-serif", decorative: "widest", eastAsian: "east-asian-latin", halfWidth: "half-width", unmeasured: "unmeasured" } as const;
+export const DOCX_SUBSTITUTE_FONTS = { sans: "liberation-sans", serif: "liberation-serif", typewriter: "liberation-mono", unknown: "sans-or-serif", decorative: "widest", eastAsian: "east-asian", proportionalEastAsian: "east-asian-latin", halfWidth: "half-width", unmeasured: "unmeasured" } as const;
 
-/** The font names a document may give (w:rFonts, theme fonts), in lower case and NFKC, and the font of DOCX_FONT_METRICS of their metrics, or that stands for them. */
+/** The font names a document may give (w:rFonts, theme fonts), in lower case, as written otherwise (ＭＳ ゴシック in full-width letters), and the font of DOCX_FONT_METRICS of their metrics, or that stands for them. */
 export const DOCX_FONT_ALIASES: Record<string, string> = ${JSON.stringify(aliases, null, 2).replace(/\n}$/, ",\n}")};
 `;
 writeFileSync(fileURLToPath(new URL("../server/docxFontMetrics.ts", import.meta.url)), output);

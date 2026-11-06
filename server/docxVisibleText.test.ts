@@ -397,7 +397,7 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       expect(await check(page(font, 1.25))).toMatchObject({ hidden: "", unverifiable: "", reasons: [] });
     });
 
-    it.each(["Verdana", "Tahoma", "Trebuchet MS"])("en %s, police d’Office que le contrôle ne mesure pas, chaque ligne dans une boîte de sa largeur : tout est lu, aux avances d’une police mesurée plus étroite", async font => {
+    it.each(["Verdana", "Tahoma", "Trebuchet MS"])("en %s, police d’Office aux largeurs publiées, chaque ligne dans une boîte de sa largeur : tout est lu", async font => {
       const result = await check(page(font, 1));
       for (const [text] of LINES) expect(result.text).toContain(text);
       expect(result).toMatchObject({ hidden: "", unverifiable: "", reasons: [] });
@@ -724,15 +724,18 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       expectSetAside(result);
     });
 
-    // Typewriter fonts at 0.6 em a character (`start` 535 pt), East Asian ones of half-width Latin at 0.5 em (446 pt) or of proportional
-    // Latin as the widest of Arial, Times New Roman, Verdana and Segoe UI (463 pt), heavy or wide ones of no width known at 1 em; a name
-    // that may be read otherwise as the widest of what it may be: Calibri, or the font Word draws one it does not have with (410 pt).
+    // Typewriter fonts at 0.6 em a character (`start` 535 pt); East Asian ones of half-width Latin at 0.5 em (SimSun, SimHei…), or of
+    // proportional Latin as the widest of Arial, Times New Roman, Verdana and Segoe UI, and their characters of an ambiguous East Asian
+    // width (é) at 1 em (462 and 477 pt; 525 for one not listed, either); heavy or wide ones of no width known at 1 em; a name that may be
+    // read otherwise as the widest of what it may be: Calibri, or the font Word draws one it does not have with (410 pt).
     it.each([
-      ["Consolas", WIDE, undefined], ["Source Code Pro", WIDE, undefined], ["Cascadia Code", WIDE, undefined],
-      ["MS Gothic", NARROW, undefined], ["ＭＳ ゴシック", NARROW, undefined], ["宋体", NARROW, undefined], ["Microsoft YaHei", WIDE, undefined], ["Noto Sans CJK JP", WIDE, undefined],
-      ["Arial Black", WIDE, "Références : Clinique Exemple,"], ["Lato Black", WIDE, "Références : Clinique Exemple,"], ["Wide Latin", WIDE, "Références : Clinique Exemple,"],
-      ["Calibri (Body)", NARROW, undefined], ["+mn-lt", NARROW, undefined], ["Calibri​", NARROW, undefined], ["Times New Roman", NARROW, undefined],
-    ])("police « %s » (chasse fixe, latin d’une police d’Asie orientale, lourde ou large, ou nom qui peut se lire autrement) : la fin de la ligne exacte est écartée", async (name, width, shown) => {
+      ["« Consolas »", "Consolas", WIDE, undefined], ["« Source Code Pro »", "Source Code Pro", WIDE, undefined], ["« Cascadia Code »", "Cascadia Code", WIDE, undefined],
+      ["« MS Gothic »", "MS Gothic", NARROW, undefined], ["« ＭＳ ゴシック »", "ＭＳ ゴシック", NARROW, undefined], ["« 宋体 »", "宋体", NARROW, undefined], ["« SimHei »", "SimHei", NARROW, undefined],
+      ["« Microsoft YaHei »", "Microsoft YaHei", WIDE, undefined], ["« Noto Sans CJK JP »", "Noto Sans CJK JP", WIDE, undefined],
+      ["« Arial Black »", "Arial Black", WIDE, "Références : Clinique Exemple,"], ["« Lato Black »", "Lato Black", WIDE, "Références : Clinique Exemple,"], ["« Wide Latin »", "Wide Latin", WIDE, "Références : Clinique Exemple,"],
+      ["« Calibri (Body) »", "Calibri (Body)", NARROW, undefined], ["« +mn-lt »", "+mn-lt", NARROW, undefined],
+      ["« Calibri » suivi d’une espace sans chasse (U+200B)", "Calibri\u200b", NARROW, undefined], ["« Times New Roman » d’une espace insécable (U+00A0) entre ses mots", "Times\u00a0New Roman", NARROW, undefined],
+    ])("police %s (chasse fixe, latin d’une police d’Asie orientale, lourde ou large, ou nom qui peut se lire autrement) : la fin de la ligne exacte est écartée", async (_, name, width, shown) => {
       const theme = { name: "word/theme/theme1.xml", relationship: "theme", content: '<?xml version="1.0" encoding="UTF-8"?><a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="T"><a:themeElements><a:fontScheme name="T"><a:majorFont><a:latin typeface="Calibri Light"/></a:majorFont><a:minorFont><a:latin typeface="Calibri"/></a:minorFont></a:fontScheme></a:themeElements></a:theme>' };
       expectLine(await check(row(Number(width), font(String(name))), { parts: [theme] }), false, shown ?? undefined);
       // The fonts they would otherwise be taken for hold it whole: Arial in the wide cell, Calibri in the narrow one.
@@ -744,9 +747,69 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       expectLine(await check(row(NARROW, font(name))), false);
     });
 
-    it("en Arial Narrow, mesurée sur Liberation Sans Narrow : la ligne exacte à sa largeur est lue entière, en Arial elle ne l’est pas", async () => {
+    it("en Arial Narrow, mesurée sur Liberation Sans Narrow : la ligne exacte à sa largeur est lue entière, en Arial, ou sous son nom écrit en lettres pleine chasse, que Word ne lit pas comme le sien, elle ne l’est pas", async () => {
       expectLine(await check(row(7016, font("Arial Narrow"))), true);
       expectLine(await check(row(7016, font("Arial"))), false);
+      expectLine(await check(row(7016, font("Ａｒｉａｌ Ｎａｒｒｏｗ"))), false);
+    });
+
+    // Of two entries of a name in the font table, Word may read either: the wider counts.
+    it("police « Zorglub » de deux entrées dans la table des polices, une autre nom d’Arial Narrow, l’autre embarquée : la fin de la ligne exacte à la largeur d’Arial Narrow est écartée", async () => {
+      const narrow = '<w:font w:name="Zorglub"><w:altName w:val="Arial Narrow"/></w:font>';
+      expectLine(await check(row(7016, font("Zorglub")), { parts: [fontTable(narrow)] }), true);
+      const embedded = '<w:font w:name="zorglub"><w:embedRegular r:id="rId9" w:fontKey="{0F0E0D0C-0B0A-0908-0706-050403020100}"/></w:font>';
+      expectLine(await check(row(7016, font("Zorglub")), { parts: [fontTable(narrow + embedded)] }), false, "Références : Clinique");
+    });
+
+    // 44 capitals M are 403 pt wide in Arial, 430 in Times New Roman: « DHA » after them holds on the line (439 pt, 448 with kerning) in
+    // Arial only. A family auto says nothing of the font: the wider of the two, as for a font the table does not name.
+    it.each([["swiss", true], ["auto", false], ["roman", false], ["", false]])("police « Zorglub » que Word n’a pas, de famille « %s » dans la table des polices : « DHA » après 44 M n’est lu que si Arial les y tient", async (family, read) => {
+      const entry = family ? `<w:font w:name="Zorglub"><w:family w:val="${family}"/><w:pitch w:val="variable"/></w:font>` : "";
+      const result = await check(table(WIDE, [[exact(300), runs("", [`${"M".repeat(44)} `, font("Zorglub")], ["DHA", font("Zorglub")])]]), { parts: entry ? [fontTable(entry)] : [] });
+      expect(result.text).toContain("M".repeat(44));
+      expect(result.text.includes("DHA")).toBe(read);
+      expect(result).toMatchObject({ hidden: "", unverifiable: read ? "" : "DHA" });
+    });
+
+    // East Asian fonts draw their characters of an ambiguous East Asian width a full em wide (« “” », « – », « ● »), those of a fixed
+    // pitch their Latin letters half an em wide: 40 of the former, or 80 of the latter, fill the line of 439 pt; in Arial, a third to
+    // three fifths of it, the claims' first words following them.
+    const filled = (filler: string, runProperties: string) => table(WIDE, [[exact(300), runs("", [`${filler} `, runProperties], [FAKE_ONE, runProperties])]]);
+    it.each([
+      ["SimSun", "« “” » ×20", "“”".repeat(20)], ["宋体", "« ● » ×40", "●".repeat(40)], ["MS Gothic", "« – » ×40", "–".repeat(40)],
+      ["SimHei", "« . » ×80", ".".repeat(80)], ["KaiTi", "« . » ×80", ".".repeat(80)], ["MingLiU", "« . » ×80", ".".repeat(80)],
+    ])("en %s, %s : les affirmations qui suivent sont écartées ; en Arial, leurs premiers mots sont lus", async (name, _, filler) => {
+      expectSetAside(await check(filled(filler, font(name))));
+      expect((await check(filled(filler, font("Arial")))).text).toContain("Titre : Médecin");
+    });
+
+    // Asked to (w:hint eastAsia), Word draws the characters that may be East Asian in the run's East Asian font, not its Latin one; in
+    // Office's East Asian fonts when the run names none.
+    it.each([["SimSun", ' w:eastAsia="SimSun"'], ["qu’il ne nomme pas", ""]])("guillemets (« “” » ×20) d’un passage en Arial Narrow, de police d’Asie orientale %s, que Word doit prendre pour eux (w:hint eastAsia) : les affirmations qui suivent sont écartées ; sans cette demande, leurs premiers mots sont lus", async (_, eastAsian) => {
+      const fonts = (hint: string) => `<w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"${eastAsian}${hint}/>`;
+      expectSetAside(await check(filled("“”".repeat(20), fonts(' w:hint="eastAsia"'))));
+      expect((await check(filled("“”".repeat(20), fonts("")))).text).toContain("Titre : Médecin");
+    });
+
+    // Office's theme leaves its East Asian font empty: Word takes the one it gives the script of the document's language (a:font), here
+    // 宋体, of half-width Latin letters, or Courier New, wider, or one of Office's when it gives none; 80 « i » fill the line in those of
+    // half-width letters, 70 in Courier New (they would leave room in them), a fifth of it in Calibri, the theme's Latin font.
+    it.each([
+      ["宋体 pour le chinois simplifié", '<a:font script="Hans" typeface="宋体"/>', 80],
+      ["Courier New pour le japonais", '<a:font script="Jpan" typeface="Courier New"/>', 70],
+      ["aucune pour ses écritures", "", 80],
+    ])("thème minorEastAsia de police d’Asie orientale vide, %s : les « i » qui remplissent la ligne exacte repoussent les affirmations ; en minorHAnsi (Calibri), leurs premiers mots sont lus", async (_, scripts, count) => {
+      const fonts = `<a:latin typeface="Calibri"/><a:ea typeface=""/><a:cs typeface=""/>${scripts}`;
+      const theme = { name: "word/theme/theme1.xml", relationship: "theme", content: `<?xml version="1.0" encoding="UTF-8"?><a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="T"><a:themeElements><a:fontScheme name="T"><a:majorFont>${fonts}</a:majorFont><a:minorFont>${fonts}</a:minorFont></a:fontScheme></a:themeElements></a:theme>` };
+      const themedRun = (name: string) => `<w:rFonts w:asciiTheme="${name}" w:hAnsiTheme="${name}" w:eastAsiaTheme="${name}"/>`;
+      expectSetAside(await check(filled("i".repeat(Number(count)), themedRun("minorEastAsia")), { parts: [theme] }));
+      expect((await check(filled("i".repeat(Number(count)), themedRun("minorHAnsi")), { parts: [theme] })).text).toContain("Titre : Médecin");
+    });
+
+    // In capitals (w:caps), a letter the check does not measure (Greek) is as wide as a capital: 62 of them fill the line of 439 pt.
+    it("62 lettres grecques en capitales (w:caps), que le contrôle ne mesure pas : les affirmations qui suivent sont écartées ; en minuscules, leurs premiers mots sont lus", async () => {
+      expectSetAside(await check(filled("α".repeat(62), "<w:caps/>")));
+      expect((await check(filled("α".repeat(62), ""))).text).toContain("Titre : Médecin");
     });
 
     it("en Lato italique, dans les avances de son italique, plus étroites que celles du droit : la ligne exacte à sa largeur est lue entière, les affirmations restent écartées", async () => {
@@ -786,7 +849,7 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       ["100 traits d’union insécables (w:noBreakHyphen), collés à l’affirmation", "<w:noBreakHyphen/>".repeat(100)],
       ["34 symboles Wingdings (w:sym), à 1 em chacun au plus", '<w:sym w:font="Wingdings" w:char="F0A8"/>'.repeat(34)],
       ["une tabulation de position au début de la marge (w:ptab), derrière le texte : la ligne suivante", '<w:ptab w:relativeTo="margin" w:alignment="left" w:leader="none"/>'],
-      ["20 appels de note de bas de page, numérotés", references("footnote", 20)],
+      ["30 appels de note de bas de page, numérotés", references("footnote", 30)],
       ["20 appels de note de fin, en chiffres romains", references("endnote", 20)],
       ["20 numéros de page (w:pgNum)", "<w:pgNum/>".repeat(20)],
       ["40 années (w:yearLong)", "<w:yearLong/>".repeat(40)],
@@ -796,6 +859,35 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       const result = await check(pushed(inRuns));
       expect(result.text).toContain("Disponible.");
       expectSetAside(result);
+    });
+
+    /** The settings part (word/settings.xml) holding these settings. */
+    const settings = (inner: string) => ({ name: "word/settings.xml", relationship: "settings", content: `<?xml version="1.0" encoding="UTF-8"?><w:settings xmlns:w="${W_NAMESPACE}">${inner}</w:settings>` });
+    /** A paragraph ending the section the row is in, of these properties (how it numbers its notes and pages). */
+    const section = (inner: string) => `<w:p><w:pPr><w:sectPr>${inner}<w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:left="1417" w:right="1417" w:top="1417" w:bottom="1417"/></w:sectPr></w:pPr></w:p>`;
+
+    // Word numbers notes and pages in the format, and from the number, the settings or the section give: 3 notes from 3888 in roman
+    // numerals take 37 capitals (MMMDCCCLXXXVIII…), 2 from 400 in Chicago's signs 201, 3 from 520 in letters 62 (20 Z, 21 A, 21 B), the
+    // numbers of pages 3888 and after some 15 capitals each, 4 of them some 60; a note numbered in words (cardinalText), no width known.
+    // Numbered in figures from 1, the claims' first words follow them on the line.
+    it.each([
+      ["3 appels de note de bas de page en chiffres romains à partir de 3888 (réglages)", references("footnote", 3), settings('<w:footnotePr><w:numFmt w:val="upperRoman"/><w:numStart w:val="3888"/></w:footnotePr>'), ""],
+      ["2 appels de note de fin en signes de Chicago à partir de 400 (réglages)", references("endnote", 2), settings('<w:endnotePr><w:numFmt w:val="chicago"/><w:numStart w:val="400"/></w:endnotePr>'), ""],
+      ["3 appels de note de bas de page en lettres à partir de 520 (section)", references("footnote", 3), undefined, section('<w:footnotePr><w:numFmt w:val="upperLetter"/><w:numStart w:val="520"/></w:footnotePr>')],
+      ["4 numéros de page en chiffres romains à partir de 3888 (section)", "<w:pgNum/>".repeat(4), undefined, section('<w:pgNumType w:fmt="upperRoman" w:start="3888"/>')],
+      ["un appel de note de bas de page en toutes lettres (cardinalText)", references("footnote", 1), settings('<w:footnotePr><w:numFmt w:val="cardinalText"/></w:footnotePr>'), ""],
+    ])("%s : les affirmations sont écartées ; en chiffres à partir de 1, leurs premiers mots sont lus", async (_, inRuns, settingsPart, after) => {
+      const result = await check(pushed(inRuns) + after, { parts: settingsPart ? [settingsPart] : [] });
+      expect(result.text).toContain("Disponible.");
+      expectSetAside(result);
+      expect((await check(pushed(inRuns) + section(""))).text).toContain("Titre : Médecin");
+    });
+
+    // A note's number in a font of no width known (Arial Black) takes 1 em a figure: 24 notes' 39 figures fill the line; in Arial, two thirds of it.
+    it("24 appels de note de bas de page en Arial Black, de largeurs inconnues : les affirmations sont écartées ; en Arial, leurs premiers mots sont lus", async () => {
+      const notes = (name: string) => `<w:rPr><w:rFonts w:ascii="${name}" w:hAnsi="${name}"/></w:rPr>${references("footnote", 24)}`;
+      expectSetAside(await check(pushed(notes("Arial Black"))));
+      expect((await check(pushed(notes("Arial")))).text).toContain("Titre : Médecin");
     });
 
     it("image en ligne de 150 pt, en DrawingML et dans sa copie VML (mc:AlternateContent) : comptée une fois, le texte qui la suit sur la ligne est lu", async () => {

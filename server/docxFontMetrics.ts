@@ -253,14 +253,24 @@ export const DOCX_FONT_METRICS: Record<string, { line: number; regular: string; 
   },
   "east-asian-latin": {
     line: 1762,
-    regular: "5Z6B7HCvA5GzCX4J7777A5Cv5j775j77A5A5A5A5A5A5A5A5A5A57777CvCvCv8jFuBJAtBJC7AR9ZCHBp6f7qBJ9ZE2BpCRARCRBJAj9nBVBJFZBJBJAt777777CvA5A59T9n8D9n9T5Z9n9x4M5P9J4MFF9x9d9n9n6p8D6B9x9JCv9J9J8N9x779xCv4-6IAPBeBXC19UAW9OGG7qAkD68wGGA47qD67q7q9OAcBS5E9O7q7qAkGQGQGQ9Z......G9.........C_......D6Da.....BEAf......I5.........AF......D6AD.....Ag................AZC_Aj....................ELAt.........54EC9g....A9.....6NAe6gAT5U......DZDBAa......IgHn.................6uAt6N.......................5p5f5f9zCPHrI87q995V5V5Y5E87878787948j9E9E5FASFe4-K-5T8E6W6WChHPGTEAFeEAD6D6D6DfD6",
-    italic: ",WAj,8At8r,8Aj,0AtAR,dBFC2BO,09d,0GP,0Aj,08dGP9O,5AW,3AyHuHuHu,0......,M.,0AS,V.,0.,0.,j9n,1.,09U.,0.,0.60AP6b,05A,YAR6Y,D.,0.,9CFG_,07x,48j8j8j8j8j,752866Z6Z,0HSFe,7",
-    bold: "5P6L9JDhBBJxDX5F8X8XBBDh5j7b5jAtBBBBBBBBBBBBBBBBBBBB6L6LDhDhDh9nFGCHBzBLD3AjAFClDD8h8rCAARE-DNDNBVDNCHBBAjClBzHlBzBfAt8XAt8XDhBBBBAZB19JB1AP6fB1BB5P6LAZ5PGfBBAtB1B17v9J7HBBAFFPAZAF9TBB8XBBDh5T79AuB_BwCS9OAf9lGG8qAuD69RGGB07qD68e8e9OBWCH5y9O8e8qAuGmGmGm9Z......Gz.........Dh......D6De.....BrC3......Gu.........Am......D6Am.....BC................BUDhBC....................FECN.........5yGIBl....Ar.....7LBY8jB661......FnDfBO......ITH7.................89Bf7V.......................6q6a6aAuCII8I87q9i5y5y5y5yAIAIAIAIAE8mA0A05TAYFg5TMW5s966m6mChIPG8EAG8EAD6D6D6DfEC",
-    boldItalic: ",bAR,3C7A5,qBjCIC8,09Y,0GP,0B0,096GP,6B4,3B0IlIlIl,VBu,kBj,XGM,2.,1.,0.,0.89B0,a8K,SCHH1,J5K,06w6wCrIW,8",
+    regular: "5Z6B7HCvA5GzCX4J7777A5Cv5j775j77A5A5A5A5A5A5A5A5A5A57777CvCvCv8jFuBJAtBJC7AR9ZCHBp6f7qBJ9ZE2BpCRARCRBJAj9nBVBJFZBJBJAt777777CvA5A59T9n8D9n9T5Z9n9x4M5P9J4MFF9x9d9n9n6p8D6B9x9JCv9J9J8N9x779xCv4-FeAPBeFeC19UFeFeGGFeAkD6FeFeA4FeFeFeFeFeAcFeFeFeFeFeAkFeFeFeFe......Fe.........Fe......FeFe.....FeFeFeFe....Fe.FeFeFe.FeFe..Fe.FeFe...FeFeFeFe.Fe.Fe..Fe.............AZC_Fe.Fe.......Fe..........FeFe...Fe.....FeFeFe....Fe.....6NFeFeFeFe.Fe...FeFeFeFe.Fe....FeFe.................6uFeFe...Fe...................5pFe5f9zFeFeFeFe99FeFe5Y5EFeFe8787FeFeFe9EFeFeFeFeFeFeFe6W6WFeFeFeFeFeFeFeFeFeFeFe",
+    italic: ",WAj,8At8r,8Aj,0AtAR,dBF,0BO,2GP,0Aj,29O,AAy,3......,M.,X.,0.,0.,m.,1.,0.,0.60,s.,0.,K8j8j,A6Z6Z,A",
+    bold: "5P6L9JDhBBJxDX5F8X8XBBDh5j7b5jAtBBBBBBBBBBBBBBBBBBBB6L6LDhDhDh9nFGCHBzBLD3AjAFClDD8h8rCAARE-DNDNBVDNCHBBAjClBzHlBzBfAt8XAt8XDhBBBBAZB19JB1AP6fB1BB5P6LAZ5PGfBBAtB1B17v9J7HBBAFFPAZAF9TBB8XBBDh5TFeAuB_FeCS9OFeFeGGFeAuD6FeFeB0FeFeFeFeFeBWFeFeFeFeFeAuFeFeFeFe......Fe.........Fe......FeFe.....FeFeFeFe....Fe.FeFeFe.FeFe..Fe.FeFe...FeFeFeFe.Fe.Fe..Fe.............BUDhFe.Fe.......Fe..........FeFe...Fe.....FeFeFe....Fe.....7LFeFeFeFe.Fe...FeFeFeFe.Fe....FeFe.................89FeFe...Fe...................6qFe6aAuFeFeFeFe9iFeFe5y5yFeFeAIAIFeFeFeA0FeFeFeFeFeFeFe6m6mFeFeFeFeFeFeFeFeFeFeFe",
+    boldItalic: ",bAR,3C7A5,qBj,0C8,2GP,0B0,EB0,_,IBj,b.,1.,0.,0.89,b8K,q6w6w,A",
   },
   "half-width": {
     line: 1762,
-    every: 500,
+    regular: "7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7qFe8j8jFe8j7qFeFeBuFe8j98FeFe8fFeFeFeFeFe91FeFeFeFeFe8jFeFeFeFeBJBJBJBJBJBJFeBJARARARAR....FeBJCACACACACAFeFeBJBJBJBJBJFeFeFeFe8j8j8j8jFe.FeFeFe8jFeFe..Fe8jFeFe8j8j8jFeFeFeFe8jFe.Fe.BJFeBJ8jBJ8jBJ.BJ.BJ.BJ.BJA7BJFeARFeAR8jAR8jAR8jARFeCA8jCA8jCA8jCA8jBJ8jFeFe...Fe.....FeFeFe..BJ.Fe9Z.9Z.9Z.FeFeFeFeBJFeBJ8jBJFeFeFeFeCAFeCA8jCA8jFeFeBJ.BJ.BJ.AR.AR.AR.AR.9Z.9Z.FeFeBJ8jBJFeBJ8jBJ8jBJ8jBJ8jEmBJBJ.BJ9Z.9Z.9Z.7qFe7q8jFeFeFeFe8fFeFe7q7qFeFe7q7qFeFeFe7qFeFeFeFeFeFeFe7q7qFeFeFeFeFeFeFeFeFeFeFe",
+    italic: ",_,gAZ,IARARARARARAR,MAR,XAR,0AR,0AR,99n,bAR,18j,08j,08j,tAR,0AR,K8j8j,N",
+    bold: "7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7q7qFe8j8jFe8j7qFeFeBiFe8j98FeFe8fFeFeFeFeFe91FeFeFeFeFe8jFeFeFeFeBJBJBJBJBJBJFeBJARARARAR....FeBJCACACACACAFeFeBJBJBJBJBJFeFeFeFe8j8j8j8jFe8jFeFeFe8jFeFe..Fe9ZFeFe9Z9Z9ZFeFeFeFe9ZFe8jFe8jBJFeBJ8jBJ8jBJ8jBJ8jBJ8jBJ8jBJBUBJFeARFeAR8jAR8jAR8jARFeCA9ZCA9ZCA9ZCA9ZCA9ZFeFe...Fe.....FeFeFe8j.CA8jFeAR.AR.AR.FeFeFeFeBJFeBJ9ZBJFeFeFeFeCAFeCA9ZCA9ZFeFeBJ.BJ.BJ.AR8jAR8jAR8jAR8jAR.AR89FeFeBJ9ZBJFeBJ9ZBJ9ZBJ9ZBJ9ZFeCABJ8jBJAR.AR.AR.7qFe7q8jFeFeFeFe8fFeFe7q7qFeFe7q7qFeFeFe7qFeFeFeFeFeFeFe7q7qFeFeFeFeFeFeFeFeFeFeFe",
+    boldItalic: ",_,g9U,lAR,mBj,bBJ,19Z,09Z,09Z89,Y9Z,09Z8K,DEm,0AR,0AR9Z,09Z,09Z,f",
+  },
+  "east-asian": {
+    line: 1762,
+    regular: "7q7q7qCvA5GzCX7q7q7qA5Cv7q7q7q7qA5A5A5A5A5A5A5A5A5A57q7qCvCvCv8jFuBJAtBJC7AR9ZCHBp7q7qBJ9ZE2BpCRARCRBJAj9nBVBJFZBJBJAt7q7q7qCvA5A59T9n8D9n9T7q9n9x7q7q9J7qFF9x9d9n9n7q8D7q9x9JCv9J9J8N9x7q9xCv7qFeAPBeFeC19UFeFeGGFeAkD6FeFeA4FeFeFeFeFeAcFeFeFeFeFeAkFeFeFeFe......Fe.........Fe......FeFe.....FeFeFeFe....Fe.FeFeFe.FeFe..Fe.FeFe...FeFeFeFe.Fe.Fe..Fe.............AZC_Fe.Fe.......Fe..........FeFe...Fe.....FeFeFe....Fe......FeFeFeFe.Fe...FeFeFeFe.Fe....FeFe..................FeFe...Fe...................7qFe7q9zFeFeFeFe99FeFe7q7qFeFe8787FeFeFe9EFeFeFeFeFeFeFe7q7qFeFeFeFeFeFeFeFeFeFeFe",
+    italic: ",WAj,8At8r,8Aj,0AtAR,dBF,0BO,2GP,0Aj,29O,AAy,3......,M.,X.,0.,0.,m.,1.,0.,0.,t.,0.,K8j8j,N",
+    bold: "7q7q9JDhBBJxDX7q8X8XBBDh7q7q7qAtBBBBBBBBBBBBBBBBBBBB7q7qDhDhDh9nFGCHBzBLD3AjAFClDD8h8rCAARE-DNDNBVDNCHBBAjClBzHlBzBfAt8XAt8XDhBBBBAZB19JB1AP7qB1BB7q7qAZ7qGfBBAtB1B17v9J7qBBAFFPAZAF9TBB8XBBDh7qFeAuB_FeCS9OFeFeGGFeAuD6FeFeB0FeFeFeFeFeBWFeFeFeFeFeAuFeFeFeFe......Fe.........Fe......FeFe.....FeFeFeFe....Fe.FeFeFe.FeFe..Fe.FeFe...FeFeFeFe.Fe.Fe..Fe.............BUDhFe.Fe.......Fe..........FeFe...Fe.....FeFeFe....Fe......FeFeFeFe.Fe...FeFeFeFe.Fe....FeFe.................89FeFe...Fe...................7qFe7qAuFeFeFeFe9iFeFe7q7qFeFeAIAIFeFeFeA0FeFeFeFeFeFeFe7q7qFeFeFeFeFeFeFeFeFeFeFe",
+    boldItalic: ",bAR,3C7A5,qBj,0C8,2GP,0B0,EB0,_,IBj,b.,1.,0.,0.89,b8K,_,1",
   },
   "unmeasured": {
     line: 1762,
@@ -273,13 +283,14 @@ export const DOCX_FONT_METRICS: Record<string, { line: number; regular: string; 
  * have with: a sans serif one (Arial), a serif one (Times New Roman), a
  * typewriter one (Courier New); of each character the wider of the first two,
  * when nothing tells which (`unknown`); the widest of all fonts measured but
- * the typewriter ones, for a script or decorative one; the Latin letters of an
- * East Asian font, proportional or of half width; a font of no width known,
- * every character 1 em wide.
+ * the typewriter ones, for a script or decorative one; an East Asian font, of
+ * proportional Latin letters, of half width, or either (`eastAsian`, one not
+ * listed), the characters of an ambiguous East Asian width a full em wide; a
+ * font of no width known, every character 1 em wide.
  */
-export const DOCX_SUBSTITUTE_FONTS = { sans: "liberation-sans", serif: "liberation-serif", typewriter: "liberation-mono", unknown: "sans-or-serif", decorative: "widest", eastAsian: "east-asian-latin", halfWidth: "half-width", unmeasured: "unmeasured" } as const;
+export const DOCX_SUBSTITUTE_FONTS = { sans: "liberation-sans", serif: "liberation-serif", typewriter: "liberation-mono", unknown: "sans-or-serif", decorative: "widest", eastAsian: "east-asian", proportionalEastAsian: "east-asian-latin", halfWidth: "half-width", unmeasured: "unmeasured" } as const;
 
-/** The font names a document may give (w:rFonts, theme fonts), in lower case and NFKC, and the font of DOCX_FONT_METRICS of their metrics, or that stands for them. */
+/** The font names a document may give (w:rFonts, theme fonts), in lower case, as written otherwise (ＭＳ ゴシック in full-width letters), and the font of DOCX_FONT_METRICS of their metrics, or that stands for them. */
 export const DOCX_FONT_ALIASES: Record<string, string> = {
   "calibri": "carlito",
   "carlito": "carlito",
@@ -344,17 +355,39 @@ export const DOCX_FONT_ALIASES: Record<string, string> = {
   "wide latin": "unmeasured",
   "ms gothic": "half-width",
   "ms mincho": "half-width",
+  "ｍｓ ゴシック": "half-width",
+  "ｍｓ 明朝": "half-width",
   "simsun": "half-width",
   "nsimsun": "half-width",
-  "ms ゴシック": "half-width",
-  "ms 明朝": "half-width",
   "宋体": "half-width",
   "新宋体": "half-width",
+  "simhei": "half-width",
+  "黑体": "half-width",
+  "kaiti": "half-width",
+  "楷体": "half-width",
+  "kaiti_gb2312": "half-width",
+  "楷体_gb2312": "half-width",
+  "fangsong": "half-width",
+  "仿宋": "half-width",
+  "fangsong_gb2312": "half-width",
+  "仿宋_gb2312": "half-width",
+  "mingliu": "half-width",
+  "細明體": "half-width",
+  "mingliu_hkscs": "half-width",
+  "細明體_hkscs": "half-width",
+  "gulimche": "half-width",
+  "굴림체": "half-width",
+  "dotumche": "half-width",
+  "돋움체": "half-width",
+  "batangche": "half-width",
+  "바탕체": "half-width",
+  "gungsuhche": "half-width",
+  "궁서체": "half-width",
   "ms pgothic": "east-asian-latin",
   "ms pmincho": "east-asian-latin",
   "ms ui gothic": "east-asian-latin",
-  "ms pゴシック": "east-asian-latin",
-  "ms p明朝": "east-asian-latin",
+  "ｍｓ ｐゴシック": "east-asian-latin",
+  "ｍｓ ｐ明朝": "east-asian-latin",
   "yu gothic": "east-asian-latin",
   "yu gothic ui": "east-asian-latin",
   "yu mincho": "east-asian-latin",
@@ -367,16 +400,8 @@ export const DOCX_FONT_ALIASES: Record<string, string> = {
   "微软雅黑": "east-asian-latin",
   "microsoft jhenghei": "east-asian-latin",
   "微軟正黑體": "east-asian-latin",
-  "simhei": "east-asian-latin",
-  "黑体": "east-asian-latin",
-  "kaiti": "east-asian-latin",
-  "楷体": "east-asian-latin",
-  "fangsong": "east-asian-latin",
-  "仿宋": "east-asian-latin",
   "dengxian": "east-asian-latin",
   "等线": "east-asian-latin",
-  "mingliu": "east-asian-latin",
-  "細明體": "east-asian-latin",
   "pmingliu": "east-asian-latin",
   "新細明體": "east-asian-latin",
   "malgun gothic": "east-asian-latin",
@@ -387,4 +412,6 @@ export const DOCX_FONT_ALIASES: Record<string, string> = {
   "돋움": "east-asian-latin",
   "batang": "east-asian-latin",
   "바탕": "east-asian-latin",
+  "gungsuh": "east-asian-latin",
+  "궁서": "east-asian-latin",
 };
