@@ -67,9 +67,9 @@ describe("ContactSection — refus traduits (ABUS-01)", () => {
     expect(renderAlert("zh", refusal("TOO_MANY_REQUESTS", "rate_limited"))).toBe("此网络连接的提交次数过多。请一小时后再试。");
   });
 
-  it("demande de recharger la page après un anti-robot refusé", () => {
-    expect(renderAlert("fr", refusal("BAD_REQUEST", "security_check_failed"))).toBe("La vérification anti-robot a échoué. Rechargez la page, puis renvoyez votre message.");
-    expect(renderAlert("en", refusal("BAD_REQUEST", "security_check_failed"))).toBe("The anti-bot check failed. Reload the page, then send your message again.");
+  it("demande de valider la nouvelle vérification, sans recharger la page, après un anti-robot refusé (PUB-09)", () => {
+    expect(renderAlert("fr", refusal("BAD_REQUEST", "security_check_failed"))).toBe("La vérification anti-robot a échoué. Validez la nouvelle vérification ci-dessous, puis renvoyez votre message.");
+    expect(renderAlert("en", refusal("BAD_REQUEST", "security_check_failed"))).toBe("The anti-bot check failed. Complete the new check below, then send your message again.");
     for (const language of ["de", "zh"] as const) {
       expect(renderAlert(language, refusal("BAD_REQUEST", "security_check_failed")), language).toBe(contactCopy[language].refusals.security_check_failed);
     }

@@ -29,6 +29,8 @@ export default function ContactSection() {
   // Reference of the message just sent, shown on the confirmation (PUB-09).
   const [trackingId, setTrackingId] = useState<string | null>(null);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  // A refused message has used its token (the server checks it first): a new challenge is rendered (PUB-09).
+  const [turnstileAttempt, setTurnstileAttempt] = useState(0);
 
   const submitMutation = trpc.contact.submit.useMutation({
     onSuccess: (data) => {
@@ -39,6 +41,8 @@ export default function ContactSection() {
       toast.success(copy.sent);
     },
     onError: (error) => {
+      setTurnstileToken(null);
+      setTurnstileAttempt(value => value + 1);
       toast.error(publicFormErrorMessage(error, copy.refusals, copy.sendError));
       console.error("Contact form error:", error);
     },
@@ -291,7 +295,8 @@ export default function ContactSection() {
                   </p>
                 )}
 
-                <TurnstileWidget onToken={setTurnstileToken} deferUntilVisible />
+                {/* Cloudflare is loaded when the form comes near (PERF-04); a new challenge after a refusal is rendered at once. */}
+                <TurnstileWidget key={turnstileAttempt} onToken={setTurnstileToken} deferUntilVisible={turnstileAttempt === 0} />
 
                 <button
                   type="submit"

@@ -135,6 +135,43 @@ describe("formulaire de contact et vérification anti-robot (navigateur simulé)
     expect(screen.getByText("C1234567890AB").closest("p")!.textContent).toBe(`${copy.reference} C1234567890AB`);
   });
 
+  it("après un refus de l’anti-robot, rend un nouveau défi et renvoie le message saisi avec son nouveau jeton, sans recharger la page (PUB-09)", async () => {
+    // The server checks the token first, whatever it answers next: that token is used up.
+    view.submit = vi.fn()
+      .mockRejectedValueOnce(Object.assign(new Error("Texte français écrit par le serveur."), { data: { code: "BAD_REQUEST", reason: "security_check_failed" } }))
+      .mockResolvedValueOnce({ success: true, trackingId: "C1234567890AB" });
+    mount();
+    fireEvent.focusIn(field("contact-name"));
+    await waitFor(() => expect(challenges).toHaveLength(1));
+    fireEvent.change(field("contact-name"), { target: { value: "Jeanne Martin" } });
+    fireEvent.change(field("contact-email"), { target: { value: "jeanne@example.test" } });
+    fireEvent.change(field("contact-message"), { target: { value: "Je souhaite organiser une consultation pré-anesthésique." } });
+    fireEvent.click(field("gdprConsent"));
+    challenges[0]!.callback("first-token");
+    await waitFor(() => expect(sendButton()).toHaveProperty("disabled", false));
+    fireEvent.click(sendButton());
+
+    expect((await screen.findByRole("alert")).textContent).toBe(copy.refusals.security_check_failed);
+    expect(view.toasts).toEqual([copy.refusals.security_check_failed]);
+    await waitFor(() => expect(challenges).toHaveLength(2));
+    expect(window.turnstile!.remove).toHaveBeenCalledWith("widget-1");
+    // Nothing leaves with the used token: sending waits for the new challenge.
+    expect(sendButton()).toHaveProperty("disabled", true);
+    fireEvent.submit(field("contact-name").form!);
+    expect(view.submit).toHaveBeenCalledTimes(1);
+
+    challenges[1]!.callback("second-token");
+    await waitFor(() => expect(sendButton()).toHaveProperty("disabled", false));
+    fireEvent.click(sendButton());
+
+    expect(await screen.findByText(copy.successTitle)).toBeTruthy();
+    expect(view.submit).toHaveBeenCalledTimes(2);
+    expect(view.submit.mock.calls.map(([input]) => input)).toEqual([
+      expect.objectContaining({ turnstileToken: "first-token" }),
+      expect.objectContaining({ name: "Jeanne Martin", email: "jeanne@example.test", message: "Je souhaite organiser une consultation pré-anesthésique.", gdprConsent: 1, turnstileToken: "second-token" }),
+    ]);
+  });
+
   it("refuse l’envoi sans consentement, même avec un jeton", async () => {
     mount();
     fireEvent.focusIn(field("contact-name"));
