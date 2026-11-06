@@ -2,7 +2,8 @@
  * TEST-ONLY in-memory stand-in for the drizzle `neon-http` database used by the
  * candidate portal tests. It renders drizzle conditions and SQL fragments with
  * the real PgDialect, then evaluates the resulting SQL expression on in-memory
- * rows. It supports the query shapes used by the candidate code paths:
+ * rows (comparisons, IS NULL, IN, LIKE, CASE). It supports the query shapes
+ * used by the candidate code paths:
  * select/from/innerJoin/leftJoin/where/orderBy/limit (and a COUNT(*) alone),
  * insert/values/returning,
  * onConflictDoUpdate/onConflictDoNothing, update/set/where/returning and
@@ -171,6 +172,16 @@ class ExpressionParser {
       this.expectWord("null");
       const isNullValue = left === null || left === undefined;
       return negate ? !isNullValue : isNullValue;
+    }
+    // LIKE with % and _ (no escape character), as drizzle's like() renders it.
+    const negateLike = this.isWord("not") && this.isWord("like", 1);
+    if (negateLike || this.isWord("like")) {
+      this.position += negateLike ? 2 : 1;
+      const pattern = this.additive();
+      if (left === null || left === undefined || pattern === null || pattern === undefined) return null;
+      const source = String(pattern).replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/%/g, ".*").replace(/_/g, ".");
+      const matched = new RegExp(`^${source}$`, "s").test(String(left));
+      return negateLike ? !matched : matched;
     }
     const negateIn = this.isWord("not") && this.isWord("in", 1);
     if (negateIn || this.isWord("in")) {

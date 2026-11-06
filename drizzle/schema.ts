@@ -202,10 +202,11 @@ export const appointmentFulfillmentJobs = mysqlTable("appointment_fulfillment_jo
   appointmentId: int("appointment_id").notNull(),
   // varchar column: "owner" (new-booking notification to the owner, sent first),
   // the notices of a refund recorded from Stripe ("refund" to the patient,
-  // "refund_owner" to the owner) and the owner's failure alert of a patient
-  // email queued when it could not go out at once ("…_failure_alert") need no
-  // migration.
-  jobType: mysqlEnum("job_type", ["owner", "confirmation", "invoice", "refund", "refund_owner", "confirmation_failure_alert", "invoice_failure_alert", "refund_failure_alert"]).notNull(),
+  // "refund_owner" to the owner), the owner's failure alert of a patient
+  // email queued when it could not go out at once ("…_failure_alert") and the
+  // owner's alert that a patient email accepted by Resend bounced
+  // ("…_bounce_alert", EXPL-13) need no migration: no CHECK on job_type.
+  jobType: mysqlEnum("job_type", ["owner", "confirmation", "invoice", "refund", "refund_owner", "confirmation_failure_alert", "invoice_failure_alert", "refund_failure_alert", "confirmation_bounce_alert", "invoice_bounce_alert", "refund_bounce_alert", "reminder_bounce_alert"]).notNull(),
   status: mysqlEnum("status", ["queued", "running", "retry", "completed", "failed"]).default("queued").notNull(),
   attempts: int("attempts").default(0).notNull(),
   maxAttempts: int("max_attempts").default(3).notNull(),

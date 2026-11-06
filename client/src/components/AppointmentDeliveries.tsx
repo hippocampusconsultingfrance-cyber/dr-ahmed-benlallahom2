@@ -5,7 +5,7 @@ import { trpc } from "@/lib/trpc";
 import { downloadInvoicePdf } from "./invoicePdfDownload";
 
 export type AppointmentDeliveryJob = "confirmation" | "invoice" | "owner" | "refund" | "refund_owner";
-export type AppointmentDeliveryState = "sent" | "failed" | "refused" | "retrying" | "pending" | "sending" | "interrupted" | "not_sent";
+export type AppointmentDeliveryState = "sent" | "failed" | "refused" | "retrying" | "pending" | "sending" | "interrupted" | "not_sent" | "bounced";
 export type AppointmentDeliveryNotSentReason = "appointment_past" | "not_paid" | "patient_data_erased";
 export type AppointmentDeliveryView = { jobType: AppointmentDeliveryJob; state: AppointmentDeliveryState; attempts: number; maxAttempts: number; notSentReason?: AppointmentDeliveryNotSentReason | null; failureCause?: "invoice_storage" | null };
 
@@ -55,6 +55,8 @@ const DELIVERY_STATE_LABELS: Record<AppointmentDeliveryState, string> = {
   sending: "en cours d’envoi",
   interrupted: "envoi interrompu",
   not_sent: "non envoyée",
+  // Accepted by the email service, then bounced by the patient's mailbox (EXPL-13).
+  bounced: "refusée après acceptation, non reçue par le patient",
 };
 
 /** The labels above that agree with a masculine job label. */
@@ -62,6 +64,7 @@ const MASCULINE_STATE_LABELS: Partial<Record<AppointmentDeliveryState, string>> 
   sent: "envoyé",
   refused: "refusé par le service d’envoi, sans nouvel essai automatique",
   not_sent: "non envoyé",
+  bounced: "refusé après acceptation, non reçu par le patient",
 };
 
 function stateLabel(delivery: AppointmentDeliveryView) {
@@ -77,6 +80,7 @@ const DELIVERY_STATE_TONES: Record<AppointmentDeliveryState, string> = {
   sending: "bg-blue-500/20 text-blue-400",
   interrupted: "bg-amber-500/20 text-amber-400",
   not_sent: "bg-muted text-muted-foreground",
+  bounced: "bg-red-500/20 text-red-400",
 };
 
 const NOT_SENT_REASONS: Record<AppointmentDeliveryNotSentReason, string> = {
@@ -98,13 +102,17 @@ export function deliveryLabel(delivery: AppointmentDeliveryView): string {
   return `${DELIVERY_JOB_LABELS[delivery.jobType]} : ${stateLabel(delivery)}${attempts}${cause}`;
 }
 
-/** States of a job « Renvoyer » sends again: it did not go out, and is not being sent. */
-const UNSENT_STATES: AppointmentDeliveryState[] = ["failed", "refused", "retrying", "pending", "interrupted"];
+/**
+ * States of a job « Renvoyer » sends again: it did not go out, and is not
+ * being sent; or it bounced after acceptance (EXPL-13), sent again once the
+ * patient's address is corrected.
+ */
+const UNSENT_STATES: AppointmentDeliveryState[] = ["failed", "refused", "retrying", "pending", "interrupted", "bounced"];
 
 /**
  * « Renvoyer » has something to send now: a job of a paid appointment failed,
- * was refused by the email service (sent again once the address is
- * corrected), was interrupted, or still waits for an attempt
+ * was refused by the email service or bounced after acceptance (sent again
+ * once the address is corrected), was interrupted, or still waits for an attempt
  * (not one being sent). Once the appointment is refunded, only the notices of
  * that refund (RES-06); the server refuses the other payment statuses. Once
  * the patient's data is erased (RGPD-12), only the owner's notices.
@@ -116,12 +124,25 @@ export function canRetryDeliveries(deliveries: AppointmentDeliveryView[], paymen
 
 /**
  * « Corriger l’email du patient » is offered once the email service refused an
- * email to the patient that « Renvoyer » would send again (EXPL-02), never on a
- * booking whose data was erased (RGPD-12: its address is empty), as the server.
+ * email to the patient that « Renvoyer » would send again (EXPL-02), at once
+ * or after accepting it (EXPL-13), never on a booking whose data was erased
+ * (RGPD-12: its address is empty), as the server.
  */
 export function canCorrectPatientEmail(deliveries: AppointmentDeliveryView[], paymentStatus: string, customerEmail: string | null | undefined): boolean {
   const retryable = RETRYABLE_JOBS[paymentStatus] ?? [];
-  return Boolean(customerEmail?.trim()) && deliveries.some(delivery => PATIENT_JOBS.includes(delivery.jobType) && retryable.includes(delivery.jobType) && delivery.state === "refused");
+  return Boolean(customerEmail?.trim()) && deliveries.some(delivery => PATIENT_JOBS.includes(delivery.jobType) && retryable.includes(delivery.jobType) && (delivery.state === "refused" || delivery.state === "bounced"));
+}
+
+/**
+ * Toast after « Renvoyer » when it put nothing back in the queue: an email
+ * that bounced after acceptance (EXPL-13) is sent again only to a corrected
+ * address, as the server.
+ */
+export function nothingToRetryNotice(deliveries: AppointmentDeliveryView[]): { tone: "info" | "warning"; message: string } {
+  if (deliveries.some(delivery => delivery.state === "bounced")) {
+    return { tone: "warning", message: "L’email refusé après acceptation n’est renvoyé qu’à une adresse corrigée : à la même adresse, il ne partirait pas de nouveau. Appelez le patient, puis « Corriger l’email du patient » et « Renvoyer »." };
+  }
+  return { tone: "info", message: "Aucun envoi à relancer pour ce rendez-vous." };
 }
 
 /**
@@ -200,7 +221,8 @@ export default function AppointmentDeliveries({ trackingId, paymentStatus, deliv
       void utils.admin.appointments.list.invalidate();
       void utils.admin.attention.invalidate();
       if (result.requeued === 0) {
-        toast.info("Aucun envoi à relancer pour ce rendez-vous.");
+        const notice = nothingToRetryNotice(result.deliveries);
+        toast[notice.tone](notice.message, notice.tone === "warning" ? { duration: 10_000 } : undefined);
         return;
       }
       const outcome = retryOutcome(result);
