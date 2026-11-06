@@ -43,7 +43,9 @@ import { DOCX_FONT_ALIASES, DOCX_FONT_AS_BASE, DOCX_FONT_AS_UPRIGHT, DOCX_FONT_C
  * w:altName, w:family, w:pitch, w:panose1, its name) only widens it: the
  * widest of what each says is taken. A font the document embeds
  * (w:embedRegular…, obfuscated with w:fontKey) is measured in its own tables
- * (cmap, hmtx, head), within a size and a count of tables; unread, of no bound.
+ * (cmap, hmtx, head), within a size and a count of tables; unread, or past the
+ * entries of a name and the fonts read (MAX_FONT_ENTRIES, MAX_EMBEDDED_FONTS),
+ * of no bound.
  * The fields Word computes as it lays the pages out or opens the document
  * (PAGE, NUMPAGES, SECTIONPAGES, SECTION, DATE, TIME…: RECOMPUTED_FIELDS) take
  * the most room their result may take, whatever result is stored; a drawing in
@@ -203,9 +205,12 @@ const NUMBER_FORMATS: Record<string, { characters: string; length: (value: numbe
  * SECTIONPAGES, SECTION, AUTONUM…) or each time it opens or shows the
  * document (DATE, TIME): the result the file stores is not what it draws.
  * Others it draws as stored, unless the field is marked to update
- * (w:dirty) or the document asks for all of them (w:updateFields).
+ * (w:dirty) or the document asks for all of them (w:updateFields), but those
+ * whose result Word keeps as it updates them (KEPT_FIELDS).
  */
 const RECOMPUTED_FIELDS = new Set(["PAGE", "NUMPAGES", "SECTIONPAGES", "SECTION", "DATE", "TIME", "AUTONUM", "AUTONUMLGL", "AUTONUMOUT"]);
+/** Fields whose result Word keeps as stored when it updates them: a hyperlink's text, which its code does not give. */
+const KEPT_FIELDS = new Set(["HYPERLINK"]);
 /** Of a field's switches \* (the format of its result), those that change no length: of letters' case, of formatting. */
 const FIELD_CASES = /^(MERGEFORMAT|MERGEFORMATINET|CHARFORMAT|Upper|Lower|FirstCap|Caps)$/i;
 /** Of the switches \* of a number, the formats of NUMBER_FORMATS it may be written in (roman in either case), and how many characters it adds (ArabicDash: « - 1 - », Ordinal: « 1st »). */
@@ -1540,6 +1545,12 @@ const THEME_REFERENCE = /^\+(mn|mj)-(lt|ea|cs)$/;
 const SHOWN_NAME = /^(.+?)\s*\([^()]*\)$/;
 /** How many fonts of a list of names (LibreOffice writes alternatives apart by semicolons) are looked for; past them, the list is of no width known. */
 const MAX_LISTED_FONTS = 8;
+/** How many entries of one name in the font table, and faces in one entry, are read: past them, the font is of no width known. */
+const MAX_FONT_ENTRIES = 8;
+/** How many fonts a document embeds (the faces of an entry) are read: past them, a font embedded is of no width known. */
+const MAX_EMBEDDED_FONTS = 32;
+/** How many fonts a run's text may be drawn in are each laid out word by word (RunFonts): past them, its characters are as wide as in the widest. */
+const MAX_CHOSEN_FONTS = 8;
 
 /**
  * The East Asian fonts of Office's themes, for Japanese, Chinese and Korean
@@ -1569,12 +1580,18 @@ function themeFont(theme: Theme, name: string) {
 /** A font the document embeds in a style: the relationship of its part (from the font table) and the key it is obfuscated with (w:fontKey). */
 type EmbeddedFace = { style: FontStyle; id: string; key: string | undefined };
 
-/** What a document's font table (w:fonts) says of a font it names: another name for it, its kind, pitch and PANOSE classification, the faces the document embeds. */
-type FontEntry = { altName?: string; family?: string; pitch?: string; panose?: string; embeds?: EmbeddedFace[] };
+/**
+ * What a document's font table (w:fonts) says of a font it names: another name for it, its kind, pitch and PANOSE classification, the
+ * faces the document embeds; of no width known when it lists more entries or faces than are read (MAX_FONT_ENTRIES).
+ */
+type FontEntry = { altName?: string; family?: string; pitch?: string; panose?: string; embeds?: EmbeddedFace[]; unbounded?: boolean };
 
 const EMBEDDED_STYLES: Record<string, FontStyle> = { "w:embedRegular": "regular", "w:embedBold": "bold", "w:embedItalic": "italic", "w:embedBoldItalic": "boldItalic" };
 
-/** The fonts of a document's font table (word/fontTable.xml), by their names (fontName); each entry of a name, as Word may read any. */
+/**
+ * The fonts of a document's font table (word/fontTable.xml), by their names (fontName); each entry of a name, as Word may read any; a
+ * name of more entries than are read (MAX_FONT_ENTRIES) as one entry of no width known.
+ */
 function readFontTable(xml: string | undefined) {
   const entries = new Map<string, FontEntry[]>();
   let entry: FontEntry | undefined;
@@ -1583,9 +1600,13 @@ function readFontTable(xml: string | undefined) {
       const name = tag.attributes.get("w:name");
       entry = tag.closing || tag.selfClosing || name === undefined ? undefined : {};
       if (entry) {
-        const named = entries.get(fontName(name!));
-        if (named) named.push(entry);
-        else entries.set(fontName(name!), [entry]);
+        const named = entries.get(fontName(name!)) ?? [];
+        entries.set(fontName(name!), named);
+        if (named.length < MAX_FONT_ENTRIES && !named[0]?.unbounded) named.push(entry);
+        else {
+          named.splice(0, named.length, { unbounded: true });
+          entry = undefined;
+        }
       }
     } else if (entry && !tag.closing) {
       const value = tag.attributes.get("w:val");
@@ -1593,7 +1614,10 @@ function readFontTable(xml: string | undefined) {
       else if (tag.name === "w:family") entry.family = value;
       else if (tag.name === "w:pitch") entry.pitch = value;
       else if (tag.name === "w:panose1") entry.panose = value;
-      else if (Object.hasOwn(EMBEDDED_STYLES, tag.name)) (entry.embeds ??= []).push({ style: EMBEDDED_STYLES[tag.name]!, id: tag.attributes.get("r:id") ?? "", key: tag.attributes.get("w:fontKey") });
+      else if (Object.hasOwn(EMBEDDED_STYLES, tag.name)) {
+        if ((entry.embeds?.length ?? 0) >= MAX_FONT_ENTRIES) entry.unbounded = true;
+        else (entry.embeds ??= []).push({ style: EMBEDDED_STYLES[tag.name]!, id: tag.attributes.get("r:id") ?? "", key: tag.attributes.get("w:fontKey") });
+      }
     }
   });
   return entries;
@@ -1627,6 +1651,7 @@ function knownFont(name: string) {
 function substituteFonts(entry: FontEntry | undefined) {
   const { sans, serif, typewriter, unbounded } = DOCX_SUBSTITUTE_FONTS;
   if (!entry) return [sans, serif];
+  if (entry.unbounded) return [unbounded];
   const keys: string[] = [];
   const alternate = entry.altName ? knownFont(fontName(entry.altName)) : undefined;
   if (alternate) keys.push(alternate);
@@ -1678,7 +1703,8 @@ function fontResolver(table: Map<string, FontEntry[]>, theme: Theme, embedded: (
     const entries = table.get(name);
     const known = knownFont(name);
     const fonts: DrawnFont[] = [];
-    for (const entry of entries ?? []) if (entry.embeds?.length) fonts.push(embedded(entry.embeds));
+    for (const entry of entries ?? []) if (entry.unbounded) fonts.push(UNBOUNDED_FONT);
+    else if (entry.embeds?.length) fonts.push(embedded(entry.embeds));
     if (known) fonts.push(measuredFont(known));
     if (!known || !DOCX_WORD_FONTS.has(name)) {
       fonts.push(...substitutes(entries));
@@ -1755,28 +1781,33 @@ const EITHER_SLOT = 3;
  * asks for it (w:hint eastAsia), as ECMA-376 lays it down (Part 1, 17.3.2.26,
  * rFonts): its signs (¡ ¤ § ¨ ª, the soft hyphen, ¯, ° to ´, ¶ to º, ¼ to ¿, ×
  * ÷), and, of a run in Chinese (w:lang w:eastAsia), its vowels à á è é ê ì í ò
- * ó ù ú ü; its other letters in the run's other Latin font. Beyond Latin-1
- * (Latin Extended-A, punctuation, signs), the check does not follow the rule:
- * either font.
+ * ó ù ú ü; its other letters in the run's other Latin font. Of a run of no East
+ * Asian language given, Word takes its own, which may be Chinese or not: those
+ * vowels in either font. Beyond Latin-1 (Latin Extended-A, punctuation,
+ * signs), the check does not follow the rule: either font.
  */
 const HINT_EAST_ASIAN = new Set([0xa1, 0xa4, 0xa7, 0xa8, 0xaa, 0xad, 0xaf, 0xb0, 0xb1, 0xb2, 0xb3, 0xb4, 0xb6, 0xb7, 0xb8, 0xb9, 0xba, 0xbc, 0xbd, 0xbe, 0xbf, 0xd7, 0xf7]);
 const HINT_CHINESE = new Set([0xe0, 0xe1, 0xe8, 0xe9, 0xea, 0xec, 0xed, 0xf2, 0xf3, 0xf9, 0xfa, 0xfc]);
-/** Of each character measured, its slot: without the hint; with it, of a run not in Chinese, or that may be (its language not given). */
-const slotsOf = (hint: boolean, chinese: boolean) => Int8Array.from(DOCX_FONT_CHARACTERS, character => {
+/** Of each character measured, its slot: without the hint; with it, of a run not in Chinese, in Chinese, or that may be (`chinese` undefined: its language not given). */
+const slotsOf = (hint: boolean, chinese: boolean | undefined) => Int8Array.from(DOCX_FONT_CHARACTERS, character => {
   const code = character.charCodeAt(0);
   if (code < 0x80) return ASCII_SLOT;
   if (!hint) return OTHER_SLOT;
   if (code > 0xff) return EITHER_SLOT;
-  return HINT_EAST_ASIAN.has(code) || (chinese && HINT_CHINESE.has(code)) ? EAST_ASIAN_SLOT : OTHER_SLOT;
+  if (HINT_EAST_ASIAN.has(code)) return EAST_ASIAN_SLOT;
+  if (!HINT_CHINESE.has(code)) return OTHER_SLOT;
+  return chinese === undefined ? EITHER_SLOT : chinese ? EAST_ASIAN_SLOT : OTHER_SLOT;
 });
 const PLAIN_SLOTS = slotsOf(false, false);
 const HINT_SLOTS = slotsOf(true, false);
 const CHINESE_HINT_SLOTS = slotsOf(true, true);
+const UNKNOWN_LANGUAGE_HINT_SLOTS = slotsOf(true, undefined);
 
 /**
  * The fonts a run's characters are drawn in (fontsOf): of each slot, the
- * widths of every font it may be (LaidFont `fonts`), in the run's style; the
- * slot of each character measured; of those either slot may draw, the wider;
+ * widths of every font it may be (LaidFont `fonts`), in the run's style, or
+ * past MAX_CHOSEN_FONTS of them, of their widest only; the slot of each
+ * character measured; of those either slot may draw, the wider;
  * the widest each character may be (for the numbers and dates Word writes);
  * the tallest line; whether each slot is of one font only.
  */
@@ -1784,8 +1815,8 @@ type RunFonts = { slots: number[][][]; slotOf: Int8Array; either: number[] | und
 
 function runFonts(style: FontStyle, ascii: LaidFont, other: LaidFont, eastAsian: LaidFont | undefined, language: string | undefined): RunFonts {
   const laid = [ascii, other, eastAsian ?? other];
-  const slots = laid.map(font => font.fonts.map(item => item.widths(style)));
-  const slotOf = !eastAsian ? PLAIN_SLOTS : language === undefined || /^zh/i.test(language) ? CHINESE_HINT_SLOTS : HINT_SLOTS;
+  const slots = laid.map(font => (font.fonts.length > MAX_CHOSEN_FONTS ? [font.widest(style)] : font.fonts.map(item => item.widths(style))));
+  const slotOf = !eastAsian ? PLAIN_SLOTS : language === undefined ? UNKNOWN_LANGUAGE_HINT_SLOTS : /^zh/i.test(language) ? CHINESE_HINT_SLOTS : HINT_SLOTS;
   const widestOf = laid.map(font => font.widest(style));
   const either = eastAsian ? widestOf[OTHER_SLOT]!.map((width, at) => Math.max(width, widestOf[EAST_ASIAN_SLOT]![at]!)) : undefined;
   const widest = Array.from(slotOf, (slot, at) => (slot === EITHER_SLOT ? either![at]! : widestOf[slot]![at]!));
@@ -1847,31 +1878,32 @@ function characterSubtable(cmap: Buffer, offset: number, format: number): ((code
 /**
  * Reads a font a document embeds (an .odttf part): Word obfuscates it
  * (ECMA-376 Part 1, 17.8.1), its first 32 bytes XORed with the 16 bytes of
- * its key (w:fontKey, a GUID written {…}), the last one first; then its
- * table directory, head (units per em), hhea and hmtx (advances), OS/2 and
- * hhea (the tallest line Word or LibreOffice sets), cmap (a Unicode subtable,
- * else a symbol one, its codes from F000 on). Null when it is larger than
- * MAX_EMBEDDED_FONT_BYTES or does not read as the OpenType specification lays
- * it down.
+ * its key (w:fontKey, a GUID written {…}), the last one first: its table
+ * directory, deobfuscated apart, the part itself not copied; then its tables,
+ * none of which may lie in those bytes: head (units per em), hhea and hmtx
+ * (advances), OS/2 and hhea (the tallest line Word or LibreOffice sets), cmap
+ * (a Unicode subtable, else a symbol one, its codes from F000 on). Null when
+ * it is larger than MAX_EMBEDDED_FONT_BYTES or does not read as the OpenType
+ * specification lays it down.
  */
 function readEmbeddedFont(data: Buffer, fontKey: string | undefined): FontFile | null {
   if (data.length < 32 || data.length > MAX_EMBEDDED_FONT_BYTES) return null;
-  const font = Buffer.from(data);
+  const directory = Buffer.from(data.subarray(0, 12 + MAX_FONT_TABLES * 16));
   const key = (fontKey ?? "").replace(/[{}-]/g, "");
-  if (/^[0-9a-f]{32}$/i.test(key)) for (let index = 0; index < 32; index += 1) font[index] = font[index]! ^ Number.parseInt(key.slice(30 - (index % 16) * 2, 32 - (index % 16) * 2), 16);
+  if (/^[0-9a-f]{32}$/i.test(key)) for (let index = 0; index < 32; index += 1) directory[index] = directory[index]! ^ Number.parseInt(key.slice(30 - (index % 16) * 2, 32 - (index % 16) * 2), 16);
   try {
-    const version = font.readUInt32BE(0);
+    const version = directory.readUInt32BE(0);
     // TrueType, CFF (OTTO) or Apple TrueType (true) outlines.
     if (version !== 0x00010000 && version !== 0x4f54544f && version !== 0x74727565) return null;
-    const count = font.readUInt16BE(4);
+    const count = directory.readUInt16BE(4);
     if (count > MAX_FONT_TABLES) return null;
     const tables = new Map<string, Buffer>();
     for (let index = 0; index < count; index += 1) {
       const record = 12 + index * 16;
-      const offset = font.readUInt32BE(record + 8);
-      const length = font.readUInt32BE(record + 12);
-      if (offset + length > font.length) return null;
-      tables.set(font.toString("latin1", record, record + 4), font.subarray(offset, offset + length));
+      const offset = directory.readUInt32BE(record + 8);
+      const length = directory.readUInt32BE(record + 12);
+      if ((length > 0 && offset < 32) || offset + length > data.length) return null;
+      tables.set(directory.toString("latin1", record, record + 4), data.subarray(offset, offset + length));
     }
     const head = tables.get("head");
     const hhea = tables.get("hhea");
@@ -3564,23 +3596,29 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
    * first numbers the document gives (numberWidth: of no width known in
    * another format, the rest of their line then set aside), and the dates
    * Word writes (WRITTEN_FIELDS), each character as wide as the widest it may
-   * be; undefined for other elements.
+   * be; undefined for other elements. A symbol's advance found once for
+   * each style, code and font.
    */
+  const symbolWidths = new Map<string, number>();
   const drawnWidth = (tag: XmlTag, effective: RunLayer) => {
     const size = fontSize(effective, "") * (effective.scale ?? 100) / 100;
     const spacing = Math.max(0, effective.spacing ?? 0);
     if (tag.name === "w:sym") {
       const code = Number.parseInt(tag.attributes.get("w:char") ?? "", 16);
       const style: FontStyle = effective.bold ? "bold" : "regular";
-      const index = Number.isFinite(code) ? MEASURED_INDEX[code >= 0xf000 && code <= 0xf0ff ? code - 0xf000 : code] ?? -1 : -1;
       const name = tag.attributes.get("w:font");
-      const laid = fonts(name);
-      const ofReader = name !== undefined && DOCX_WORD_FONTS.has(fontName(name));
-      let width = 0;
-      for (const font of laid.fonts) {
-        const own = font.advanceOf && Number.isFinite(code) ? font.advanceOf(code, style) : undefined;
-        const widths = font.widths(style);
-        width = Math.max(width, own ?? (ofReader && index >= 0 && widths[index]! > 0 ? widths[index]! : Math.max(...widths)));
+      const key = `${style}\n${Number.isFinite(code) ? code : ""}\n${name ?? ""}`;
+      let width = symbolWidths.get(key);
+      if (width === undefined) {
+        const index = Number.isFinite(code) ? MEASURED_INDEX[code >= 0xf000 && code <= 0xf0ff ? code - 0xf000 : code] ?? -1 : -1;
+        const ofReader = name !== undefined && DOCX_WORD_FONTS.has(fontName(name));
+        width = 0;
+        for (const font of fonts(name).fonts) {
+          const own = font.advanceOf && Number.isFinite(code) ? font.advanceOf(code, style) : undefined;
+          const widths = font.widths(style);
+          width = Math.max(width, own ?? (ofReader && index >= 0 && widths[index]! > 0 ? widths[index]! : Math.max(...widths)));
+        }
+        symbolWidths.set(key, width);
       }
       return width * size + spacing;
     }
@@ -3629,8 +3667,11 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     }
     return width;
   };
-  /** Whether Word draws a field's result otherwise than stored: one it computes (RECOMPUTED_FIELDS), or updates. */
-  const recomputed = (code: string, dirty: boolean) => RECOMPUTED_FIELDS.has(fieldCode(code).type) || dirty || updatesFields;
+  /** Whether Word draws a field's result otherwise than stored: one it computes (RECOMPUTED_FIELDS), or updates, but a result it keeps (KEPT_FIELDS). */
+  const recomputed = (code: string, dirty: boolean) => {
+    const { type } = fieldCode(code);
+    return RECOMPUTED_FIELDS.has(type) || ((dirty || updatesFields) && !KEPT_FIELDS.has(type));
+  };
   /**
    * How Word shows the text read here of the fields open: never their code
    * (but as the user shows field codes): hidden; their result recomputed or
@@ -4694,14 +4735,15 @@ function relatedPart(parts: Map<string, Buffer>, relationshipsPath: string, type
   return found;
 }
 
-/** The existing target of the relationship of this id, resolved as relatedPart resolves it. */
-function relatedTarget(parts: Map<string, Buffer>, relationshipsPath: string, id: string, basePath: string) {
-  let found: string | undefined;
+/** The existing target of the relationship of each id, resolved as relatedPart resolves it: the relationships read once. */
+function relatedTargets(parts: Map<string, Buffer>, relationshipsPath: string, basePath: string) {
+  const found = new Map<string, string>();
   visitXmlTags(parts.get(relationshipsPath)?.toString("utf8") ?? "", tag => {
-    if (found || tag.closing || tag.name !== "relationships:Relationship" || tag.attributes.get("Id") !== id) return;
+    const id = tag.attributes.get("Id");
+    if (tag.closing || tag.name !== "relationships:Relationship" || id === undefined || found.has(id)) return;
     const target = tag.attributes.get("Target") ?? "";
     const path = (target.startsWith("/") || !basePath ? target : `${basePath}/${target}`).replace(/^\//, "");
-    if (parts.has(path)) found = path;
+    if (parts.has(path)) found.set(id, path);
   });
   return found;
 }
@@ -4842,16 +4884,26 @@ export function withoutInvisibleDocxText(buffer: Buffer, limits = DOCUMENT_DECOM
   const linkedNumbering = parts.get(numberingPart)?.includes("numStyleLink") ?? false;
   if (linkedNumbering) parts.delete(numberingPart);
   const budget = { units: limits.docxLayoutWorkUnits };
-  // The fonts the document embeds: each part found by the font table's relationship, read once.
+  // The fonts the document embeds: each part found by the font table's relationships (read once), read once with each key; each set
+  // of faces one font, past MAX_EMBEDDED_FONTS of no width known.
   const fontTablePart = related("fontTable");
+  const fontParts = relatedTargets(parts, relationshipsOf(fontTablePart), fontTablePart.includes("/") ? fontTablePart.slice(0, fontTablePart.lastIndexOf("/")) : "");
   const fontFiles = new Map<string, FontFile | null>();
   const readFace = (face: EmbeddedFace) => {
-    const part = relatedTarget(parts, relationshipsOf(fontTablePart), face.id, fontTablePart.includes("/") ? fontTablePart.slice(0, fontTablePart.lastIndexOf("/")) : "");
+    const part = fontParts.get(face.id);
     if (part === undefined) return null;
-    if (!fontFiles.has(part)) fontFiles.set(part, readEmbeddedFont(parts.get(part)!, face.key));
-    return fontFiles.get(part)!;
+    const id = `${part}\n${face.key ?? ""}`;
+    if (!fontFiles.has(id)) fontFiles.set(id, readEmbeddedFont(parts.get(part)!, face.key));
+    return fontFiles.get(id)!;
   };
-  const fonts = fontResolver(readFontTable(parts.get(fontTablePart)?.toString("utf8")), theme, faces => embeddedFont(faces, readFace));
+  const embeddedFonts = new Map<string, DrawnFont>();
+  const embedded = (faces: EmbeddedFace[]) => {
+    const id = faces.map(face => `${face.style}\n${fontParts.get(face.id) ?? ""}\n${face.key ?? ""}`).join("\n");
+    let font = embeddedFonts.get(id);
+    if (!font) embeddedFonts.set(id, (font = embeddedFonts.size < MAX_EMBEDDED_FONTS ? embeddedFont(faces, readFace) : UNBOUNDED_FONT));
+    return font;
+  };
+  const fonts = fontResolver(readFontTable(parts.get(fontTablePart)?.toString("utf8")), theme, embedded);
   // A page holds a character at least of the text flowing over the pages: of the document, of its notes.
   const pages = [mainDocument, related("footnotes"), related("endnotes")].reduce((size, name) => size + (parts.get(name)?.length ?? 0), 0);
   const visible = cutInvisibleRuns(xml, readStyles(parts.get(stylesPart)?.toString("utf8"), theme), theme, onEveryPage, showsPageColour(settings), defaultTabStop(settings), budget, fonts, numberings(settings, pages), updatesFields(settings), tags);

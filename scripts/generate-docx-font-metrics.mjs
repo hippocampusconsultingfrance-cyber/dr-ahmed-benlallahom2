@@ -32,9 +32,11 @@
  * document names them included (WORD_FONTS). Each width written is a bound
  * of what that reader draws: a font of these of no metrics here (Aptos,
  * Franklin Gothic…) is as wide, character by character, as the widest font
- * measured and a twentieth more (LISTED); one of the display, script and
- * symbol fonts among them (Wide Latin, Brush Script…), or a heavy or wide
- * one, of no bound (UNBOUNDED); a font none of these, Word does not have.
+ * measured and a twentieth more (LISTED), a typewriter one (Consolas…) as
+ * Courier New and a twentieth more in Latin-1 (TYPEWRITER); one of the
+ * display, script and symbol fonts among them (Wide Latin, Brush Script…), or
+ * a heavy or wide one, of no bound (UNBOUNDED); a font none of these, Word
+ * does not have.
  * Written compactly: a character as wide as its base letter (É as E), or a
  * slanted style as wide as its upright one, in a sign rather than two digits.
  *
@@ -185,8 +187,13 @@ const SYNTHETIC_BOLD = 84;
  * the size; the others, which such a font may lack, no narrower, and no
  * narrower than Word draws them instead), or either (one not listed). And
  * the bound of a font of Windows or Office of no metrics here (LISTED): the
- * widest of all, `share` thousandths more; of a symbol font of the reader
- * (SYMBOL), every character as wide as the widest of these (`every`).
+ * widest of all, `share` thousandths more; of a typewriter one (TYPEWRITER),
+ * as Courier New and a twentieth more in Latin-1, which such a font draws all
+ * as wide, beyond it (`latin1`: characters it may lack, which Word draws in
+ * another font) never narrower than LISTED, and its bold as its upright one
+ * emboldened (`synthetic`: Lucida Console has no bold face), of the taller
+ * line of the two; of a symbol font of the reader (SYMBOL), every character as
+ * wide as the widest of these (`every`).
  */
 const SUBSTITUTES = [
   { key: "sans-or-serif", of: ["liberation-sans", "liberation-serif"] },
@@ -195,8 +202,17 @@ const SUBSTITUTES = [
   { key: "half-width", of: ["sans-or-serif"], basicLatin: 500, eastAsian: true },
   { key: "east-asian", of: ["east-asian-latin", "half-width"], eastAsian: true },
   { key: "listed", of: ["widest"], share: 50 },
+  { key: "listed-typewriter", of: ["liberation-mono"], share: 50, latin1: "listed", synthetic: true },
   { key: "symbol", of: ["listed"], every: true },
 ];
+/**
+ * Names of typewriter fonts of the reader, of no metrics here: Lucida Console
+ * and Lucida Sans Typewriter (0.602 em a character), Cascadia Code and Mono
+ * (0.586 em), Consolas (0.550 em) draw a few thousandths wider than Courier
+ * New (0.600 em), Aptos Mono is not measured; OCR A Extended, wider, is of no
+ * bound (UNBOUNDED).
+ */
+const TYPEWRITER = ["cascadia code", "cascadia mono", "consolas", "lucida console", "lucida sans typewriter", "aptos mono"];
 /** Names of symbol fonts of the reader, of no metrics here: of glyphs of any shape, none wider than the widest character of LISTED. */
 const SYMBOL = ["symbol", "wingdings", "wingdings 2", "wingdings 3", "webdings", "marlett", "bookshelf symbol 7", "ms outlook", "ms reference specialty", "mt extra"];
 /**
@@ -211,7 +227,7 @@ const SYMBOL = ["symbol", "wingdings", "wingdings 2", "wingdings 3", "webdings",
  */
 const WORD_FONTS = [
   // Windows; Helvetica, Times and Courier as Windows draws them (in Arial, Times New Roman and Courier New, its FontSubstitutes).
-  "arial","bahnschrift", "bahnschrift light", "bahnschrift semilight", "bahnschrift semibold", "bahnschrift condensed", "bahnschrift semicondensed", "bahnschrift light condensed",
+  "arial", "bahnschrift", "bahnschrift light", "bahnschrift semilight", "bahnschrift semibold", "bahnschrift condensed", "bahnschrift semicondensed", "bahnschrift light condensed",
   "bahnschrift light semicondensed", "bahnschrift semilight condensed", "bahnschrift semilight semicondensed", "bahnschrift semibold condensed", "bahnschrift semibold semicondensed",
   "calibri", "calibri light", "cambria", "candara", "candara light", "cascadia code", "cascadia mono", "comic sans ms", "consolas", "constantia", "corbel", "corbel light", "courier new",
   "ebrima", "franklin gothic medium", "gadugi", "georgia", "helvetica", "times", "courier", "impact", "leelawadee ui", "leelawadee ui semilight", "lucida console", "lucida sans unicode",
@@ -228,7 +244,7 @@ const WORD_FONTS = [
   "bookman old style", "californian fb", "calisto mt", "centaur", "century", "century gothic", "century schoolbook", "footlight mt light", "franklin gothic book", "franklin gothic demi",
   "franklin gothic demi cond", "franklin gothic medium cond", "garamond", "gill sans mt", "gill sans mt condensed", "gill sans mt ext condensed bold", "gloucester mt extra condensed",
   "goudy old style", "haettenschweiler", "high tower text", "lucida bright", "lucida fax", "lucida sans", "lucida sans typewriter", "maiandra gd", "modern no. 20",
-  "ms reference sans serif", "news gothic mt", "ocr a extended", "perpetua", "perpetua titling mt", "rockwell", "rockwell condensed", "tw cen mt", "tw cen mt condensed",
+  "ms reference sans serif", "news gothic mt", "perpetua", "perpetua titling mt", "rockwell", "rockwell condensed", "tw cen mt", "tw cen mt condensed",
   "aptos", "aptos display", "aptos light", "aptos narrow", "aptos semibold", "aptos serif", "aptos mono", "grandview", "grandview display", "bierstadt", "bierstadt display", "seaford",
   "seaford display", "skeena", "skeena display", "tenorite", "tenorite display",
   // Microsoft 365's cloud fonts.
@@ -244,10 +260,11 @@ const WORD_FONTS = [
  * Names of fonts of the reader of no bound known: its display, script,
  * handwriting and symbol fonts, of letters wider than any measured (Wide
  * Latin, Goudy Stout…) or of glyphs of any width; its heavy or wide fonts
- * (Arial Black…); Cambria Math and Gabriola, of lines far taller.
+ * (Arial Black…), OCR A Extended, a typewriter font wider than any measured;
+ * Cambria Math and Gabriola, of lines far taller.
  */
 const UNBOUNDED = [
-  "arial black", "aptos black", "aptos extrabold", "segoe ui black", "segoe ui emoji", "segoe ui symbol", "segoe mdl2 assets", "segoe fluent icons", "hololens mdl2 assets",
+  "arial black", "ocr a extended", "aptos black", "aptos extrabold", "segoe ui black", "segoe ui emoji", "segoe ui symbol", "segoe mdl2 assets", "segoe fluent icons", "hololens mdl2 assets",
   "segoe print", "segoe script", "ink free", "javanese text", "mv boli", "gabriola", "cambria math", "algerian", "bauhaus 93", "berlin sans fb demi", "bernard mt condensed", "blackadder itc",
   "bodoni mt black", "bodoni mt poster compressed", "bradley hand itc", "britannic bold", "broadway", "brush script mt", "castellar", "chiller", "colonna mt", "cooper black",
   "copperplate gothic bold", "copperplate gothic light", "curlz mt", "edwardian script itc", "elephant", "engravers mt", "eras bold itc", "eras demi itc", "eras light itc",
@@ -503,7 +520,7 @@ for (const { key, from, style, names } of STANDING_IN) {
   if (from) metrics[key] = { line: fonts[from].line, advances: Object.fromEntries(Object.keys(STYLES).map(name => [name, fonts[from].advances[/italic/i.test(name) ? `${style}Italic` : style]])) };
   for (const name of names) aliases[name] = key;
 }
-for (const { key, of, basicLatin, eastAsian, share, every } of SUBSTITUTES) {
+for (const { key, of, basicLatin, eastAsian, share, every, latin1, synthetic } of SUBSTITUTES) {
   const keys = of ?? Object.keys(fonts).filter(font => fonts[font].widest);
   const advances = Object.fromEntries(Object.entries(widestOf(keys)).map(([style, widest]) => [style, widest.map((width, at) => {
     const code = CHARACTERS.charCodeAt(at);
@@ -512,7 +529,12 @@ for (const { key, of, basicLatin, eastAsian, share, every } of SUBSTITUTES) {
     if (share) return Math.ceil(width * (1000 + share) / 1000);
     return basicLatin && code < 0x7f ? basicLatin : Math.max(basicLatin ?? 0, width);
   })]));
-  metrics[key] = { line: eastAsian ? tallest : Math.max(...keys.map(font => metrics[font].line)), advances };
+  if (synthetic) for (const [name, { fallback }] of Object.entries(STYLES)) {
+    const upright = /bold/i.test(name) && advances[fallback === "bold" ? "italic" : "regular"];
+    if (upright) advances[name] = advances[name].map((width, at) => (upright[at] ? Math.max(width, upright[at] + SYNTHETIC_BOLD) : width));
+  }
+  if (latin1) for (const [style, widths] of Object.entries(advances)) advances[style] = widths.map((width, at) => (CHARACTERS.charCodeAt(at) > 0xff ? Math.max(width, metrics[latin1].advances[style][at]) : width));
+  metrics[key] = { line: eastAsian ? tallest : Math.max(...[...keys, ...(latin1 ? [latin1] : [])].map(font => metrics[font].line)), advances };
 }
 for (const { key } of FONTS.filter(font => font.latin)) {
   const bound = metrics["east-asian"].advances;
@@ -522,6 +544,7 @@ for (const name of HALF_WIDTH) aliases[name.toLowerCase()] = "half-width";
 for (const name of EAST_ASIAN) aliases[name.toLowerCase()] = "east-asian-latin";
 // The reader's fonts: measured, bounded as the widest (LISTED), as the widest character for a symbol font, or of no bound.
 for (const name of SYMBOL) aliases[name] = "symbol";
+for (const name of TYPEWRITER) aliases[name] = "listed-typewriter";
 for (const name of WORD_FONTS) aliases[name] ??= "listed";
 for (const name of UNBOUNDED) aliases[name] = "unbounded";
 const wordFonts = new Set([...WORD_FONTS, ...SYMBOL, ...UNBOUNDED, ...[...HALF_WIDTH, ...EAST_ASIAN].map(name => name.toLowerCase())]);
@@ -580,8 +603,8 @@ export const DOCX_SYNTHETIC_BOLD = ${SYNTHETIC_BOLD};
 
 /**
  * The font names a document may give (w:rFonts, theme fonts), in lower case, as written otherwise (ＭＳ ゴシック in full-width
- * letters), and the font of DOCX_FONT_METRICS of their metrics, or that stands for them; \`listed\` or \`unbounded\` for a font of
- * the reader not measured (DOCX_SUBSTITUTE_FONTS).
+ * letters), and the font of DOCX_FONT_METRICS of their metrics, or that stands for them; \`listed\`, \`listed-typewriter\` or
+ * \`unbounded\` for a font of the reader not measured (DOCX_SUBSTITUTE_FONTS).
  */
 export const DOCX_FONT_ALIASES: Record<string, string> = ${JSON.stringify(aliases, null, 2).replace(/\n}$/, ",\n}")};
 

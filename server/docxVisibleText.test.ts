@@ -876,8 +876,13 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       expect((await check(filled(filler, font("Arial")))).text).toContain("Titre : Médecin");
     });
 
-    // Asked to (w:hint eastAsia), Word draws the characters that may be East Asian in the run's East Asian font, not its Latin one; in
-    // Office's East Asian fonts when the run names none.
+    // Typewriter fonts of Word draw every character of Latin-1 as wide, a few thousandths wider than Courier New (Lucida Console 0.602
+    // em): 66 « . » fill the line of 439 pt; in Arial, half of it. OCR A Extended, wider, is of no bound.
+    it.each(["Consolas", "Lucida Console", "Cascadia Code", "Lucida Sans Typewriter", "Aptos Mono", "OCR A Extended"])("66 « . » en %s, police à chasse fixe de Word : les affirmations qui suivent sont écartées ; en Arial, leurs premiers mots sont lus", async name => {
+      expectSetAside(await check(filled(".".repeat(66), font(name))));
+      expect((await check(filled(".".repeat(66), font("Arial")))).text).toContain("Titre : Médecin");
+    });
+
     // A font the document embeds is measured in its own tables, read once deobfuscated; Word may still draw a font it does not have in
     // the one it substitutes for it, so the line is never narrower than in Arial.
     describe("police embarquée (w:embedRegular, .odttf obfusqué par w:fontKey)", () => {
@@ -897,6 +902,15 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
 
       it("lisible, ses caractères étroits : la ligne exacte, que son substitut tient aussi, est lue entière", async () => {
         expectLine(await check(row(WIDE, font("Zorglub")), { parts: embedded(embeddedFont(300, {}, KEY)) }), true);
+      });
+
+      // Word may read any entry of a name in the font table: each counts, the same faces read as one font; past 8, of no bound.
+      it.each([[8, true], [9, false]])("%i entrées « Zorglub » embarquant la même police étroite : la ligne exacte n’est lue entière que de 8 entrées au plus", async (count, whole) => {
+        const [, ...files] = embedded(embeddedFont(300, {}, KEY));
+        const entry = `<w:font w:name="Zorglub"><w:family w:val="swiss"/><w:embedRegular r:id="rIdF1" w:fontKey="${KEY}"/></w:font>`;
+        const result = await check(row(WIDE, font("Zorglub")), { parts: [fontTable(entry.repeat(Number(count))), ...files] });
+        if (whole) expectLine(result, true);
+        else expectUnread(result);
       });
 
       it.each([
@@ -935,6 +949,17 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       const result = await check(filled("é".repeat(40), properties));
       if (read) expect(result.text).toContain("Titre : Médecin");
       else expectSetAside(result);
+    });
+
+    // Asked to (w:hint eastAsia), Word draws the characters that may be East Asian in the run's East Asian font, not its Latin one; in
+    // Office's East Asian fonts when the run names none.
+    // In Verdana, 60 « é » leave no room for « Médecin », in MS Gothic, of half-width é, they do: of a run of no East Asian language
+    // given, Word may draw them in either.
+    it.each([["fr-FR", false], ["zh-CN", true], ["", false]])("60 « é » en Verdana, de police d’Asie orientale MS Gothic, demandée pour eux (w:hint eastAsia), langue d’Asie orientale « %s » : « Médecin » n’est lu que si Word dessine « é » en MS Gothic", async (language, read) => {
+      const properties = `<w:rFonts w:ascii="Verdana" w:hAnsi="Verdana" w:eastAsia="MS Gothic" w:hint="eastAsia"/>${language ? `<w:lang w:eastAsia="${language}"/>` : ""}`;
+      const result = await check(filled("é".repeat(60), properties));
+      expect(result.text.includes("Titre : Médecin")).toBe(read);
+      expectSetAside(result, read ? "Titre : Médecin " : "Titre : ");
     });
 
     it.each([["SimSun", ' w:eastAsia="SimSun"'], ["qu’il ne nomme pas", ""]])("guillemets (« “” » ×20) d’un passage en Arial Narrow, de police d’Asie orientale %s, que Word doit prendre pour eux (w:hint eastAsia) : les affirmations qui suivent sont écartées ; sans cette demande, leurs premiers mots sont lus", async (_, eastAsian) => {
@@ -1080,6 +1105,19 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       expectSetAside(await check(pushed(complex("REF signet")), { parts: [settings('<w:updateFields w:val="true"/>')] }));
     });
 
+    // Word keeps a hyperlink's text as it updates the field (HYPERLINK): an e-mail address so written in a text box pushes nothing out of
+    // it, whatever the document asks (w:updateFields).
+    it("adresse e-mail en champ HYPERLINK dans une zone de texte, le document demandant ou non de mettre à jour ses champs (w:updateFields) : tout est lu, rien n’est écarté", async () => {
+      const link = `<w:p><w:pPr>${NO_SPACING}</w:pPr><w:r><w:t xml:space="preserve">Email : </w:t></w:r><w:r>${complex('HYPERLINK "mailto:claire@example.com"', "claire@example.com")}</w:r><w:r><w:t xml:space="preserve"> – Tél. 06 00 00 00 00</w:t></w:r></w:p>`;
+      const content = paragraph("Claire Exemple") + link + paragraph("Infirmière diplômée d'État") + paragraph("Compétences : soins intensifs, urgences.");
+      for (const parts of [[], [settings('<w:updateFields w:val="true"/>')]]) {
+        const result = await check(inRun(vmlBox(content, 300, 200)), { parts });
+        expect(result.text).toContain("Email : claire@example.com – Tél. 06 00 00 00 00");
+        expect(result.text).toContain("Compétences : soins intensifs, urgences.");
+        expect(result).toMatchObject({ hidden: "", unverifiable: "" });
+      }
+    });
+
     // A drawing in line with the text takes its extent, what its effects add on each side (wp:effectExtent) and its outline on its line;
     // Word reads a length signed with + as XML Schema writes integers. 400 pt so taken push the claims under the row; 100 pt leave room
     // for their first words.
@@ -1193,6 +1231,24 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       return { ...measured, bound: 3 * GROWTH * Math.max(before, after, FLOOR_MS) };
     };
     const scaled = (count: number, scale: number) => Math.round(count * scale);
+
+    // Each relationship of the font table's fonts read once, each entry of a name read up to 8, the same faces as one font: a font table
+    // of 8 000 entries of one name embedding a font, of 8 000 relationships, took a minute; of 20 000 entries of a font read and 3 000
+    // words in a row of exact height, 20 s.
+    it("table des polices de milliers d’entrées d’un nom, chacune embarquant une police, et de milliers de relations : contrôlée en quelques secondes au plus", () => {
+      const KEY = "{6C1A2D3B-4E5F-7081-92A3-B4C5D6E7F809}";
+      const fonts = (entries: number, relationships: number, words: number, file: Buffer) => docx(table(9000, [[exact(300), paragraph(Array.from({ length: words }, (_, index) => `mot${index}`).join(" "), "", '<w:rFonts w:ascii="Zorglub" w:hAnsi="Zorglub"/>')]]), "", [
+        { name: "word/fontTable.xml", relationship: "fontTable", content: `<?xml version="1.0" encoding="UTF-8"?><w:fonts xmlns:w="${W_NAMESPACE}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">${`<w:font w:name="Zorglub"><w:embedRegular r:id="rIdF1" w:fontKey="${KEY}"/></w:font>`.repeat(entries)}</w:fonts>` },
+        { name: "word/_rels/fontTable.xml.rels", content: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${Array.from({ length: relationships }, (_, index) => `<Relationship Id="rIdX${index}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/font" Target="fonts/font1.odttf"/>`).join("")}<Relationship Id="rIdF1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/font" Target="fonts/font1.odttf"/></Relationships>` },
+        { name: "word/fonts/font1.odttf", content: file },
+      ]);
+      const unreadable = timedGrowth(scale => fonts(scaled(8_000, scale), scaled(8_000, scale), 200, Buffer.alloc(100)));
+      expect(unreadable.ms).toBeLessThan(unreadable.bound);
+      const read = timedGrowth(scale => fonts(scaled(20_000, scale), 10, scaled(3_000, scale), embeddedFont(500, {}, KEY)));
+      expect(read.ms).toBeLessThan(read.bound);
+      // Of no bound, the row's words are set aside.
+      for (const { result } of [unreadable, read]) expect(result.unverifiableText.length).toBeGreaterThan(0);
+    }, 120_000);
 
     it("30 000 zones de texte VML liées et 20 000 lignes exactes : contrôlées en quelques secondes au plus", () => {
       const chain = (count: number) => Array.from({ length: count }, (_, index) =>

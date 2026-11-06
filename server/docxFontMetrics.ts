@@ -328,6 +328,13 @@ export const DOCX_FONT_METRICS: Record<string, { line: number; regular: string; 
     bold: "7-7W9nEsBlKxEr798z8zBlEN79A679BUBlBlBlBlBlBlBlBlBlBl7979ENENENAtHkCvDvD4EGCYBuE2FX97B5EIBuIBF1EKCUEYDgBuCFELCoJ6DICFB_8zDB8zENDgBlB9BmAYBmB98TBmBz6F6gBO6FHVBzBQBmBm8g9o7tBzAmGBB5Am9yBlAcBlEN5l7WBRCcCXD49-BCAFH49HBRDm9wH4Ba8DDm94949sC5DA6F9s949HBRHcHcHcAt......Il.........EN......DmEK.....CUCg......Hm.........BJ......DmBJ.....Bm................EcENBm....................F_C_.........6FHsCL....BO.....8CC799Bu6L......GaELBz......K3H-.................9KCF7t.......................7A6v6vBRCwJ2J28DAB6F6F6F6FApApApApAl9EAWAW5lB4GT5lNe699a7676DKJKGyEuGyEuDmGSGSELEw",
     boldItalic: ",5G7,7BQ,EAHHc,4Bg,2BE,0Bb,2CM,4ClIrDC,2D0,1Dj,0BL,66Q,0BX6Q,48n,5B0,7CJCwClADAD,0HE,0Ba,09aHE,6Be,3BaJhJhJhAD,TCRCU......,5....,C.,0.,0.,0.,0.,8Dz,O.,0.,0.,0.,06QIGCU.,1.BX.....8aBb,0Bg6Q,EJP,1.,0.,0.,A8l,D.,1.,ACvHu,J5b,07H7HDVJS,8",
   },
+  "listed-typewriter": {
+    line: 1762,
+    regular: "9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u9u......9u.........9u......9u9u.....9u9u......9u.........9u......9u9u.....9u.CoBFCoBFCoBFDNAfDNAfDNAfDNAfDaDuDfBHB_AiB_AiB_AiB_AiB_AiELBGELBGELBGELBGELB6F3BQ.........9uFrA9B5.CoAQAgA-.A-.A-.BA9uA_9uENB6ENB6ENB6EFDsB6EIAnEIAnEIAnKOIhCN.CN.CN.BQ.BQ.BQ.BQ.BQ.BQ.BQ9uDsBCDsBCDsBCDsBCDsBCDsBCIFERBu.BuBQ.BQ.BQ.9u9u5yATD1IlJ28D9u9u9u9u9u9u9u9u9u9u9u9-9i5WA-GS5EM29u9u9u9uDKIHHIEuGQEuDmGSGSELDm",
+    italic: ",_,_,-CB,0CB,0CB,9Dq,XGkAH,1CI9zA2,5A-,HJd,EBH,0BH,0BH,1B2,0B2,0B2,0B2,0B2,0B2I5EUBH,0BH,5F3,2CtHs,08L,8ADAD,BIKGQ,7",
+    bold: "BCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBCBC......BC.........BC......BCBC.....BCBC......BC.........BC......BCBC.....BC.Cv.Cv.Cv.D4.D4.D4.D4.EGEcENBmCY.CY.CY.CY.CY.E2BmE2BmE2BmE2BmFXBzF_C_.........BCHsCL..EIBOBOBu.Bu.Bu.C7BCBuBCF1BzF1BzF1BzGaELBzEKBQEKBQEKBQK3H-Dg.Dg.Dg.Bu.Bu.Bu.Bu.CF.CF.CFBCELBzELBzELBzELBzELBzELBzJ6GBCF.CFB_.B_.B_.BCBC6vBRCwJ2J28DBCBCBCBCBCBCBCBCBCBCBCBCAW5lB4GT5lNeBCBCBCBCDKJKGyEuGyEuDmGSGSELEw",
+    boldItalic: ",_,_,_BL,0BL,0BL,8Dz,XIGCUBE,1BXBXBb,0Bb,0Bb,0Bb,0Bg,FJP,WIr,DCvHu,NDVJS,8",
+  },
   "symbol": {
     line: 1762,
     regular: "M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2......M2.........M2......M2M2.....M2M2......M2.........M2......M2M2.....M2.................M2M2....................M2M2.........M2M2M2....M2......M2M2M2M2......M2M2M2......M2M2..................M2M2.......................M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2M2",
@@ -353,8 +360,8 @@ export const DOCX_SYNTHETIC_BOLD = 84;
 
 /**
  * The font names a document may give (w:rFonts, theme fonts), in lower case, as written otherwise (ＭＳ ゴシック in full-width
- * letters), and the font of DOCX_FONT_METRICS of their metrics, or that stands for them; `listed` or `unbounded` for a font of
- * the reader not measured (DOCX_SUBSTITUTE_FONTS).
+ * letters), and the font of DOCX_FONT_METRICS of their metrics, or that stands for them; `listed`, `listed-typewriter` or
+ * `unbounded` for a font of the reader not measured (DOCX_SUBSTITUTE_FONTS).
  */
 export const DOCX_FONT_ALIASES: Record<string, string> = {
   "calibri": "carlito",
@@ -491,6 +498,12 @@ export const DOCX_FONT_ALIASES: Record<string, string> = {
   "ms outlook": "symbol",
   "ms reference specialty": "symbol",
   "mt extra": "symbol",
+  "cascadia code": "listed-typewriter",
+  "cascadia mono": "listed-typewriter",
+  "consolas": "listed-typewriter",
+  "lucida console": "listed-typewriter",
+  "lucida sans typewriter": "listed-typewriter",
+  "aptos mono": "listed-typewriter",
   "bahnschrift": "listed",
   "bahnschrift light": "listed",
   "bahnschrift semilight": "listed",
@@ -506,9 +519,6 @@ export const DOCX_FONT_ALIASES: Record<string, string> = {
   "calibri light": "listed",
   "candara": "listed",
   "candara light": "listed",
-  "cascadia code": "listed",
-  "cascadia mono": "listed",
-  "consolas": "listed",
   "constantia": "listed",
   "corbel": "listed",
   "corbel light": "listed",
@@ -517,7 +527,6 @@ export const DOCX_FONT_ALIASES: Record<string, string> = {
   "gadugi": "listed",
   "leelawadee ui": "listed",
   "leelawadee ui semilight": "listed",
-  "lucida console": "listed",
   "lucida sans unicode": "listed",
   "microsoft new tai lue": "listed",
   "microsoft phagspa": "listed",
@@ -594,12 +603,10 @@ export const DOCX_FONT_ALIASES: Record<string, string> = {
   "lucida bright": "listed",
   "lucida fax": "listed",
   "lucida sans": "listed",
-  "lucida sans typewriter": "listed",
   "maiandra gd": "listed",
   "modern no. 20": "listed",
   "ms reference sans serif": "listed",
   "news gothic mt": "listed",
-  "ocr a extended": "listed",
   "perpetua": "listed",
   "perpetua titling mt": "listed",
   "rockwell": "listed",
@@ -612,7 +619,6 @@ export const DOCX_FONT_ALIASES: Record<string, string> = {
   "aptos narrow": "listed",
   "aptos semibold": "listed",
   "aptos serif": "listed",
-  "aptos mono": "listed",
   "grandview": "listed",
   "grandview display": "listed",
   "bierstadt": "listed",
@@ -695,6 +701,7 @@ export const DOCX_FONT_ALIASES: Record<string, string> = {
   "vijaya": "listed",
   "aldhabi": "listed",
   "arial black": "unbounded",
+  "ocr a extended": "unbounded",
   "aptos black": "unbounded",
   "aptos extrabold": "unbounded",
   "segoe ui black": "unbounded",
