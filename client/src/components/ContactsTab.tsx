@@ -23,6 +23,7 @@ export default function ContactsTab() {
       toast.success("Marqué comme lu");
       utils.admin.contacts.list.invalidate();
     },
+    onError: error => toast.error(error.message),
   });
   // RGPD-12: erasure request or withdrawn consent; the trace names no one.
   const deleteMessage = trpc.admin.contacts.delete.useMutation({

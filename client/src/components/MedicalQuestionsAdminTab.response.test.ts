@@ -3,7 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { elementsOf, renderStateful, resetStatefulHooks } from "@/testing/statefulRender";
 
 // Réponse à une question santé dans l’administration, comme la rédige le
-// médecin : validation impossible sous 20 caractères (et expliquée),
+// médecin : validation impossible sous 20 caractères (et expliquée), envoi
+// seulement après une confirmation qui rappelle le destinataire, le début de
+// la réponse et la publication (ADM-11), brouillon de toute longueur et motif
+// facultatif de classement sans suite (ADM-23),
 // publication seulement avec l’accord du patient et un contenu anonymisé,
 // retrait de la bibliothèque publique après confirmation, fiche privée en
 // erreur avec une reprise, et colonnes qui laissent la place au panneau de
@@ -69,7 +72,7 @@ const question = (extra: Record<string, unknown> = {}) => ({
 });
 
 let confirmAnswer: boolean;
-const confirm = vi.fn(() => confirmAnswer);
+const confirm = vi.fn((_message?: string) => confirmAnswer);
 
 beforeEach(() => {
   for (const key of Object.keys(state.mutations)) delete state.mutations[key];
@@ -102,8 +105,28 @@ describe("réponse privée à une question santé", () => {
 
     write("medical-question-private-response", "Oui, jusqu’à 2 h avant.");
     expect(send().props.disabled).toBe(false);
+    confirmAnswer = true;
     send().props.onClick();
     expect(sent().mock.calls).toEqual([[{ id: 7, adminResponse: "Oui, jusqu’à 2 h avant.", publicQuestion: "", publicResponse: "", publish: false }]]);
+  });
+
+  it("n’envoie qu’après une confirmation qui nomme le destinataire, cite le début de la réponse et dit qu’elle ne sera pas publiée (ADM-11)", () => {
+    const response = `Oui, de l’eau claire jusqu’à 2 h avant l’anesthésie. ${"Une suite plus longue que l’extrait. ".repeat(8)}Fin de la réponse.`;
+    write("medical-question-private-response", response);
+    button("Valider et envoyer")!.props.onClick();
+
+    expect(confirm).toHaveBeenCalledTimes(1);
+    const message = String(confirm.mock.calls[0]![0]);
+    expect(message).toContain("Jeanne Martin (jeanne@test.local)");
+    expect(message).toContain("« Oui, de l’eau claire jusqu’à 2 h avant l’anesthésie. Une suite");
+    expect(message).not.toContain("Fin de la réponse.");
+    expect(message).toContain("… »");
+    expect(message).toContain("Rien ne sera publié");
+    expect(sent()).not.toHaveBeenCalled();
+
+    confirmAnswer = true;
+    button("Valider et envoyer")!.props.onClick();
+    expect(sent().mock.calls).toEqual([[{ id: 7, adminResponse: response, publicQuestion: "", publicResponse: "", publish: false }]]);
   });
 
   it("ne publie qu’avec l’accord du patient et une version anonymisée complète", () => {
@@ -119,7 +142,9 @@ describe("réponse privée à une question santé", () => {
 
     write("medical-question-public-question", "Peut-on boire de l’eau avant une anesthésie ?");
     write("medical-question-public-response", "Oui, de l’eau claire jusqu’à 2 h avant.");
+    confirmAnswer = true;
     button("Valider, envoyer et publier")!.props.onClick();
+    expect(String(confirm.mock.calls[0]![0])).toContain("La version anonymisée sera publiée dans la bibliothèque publique.");
     expect(sent().mock.calls[0]![0]).toMatchObject({ id: 7, publish: true, publicQuestion: "Peut-on boire de l’eau avant une anesthésie ?" });
   });
 
@@ -132,6 +157,43 @@ describe("réponse privée à une question santé", () => {
     confirmAnswer = true;
     button("Retirer de la bibliothèque publique")!.props.onClick();
     expect(state.mutations.unpublish!.mock.calls).toEqual([[{ id: 7 }]]);
+  });
+});
+
+describe("brouillon et classement sans suite d’une question santé (ADM-23)", () => {
+  it("enregistre un brouillon de quelques caractères, jamais un brouillon vide, sans permettre l’envoi", () => {
+    const save = () => button("Enregistrer le brouillon")!;
+    expect(save().props.disabled).toBe(true);
+    write("medical-question-private-response", "   ");
+    expect(save().props.disabled).toBe(true);
+
+    write("medical-question-private-response", "À revoir");
+    expect(save().props.disabled).toBe(false);
+    expect(button("Valider et envoyer")!.props.disabled).toBe(true);
+    save().props.onClick();
+    expect(state.mutations.saveDraft!.mock.calls).toEqual([[{ id: 7, adminResponse: "À revoir", publicQuestion: "", publicResponse: "" }]]);
+  });
+
+  it("classe sans suite avec le motif choisi, rappelé dans la confirmation, et rien sans confirmation", () => {
+    const reason = () => elements().find(element => element.props.id === "medical-question-rejection-reason")!;
+    expect(reason().props.value).toBe("");
+    reason().props.onChange({ target: { value: "urgence_redirigee" } });
+
+    button("Classer sans suite")!.props.onClick();
+    expect(String(confirm.mock.calls[0]![0])).toContain("QMED-ADMIN007-00000 (motif : Urgence redirigée) ?");
+    expect(String(confirm.mock.calls[0]![0])).toContain("Aucun email n’est envoyé");
+    expect(state.mutations.reject).not.toHaveBeenCalled();
+
+    confirmAnswer = true;
+    button("Classer sans suite")!.props.onClick();
+    expect(state.mutations.reject!.mock.calls).toEqual([[{ id: 7, reason: "urgence_redirigee" }]]);
+  });
+
+  it("classe sans motif quand aucun n’est choisi", () => {
+    confirmAnswer = true;
+    button("Classer sans suite")!.props.onClick();
+    expect(String(confirm.mock.calls[0]![0])).not.toContain("motif");
+    expect(state.mutations.reject!.mock.calls).toEqual([[{ id: 7 }]]);
   });
 });
 

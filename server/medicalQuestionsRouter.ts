@@ -102,7 +102,11 @@ async function requireMfa(ctx: { req: Parameters<typeof isAdminMfaVerified>[0]; 
   if (!(await isAdminMfaVerified(ctx.req, ctx.user.openId))) throw new TRPCError({ code: "FORBIDDEN", message: "Double authentification administrateur requise." });
 }
 
-const draftInput = z.object({ id: z.number().int().positive(), adminResponse: z.string().trim().min(20).max(5000), publicQuestion: z.string().trim().max(1000).optional().default(""), publicResponse: z.string().trim().max(5000).optional().default("") });
+// ADM-23: a draft of any length is kept (not an empty one); the 20 characters are asked of the answer sent.
+const draftInput = z.object({ id: z.number().int().positive(), adminResponse: z.string().trim().min(1).max(5000), publicQuestion: z.string().trim().max(1000).optional().default(""), publicResponse: z.string().trim().max(5000).optional().default("") });
+const responseInput = draftInput.extend({ adminResponse: z.string().trim().min(20).max(5000), publish: z.boolean().default(false), resend: z.boolean().default(false) });
+/** Why a question is filed away (ADM-23), written in its journal only: the patient is not emailed. */
+const rejectionReason = z.enum(["hors_champ", "urgence_redirigee", "doublon", "autre"]);
 
 export const medicalQuestionsRouter = router({
   submit: publicProcedure.input(privateQuestionInput).mutation(async ({ input, ctx }) => {
@@ -240,7 +244,7 @@ export const medicalQuestionsRouter = router({
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "La proposition de reformulation est temporairement indisponible." });
       }
     }),
-    sendValidatedResponse: adminProcedure.input(draftInput.extend({ publish: z.boolean().default(false), resend: z.boolean().default(false) })).mutation(async ({ input, ctx }) => {
+    sendValidatedResponse: adminProcedure.input(responseInput).mutation(async ({ input, ctx }) => {
       await requireMfa(ctx);
       const db = await requireDb();
       const [question] = await db.select().from(medicalQuestions).where(eq(medicalQuestions.id, input.id)).limit(1);
@@ -343,9 +347,10 @@ export const medicalQuestionsRouter = router({
      * leaves the queue; the private record and its journal are kept, and
      * saving a draft puts it back in the queue. The update only matches a
      * question still without reply: a reply sent meanwhile is never filed
-     * away, and filing twice writes a single journal entry.
+     * away, and filing twice writes a single journal entry. The optional
+     * reason (ADM-23) goes in that entry; no email is sent to the patient.
      */
-    reject: adminProcedure.input(questionIdInput).mutation(async ({ input, ctx }) => {
+    reject: adminProcedure.input(questionIdInput.extend({ reason: rejectionReason.optional() })).mutation(async ({ input, ctx }) => {
       await requireMfa(ctx);
       const db = await requireDb();
       const alreadyAnswered = "Cette question a déjà reçu une réponse : elle ne peut plus être classée sans suite.";
@@ -359,7 +364,7 @@ export const medicalQuestionsRouter = router({
         if (current?.responseSentAt) throw new TRPCError({ code: "BAD_REQUEST", message: alreadyAnswered });
         return { success: true };
       }
-      await auditQuestion({ questionId: input.id, actorOpenId: ctx.user.openId, action: "rejected", metadata: { previousStatus: question.status } });
+      await auditQuestion({ questionId: input.id, actorOpenId: ctx.user.openId, action: "rejected", metadata: { previousStatus: question.status, ...(input.reason ? { reason: input.reason } : {}) } });
       return { success: true };
     }),
     /**

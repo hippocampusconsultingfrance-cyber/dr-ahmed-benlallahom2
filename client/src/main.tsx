@@ -1,15 +1,17 @@
 import { trpc } from "@/lib/trpc";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import { installChunkLoadRecovery } from "./lib/chunkLoadRecovery";
+import { createQueryClient } from "./lib/queryClient";
 import { createTrpcLinks } from "./lib/trpcLinks";
 import "./fonts.css";
 import "./index.css";
 
 installChunkLoadRecovery();
 
-const queryClient = new QueryClient();
+// An admin action without its own error handler still says that it failed (ADM-10).
+const queryClient = createQueryClient();
 
 queryClient.getQueryCache().subscribe(event => {
   if (event.type === "updated" && event.action.type === "error") {

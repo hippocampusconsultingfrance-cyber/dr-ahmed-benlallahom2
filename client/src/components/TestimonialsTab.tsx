@@ -3,21 +3,24 @@ import { Button } from "@/components/ui/button";
 import { CheckCircle, XCircle, Star, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
+import { AdminErrorState } from "@/components/AdminStatePanel";
 
 export default function TestimonialsTab() {
-  const { data: testimonialsList, isLoading } = trpc.admin.testimonials.list.useQuery();
+  const { data: testimonialsList, isLoading, error, refetch, isFetching } = trpc.admin.testimonials.list.useQuery();
   const utils = trpc.useUtils();
   const updateStatus = trpc.admin.testimonials.updateStatus.useMutation({
     onSuccess: () => {
       toast.success("Témoignage mis à jour");
       utils.admin.testimonials.list.invalidate();
     },
+    onError: mutationError => toast.error(mutationError.message),
   });
   const deleteTestimonial = trpc.admin.testimonials.delete.useMutation({
     onSuccess: () => {
       toast.success("Témoignage supprimé");
       utils.admin.testimonials.list.invalidate();
     },
+    onError: mutationError => toast.error(mutationError.message),
   });
 
   const statusColors: Record<string, string> = {
@@ -28,6 +31,11 @@ export default function TestimonialsTab() {
 
   if (isLoading) {
     return <PublicContentSkeleton label="Chargement des témoignages administratifs" />;
+  }
+
+  // ADM-10: a list that could not be loaded is not shown as « Aucun témoignage ».
+  if (error) {
+    return <AdminErrorState description={error.message} onRetry={() => void refetch()} retrying={isFetching} />;
   }
 
   return (

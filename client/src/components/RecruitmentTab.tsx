@@ -459,7 +459,19 @@ export default function RecruitmentTab() {
                     <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${analysisStatusTone(application.analysisStatus)}`}>
                       {analysisStatusLabel(application.analysisStatus)}
                     </span>
-                    <select aria-label={`Statut de ${application.firstName} ${application.lastName}`} value={application.status} disabled={updateStatus.isPending} onChange={event => updateStatus.mutate({ id: application.id, status: event.target.value as Status })} className="h-9 rounded-md border border-border bg-background px-2 text-sm text-foreground">
+                    <select
+                      aria-label={`Statut de ${application.firstName} ${application.lastName}`}
+                      value={application.status}
+                      disabled={updateStatus.isPending}
+                      onChange={event => {
+                        const status = event.target.value as Status;
+                        // ADM-11: « Refusée » and « Archivée » take the dossier out of the pool, the campaigns and the missions:
+                        // confirmed first. Cancelling changes nothing, and the controlled select shows the current status again.
+                        if ((status === "rejected" || status === "archived") && !window.confirm(`Passer la candidature de ${application.firstName} ${application.lastName} (${application.trackingId}) à « ${statusOptions.find(option => option.value === status)!.label} » ? Elle sortira du vivier, des campagnes et des missions.`)) return;
+                        updateStatus.mutate({ id: application.id, status });
+                      }}
+                      className="h-9 rounded-md border border-border bg-background px-2 text-sm text-foreground"
+                    >
                       {statusOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
                     </select>
                           <Button size="sm" variant="outline" onClick={() => downloadCv.mutate({ id: application.id })} disabled={downloadCv.isPending}>
