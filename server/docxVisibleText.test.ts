@@ -67,13 +67,39 @@ const turnedCell = (row: string, width: number, content: string) =>
   `<w:tbl><w:tblPr><w:tblW w:w="9000" w:type="dxa"/><w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid><w:gridCol w:w="${9000 - width}"/><w:gridCol w:w="${width}"/></w:tblGrid>` +
   `<w:tr><w:trPr>${row}</w:trPr><w:tc><w:tcPr><w:tcW w:w="${9000 - width}" w:type="dxa"/></w:tcPr><w:p/></w:tc><w:tc><w:tcPr><w:tcW w:w="${width}" w:type="dxa"/><w:textDirection w:val="btLr"/></w:tcPr>${content}</w:tc></w:tr></w:tbl>`;
 
+/** A format 4 subtable of a character map: each character code to its glyph, one segment each, then the last one (0xFFFF). */
+function characterMap(glyphs: Map<number, number>) {
+  const codes = [...Array.from(glyphs.keys()).sort((left, right) => left - right), 0xffff];
+  const subtable = Buffer.alloc(16 + codes.length * 8);
+  subtable.writeUInt16BE(4, 0);
+  subtable.writeUInt16BE(subtable.length, 2);
+  subtable.writeUInt16BE(codes.length * 2, 6);
+  codes.forEach((code, index) => {
+    subtable.writeUInt16BE(code, 14 + index * 2);
+    subtable.writeUInt16BE(code, 16 + codes.length * 2 + index * 2);
+    subtable.writeUInt16BE(code === 0xffff ? 1 : ((glyphs.get(code) ?? 0) - code) & 0xffff, 16 + codes.length * 4 + index * 2);
+  });
+  return subtable;
+}
+
+/** A table of 16-bit numbers. */
+const words = (...values: number[]) => Buffer.from(values.flatMap(value => [(value >> 8) & 0xff, value & 0xff]));
+
 /**
- * A TrueType font of the tables the check reads (head, hhea, hmtx, cmap format 4), whose every character of Basic Latin and Latin-1
- * is `advance` thousandths of an em wide, but those of `wider` (code: thousandths); obfuscated as Word embeds it (ECMA-376 Part 1,
- * 17.8.1: its first 32 bytes XORed with the bytes of its GUID key, the last one first).
+ * A TrueType font (head, hhea, hmtx, cmap) whose characters of Basic Latin and Latin-1 are all 0.3 em wide (glyph 1), « f » and « i »
+ * too (glyphs 3 and 4), as its character map for platform 0 (Unicode) gives them; but `space`: its character map for Windows
+ * (platform 3, encoding 1), which Word and HarfBuzz read, giving the space a glyph 2 em wide (glyph 2); `ligature`: a GSUB table whose
+ * ligature (liga) draws « fi » as that glyph; `kerning`: a kern table of 0.8 em between « f » and « i ». Obfuscated as Word embeds
+ * it (ECMA-376 Part 1, 17.8.1: its first 32 bytes XORed with the bytes of its GUID key, the last one first).
  */
-function embeddedFont(advance: number, wider: Record<number, number>, key: string) {
+function embeddedFont(key: string, { space = false, ligature = false, kerning = false } = {}) {
   const codes = [...Array.from({ length: 0x5f }, (_, index) => 0x20 + index), ...Array.from({ length: 0x60 }, (_, index) => 0xa0 + index)];
+  const unicode = new Map(codes.map(code => [code, code === 0x66 ? 3 : code === 0x69 ? 4 : 1]));
+  const windows = new Map(unicode);
+  if (space) windows.set(0x20, 2);
+  const unicodeMap = characterMap(unicode);
+  const windowsMap = characterMap(windows);
+  const cmap = Buffer.concat([words(0, 2, 0, 3, 0, 20, 3, 1, 0, 20 + unicodeMap.length), unicodeMap, windowsMap]);
   const head = Buffer.alloc(54);
   head.writeUInt32BE(0x00010000, 0);
   head.writeUInt32BE(0x5f0f3cf5, 12);
@@ -82,23 +108,13 @@ function embeddedFont(advance: number, wider: Record<number, number>, key: strin
   hhea.writeUInt32BE(0x00010000, 0);
   hhea.writeInt16BE(800, 4);
   hhea.writeInt16BE(-200, 6);
-  hhea.writeUInt16BE(codes.length + 1, 34);
-  const hmtx = Buffer.alloc((codes.length + 1) * 4);
-  hmtx.writeUInt16BE(advance, 0);
-  codes.forEach((code, index) => hmtx.writeUInt16BE(wider[code] ?? advance, (index + 1) * 4));
-  // One segment per character, then the last one (0xFFFF).
-  const segments = codes.length + 1;
-  const subtable = Buffer.alloc(16 + segments * 8);
-  subtable.writeUInt16BE(4, 0);
-  subtable.writeUInt16BE(subtable.length, 2);
-  subtable.writeUInt16BE(segments * 2, 6);
-  [...codes, 0xffff].forEach((code, index) => {
-    subtable.writeUInt16BE(code, 14 + index * 2);
-    subtable.writeUInt16BE(code, 16 + segments * 2 + index * 2);
-    subtable.writeUInt16BE(code === 0xffff ? 1 : (index + 1 - code) & 0xffff, 16 + segments * 4 + index * 2);
-  });
-  const cmap = Buffer.concat([Buffer.from([0, 0, 0, 1, 0, 3, 0, 1, 0, 0, 0, 12]), subtable]);
+  hhea.writeUInt16BE(5, 34);
+  const hmtx = words(500, 0, 300, 0, 2000, 0, 300, 0, 300, 0);
   const tables: Array<[string, Buffer]> = [["cmap", cmap], ["head", head], ["hhea", hhea], ["hmtx", hmtx]];
+  // GSUB 1.0: the default script's feature liga, of a lookup of ligatures (type 4) of glyph 3 then 4 into glyph 2.
+  if (ligature) tables.push(["GSUB", words(1, 0, 10, 30, 44, 1, ...[0x4446, 0x4c54], 8, 4, 0, 0, 0xffff, 1, 0, 1, ...[0x6c69, 0x6761], 8, 0, 1, 0, 1, 4, 4, 0, 1, 8, 1, 8, 1, 14, 1, 1, 3, 1, 4, 2, 2, 4)]);
+  // kern 0: one subtable of format 0, its pair of glyphs 3 and 4 0.8 em further apart.
+  if (kerning) tables.push(["kern", words(0, 1, 0, 20, 1, 1, 6, 0, 0, 3, 4, 800)]);
   const directory = Buffer.alloc(12 + tables.length * 16);
   directory.writeUInt32BE(0x00010000, 0);
   directory.writeUInt16BE(tables.length, 4);
@@ -871,6 +887,7 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
     it.each([
       ["SimSun", "« “” » ×20", "“”".repeat(20)], ["宋体", "« ● » ×40", "●".repeat(40)], ["MS Gothic", "« – » ×40", "–".repeat(40)],
       ["SimHei", "« . » ×80", ".".repeat(80)], ["KaiTi", "« . » ×80", ".".repeat(80)], ["MingLiU", "« . » ×80", ".".repeat(80)],
+      ["SimSun-ExtB", "« . » ×80", ".".repeat(80)], ["MingLiU-ExtB", "« . » ×80", ".".repeat(80)], ["MingLiU_HKSCS-ExtB", "« . » ×80", ".".repeat(80)],
     ])("en %s, %s : les affirmations qui suivent sont écartées ; en Arial, leurs premiers mots sont lus", async (name, _, filler) => {
       expectSetAside(await check(filled(filler, font(name))));
       expect((await check(filled(filler, font("Arial")))).text).toContain("Titre : Médecin");
@@ -883,48 +900,38 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       expect((await check(filled(".".repeat(66), font("Arial")))).text).toContain("Titre : Médecin");
     });
 
-    // A font the document embeds is measured in its own tables, read once deobfuscated; Word may still draw a font it does not have in
-    // the one it substitutes for it, so the line is never narrower than in Arial.
-    describe("police embarquée (w:embedRegular, .odttf obfusqué par w:fontKey)", () => {
+    // A font the document embeds Word draws in its own glyphs, by the character map it reads (Windows', platform 3), with its
+    // substitutions (GSUB: ligatures, w14:ligatures) and kerning (GPOS, kern, w:kern): never measured by the check, of no bound,
+    // whatever its tables or its name; what it draws in a row of exact height is not read, the claims are set aside. LibreOffice, which
+    // loads these fonts, draws the honest line and not the claims.
+    describe("police embarquée (w:embedRegular, .odttf obfusqué par w:fontKey) : jamais mesurée, de largeurs sans borne", () => {
       const KEY = "{6C1A2D3B-4E5F-7081-92A3-B4C5D6E7F809}";
-      const embedded = (file: Buffer | string, key = KEY) => [
-        fontTable(`<w:font w:name="Zorglub"><w:family w:val="swiss"/><w:embedRegular r:id="rIdF1" w:fontKey="${key}"/></w:font>`),
+      const embedded = (file: Buffer | string, name = "Zorglub", key = KEY) => [
+        fontTable(`<w:font w:name="${name}"><w:family w:val="swiss"/><w:embedRegular r:id="rIdF1" w:fontKey="${key}"/></w:font>`),
         { name: "word/_rels/fontTable.xml.rels", content: '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdF1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/font" Target="fonts/font1.odttf"/></Relationships>' },
         { name: "word/fonts/font1.odttf", content: file },
       ];
 
-      it("lisible, ses caractères de 2 em : la ligne exacte ne tient que ses premiers mots, la suite est écartée", async () => {
-        const result = await check(row(WIDE, font("Zorglub")), { parts: embedded(embeddedFont(2000, {}, KEY)) });
-        expect(result.text).toContain("Références");
-        expect(result.text).not.toContain("Clinique Exemple, service");
-        expectSetAside(result);
-      });
-
-      it("lisible, ses caractères étroits : la ligne exacte, que son substitut tient aussi, est lue entière", async () => {
-        expectLine(await check(row(WIDE, font("Zorglub")), { parts: embedded(embeddedFont(300, {}, KEY)) }), true);
-      });
-
-      // Word may read any entry of a name in the font table: each counts, the same faces read as one font; past 8, of no bound.
-      it.each([[8, true], [9, false]])("%i entrées « Zorglub » embarquant la même police étroite : la ligne exacte n’est lue entière que de 8 entrées au plus", async (count, whole) => {
-        const [, ...files] = embedded(embeddedFont(300, {}, KEY));
-        const entry = `<w:font w:name="Zorglub"><w:family w:val="swiss"/><w:embedRegular r:id="rIdF1" w:fontKey="${KEY}"/></w:font>`;
-        const result = await check(row(WIDE, font("Zorglub")), { parts: [fontTable(entry.repeat(Number(count))), ...files] });
-        if (whole) expectLine(result, true);
-        else expectUnread(result);
-      });
-
       it.each([
-        ["désobfusquée d’une autre clé", embeddedFont(300, {}, KEY), "{00000000-0000-0000-0000-000000000000}"],
-        ["tronquée", embeddedFont(300, {}, KEY).subarray(0, 40), KEY],
-        ["qui n’est pas une police", "PK pas une police", KEY],
-      ])("illisible (%s) : de largeurs sans borne, rien de sa ligne exacte n’est lu", async (_, file, key) => {
-        expectUnread(await check(row(WIDE, font("Zorglub")), { parts: embedded(file, key) }));
+        ["de caractères étroits (0,3 em) dans sa table Unicode (0,3), mais d’une espace de 2 em dans celle de Windows (3,1)", embeddedFont(KEY, { space: true }), ""],
+        ["de caractères étroits et d’une ligature « fi » de 3 em (GSUB liga), Word suivant ses ligatures (w14:ligatures)", embeddedFont(KEY, { ligature: true }), '<w14:ligatures xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" w14:val="all"/>'],
+        ["de caractères étroits et d’un crénage positif de 0,8 em (kern), Word crénant (w:kern)", embeddedFont(KEY, { kerning: true }), '<w:kern w:val="2"/>'],
+        ["de caractères étroits, sans plus", embeddedFont(KEY), ""],
+        ["désobfusquée d’une autre clé", embeddedFont("{00000000-0000-0000-0000-000000000000}"), ""],
+        ["tronquée", embeddedFont(KEY).subarray(0, 40), ""],
+        ["qui n’est pas une police", "PK pas une police", ""],
+      ])("police « Zorglub » embarquée %s : rien de sa ligne exacte n’est lu, les affirmations sont écartées", async (_, file, runProperties) => {
+        expectUnread(await check(row(WIDE, `${font("Zorglub")}${runProperties}`), { parts: embedded(file) }));
       });
 
-      // Its W 3 em wide: 12 of them fill the line; in Arial, a third of it.
-      it("symbole (w:sym) d’une police embarquée, dans l’avance que lui donne la police : les affirmations qui suivent sont écartées ; en Arial, leurs premiers mots sont lus", async () => {
-        const symbols = (name: string) => table(WIDE, [[exact(300), `<w:p><w:pPr>${NO_SPACING}</w:pPr><w:r><w:t xml:space="preserve">Disponible. </w:t></w:r><w:r>${`<w:sym w:font="${name}" w:char="0057"/>`.repeat(12)}</w:r><w:r><w:t xml:space="preserve"> ${escaped(FAKE_ONE)}</w:t></w:r></w:p>`]]);
-        expectSetAside(await check(symbols("Zorglub"), { parts: embedded(embeddedFont(500, { 0x57: 3000 }, KEY)) }));
+      it("police embarquée sous le nom d’Arial, police de Word : rien de sa ligne exacte n’est lu ; Arial sans police embarquée la lit entière", async () => {
+        expectUnread(await check(row(WIDE, font("Arial")), { parts: embedded(embeddedFont(KEY), "Arial") }));
+        expectLine(await check(row(WIDE, font("Arial"))), true);
+      });
+
+      it("symbole (w:sym) d’une police embarquée : les affirmations qui suivent sont écartées ; en Arial, leurs premiers mots sont lus", async () => {
+        const symbols = (name: string) => table(WIDE, [[exact(300), `<w:p><w:pPr>${NO_SPACING}</w:pPr><w:r><w:t xml:space="preserve">Disponible. </w:t></w:r><w:r><w:sym w:font="${name}" w:char="0057"/></w:r><w:r><w:t xml:space="preserve"> ${escaped(FAKE_ONE)}</w:t></w:r></w:p>`]]);
+        expectSetAside(await check(symbols("Zorglub"), { parts: embedded(embeddedFont(KEY)) }));
         expect((await check(symbols("Arial"))).text).toContain("Titre : Médecin");
       });
     });
@@ -983,10 +990,30 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       expect((await check(filled("i".repeat(Number(count)), themedRun("minorHAnsi")), { parts: [theme] })).text).toContain("Titre : Médecin");
     });
 
-    // In capitals (w:caps), a letter the check does not measure (Greek) is as wide as a capital: 62 of them fill the line of 439 pt.
-    it("62 lettres grecques en capitales (w:caps), que le contrôle ne mesure pas : les affirmations qui suivent sont écartées ; en minuscules, leurs premiers mots sont lus", async () => {
-      expectSetAside(await check(filled("α".repeat(62), "<w:caps/>")));
-      expect((await check(filled("α".repeat(62), ""))).text).toContain("Titre : Médecin");
+    // Greek, Cyrillic and Latin Extended letters and signs are measured in the fonts that hold them, Liberation Sans for Arial: 50 « ш »
+    // (0.80 em), « Ю » (1.01 em) or « № » (1.07 em) fill the line of 439 pt, which the average width of a letter (0.5 em) left half empty;
+    // 50 « а » (0.56 em) leave room for the claims' first words; in capitals (w:caps), 62 « α » are as wide as 62 « Α » (0.67 em).
+    it.each([["50 « ш »", "ш", 50, ""], ["50 « Ю »", "Ю", 50, ""], ["50 « № »", "№", 50, ""], ["50 « Ǆ »", "Ǆ", 50, ""], ["62 « α » en capitales (w:caps)", "α", 62, "<w:caps/>"]])("%s en Arial, mesurés : les affirmations qui suivent sont écartées ; 50 « а » cyrilliques laissent lire leurs premiers mots", async (_, letter, count, capitals) => {
+      expectSetAside(await check(filled(String(letter).repeat(Number(count)), `${font("Arial")}${capitals}`)));
+      expect((await check(filled("а".repeat(50), font("Arial")))).text).toContain("Titre : Médecin");
+    });
+
+    // A Russian or Greek line of a CV that fits its row with room to spare is read whole, in Arial, Times New Roman or Calibri.
+    it.each([["Arial"], ["Times New Roman"], ["Calibri"]])("ligne russe puis ligne grecque en %s, chacune dans une ligne exacte qu’elle tient largement : lues entières, rien n’est écarté", async name => {
+      const lines = ["Медсестра реанимации, 5 лет опыта.", "Νοσηλεύτρια, 5 χρόνια εμπειρίας."];
+      const result = await check(table(WIDE, lines.map((line): [string, string] => [exact(300), paragraph(line, "", font(name!))])));
+      for (const line of lines) expect(result.text).toContain(line);
+      expect(result).toMatchObject({ hidden: "", unverifiable: "" });
+    });
+
+    // A sign the run's font lacks (☎ in Arial), which Word may draw in a symbol font of no metrics (Segoe UI Symbol), or a character no
+    // font measured holds (an emoji, an Arabic letter, which Word shapes): of no bound, what follows it on the line is set aside; a sign
+    // the font holds (•) leaves room for the claims' first words.
+    it.each([["☎, que la police n’a pas", "☎"], ["une émoticône", "🙂"], ["une lettre arabe", "ب"]])("« Disponible » suivi de %s en Arial : les affirmations qui suivent sont écartées ; suivi de « • », leurs premiers mots sont lus", async (_, sign) => {
+      const result = await check(filled(`Disponible ${sign}`, font("Arial")));
+      expect(result.text).toContain("Disponible");
+      expectSetAside(result);
+      expect((await check(filled("Disponible •", font("Arial")))).text).toContain("Titre : Médecin");
     });
 
     // `start` is 364.6 pt wide in Calibri, 359.7 in its italic (Carlito Italic): a cell of 7456 twips leaves it 362 pt.
@@ -1003,18 +1030,68 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       expectLine(await check(row(NARROW, themedRun(themed!)), { parts: [theme] }), false);
     });
 
-    it.each(["Segoe UI", "Comic Sans MS"])("dix lignes de 10,5 pt dans une boîte de 1,15 fois leur taille chacune, en %s, aux lignes plus hautes (1,33 et 1,39 fois leur taille) : les dernières, que Word coupe, sont écartées", async name => {
+    /** Ten lines of 10.5 pt in this font in a text box of 1.15 times their size each, without insets. */
+    const tenLines = (fontName: string) => {
       const box = (content: string) => alternate(
         `<w:drawing><wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="3" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="1"><wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="page"><wp:posOffset>762000</wp:posOffset></wp:positionH><wp:positionV relativeFrom="page"><wp:posOffset>635000</wp:posOffset></wp:positionV>` +
         `<wp:extent cx="3810000" cy="${Math.round(10 * 1.15 * 10.5 * 12_700)}"/><wp:wrapNone/><wp:docPr id="2" name="Texte"/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:wsp><wps:cNvSpPr txBox="1"/><wps:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></wps:spPr>` +
         `<wps:txbx><w:txbxContent>${content}</w:txbxContent></wps:txbx><wps:bodyPr rot="0" vert="horz" wrap="square" lIns="0" tIns="0" rIns="0" bIns="0" anchor="t"><a:noAutofit/></wps:bodyPr></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing>`,
         `<w:pict><v:shape style="position:absolute;margin-left:60pt;margin-top:50pt;width:300pt;height:${10 * 1.15 * 10.5}pt;mso-position-horizontal-relative:page;mso-position-vertical-relative:page" filled="f" stroked="f"><v:textbox inset="0,0,0,0"><w:txbxContent>${content}</w:txbxContent></v:textbox></v:shape></w:pict>`);
-      const lines = (fontName: string) => box(Array.from({ length: 10 }, (_, index) => paragraph(`Ligne ${index + 1} : soins post-opératoires.`, "", `${font(fontName)}<w:sz w:val="21"/>`)).join(""));
-      expect(await check(lines("Arial"))).toMatchObject({ hidden: "", unverifiable: "" });
-      const result = await check(lines(name));
+      return box(Array.from({ length: 10 }, (_, index) => paragraph(`Ligne ${index + 1} : soins post-opératoires.`, "", `${font(fontName)}<w:sz w:val="21"/>`)).join(""));
+    };
+
+    it.each(["Segoe UI", "Comic Sans MS"])("dix lignes de 10,5 pt dans une boîte de 1,15 fois leur taille chacune, en %s, aux lignes plus hautes (1,33 et 1,39 fois leur taille) : les dernières, que Word coupe, sont écartées", async name => {
+      expect(await check(tenLines("Arial"))).toMatchObject({ hidden: "", unverifiable: "" });
+      const result = await check(tenLines(name));
       expect(result).toMatchObject({ hidden: "", reasons: ["layout"] });
       expect(result.unverifiable).toContain("Ligne 10 : soins post-opératoires.");
       expect(result.text).toContain("Ligne 8 : soins post-opératoires.");
+    });
+
+    // The weights and interface faces Windows installs of its East Asian fonts (Yu Gothic Medium, Microsoft YaHei UI, Malgun Gothic
+    // Semilight) set their lines as their family, 1.76 times their size: seven of the ten lines hold in the box. A name that goes on
+    // from a family's with a word of weight (Yu Gothic Demibold, which Windows does not install) is never narrower nor shorter than it.
+    it.each(["Yu Gothic", "Yu Gothic Medium", "Microsoft YaHei UI", "Malgun Gothic Semilight", "Yu Gothic Demibold"])("dix lignes de 10,5 pt dans la boîte de 1,15 fois leur taille chacune, en %s : les lignes que Word repousse sous la boîte sont écartées", async name => {
+      const result = await check(tenLines(name));
+      expect(result).toMatchObject({ hidden: "", reasons: ["layout"] });
+      expect(result.unverifiable).toContain("Ligne 10 : soins post-opératoires.");
+      expect(result.unverifiable).toContain("Ligne 8 : soins post-opératoires.");
+      expect(result.text).toContain("Ligne 5 : soins post-opératoires.");
+    });
+
+    // « MMMM » is wider in Times New Roman (39.2 pt at 11 pt) than in Arial (36.7 pt), « eeee » in Arial (24.5 pt) than in Times New Roman
+    // (19.5 pt): six of each, then « Fin. », take 422 pt in Arial, 403 in Times New Roman, 434 in Times New Roman for the first and Arial
+    // for the others, 437 each word as wide as in the wider. A font Word does not have is drawn in one font: laid out in each, the line
+    // of 430 pt is read whole; two such names may be drawn in two, every pair of them is laid out, and « Fin. » is set aside.
+    describe("une mise en page complète par police que Word peut dessiner", () => {
+      const pairs = (first: string, second: string) => table(8816, [[exact(300), runs("", ...Array.from({ length: 6 }, (): Array<[string, string]> => [["MMMM ", font(first)], ["eeee ", font(second)]]).flat(), ["Fin.", font(first)])]]);
+
+      it("police « Zorglub » que Word n’a pas, Arial ou Times New Roman : chacune tient la ligne exacte, lue entière, rien n’est écarté", async () => {
+        const result = await check(pairs("Zorglub", "Zorglub"));
+        expect(result.text).toContain("MMMM eeee MMMM eeee MMMM eeee MMMM eeee MMMM eeee MMMM eeee Fin.");
+        expect(result).toMatchObject({ hidden: "", unverifiable: "" });
+      });
+
+      it("polices « Zorglub » et « Foobar » que Word n’a pas, chacune Arial ou Times New Roman : la paire qui ne tient pas la ligne écarte sa fin", async () => {
+        const result = await check(pairs("Zorglub", "Foobar"));
+        expect(result.text).toContain("MMMM eeee MMMM eeee");
+        expect(result.text).not.toContain("Fin.");
+        expect(result).toMatchObject({ hidden: "", reasons: ["layout"] });
+        expect(result.unverifiable).toContain("Fin.");
+      });
+
+      // Each layout of one font costs the reading of the part and its own layout work: past the work allowed, each word stays as wide
+      // as in the widest font, which holds it for any font Word draws.
+      it("travail permis épuisé avant les mises en page par police : chaque mot reste aussi large que dans la plus large, la fin de la ligne est écartée", async () => {
+        const result = await check(pairs("Zorglub", "Zorglub"), { limits: { ...DOCUMENT_DECOMPRESSION_LIMITS, docxLayoutWorkUnits: 120 } });
+        expect(result.text).not.toContain("Fin.");
+        expect(result).toMatchObject({ hidden: "", reasons: ["layout"] });
+      });
+
+      it("police « Zorglub » de famille romaine (w:family roman), Times New Roman seule : la ligne exacte est lue entière", async () => {
+        const result = await check(pairs("Zorglub", "Zorglub"), { parts: [fontTable('<w:font w:name="Zorglub"><w:family w:val="roman"/></w:font>')] });
+        expect(result).toMatchObject({ hidden: "", unverifiable: "" });
+      });
     });
   });
 
@@ -1069,6 +1146,22 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       expect((await check(pushed(notes("Arial")))).text).toContain("Titre : Médecin");
     });
 
+    // Word draws the mc:Choice that requires only namespaces it understands (wps), else the mc:Fallback (a vocabulary of no one's,
+    // urn:example); of a namespace of Office it may or may not know (word/2099), either, both laid out, what each draws taking room in
+    // the most room only: a rectangle of 400 pt in the fallback after an image of 10 pt in the choice pushes the claims under the row.
+    const alternateInline = (namespace: string) =>
+      `<mc:AlternateContent xmlns:x="${namespace}"><mc:Choice Requires="${namespace.includes("wordprocessingShape") ? "wps" : "x"}">${inline("127000")}</mc:Choice><mc:Fallback><w:pict><v:rect style="width:400pt;height:10pt" fillcolor="white" stroked="f"/></w:pict></mc:Fallback></mc:AlternateContent>`;
+    it.each([
+      ["d’un espace de noms d’Office inconnu de Word (word/2099), qui peut dessiner l’un ou l’autre : écartées sans être comptées comme cachées", "http://schemas.microsoft.com/office/word/2099/wordml/zorglub", true],
+      ["d’un espace de noms d’aucun vocabulaire de Word (urn:example), qui dessine le repli", "urn:example:zorglub", false],
+    ])("mc:Choice %s, de repli (mc:Fallback) d’un rectangle de 400 pt : les affirmations sont écartées ; d’un mc:Choice wps, leurs premiers mots sont lus", async (_, namespace, either) => {
+      const result = await check(pushed(alternateInline(String(namespace))));
+      expect(result.text).toContain("Disponible.");
+      expectSetAside(result);
+      if (either) expect(result.hidden).not.toContain("Titre");
+      expect((await check(pushed(alternateInline("http://schemas.microsoft.com/office/word/2010/wordprocessingShape")))).text).toContain("Titre : Médecin");
+    });
+
     it("image en ligne de 150 pt, en DrawingML et dans sa copie VML (mc:AlternateContent) : comptée une fois, le texte qui la suit sur la ligne est lu", async () => {
       const inline = `<w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${150 * 12_700}" cy="${10 * 12_700}"/><wp:docPr id="3" name="Image"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"/></a:graphic></wp:inline></w:drawing>`;
       const picture = `<mc:AlternateContent><mc:Choice Requires="wps">${inline}</mc:Choice><mc:Fallback><w:pict><v:rect style="width:150pt;height:10pt" stroked="f"/></w:pict></mc:Fallback></mc:AlternateContent>`;
@@ -1103,6 +1196,37 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       expect((await check(pushed(complex("REF signet")))).text).toContain("Titre : Médecin");
       expectSetAside(await check(pushed(complex("REF signet").replace('w:fldCharType="begin"', 'w:fldCharType="begin" w:dirty="true"'))));
       expectSetAside(await check(pushed(complex("REF signet")), { parts: [settings('<w:updateFields w:val="true"/>')] }));
+    });
+
+    // Word draws the result the file stores of the fields it does not compute (the user's and the document's information, references):
+    // a short one is read with what follows.
+    it.each(["USERNAME", "DOCVARIABLE Nom", "MERGEFIELD Nom", "PAGEREF signet"])("champ %s au résultat stocké court : lu tel quel, avec les premiers mots des affirmations", async code => {
+      const result = await check(pushed(complex(code, "Claire")));
+      expect(result.text).toContain("Disponible. Claire");
+      expect(result.text).toContain("Titre : Médecin");
+    });
+
+    // MACROBUTTON and GOTOBUTTON store no result: Word draws the text of their code after the macro or the bookmark, as wide as in the
+    // run's font; 40 « W » push the claims under the row, « [Nom] » leaves room for their first words. Word draws EQ from its code too,
+    // and numbers LISTNUM anew; it may draw another result for a field of a type the check does not bound (ZORGLUB), or whose code holds
+    // another field: of no width known, the rest of the line is set aside, and the result they store with it.
+    const codeOnly = (code: string) => `<w:fldChar w:fldCharType="begin"/><w:instrText xml:space="preserve"> ${code} </w:instrText><w:fldChar w:fldCharType="end"/>`;
+    it.each([["MACROBUTTON", "MACROBUTTON NoMacro"], ["GOTOBUTTON", "GOTOBUTTON Signet"]])("champ %s dessiné depuis son code de 40 « W » : les affirmations sont écartées ; de « [Nom] », leurs premiers mots sont lus", async (_, code) => {
+      const result = await check(pushed(codeOnly(`${code} ${"W".repeat(40)}`)));
+      expect(result.text).toContain("Disponible.");
+      expectSetAside(result);
+      expect((await check(pushed(codeOnly(`${code} [Nom]`)))).text).toContain("Titre : Médecin");
+    });
+
+    it.each([
+      ["EQ, dessiné depuis son code", complex("EQ \\o(DESAR,¯)", "")],
+      ["LISTNUM, que Word numérote", complex("LISTNUM \\s 999999999")],
+      ["d’un type que le contrôle ne borne pas (ZORGLUB)", complex("ZORGLUB")],
+      ["REF dont le code contient un autre champ", `<w:fldChar w:fldCharType="begin"/><w:instrText xml:space="preserve"> REF </w:instrText>${complex("PAGE")}<w:fldChar w:fldCharType="separate"/><w:t>1</w:t><w:fldChar w:fldCharType="end"/>`],
+    ])("champ %s : les affirmations sont écartées, « Disponible. » est lu", async (_, field) => {
+      const result = await check(pushed(field!));
+      expect(result.text).toContain("Disponible.");
+      expectSetAside(result);
     });
 
     // Word keeps a hyperlink's text as it updates the field (HYPERLINK): an e-mail address so written in a text box pushes nothing out of
@@ -1232,9 +1356,9 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
     };
     const scaled = (count: number, scale: number) => Math.round(count * scale);
 
-    // Each relationship of the font table's fonts read once, each entry of a name read up to 8, the same faces as one font: a font table
-    // of 8 000 entries of one name embedding a font, of 8 000 relationships, took a minute; of 20 000 entries of a font read and 3 000
-    // words in a row of exact height, 20 s.
+    // Each entry of a name read up to 8, a font embedded of no bound without reading it: a font table of 8 000 entries of one name
+    // embedding a font, of 8 000 relationships, took a minute; of 20 000 entries of a font read and 3 000 words in a row of exact
+    // height, 20 s.
     it("table des polices de milliers d’entrées d’un nom, chacune embarquant une police, et de milliers de relations : contrôlée en quelques secondes au plus", () => {
       const KEY = "{6C1A2D3B-4E5F-7081-92A3-B4C5D6E7F809}";
       const fonts = (entries: number, relationships: number, words: number, file: Buffer) => docx(table(9000, [[exact(300), paragraph(Array.from({ length: words }, (_, index) => `mot${index}`).join(" "), "", '<w:rFonts w:ascii="Zorglub" w:hAnsi="Zorglub"/>')]]), "", [
@@ -1244,7 +1368,7 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       ]);
       const unreadable = timedGrowth(scale => fonts(scaled(8_000, scale), scaled(8_000, scale), 200, Buffer.alloc(100)));
       expect(unreadable.ms).toBeLessThan(unreadable.bound);
-      const read = timedGrowth(scale => fonts(scaled(20_000, scale), 10, scaled(3_000, scale), embeddedFont(500, {}, KEY)));
+      const read = timedGrowth(scale => fonts(scaled(20_000, scale), 10, scaled(3_000, scale), embeddedFont(KEY)));
       expect(read.ms).toBeLessThan(read.bound);
       // Of no bound, the row's words are set aside.
       for (const { result } of [unreadable, read]) expect(result.unverifiableText.length).toBeGreaterThan(0);
