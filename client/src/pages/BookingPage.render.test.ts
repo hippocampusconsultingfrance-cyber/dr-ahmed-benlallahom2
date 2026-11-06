@@ -170,28 +170,38 @@ describe("formulaire de réservation", () => {
     expect(view.create).toHaveBeenCalledTimes(2);
   });
 
-  it("n’expose pas de détail technique dans les alertes publiques de paiement", async () => {
+  it("n’expose pas de détail technique dans les messages d’échec du paiement, affichés dans la page", async () => {
+    const submitError = () => textOf(all().find(element => element.props.id === "booking-submit-error"));
+    const messages: string[] = [];
     fillForm();
     view.create = vi.fn(async () => ({ success: false }));
     await submit();
-    expect(alert).toHaveBeenLastCalledWith(content().paymentError);
+    messages.push(submitError());
+    expect(messages.at(-1)).toBe(content().paymentError);
 
     view.create = vi.fn(async () => { throw Object.assign(new Error("duplicate key value violates unique constraint appointments_slot_key"), { data: { code: "INTERNAL_SERVER_ERROR" } }); });
     await submit();
-    expect(alert).toHaveBeenLastCalledWith(content().bookingError);
+    messages.push(submitError());
+    expect(messages.at(-1)).toBe(content().bookingError);
 
     view.create = vi.fn(async () => { throw Object.assign(new Error("Ce créneau vient d’être réservé."), { data: { code: "CONFLICT", reason: "slot_taken" } }); });
     view.language = "en";
     await submit();
-    expect(alert).toHaveBeenLastCalledWith(content("en").refusals.slot_taken);
-    for (const [message] of alert.mock.calls) expect(String(message)).not.toMatch(/duplicate key|constraint|Ce créneau vient/);
+    messages.push(submitError());
+    // Créneau pris : les horaires libres les plus proches font partie du message annoncé.
+    expect(messages.at(-1)).toBe(`${content("en").refusals.slot_taken} ${textOf(byId("booking-nearest-slots"))}`);
+    for (const message of messages) expect(message).not.toMatch(/duplicate key|constraint|Ce créneau vient/);
+    expect(alert).not.toHaveBeenCalled();
   });
 
   it("contrôle le téléphone côté client, sans rien envoyer, avec un message lié au champ", async () => {
+    // L’indicatif exigé est dit avant la saisie, et reste lié au champ (INTL-09).
+    expect(byId("booking-phone").props["aria-describedby"]).toBe("booking-phone-hint");
+    expect(textOf(byId("booking-phone-hint"))).toBe(content().form.phoneHint);
     fillForm("12");
     await submit();
     expect(view.create).not.toHaveBeenCalled();
-    expect(byId("booking-phone").props).toMatchObject({ "aria-invalid": true, "aria-describedby": "booking-phone-error" });
+    expect(byId("booking-phone").props).toMatchObject({ "aria-invalid": true, "aria-describedby": "booking-phone-hint booking-phone-error" });
     expect(textOf(byId("booking-phone-error"))).toBe(content().form.invalidPhone);
 
     type("booking-phone", "+33 6 12 34 56 78");
@@ -206,7 +216,10 @@ describe("formulaire de réservation", () => {
     vi.setSystemTime(new Date(new Date(appointmentDate).getTime() - 60 * 60 * 1000));
     await submit();
     expect(view.create).not.toHaveBeenCalled();
-    expect(alert).toHaveBeenCalledTimes(1);
+    // Délai relu à l’envoi, même avant le prochain tic de l’horloge de la page.
+    expect(textOf(byId("booking-submit-error"))).toBe(content().form.tooSoon);
+    expect(byId("booking-submit-error").props.role).toBe("alert");
+    expect(alert).not.toHaveBeenCalled();
   });
 
   it("bloque le paiement et informe sans détail technique quand l’agenda ne se charge pas", () => {

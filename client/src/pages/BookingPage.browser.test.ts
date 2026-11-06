@@ -115,6 +115,20 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
     return { page, calls, alerts };
   }
 
+  /** Refus affiché dans la page (RES-10), sans les horaires proposés après un créneau pris, ou null : jamais de fenêtre d'alerte. */
+  const submitErrorText = (page: Page) => page.evaluate(() => {
+    const message = document.getElementById("booking-submit-error")?.cloneNode(true) as HTMLElement | undefined;
+    message?.querySelector("#booking-nearest-slots")?.remove();
+    return message?.textContent?.trim() ?? null;
+  });
+
+  /** Élément qui a le focus entièrement à l'écran, et premier horaire de la grille visible sous lui. */
+  const focusedRefusalOnScreen = (page: Page) => page.evaluate(() => {
+    const focused = document.activeElement!.getBoundingClientRect();
+    const firstSlot = document.querySelector("#booking-slots label")!.getBoundingClientRect();
+    return focused.top >= 0 && focused.bottom <= window.innerHeight && firstSlot.top >= focused.bottom && firstSlot.top < window.innerHeight;
+  });
+
   const bookingProcedures = (overrides: Record<string, Procedure> = {}): Record<string, Procedure> => ({
     "availability.getSlots": () => EVENING_SLOTS,
     "availability.getBlockedDates": () => [],
@@ -190,7 +204,7 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
     await page.context().close();
   }, 60_000);
 
-  it("envoie l'instant exact et la langue, puis traduit un refus « créneau déjà pris » (EN-06)", async () => {
+  it("envoie l'instant exact et la langue, puis traduit un refus « créneau déjà pris » dans la page et propose les horaires libres les plus proches (EN-06, RES-10)", async () => {
     const [firstDay] = openDays();
     const { page, calls, alerts } = await open("/booking", bookingProcedures({
       "appointments.create": () => refuse("CONFLICT", 409, "Ce créneau vient d’être réservé par un autre patient. Veuillez en choisir un autre.", "slot_taken"),
@@ -205,15 +219,53 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
     await slot.locator("xpath=..").click();
     expect(await slot.isChecked()).toBe(true);
     await page.locator("#booking-details").fill("Practical questions");
+    const grid = page.getByRole("group", { name: bookingContent.en.form.slotsLegend });
+    const values = await grid.getByRole("radio").evaluateAll((radios) => radios.map((radio) => (radio as HTMLInputElement).value));
     await page.getByRole("button", { name: bookingContent.en.form.submit }).click();
     await page.waitForFunction(() => document.querySelector("button[type=submit]") && !(document.querySelector("button[type=submit]") as HTMLButtonElement).textContent?.includes("Processing"));
-    await expect.poll(() => alerts.length).toBe(1);
+    await expect.poll(() => submitErrorText(page)).toBe(bookingContent.en.refusals.slot_taken);
 
     expect(calls.find((call) => call.procedure === "appointments.create")?.input).toMatchObject({ appointmentDate: chosen, language: "en", customerPhone: "+971 50 123 4567" });
-    expect(alerts[0]).toBe(bookingContent.en.refusals.slot_taken);
-    expect(alerts[0]).not.toContain("créneau");
+    // Dans la page, annoncé (role=alert) et focalisé : aucune fenêtre d'alerte.
+    expect(alerts).toEqual([]);
+    expect(await page.evaluate(() => { const active = document.activeElement; return active?.id === "booking-submit-error" && active.getAttribute("role") === "alert"; })).toBe(true);
     // L'agenda est rechargé pour que la grille ne propose plus l'horaire pris.
     await expect.poll(() => calls.filter((call) => call.procedure === "availability.getBookedSlots").length).toBeGreaterThan(1);
+    // L'horaire pris étant le dernier du jour, les (au plus) trois précédents sont mis en avant, et dits dans le message, en tête de la grille.
+    const nearest = values.filter((value) => value !== chosen).slice(-3);
+    expect(await grid.locator("label[data-suggested] input").evaluateAll((radios) => radios.map((radio) => (radio as HTMLInputElement).value))).toEqual(nearest);
+    expect(await grid.locator("#booking-submit-error").count()).toBe(1);
+    if (nearest.length > 0) {
+      const times = nearest.map((value) => new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "Europe/Paris" }).format(new Date(value)));
+      expect(await page.locator("#booking-submit-error #booking-nearest-slots").innerText()).toBe(bookingContent.en.form.nearestSlots(times));
+    }
+    // Défilement doux de la page (scroll-behavior: smooth) : le message qui a le focus arrive à l'écran, les horaires sous lui.
+    await expect.poll(() => focusedRefusalOnScreen(page), { timeout: 5_000 }).toBe(true);
+    await page.context().close();
+  }, 60_000);
+
+  it("garde à l'écran, sur téléphone, le refus d'un créneau pris qui a le focus, avec les horaires sous lui (RES-10)", async () => {
+    const [firstDay] = openDays();
+    const { page, alerts } = await open("/booking", bookingProcedures({
+      "appointments.create": () => refuse("CONFLICT", 409, "Ce créneau vient d’être réservé par un autre patient. Veuillez en choisir un autre.", "slot_taken"),
+    }), { context: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } });
+    const grid = page.getByRole("group", { name: bookingContent.fr.form.slotsLegend });
+    await page.locator("#booking-name").fill("Test Patient");
+    await page.locator("#booking-email").fill("patient@example.test");
+    await page.locator("#booking-phone").fill("+33 6 12 34 56 78");
+    await page.locator("#booking-day").selectOption(firstDay);
+    await grid.getByRole("radio").first().locator("xpath=..").click();
+    await page.locator("#booking-details").fill("Questions pratiques");
+    await page.locator("#availability-status[data-state='available']").waitFor();
+    await page.getByRole("button", { name: bookingContent.fr.form.submit }).click();
+
+    await expect.poll(() => submitErrorText(page)).toBe(bookingContent.fr.refusals.slot_taken);
+    expect(await page.evaluate(() => document.activeElement?.id)).toBe("booking-submit-error");
+    await expect.poll(() => focusedRefusalOnScreen(page), { timeout: 5_000 }).toBe(true);
+    // Tab depuis le message mène aux horaires, juste en dessous.
+    await page.keyboard.press("Tab");
+    expect(await page.evaluate(() => (document.activeElement as HTMLInputElement | null)?.name)).toBe("booking-slot");
+    expect(alerts).toEqual([]);
     await page.context().close();
   }, 60_000);
 
@@ -235,6 +287,8 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
     expect(text).toContain("(heure de Paris)");
     expect(text).toContain(`soit ${new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "America/Montreal" }).format(appointmentDate)} chez vous`);
     expect(text).not.toContain("Réservé jusqu’à");
+    // La carte retrouvée au retour de Stripe reçoit le focus par son titre, au lieu du haut de page (A11Y-10).
+    await expect.poll(() => page.evaluate(() => document.activeElement?.id)).toBe("pending-booking-title");
     await page.context().close();
   }, 60_000);
 
@@ -332,10 +386,12 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
     await page.locator("#booking-details").fill("Questions pratiques");
     await page.locator("#availability-status[data-state='available']").waitFor();
     await page.getByRole("button", { name: bookingContent.fr.form.submit }).click();
-    await expect.poll(() => alerts).toEqual([bookingContent.fr.refusals.date_blocked]);
+    await expect.poll(() => submitErrorText(page)).toBe(bookingContent.fr.refusals.date_blocked);
+    expect(alerts).toEqual([]);
 
-    // Jour fermé : la grille ne prétend pas que tout est réservé, comme la ligne d'état.
+    // Jour fermé : la grille ne prétend pas que tout est réservé, comme la ligne d'état ; le jour est marqué invalide (A11Y-10).
     await grid.getByText(bookingContent.fr.form.noSlotsLeftThisDay).waitFor();
+    expect(await page.locator("#booking-day").getAttribute("aria-invalid")).toBe("true");
     expect(await grid.innerText()).not.toContain(bookingContent.fr.form.noSlotsThisDay);
     expect(await page.locator("#availability-status").innerText()).toBe(bookingContent.fr.form.blocked);
     await page.context().close();
@@ -359,6 +415,38 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
     await online.page.locator(`input[name="booking-slot"][value="${draft.appointmentDate}"]:checked`).waitFor({ state: "attached" });
     expect(await online.page.locator("#booking-day").inputValue()).toBe(slot.dayKey);
     await online.page.context().close();
+  }, 60_000);
+
+  it("annonce l'étape courante sur téléphone, ouvre la page par son h1 sans saut de niveau et propose de corriger « gmial.com » (A11Y-10, RES-10)", async () => {
+    const [firstDay] = openDays();
+    const { page, alerts } = await open("/booking", bookingProcedures(), { context: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } });
+    const copy = bookingContent.fr;
+    const currentStep = () => page.locator('[aria-current="step"]').evaluateAll((steps) => steps.map((step) => step.textContent));
+    // Libellés d'étapes masqués à l'écran sur téléphone, mais lus : « Étape 1 sur 3 : Informations ».
+    expect(await currentStep()).toEqual([`${copy.stepOf(1, 3)}Informations`]);
+
+    await page.locator("#booking-name").fill("Test Patient");
+    await page.locator("#booking-email").fill("patient@gmial.com");
+    await page.locator("#booking-phone").focus();
+    await expect.poll(() => page.locator("#booking-email-suggestion").innerText()).toContain(copy.form.emailSuggestion("patient@gmail.com"));
+    await page.getByRole("button", { name: copy.form.useEmailSuggestion }).click();
+    expect(await page.locator("#booking-email").inputValue()).toBe("patient@gmail.com");
+
+    await page.locator("#booking-phone").fill("+33 6 12 34 56 78");
+    await page.locator("#booking-day").selectOption(firstDay);
+    await page.getByRole("group", { name: copy.form.slotsLegend }).getByRole("radio").first().locator("xpath=..").click();
+    await page.locator("#booking-details").fill("Questions pratiques");
+    await page.locator("#availability-status[data-state='available']").waitFor();
+    expect(await currentStep()).toEqual([`${copy.stepOf(3, 3)}Paiement`]);
+    expect(await page.locator("#booking-confirmation-email").innerText()).toBe(copy.form.confirmationTo("patient@gmail.com"));
+
+    // Tarif affiché : aucun titre avant le h1, aucun saut de niveau ensuite.
+    await page.getByRole("heading", { level: 2, name: copy.pricing.title }).waitFor();
+    const levels = await page.locator("h1, h2, h3, h4, h5, h6").evaluateAll((headings) => headings.map((heading) => Number(heading.tagName.slice(1))));
+    expect(levels[0]).toBe(1);
+    levels.forEach((level, index) => { if (index > 0) expect(level, levels.join(" ")).toBeLessThanOrEqual(levels[index - 1] + 1); });
+    expect(alerts).toEqual([]);
+    await page.context().close();
   }, 60_000);
 
   it("rappelle la date, la durée et le montant d'un rendez-vous confirmé et propose le fichier agenda (RES-05)", async () => {
@@ -419,14 +507,17 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
     await page.getByRole("group", { name: bookingContent.en.form.slotsLegend }).getByRole("radio").first().locator("xpath=..").click();
     await page.locator("#booking-details").fill("Practical questions");
 
-    for (let attempt = 1; attempt <= 4; attempt += 1) {
+    const { refusals: messages, bookingError } = bookingContent.en;
+    const expected = [messages.rate_limited, messages.too_many_holds, messages.payment_unavailable, bookingError];
+    for (const message of expected) {
       await page.locator("#availability-status[data-state='available']").waitFor();
       await page.getByRole("button", { name: bookingContent.en.form.submit }).click();
-      await expect.poll(() => alerts.length).toBe(attempt);
+      await expect.poll(() => submitErrorText(page)).toBe(message);
+      expect(message).not.toMatch(/réservation|paiement|Veuillez|créneau/);
     }
-    const { refusals: messages, bookingError } = bookingContent.en;
-    expect(alerts).toEqual([messages.rate_limited, messages.too_many_holds, messages.payment_unavailable, bookingError]);
-    for (const alert of alerts) expect(alert).not.toMatch(/réservation|paiement|Veuillez|créneau/);
+    // Trop d'essais : le message donne le téléphone du cabinet (RES-08).
+    expect(messages.rate_limited).toContain("+33 9 72 15 24 13");
+    expect(alerts).toEqual([]);
     await page.context().close();
   }, 60_000);
 
@@ -456,18 +547,20 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
     await page.locator("#availability-status[data-state='available']").waitFor();
     expect(await page.locator("script#cloudflare-turnstile-script").count()).toBe(0);
     await submit.click();
-    await expect.poll(() => alerts).toEqual([bookingContent.en.refusals.security_check_required]);
+    await expect.poll(() => submitErrorText(page)).toBe(bookingContent.en.refusals.security_check_required);
     expect(createInputs()[0]).not.toHaveProperty("turnstileToken");
 
     for (const attempt of [1, 2]) {
       await expect.poll(() => submit.isEnabled()).toBe(true);
+      // Une seule vérification affichée à la fois (sa clé ne croise pas celle du message de refus).
+      expect(await page.locator("[aria-label='Anti-bot verification']").count()).toBe(1);
       await submit.click();
       await expect.poll(() => createInputs().length).toBe(attempt + 1);
       expect(createInputs()[attempt].turnstileToken).toBe(`fake-turnstile-token-${attempt}-0123456789`);
-      // L’alerte du refus arrive après la requête : attendue avant l’essai suivant.
-      await expect.poll(() => alerts.length).toBe(attempt + 1);
+      // Le refus arrive après la requête (le message précédent a disparu à l’envoi) : attendu avant l’essai suivant.
+      await expect.poll(() => submitErrorText(page)).toBe(bookingContent.en.refusals.slot_taken);
     }
-    await expect.poll(() => alerts.slice(1)).toEqual([bookingContent.en.refusals.slot_taken, bookingContent.en.refusals.slot_taken]);
+    expect(alerts).toEqual([]);
     await page.context().close();
   }, 60_000);
 
