@@ -115,8 +115,19 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
     return { page, calls, alerts };
   }
 
-  /** Refus affiché au-dessus du bouton de paiement (RES-10), ou null : jamais de fenêtre d'alerte. */
-  const submitErrorText = (page: Page) => page.evaluate(() => document.getElementById("booking-submit-error")?.textContent ?? null);
+  /** Refus affiché dans la page (RES-10), sans les horaires proposés après un créneau pris, ou null : jamais de fenêtre d'alerte. */
+  const submitErrorText = (page: Page) => page.evaluate(() => {
+    const message = document.getElementById("booking-submit-error")?.cloneNode(true) as HTMLElement | undefined;
+    message?.querySelector("#booking-nearest-slots")?.remove();
+    return message?.textContent?.trim() ?? null;
+  });
+
+  /** Élément qui a le focus entièrement à l'écran, et premier horaire de la grille visible sous lui. */
+  const focusedRefusalOnScreen = (page: Page) => page.evaluate(() => {
+    const focused = document.activeElement!.getBoundingClientRect();
+    const firstSlot = document.querySelector("#booking-slots label")!.getBoundingClientRect();
+    return focused.top >= 0 && focused.bottom <= window.innerHeight && firstSlot.top >= focused.bottom && firstSlot.top < window.innerHeight;
+  });
 
   const bookingProcedures = (overrides: Record<string, Procedure> = {}): Record<string, Procedure> => ({
     "availability.getSlots": () => EVENING_SLOTS,
@@ -220,15 +231,41 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
     expect(await page.evaluate(() => { const active = document.activeElement; return active?.id === "booking-submit-error" && active.getAttribute("role") === "alert"; })).toBe(true);
     // L'agenda est rechargé pour que la grille ne propose plus l'horaire pris.
     await expect.poll(() => calls.filter((call) => call.procedure === "availability.getBookedSlots").length).toBeGreaterThan(1);
-    // L'horaire pris étant le dernier du jour, les (au plus) trois précédents sont mis en avant, et la grille est à l'écran.
+    // L'horaire pris étant le dernier du jour, les (au plus) trois précédents sont mis en avant, et dits dans le message, en tête de la grille.
     const nearest = values.filter((value) => value !== chosen).slice(-3);
     expect(await grid.locator("label[data-suggested] input").evaluateAll((radios) => radios.map((radio) => (radio as HTMLInputElement).value))).toEqual(nearest);
+    expect(await grid.locator("#booking-submit-error").count()).toBe(1);
     if (nearest.length > 0) {
       const times = nearest.map((value) => new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "Europe/Paris" }).format(new Date(value)));
-      expect(await page.locator("#booking-nearest-slots").innerText()).toBe(bookingContent.en.form.nearestSlots(times));
+      expect(await page.locator("#booking-submit-error #booking-nearest-slots").innerText()).toBe(bookingContent.en.form.nearestSlots(times));
     }
-    // Défilement doux de la page (scroll-behavior: smooth) : la grille arrive à l'écran en quelques centaines de millisecondes.
-    await expect.poll(() => grid.evaluate((element) => { const box = element.getBoundingClientRect(); return box.top >= 0 && box.bottom <= window.innerHeight; }), { timeout: 5_000 }).toBe(true);
+    // Défilement doux de la page (scroll-behavior: smooth) : le message qui a le focus arrive à l'écran, les horaires sous lui.
+    await expect.poll(() => focusedRefusalOnScreen(page), { timeout: 5_000 }).toBe(true);
+    await page.context().close();
+  }, 60_000);
+
+  it("garde à l'écran, sur téléphone, le refus d'un créneau pris qui a le focus, avec les horaires sous lui (RES-10)", async () => {
+    const [firstDay] = openDays();
+    const { page, alerts } = await open("/booking", bookingProcedures({
+      "appointments.create": () => refuse("CONFLICT", 409, "Ce créneau vient d’être réservé par un autre patient. Veuillez en choisir un autre.", "slot_taken"),
+    }), { context: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } });
+    const grid = page.getByRole("group", { name: bookingContent.fr.form.slotsLegend });
+    await page.locator("#booking-name").fill("Test Patient");
+    await page.locator("#booking-email").fill("patient@example.test");
+    await page.locator("#booking-phone").fill("+33 6 12 34 56 78");
+    await page.locator("#booking-day").selectOption(firstDay);
+    await grid.getByRole("radio").first().locator("xpath=..").click();
+    await page.locator("#booking-details").fill("Questions pratiques");
+    await page.locator("#availability-status[data-state='available']").waitFor();
+    await page.getByRole("button", { name: bookingContent.fr.form.submit }).click();
+
+    await expect.poll(() => submitErrorText(page)).toBe(bookingContent.fr.refusals.slot_taken);
+    expect(await page.evaluate(() => document.activeElement?.id)).toBe("booking-submit-error");
+    await expect.poll(() => focusedRefusalOnScreen(page), { timeout: 5_000 }).toBe(true);
+    // Tab depuis le message mène aux horaires, juste en dessous.
+    await page.keyboard.press("Tab");
+    expect(await page.evaluate(() => (document.activeElement as HTMLInputElement | null)?.name)).toBe("booking-slot");
+    expect(alerts).toEqual([]);
     await page.context().close();
   }, 60_000);
 
@@ -352,8 +389,9 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
     await expect.poll(() => submitErrorText(page)).toBe(bookingContent.fr.refusals.date_blocked);
     expect(alerts).toEqual([]);
 
-    // Jour fermé : la grille ne prétend pas que tout est réservé, comme la ligne d'état.
+    // Jour fermé : la grille ne prétend pas que tout est réservé, comme la ligne d'état ; le jour est marqué invalide (A11Y-10).
     await grid.getByText(bookingContent.fr.form.noSlotsLeftThisDay).waitFor();
+    expect(await page.locator("#booking-day").getAttribute("aria-invalid")).toBe("true");
     expect(await grid.innerText()).not.toContain(bookingContent.fr.form.noSlotsThisDay);
     expect(await page.locator("#availability-status").innerText()).toBe(bookingContent.fr.form.blocked);
     await page.context().close();

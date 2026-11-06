@@ -30,6 +30,7 @@ import {
   BOOKING_REQUEST_SUBJECT_MAX_LENGTH,
   BOOKING_HORIZON_MS,
   getBookingWindowIssue,
+  isBookingEmailAddress,
   isBookingRefusalReason,
   isPlausiblePhoneNumber,
   normalizePhoneInput,
@@ -84,6 +85,7 @@ export const bookingContent = {
       tooSoon: bookingWindowMessages.fr.tooSoon,
       tooFar: bookingWindowMessages.fr.tooFar,
       invalidPhone: "Saisissez un numéro de téléphone valide, avec l’indicatif du pays précédé de + ou 00 (8 à 15 chiffres, ex. +33 6 12 34 56 78).",
+      phoneHint: "Avec l’indicatif du pays, par exemple +33 6 12 34 56 78.",
       invalidEmail: "Saisissez une adresse email complète, par exemple nom@exemple.fr.",
       emailSuggestion: (address: string) => `Vouliez-vous dire ${address} ?`,
       useEmailSuggestion: "Corriger l’adresse",
@@ -188,6 +190,7 @@ export const bookingContent = {
       tooSoon: bookingWindowMessages.en.tooSoon,
       tooFar: bookingWindowMessages.en.tooFar,
       invalidPhone: "Enter a valid phone number with its country code, after + or 00 (8 to 15 digits, e.g. +33 6 12 34 56 78).",
+      phoneHint: "With your country code, for example +33 6 12 34 56 78.",
       invalidEmail: "Enter a complete email address, for example name@example.com.",
       emailSuggestion: (address: string) => `Did you mean ${address}?`,
       useEmailSuggestion: "Use this address",
@@ -290,6 +293,7 @@ export const bookingContent = {
       tooSoon: bookingWindowMessages.de.tooSoon,
       tooFar: bookingWindowMessages.de.tooFar,
       invalidPhone: "Geben Sie eine gültige Telefonnummer mit Ländervorwahl nach + oder 00 ein (8 bis 15 Ziffern, z. B. +49 30 1234567).",
+      phoneHint: "Mit Ländervorwahl, zum Beispiel +49 30 1234567.",
       invalidEmail: "Geben Sie eine vollständige E-Mail-Adresse ein, zum Beispiel name@beispiel.de.",
       emailSuggestion: (address: string) => `Meinten Sie ${address}?`,
       useEmailSuggestion: "Diese Adresse verwenden",
@@ -392,6 +396,7 @@ export const bookingContent = {
       tooSoon: bookingWindowMessages.zh.tooSoon,
       tooFar: bookingWindowMessages.zh.tooFar,
       invalidPhone: "请输入有效的电话号码，并在 + 或 00 后填写国家区号（8 至 15 位数字，例如 +33 6 12 34 56 78）。",
+      phoneHint: "请填写国家区号，例如 +33 6 12 34 56 78。",
       invalidEmail: "请输入完整的电子邮件地址，例如 name@example.com。",
       emailSuggestion: (address: string) => `您是否想输入 ${address}？`,
       useEmailSuggestion: "使用此地址",
@@ -636,15 +641,6 @@ export function nearestFreeSlots<T extends BookingSlotOption>(options: T[], take
     .sort((a, b) => a.start.getTime() - b.start.getTime());
 }
 
-/**
- * Address the confirmation and the invoice can reach (RES-10): a domain with a
- * dot and an extension of two characters at least. "patient@gmail" passes the
- * browser's own check, never the server's.
- */
-export function isCompleteEmailAddress(value: string): boolean {
-  return /^[^\s@]+@(?:[^\s@.]+\.)+[^\s@.]{2,}$/.test(value.trim());
-}
-
 // Fautes de frappe courantes dans le domaine d’une adresse : proposées, jamais imposées.
 const BOOKING_EMAIL_DOMAIN_TYPOS = new Map([
   ["gmail", "gmail.com"], ["gmial.com", "gmail.com"], ["gmal.com", "gmail.com"], ["gmai.com", "gmail.com"], ["gamil.com", "gmail.com"], ["gnail.com", "gmail.com"], ["gmail.con", "gmail.com"],
@@ -832,9 +828,10 @@ export default function BookingPage() {
   // Adresse sans domaine complet : erreur sous le champ ; faute de frappe courante : correction proposée, sans bloquer (RES-10).
   const [emailError, setEmailError] = useState<string | null>(null);
   const [emailSuggestion, setEmailSuggestion] = useState<string | null>(null);
-  // Refus de l’envoi affiché au-dessus du bouton de paiement, qui prend le focus (RES-10, A11Y-10) :
-  // une clé neuve à chaque refus, pour qu’un même message soit de nouveau annoncé. Créneau pris :
-  // la grille, amenée à l’écran, met en avant les horaires libres les plus proches.
+  // Refus de l’envoi affiché dans la page, qui prend le focus (RES-10, A11Y-10) : une clé neuve à
+  // chaque refus, pour qu’un même message soit de nouveau annoncé. Créneau pris : le message passe
+  // en tête de la grille, amenée à l’écran, qui met en avant les horaires libres les plus proches ;
+  // sinon il reste au-dessus du bouton de paiement.
   const [submitError, setSubmitError] = useState<{ message: string; key: number; revealSlots: boolean } | null>(null);
   const submitErrorRef = useRef<HTMLParagraphElement>(null);
   const submitErrorCountRef = useRef(0);
@@ -1045,6 +1042,7 @@ export default function BookingPage() {
     setDayKey(nextDayKey);
     if (selectedDate && toParisBookingDateKey(selectedDate) !== nextDayKey) setSelectedDate(null);
     setTakenSlot(null);
+    setSubmitError(null);
   };
 
   // Nouvel horaire choisi : le refus et les horaires proposés à la place de l’ancien n’ont plus lieu d’être.
@@ -1060,10 +1058,12 @@ export default function BookingPage() {
   };
 
   useEffect(() => {
-    if (!submitError) return;
-    // Créneau pris : le message garde le focus (et reste annoncé), la grille vient à l’écran.
-    submitErrorRef.current?.focus({ preventScroll: submitError.revealSlots });
-    if (submitError.revealSlots) slotsFieldsetRef.current?.scrollIntoView?.({ block: "center" });
+    const message = submitErrorRef.current;
+    if (!submitError || !message) return;
+    // Créneau pris : le message prend le focus en tête de la grille, qui vient en haut de l’écran
+    // (sous l’en-tête fixe) avec les horaires proposés sous lui. Sinon, au-dessus du bouton, il est déjà en vue.
+    message.focus({ preventScroll: submitError.revealSlots });
+    if (submitError.revealSlots) message.scrollIntoView?.({ block: "start" });
   }, [submitError]);
 
   // Retour depuis Stripe (bouton Précédent, rechargement, page restaurée du
@@ -1182,8 +1182,9 @@ export default function BookingPage() {
       return;
     }
 
+    // Même règle que le serveur : une adresse qu’il refuserait l’est ici, sous le champ (RES-10).
     const email = formData.email.trim();
-    if (!isCompleteEmailAddress(email)) {
+    if (!isBookingEmailAddress(email)) {
       setEmailError(content.form.invalidEmail);
       setEmailSuggestion(suggestBookingEmail(email));
       document.getElementById("booking-email")?.focus();
@@ -1211,7 +1212,7 @@ export default function BookingPage() {
     try {
       const appointmentResult = await createAppointment.mutateAsync({
         customerName: formData.name,
-        customerEmail: formData.email,
+        customerEmail: email,
         customerPhone: phone,
         appointmentDate: selectedDate.toISOString(),
         requestDetails: formData.details,
@@ -1270,7 +1271,22 @@ export default function BookingPage() {
   };
 
   const isLoading = createAppointment.isPending;
-  const confirmationEmail = isCompleteEmailAddress(formData.email) ? formData.email.trim() : null;
+  const confirmationEmail = isBookingEmailAddress(formData.email.trim()) ? formData.email.trim() : null;
+  // Refus d’un horaire (créneau pris) affiché en tête de la grille, avec les horaires libres les plus
+  // proches dans le texte annoncé ; tout autre refus au-dessus du bouton de paiement (RES-10, A11Y-10).
+  const slotRefusalInGrid = Boolean(submitError?.revealSlots && dayKey);
+  const nearestSlotsShown = slotRefusalInGrid && suggestedSlots.length > 0 && !bookedSlots.isError && !slotsRetrying;
+  const submitErrorMessage = submitError && (
+    <p key={`submit-error-${submitError.key}`} id="booking-submit-error" ref={submitErrorRef} tabIndex={-1} className={`rounded-xl border border-destructive/35 bg-destructive/5 p-4 text-sm text-destructive focus:outline-none${slotRefusalInGrid ? " mb-3" : ""}`} role="alert">
+      {submitError.message}
+      {nearestSlotsShown && (
+        <>
+          {" "}
+          <span id="booking-nearest-slots" className="mt-1 block font-medium text-foreground">{content.form.nearestSlots(suggestedSlots.map((slot) => slot.time))}</span>
+        </>
+      )}
+    </p>
+  );
 
   // Progress steps
   const steps = [
@@ -1497,12 +1513,12 @@ export default function BookingPage() {
                 value={formData.email}
                 onChange={(e) => {
                   setFormData({ ...formData, email: e.target.value });
-                  if (emailError && isCompleteEmailAddress(e.target.value)) setEmailError(null);
+                  if (emailError && isBookingEmailAddress(e.target.value.trim())) setEmailError(null);
                   setEmailSuggestion(null);
                 }}
                 onBlur={() => {
                   const email = formData.email.trim();
-                  setEmailError(email && !isCompleteEmailAddress(email) ? content.form.invalidEmail : null);
+                  setEmailError(email && !isBookingEmailAddress(email) ? content.form.invalidEmail : null);
                   setEmailSuggestion(suggestBookingEmail(email));
                 }}
                 autoComplete="email"
@@ -1541,6 +1557,8 @@ export default function BookingPage() {
                 <Phone className="w-4 h-4" aria-hidden="true" />
                 {content.form.phone}
               </label>
+              {/* Indicatif exigé (INTL-09) : dit avant la saisie, pas seulement par l’erreur. */}
+              <p id="booking-phone-hint" className="mb-2 text-xs leading-5 text-muted-foreground">{content.form.phoneHint}</p>
               <input
                 id="booking-phone"
                 type="tel"
@@ -1556,7 +1574,7 @@ export default function BookingPage() {
                 enterKeyHint="next"
                 maxLength={50}
                 aria-invalid={phoneError ? true : undefined}
-                aria-describedby={phoneError ? "booking-phone-error" : undefined}
+                aria-describedby={phoneError ? "booking-phone-hint booking-phone-error" : "booking-phone-hint"}
                 className="form-field-premium w-full px-4 py-2 border"
               />
               {phoneError && <p id="booking-phone-error" className="mt-2 text-sm text-destructive" role="alert">{phoneError}</p>}
@@ -1590,6 +1608,7 @@ export default function BookingPage() {
                 onChange={(e) => chooseDay(e.target.value)}
                 disabled={dayOptions.length === 0}
                 aria-describedby="booking-opening-hours booking-date-hint availability-status"
+                aria-invalid={isBlockedDate || undefined}
                 className="form-field-premium h-11 w-full border px-4 py-2"
               >
                 <option value="">{content.form.dayPlaceholder}</option>
@@ -1599,11 +1618,9 @@ export default function BookingPage() {
               </select>
               {dayKey && (
                 // Boutons radio natifs : Tab entre dans la grille, les flèches changent d’horaire.
-                <fieldset ref={slotsFieldsetRef} className="mt-4" aria-describedby={`${suggestedSlots.length > 0 ? "booking-nearest-slots " : ""}booking-date-hint availability-status`}>
+                <fieldset ref={slotsFieldsetRef} className="mt-4" aria-describedby={`${nearestSlotsShown ? "booking-nearest-slots " : ""}booking-date-hint availability-status`}>
                   <legend className="block text-xs font-medium mb-2">{content.form.slotsLegend}</legend>
-                  {suggestedSlots.length > 0 && !bookedSlots.isError && !slotsRetrying && (
-                    <p id="booking-nearest-slots" className="mb-2 text-sm font-medium text-primary">{content.form.nearestSlots(suggestedSlots.map((slot) => slot.time))}</p>
-                  )}
+                  {slotRefusalInGrid && submitErrorMessage}
                   {bookedSlots.isLoading && !slotsRetrying ? (
                     <p className="text-sm text-muted-foreground">{bookingFormCopy.checkingAvailability}</p>
                   ) : bookedSlots.isError || slotsRetrying ? (
@@ -1725,11 +1742,7 @@ export default function BookingPage() {
             )}
 
             {/* Refus de l’envoi, dans la page plutôt qu’en fenêtre d’alerte (RES-10, A11Y-10). */}
-            {submitError && (
-              <p key={`submit-error-${submitError.key}`} id="booking-submit-error" ref={submitErrorRef} tabIndex={-1} className="rounded-xl border border-destructive/35 bg-destructive/5 p-4 text-sm text-destructive focus:outline-none" role="alert">
-                {submitError.message}
-              </p>
-            )}
+            {!slotRefusalInGrid && submitErrorMessage}
 
             {/* Submit Button */}
             <Button

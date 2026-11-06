@@ -188,16 +188,20 @@ describe("formulaire de réservation", () => {
     view.language = "en";
     await submit();
     messages.push(submitError());
-    expect(messages.at(-1)).toBe(content("en").refusals.slot_taken);
+    // Créneau pris : les horaires libres les plus proches font partie du message annoncé.
+    expect(messages.at(-1)).toBe(`${content("en").refusals.slot_taken} ${textOf(byId("booking-nearest-slots"))}`);
     for (const message of messages) expect(message).not.toMatch(/duplicate key|constraint|Ce créneau vient/);
     expect(alert).not.toHaveBeenCalled();
   });
 
   it("contrôle le téléphone côté client, sans rien envoyer, avec un message lié au champ", async () => {
+    // L’indicatif exigé est dit avant la saisie, et reste lié au champ (INTL-09).
+    expect(byId("booking-phone").props["aria-describedby"]).toBe("booking-phone-hint");
+    expect(textOf(byId("booking-phone-hint"))).toBe(content().form.phoneHint);
     fillForm("12");
     await submit();
     expect(view.create).not.toHaveBeenCalled();
-    expect(byId("booking-phone").props).toMatchObject({ "aria-invalid": true, "aria-describedby": "booking-phone-error" });
+    expect(byId("booking-phone").props).toMatchObject({ "aria-invalid": true, "aria-describedby": "booking-phone-hint booking-phone-error" });
     expect(textOf(byId("booking-phone-error"))).toBe(content().form.invalidPhone);
 
     type("booking-phone", "+33 6 12 34 56 78");

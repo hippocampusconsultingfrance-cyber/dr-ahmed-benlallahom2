@@ -18,7 +18,7 @@ describe("localisation de la réservation", () => {
     });
   });
 
-  it("donne dans les quatre langues le téléphone du cabinet après trop d’essais, l’adresse de confirmation, la correction proposée et l’étape courante (RES-08, RES-10, A11Y-10)", () => {
+  it("donne dans les quatre langues le téléphone du cabinet après trop d’essais, l’adresse de confirmation, la correction proposée, l’indicatif attendu et l’étape courante (RES-08, RES-10, A11Y-10, INTL-09)", () => {
     Object.values(bookingContent).forEach(content => {
       expect(content.refusals.rate_limited).toContain(siteConfig.phone);
       expect(content.form.confirmationTo("jeanne@example.test")).toContain("jeanne@example.test");
@@ -26,6 +26,8 @@ describe("localisation de la réservation", () => {
       expect(content.form.nearestSlots(["18:30", "19:00"])).toMatch(/18:30.+19:00/);
       expect(content.stepOf(2, 3)).toMatch(/2.+3/);
       expect(content.form.invalidEmail && content.form.useEmailSuggestion && content.form.suggestedSlot).toBeTruthy();
+      // L’indicatif demandé dès le champ, avec un exemple (INTL-09).
+      expect(content.form.phoneHint).toMatch(/\+\d/);
     });
   });
 

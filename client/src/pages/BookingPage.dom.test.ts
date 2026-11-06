@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // sont simulés au niveau tRPC, la création passe par React Query comme dans
 // l’application.
 
-const view = vi.hoisted(() => ({ create: vi.fn() }));
+const view = vi.hoisted(() => ({ create: vi.fn(), blocked: [] as Array<{ date: string }> }));
 
 vi.mock("@/lib/trpc", async () => {
   const { useMutation } = await import("@tanstack/react-query");
@@ -23,7 +23,12 @@ vi.mock("@/lib/trpc", async () => {
   const unused = { useMutation: () => ({ mutateAsync: async () => undefined, isPending: false }) };
   return {
     trpc: {
-      availability: { getBlockedDates: loaded([]), getBookedSlots: loaded([]), getSlots: loaded(week) },
+      availability: {
+        // Dates fermées lues à chaque rendu : un test peut en fermer une après le choix du jour.
+        getBlockedDates: { useQuery: () => ({ ...loaded([]).useQuery(), data: view.blocked }) },
+        getBookedSlots: loaded([]),
+        getSlots: loaded(week),
+      },
       appointments: {
         calculatePrice: loaded({ finalPrice: 100, isNightRate: false }),
         create: { useMutation: () => useMutation({ mutationFn: (input: unknown) => view.create(input) }) },
@@ -69,6 +74,7 @@ beforeEach(() => {
   vi.setSystemTime(new Date("2026-11-02T07:00:00.000Z"));
   localStorage.setItem("language", "fr");
   view.create = vi.fn(async () => CREATED);
+  view.blocked = [];
   assign = vi.fn();
   alert = vi.fn();
   // Leaving for Stripe is recorded instead of navigating.
@@ -133,7 +139,7 @@ const parisTime = (iso: string) => new Intl.DateTimeFormat("fr-FR", { hour: "2-d
 const pay = () => fireEvent.click(screen.getByRole("button", { name: copy.submit }));
 
 describe("erreurs et repères du parcours de réservation (RES-10, A11Y-10, INTL-09)", () => {
-  it("affiche un créneau pris dans la page, avec le focus, puis amène la grille et y met en avant les horaires libres les plus proches", async () => {
+  it("affiche un créneau pris en tête de la grille, avec le focus et les horaires libres les plus proches dans le message, et amène la grille à l’écran", async () => {
     const scrollIntoView = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => undefined);
     mount();
     const chosen = fillForm();
@@ -141,7 +147,6 @@ describe("erreurs et repères du parcours de réservation (RES-10, A11Y-10, INTL
     pay();
 
     const refusal = await screen.findByRole("alert");
-    expect(refusal.textContent).toBe(content.refusals.slot_taken);
     await waitFor(() => expect(document.activeElement).toBe(refusal));
     expect(alert).not.toHaveBeenCalled();
 
@@ -151,15 +156,33 @@ describe("erreurs et repères du parcours de réservation (RES-10, A11Y-10, INTL
     expect(values[0]).toBe(chosen);
     const suggested = [...grid.querySelectorAll<HTMLInputElement>("label[data-suggested] input")].map(radio => radio.value);
     expect(suggested).toEqual(values.slice(1, 4));
-    expect(document.getElementById("booking-nearest-slots")!.textContent).toBe(content.form.nearestSlots(suggested.map(parisTime)));
+    // Le message annoncé dit le refus et propose ces horaires ; il est dans la grille, avant les horaires.
+    expect(refusal.textContent).toBe(`${content.refusals.slot_taken} ${content.form.nearestSlots(suggested.map(parisTime))}`);
+    expect(grid.contains(refusal)).toBe(true);
+    expect(refusal.compareDocumentPosition(grid.querySelector('input[name="booking-slot"]')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(grid.getAttribute("aria-describedby")!.split(" ")).toContain("booking-nearest-slots");
-    expect(scrollIntoView.mock.contexts).toContain(grid);
+    // Le message, en haut de l’écran, avec la grille sous lui.
+    expect(scrollIntoView.mock.contexts).toContain(refusal);
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "start" });
 
     // L’horaire proposé choisi, le refus et la mise en avant disparaissent.
     fireEvent.click(grid.querySelector<HTMLInputElement>(`input[value="${suggested[0]}"]`)!);
     await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
     expect(grid.querySelectorAll("label[data-suggested]")).toHaveLength(0);
     expect(document.getElementById("booking-nearest-slots")).toBeNull();
+  });
+
+  it("retire le refus d’un créneau pris quand le patient choisit un autre jour", async () => {
+    vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => undefined);
+    mount();
+    fillForm();
+    view.create = vi.fn(async () => { throw Object.assign(new Error("Ce créneau vient d’être réservé."), { data: { code: "CONFLICT", reason: "slot_taken" } }); });
+    pay();
+    await screen.findByRole("alert");
+
+    const otherDay = [...(field("booking-day") as unknown as HTMLSelectElement).options].filter(option => option.value)[1];
+    fireEvent.change(field("booking-day"), { target: { value: otherDay.value } });
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
   });
 
   it("annonce de nouveau un refus identique, avec le focus", async () => {
@@ -232,6 +255,24 @@ describe("erreurs et repères du parcours de réservation (RES-10, A11Y-10, INTL
     expect(document.getElementById("booking-confirmation-email")!.textContent).toBe(content.form.confirmationTo("jeanne@gmail.com"));
   });
 
+  it("refuse sous le champ, sans rien envoyer, une adresse que le serveur refuserait (RES-10)", async () => {
+    mount();
+    fillForm();
+    for (const address of ["jean@gmail.c0m", "jean@gmail.com1", "jean..x@exemple.fr", "jean.@exemple.fr"]) {
+      fireEvent.change(field("booking-email"), { target: { value: address } });
+      pay();
+      expect(document.getElementById("booking-email-error")?.textContent, address).toBe(content.form.invalidEmail);
+      expect(document.activeElement, address).toBe(field("booking-email"));
+      expect(document.getElementById("booking-confirmation-email"), address).toBeNull();
+    }
+    expect(view.create).not.toHaveBeenCalled();
+
+    // Corrigée, l’adresse part sans espace autour.
+    fireEvent.change(field("booking-email"), { target: { value: " jean@gmail.com " } });
+    pay();
+    await waitFor(() => expect(view.create).toHaveBeenCalledWith(expect.objectContaining({ customerEmail: "jean@gmail.com" })));
+  });
+
   it("ne bloque pas une adresse complète même quand une correction est proposée, et la rappelle avant le paiement", async () => {
     mount();
     fillForm();
@@ -250,11 +291,15 @@ describe("erreurs et repères du parcours de réservation (RES-10, A11Y-10, INTL
 
   it("demande l’indicatif d’un numéro local, et envoie en chiffres 0-9 un numéro collé en chiffres arabes", async () => {
     mount();
+    // L’indicatif est demandé dès le champ, avant toute erreur (INTL-09).
+    expect(field("booking-phone").getAttribute("aria-describedby")).toBe("booking-phone-hint");
+    expect(document.getElementById("booking-phone-hint")!.textContent).toBe(content.form.phoneHint);
     fillForm();
     fireEvent.change(field("booking-phone"), { target: { value: "0612345678" } });
     pay();
     expect(view.create).not.toHaveBeenCalled();
     expect(document.getElementById("booking-phone-error")!.textContent).toBe(content.form.invalidPhone);
+    expect(field("booking-phone").getAttribute("aria-describedby")).toBe("booking-phone-hint booking-phone-error");
     expect(document.activeElement).toBe(field("booking-phone"));
 
     // Numéro copié d’un répertoire en arabe, entouré de marques de direction.
@@ -274,6 +319,7 @@ describe("erreurs et repères du parcours de réservation (RES-10, A11Y-10, INTL
 
     expect(document.getElementById("booking-date-hint")!.textContent).toContain(content.form.dateHint);
     expect(field("booking-day").getAttribute("aria-describedby")!.split(" ")).toContain("booking-date-hint");
+    expect(field("booking-day").hasAttribute("aria-invalid")).toBe(false);
     expect(screen.getByRole("group", { name: content.form.slotsLegend }).getAttribute("aria-describedby")!.split(" ")).toContain("booking-date-hint");
 
     // Tarif affiché : « Tarification » est un h2 sous le h1, et aucun titre ne précède le h1.
@@ -281,6 +327,17 @@ describe("erreurs et repères du parcours de réservation (RES-10, A11Y-10, INTL
     const levels = [...document.getElementById("main-content")!.querySelectorAll("h1, h2, h3, h4, h5, h6")].map(heading => Number(heading.tagName.slice(1)));
     expect(levels[0]).toBe(1);
     levels.forEach((level, index) => { if (index > 0) expect(level, `${levels}`).toBeLessThanOrEqual(levels[index - 1] + 1); });
+  });
+
+  it("marque le jour choisi comme invalide quand il vient d’être fermé (A11Y-10)", async () => {
+    mount();
+    fillForm();
+    expect(field("booking-day").hasAttribute("aria-invalid")).toBe(false);
+    // Dates fermées rechargées : lues au rendu suivant de la page (ici, une saisie).
+    view.blocked = [{ date: (field("booking-day") as unknown as HTMLSelectElement).value }];
+    fireEvent.change(field("booking-details"), { target: { value: "Organisation" } });
+    await waitFor(() => expect(field("booking-day").getAttribute("aria-invalid")).toBe("true"));
+    expect(document.getElementById("availability-status")!.textContent).toContain(copy.blocked);
   });
 
   it("place le focus sur le titre du paiement en attente retrouvé au retour de Stripe", async () => {
