@@ -84,7 +84,7 @@ describe("REC-05 — catégorie du document dans le coffre", () => {
 
   it("refuse l’envoi tant que le type n’est pas choisi, même si tout le reste est prêt", () => {
     const copy = candidatePortalCopy.fr;
-    const ready = { file: { size: 2048 }, otherLabel: "", turnstileToken: "turnstile-token" };
+    const ready = { file: { name: "diplome.pdf", size: 2048 }, otherLabel: "", turnstileToken: "turnstile-token" };
 
     expect(candidateUploadProblem({ ...ready, category: "" }, copy)).toBe(copy.categoryRequired);
     expect(candidateUploadProblem({ ...ready, category: "identity_document" }, copy)).toBeNull();
@@ -107,7 +107,7 @@ describe("REC-05 — catégorie du document dans le coffre", () => {
   it.each(languages)("relie « choisissez le type » au déclencheur de catégorie, et à lui seul (%s)", language => {
     const copy = candidatePortalCopy[language];
     const html = renderPortal(language);
-    const message = candidateUploadProblem({ file: { size: 2048 }, category: "", otherLabel: "", turnstileToken: "turnstile-token" }, copy) ?? "";
+    const message = candidateUploadProblem({ file: { name: "diplome.pdf", size: 2048 }, category: "", otherLabel: "", turnstileToken: "turnstile-token" }, copy) ?? "";
     const field = candidateUploadProblemField(message, copy);
 
     expect(field).toBe("candidate-document-category");
@@ -160,6 +160,31 @@ describe("REC-05 — catégorie du document dans le coffre", () => {
     // The anti-bot check is not a field the visitor can type into: focus stays where it is.
     focusCandidateUploadProblem(copy.turnstile, copy);
     expect(frames).toHaveLength(0);
+  });
+});
+
+describe("REC-15 — document Word ancien (.doc) dans le coffre", () => {
+  it.each(languages)("ne le propose plus au sélecteur de fichier et l’annonce sans .doc (%s)", language => {
+    const copy = candidatePortalCopy[language];
+    const input = renderPortal(language).match(/<input[^>]*id="candidate-document-file"[^>]*>/)?.[0] ?? "";
+
+    expect(input).toContain('accept=".pdf,.docx,.jpg,.jpeg,.png"');
+    expect(copy.uploadDescription).toContain("DOCX");
+    expect(copy.uploadDescription).not.toMatch(/\bDOC\b/);
+  });
+
+  it.each(languages)("refuse un .doc avant l’envoi, sur le champ fichier, et accepte un .docx (%s)", language => {
+    const copy = candidatePortalCopy[language];
+    const ready = { category: "diploma" as const, otherLabel: "", turnstileToken: "turnstile-token" };
+
+    for (const name of ["diplome.doc", "DIPLOME.DOC", "diplome.docm", "diplome"]) {
+      expect(candidateUploadProblem({ ...ready, file: { name, size: 2048 } }, copy), name).toBe(copy.fileTypeRefused);
+    }
+    expect(candidateUploadProblemField(copy.fileTypeRefused, copy)).toBe("candidate-document-file");
+    expect(candidateUploadFieldDescription("candidate-document-file", copy.fileTypeRefused, copy, "candidate-document-limit")).toBe("candidate-document-upload-message candidate-document-limit");
+    for (const name of ["diplome.docx", "diplome.DOCX", "diplome.pdf", "photo.JPG", "photo.jpeg", "scan.png"]) {
+      expect(candidateUploadProblem({ ...ready, file: { name, size: 2048 } }, copy), name).toBeNull();
+    }
   });
 });
 

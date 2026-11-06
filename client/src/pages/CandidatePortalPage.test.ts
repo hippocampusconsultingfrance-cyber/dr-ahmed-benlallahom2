@@ -136,6 +136,29 @@ describe("états du coffre candidat", () => {
   });
 });
 
+describe("REC-15 — choix d’un document Word ancien (.doc)", () => {
+  it("le retire du champ dès le choix et dit quoi faire, puis accepte le même document en DOCX", () => {
+    const copy = candidatePortalCopy.fr;
+    const fileInput = () => elementsOf(renderStateful(CandidatePortalPage)).find(element => element.props.id === "candidate-document-file")!;
+    const message = () => elementsOf(renderStateful(CandidatePortalPage)).find(element => element.props.id === "candidate-document-upload-message")!.props.children;
+    const choose = (name: string) => {
+      const target = { files: [{ name, size: 4096, type: "" }], value: `C:\\fakepath\\${name}` };
+      (fileInput().props.onChange as (event: { target: typeof target }) => void)({ target });
+      return target;
+    };
+
+    const legacy = choose("diplome.doc");
+    expect(legacy.value).toBe("");
+    expect(message()).toBe(copy.fileTypeRefused);
+    expect(fileInput().props["aria-invalid"]).toBe(true);
+
+    const resaved = choose("diplome.docx");
+    expect(resaved.value).toBe("C:\\fakepath\\diplome.docx");
+    expect(message()).toBe("");
+    expect(fileInput().props["aria-invalid"]).toBe(false);
+  });
+});
+
 describe("CAND-10 — retour vers la connexion", () => {
   it("n’éjecte pas le candidat tant que la session est en cours de vérification", () => {
     expect(shouldRedirectToCandidateAccess({ isLoading: false, isFetching: true, data: null })).toBe(false);

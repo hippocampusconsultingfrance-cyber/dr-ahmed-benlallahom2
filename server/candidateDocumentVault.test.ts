@@ -14,6 +14,7 @@ import { createInMemoryDrizzle, type InMemoryDrizzle } from "./testSupport/inMem
 import { TEST_PEPPER } from "./testSupport/candidatePortal";
 import { listen, seedVerifiedCandidate, uploadDocument, validPdfBuffer } from "./testSupport/candidateUploadApp";
 import { libreOfficeCvPdf, packPdfIntoObjectStream } from "./testing/pdfFixture";
+import { buildZip } from "./testing/zipFixture";
 import { candidateDocumentRefusalMessage } from "../client/src/lib/candidateDocumentUploadErrors";
 
 const state = vi.hoisted(() => {
@@ -295,5 +296,28 @@ describe("DATA-01 — document envoyé pendant l’effacement du compte", () => 
     expect(state.blobs.size).toBe(0);
     expect(db().rows(candidateDocumentProcessingJobs)).toHaveLength(0);
     expect(db().rows(candidateDocumentAuditLogs)).toHaveLength(0);
+  });
+});
+
+describe("REC-15 — document Word ancien (.doc) déposé dans le coffre", () => {
+  it("le refuse avec le code stable que le portail traduit, sans rien stocker, et accepte le même document en DOCX", async () => {
+    const doc = Buffer.concat([Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]), Buffer.alloc(2048, 0)]);
+    const result = await uploadDocument(baseUrl, sessionToken, { category: "diploma", buffer: doc, name: "diplome.doc", type: "application/msword" });
+    expect(result.status).toBe(400);
+    expect(result.body.code).toBe("candidate_document_type_mismatch");
+    expect(String(result.body.error)).toContain("Réenregistrez-le en DOCX");
+    expect(candidateDocumentRefusalMessage(result.body, "fr")).toBe(result.body.error);
+    expect(candidateDocumentRefusalMessage(result.body, "en")).toContain("Save it again as a DOCX");
+    expect(state.stored).toHaveLength(0);
+    expect(db().rows(candidateDocuments)).toHaveLength(0);
+
+    // The same diploma saved again as a DOCX goes through.
+    const docx = buildZip([
+      { name: "[Content_Types].xml", content: '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/></Types>' },
+      { name: "word/document.xml", content: '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Diplôme</w:t></w:r></w:p></w:body></w:document>' },
+    ]);
+    const resaved = await uploadDocument(baseUrl, sessionToken, { category: "diploma", buffer: docx, name: "diplome.docx", type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+    expect(resaved.status).toBe(201);
+    expect(db().rows(candidateDocuments)).toHaveLength(1);
   });
 });
