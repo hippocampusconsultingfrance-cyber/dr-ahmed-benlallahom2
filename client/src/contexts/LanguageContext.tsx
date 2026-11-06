@@ -4,7 +4,7 @@ import { contentEn } from "@/data/content-en";
 import { contentDe } from "@/data/content-de";
 import { contentZh } from "@/data/content-zh";
 import { siteConfig } from "@/data/site-config";
-import { getNextLanguage, readLanguagePreference, type UserLanguage } from "./userPreferences";
+import { getNextLanguage, readLanguageParameter, readLanguagePreference, removeLanguageParameter, type UserLanguage } from "./userPreferences";
 
 type Language = UserLanguage;
 type Content = typeof contentFr;
@@ -20,7 +20,9 @@ const LanguageContext = createContext<LanguageContextType | undefined>(undefined
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [language, setLanguage] = useState<Language>(() => {
     if (typeof window !== "undefined") {
-      return readLanguagePreference(localStorage.getItem("language"), siteConfig.defaultLanguage as Language);
+      // Un lien en ?lang=en|fr|de|zh l’emporte sur la langue mémorisée (EN-03).
+      return readLanguageParameter(window.location.search)
+        ?? readLanguagePreference(localStorage.getItem("language"), siteConfig.defaultLanguage as Language);
     }
     return siteConfig.defaultLanguage as Language;
   });
@@ -30,6 +32,12 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     localStorage.setItem("language", language);
     document.documentElement.lang = language;
   }, [language]);
+
+  // Une fois la langue du lien mémorisée (effet ci-dessus), ?lang= est retiré de l’adresse.
+  useEffect(() => {
+    const address = removeLanguageParameter(window.location.href);
+    if (address) window.history.replaceState(window.history.state, "", address);
+  }, []);
 
   const toggleLanguage = useCallback(() => {
     setLanguage((prev) => {

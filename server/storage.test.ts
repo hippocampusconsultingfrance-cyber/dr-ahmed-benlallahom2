@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const blob = vi.hoisted(() => ({
+  BlobNotFoundError: class BlobNotFoundError extends Error {},
   del: vi.fn(),
+  head: vi.fn(),
   issueSignedToken: vi.fn(),
   list: vi.fn(),
   presignUrl: vi.fn(),
@@ -10,7 +12,7 @@ const blob = vi.hoisted(() => ({
 
 vi.mock("@vercel/blob", () => blob);
 
-import { classifyStorageError, storageDelete, storageGetSignedUrl, storageListKeys, storagePut } from "./storage";
+import { classifyStorageError, storageDelete, storageGetSignedUrl, storageListKeys, storageListObjects, storagePut, storagePutOnce } from "./storage";
 
 describe("private Vercel Blob storage", () => {
   beforeEach(() => {
@@ -39,6 +41,43 @@ describe("private Vercel Blob storage", () => {
       expect.any(Buffer),
       expect.objectContaining({ access: "private", addRandomSuffix: false, token: "blob-test-token" }),
     );
+  });
+
+  it("stores a rebuilt document once under its exact key, then keeps the stored copy without uploading it again", async () => {
+    // A private store held in memory: head() finds what put() stored.
+    const stored = new Map<string, Buffer>();
+    blob.head.mockImplementation(async (pathname: string) => {
+      if (!stored.has(pathname)) throw new blob.BlobNotFoundError("Vercel Blob: The requested blob does not exist");
+      return { pathname, url: `https://private.blob.example/${pathname}` };
+    });
+    blob.put.mockImplementation(async (pathname: string, body: Buffer) => {
+      stored.set(pathname, body);
+      return { pathname, url: `https://private.blob.example/${pathname}` };
+    });
+    const pdf = Buffer.from("%PDF-1.3 invoice");
+
+    const first = await storagePutOnce("/invoices/FAC-2026-000001-APTTEST000001.pdf", pdf, "application/pdf");
+    const retries = [];
+    for (let attempt = 2; attempt <= 8; attempt += 1) retries.push(await storagePutOnce("invoices/FAC-2026-000001-APTTEST000001.pdf", pdf, "application/pdf"));
+
+    expect(first).toEqual({ key: "invoices/FAC-2026-000001-APTTEST000001.pdf", url: "https://private.blob.example/invoices/FAC-2026-000001-APTTEST000001.pdf", uploaded: true });
+    expect(retries.every(retry => retry.key === first.key && !retry.uploaded)).toBe(true);
+    expect(blob.put).toHaveBeenCalledTimes(1);
+    expect(blob.put).toHaveBeenCalledWith(first.key, pdf, expect.objectContaining({ access: "private", addRandomSuffix: false, allowOverwrite: false, token: "blob-test-token" }));
+    expect(Array.from(stored.keys())).toEqual([first.key]);
+  });
+
+  it("uploads nothing when the store cannot say whether the document is already there, and says so apart from a failed upload", async () => {
+    blob.head.mockRejectedValue(new Error("Vercel Blob: This store has been suspended."));
+    await expect(storagePutOnce("invoices/FAC-2026-000002-APTTEST000002.pdf", "pdf", "application/pdf")).rejects.toMatchObject({ message: "storage_check_failed", code: "storage_store_suspended" });
+    blob.head.mockRejectedValue(new Error("Vercel Blob: The blob service is currently not available. Please try again."));
+    await expect(storagePutOnce("invoices/FAC-2026-000002-APTTEST000002.pdf", "pdf", "application/pdf")).rejects.toMatchObject({ message: "storage_check_failed", code: "storage_service_unavailable" });
+    expect(blob.put).not.toHaveBeenCalled();
+
+    // The key is free, but the upload fails.
+    blob.head.mockRejectedValue(new blob.BlobNotFoundError("Vercel Blob: The requested blob does not exist"));
+    blob.put.mockRejectedValue(new Error("Vercel Blob: The blob service is currently not available. Please try again."));
+    await expect(storagePutOnce("invoices/FAC-2026-000002-APTTEST000002.pdf", "pdf", "application/pdf")).rejects.toMatchObject({ message: "storage_upload_failed", code: "storage_service_unavailable" });
   });
 
   it("creates a five-minute read-only URL for one private pathname", async () => {
@@ -78,6 +117,12 @@ describe("private Vercel Blob storage", () => {
     await expect(storageListKeys("recruitment/cv/CVX-")).resolves.toEqual(["recruitment/cv/CVX-a.pdf", "recruitment/cv/CVX-b.pdf"]);
     expect(blob.list).toHaveBeenLastCalledWith(expect.objectContaining({ prefix: "recruitment/cv/CVX-", cursor: "next", token: "blob-test-token" }));
     await expect(storageListKeys("recruitment")).rejects.toThrow("storage_list_prefix_too_broad");
+  });
+
+  it("lists objects with their upload date, for the orphan CV cleanup (DATA-02)", async () => {
+    blob.list.mockResolvedValueOnce({ blobs: [{ pathname: "recruitment/quarantine/CVX-cv.pdf", uploadedAt: new Date("2026-10-25T08:00:00Z") }], hasMore: false });
+    await expect(storageListObjects("recruitment/quarantine/", 20_000)).resolves.toEqual([{ key: "recruitment/quarantine/CVX-cv.pdf", uploadedAt: new Date("2026-10-25T08:00:00Z") }]);
+    expect(blob.list).toHaveBeenLastCalledWith(expect.objectContaining({ prefix: "recruitment/quarantine/", limit: 1000 }));
   });
 
   it("classifies Blob failures without exposing their raw message", () => {

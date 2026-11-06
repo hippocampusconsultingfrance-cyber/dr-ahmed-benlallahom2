@@ -12,6 +12,7 @@ import MedicalQuestionsTeaser from "@/components/MedicalQuestionsTeaser";
 import Footer from "@/components/Footer";
 import { useScrollReveal } from "@/hooks/useScrollReveal";
 import { SEOHead } from "@/components/SEOHead";
+import { scrollToSectionTop } from "@/lib/scrollToSection";
 import { useEffect } from "react";
 
 export default function Home() {
@@ -21,9 +22,7 @@ export default function Home() {
     const scrollToHashTarget = () => {
       const targetId = decodeURIComponent(window.location.hash.slice(1));
       if (!targetId) return;
-      const target = document.getElementById(targetId);
-      if (!target) return;
-      window.scrollTo({ top: target.getBoundingClientRect().top + window.scrollY, behavior: "auto" });
+      scrollToSectionTop(document.getElementById(targetId), "auto");
     };
 
     const initialScrollTimers = [0, 180, 500].map(delay => window.setTimeout(scrollToHashTarget, delay));

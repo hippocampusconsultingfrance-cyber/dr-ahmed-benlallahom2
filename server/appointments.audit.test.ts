@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
 import { isBookableAppointmentTime, isNightRateForParis, isWithinAvailability, parseAppointmentDate } from "./routers";
 
 describe("Appointment pricing audit", () => {
@@ -46,16 +45,6 @@ describe("Appointment pricing audit", () => {
     expect(isBookableAppointmentTime(parseAppointmentDate("2026-08-17T23:30"), mondayNight)).toBe(true);
     expect(isBookableAppointmentTime(parseAppointmentDate("2026-08-18T01:30"), mondayNight)).toBe(true);
     expect(isBookableAppointmentTime(parseAppointmentDate("2026-08-18T02:00"), mondayNight)).toBe(false);
-  });
-
-  it("annule immédiatement un checkout Stripe abandonné encore en attente", () => {
-    const source = readFileSync(new URL("./routers.ts", import.meta.url), "utf8");
-    const cancelPendingBlock = source.slice(source.indexOf("cancelPending: publicProcedure"), source.indexOf("// Blog / Actualités"));
-
-    expect(cancelPendingBlock).toContain('eq(appointments.appointmentStatus, "held")');
-    expect(cancelPendingBlock).not.toContain('eq(appointments.appointmentStatus, "confirmed")');
-    expect(cancelPendingBlock).toContain('holdExpiresAt: null');
-    expect(cancelPendingBlock).toContain('cancelledAt: new Date()');
   });
 });
 

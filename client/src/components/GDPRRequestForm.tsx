@@ -1,6 +1,7 @@
 import { useLanguage } from "@/contexts/LanguageContext";
+import { siteConfig } from "@/data/site-config";
 import { trpc } from "@/lib/trpc";
-import { getGdprRequestCopy, publicFormCopy } from "@/lib/publicFormCopy";
+import { getGdprRequestCopy, publicFormCopy, publicFormErrorMessage } from "@/lib/publicFormCopy";
 import { CheckCircle, Loader2, ArrowLeft } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -32,6 +33,8 @@ export default function GDPRRequestForm({ onBack }: GDPRRequestFormProps) {
   });
   const [submitted, setSubmitted] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  // Une fois la limite atteinte, rappeler l'adresse de contact donnée par la politique de confidentialité.
+  const errorMessage = (error: unknown) => publicFormErrorMessage(error, copy.refusals, copy.error).replace("{email}", siteConfig.email);
 
   const submitMutation = trpc.gdpr.submit.useMutation({
     onSuccess: () => {
@@ -47,7 +50,7 @@ export default function GDPRRequestForm({ onBack }: GDPRRequestFormProps) {
       toast.success(copy.submitted);
     },
     onError: (error) => {
-      toast.error(copy.error);
+      toast.error(errorMessage(error));
       console.error("GDPR form error:", error);
     },
   });
@@ -132,6 +135,7 @@ export default function GDPRRequestForm({ onBack }: GDPRRequestFormProps) {
                   <input
                     type="text"
                     id={gdprFieldIds.name}
+                    autoComplete="name"
                     required
                     placeholder={content.gdpr.form.namePlaceholder}
                     value={formData.name}
@@ -146,6 +150,7 @@ export default function GDPRRequestForm({ onBack }: GDPRRequestFormProps) {
                   <input
                     type="email"
                     id={gdprFieldIds.email}
+                    autoComplete="email"
                     required
                     placeholder={content.gdpr.form.emailPlaceholder}
                     value={formData.email}
@@ -162,6 +167,7 @@ export default function GDPRRequestForm({ onBack }: GDPRRequestFormProps) {
                 <input
                   type="tel"
                   id={gdprFieldIds.phone}
+                  autoComplete="tel"
                   placeholder={content.gdpr.form.phonePlaceholder}
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
@@ -201,6 +207,12 @@ export default function GDPRRequestForm({ onBack }: GDPRRequestFormProps) {
                   className="w-full px-4 py-3 rounded-lg bg-input/50 border border-border/50 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 transition-all resize-none"
                 />
               </div>
+
+              {submitMutation.error && (
+                <p role="alert" className="form-alert text-sm text-destructive">
+                  {errorMessage(submitMutation.error)}
+                </p>
+              )}
 
               <TurnstileWidget onToken={setTurnstileToken} />
 

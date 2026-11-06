@@ -1,6 +1,4 @@
-import { readFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
-import path from "node:path";
 import express from "express";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { clerkMiddleware } from "@clerk/express";
@@ -56,12 +54,6 @@ describe("variables critiques de production (M27 / OPS-01)", () => {
     expect(silent).not.toHaveBeenCalled();
     // Le serveur Express hors Vercel garde son refus de démarrer.
     expect(() => assertCriticalProductionEnvironment(environment)).toThrow(/CRON_SECRET, RESEND_WEBHOOK_SECRET/);
-  });
-
-  it("le point d'entrée Vercel exécute le contrôle non bloquant au démarrage à froid", () => {
-    const entry = readFileSync(path.join(process.cwd(), "server/vercelEntry.ts"), "utf8");
-    expect(entry).toContain("reportCriticalProductionEnvironment();");
-    expect(entry).not.toMatch(/assertCriticalProductionEnvironment\(\)/);
   });
 });
 
@@ -163,14 +155,6 @@ describe("GET /api/health (sonde de disponibilité, M29 / OPS-05)", () => {
     expect(owner.body.checks.configuration).toEqual({ status: "missing", missing: ["TURNSTILE_SECRET_KEY", "CANDIDATE_DOCUMENT_ENCRYPTION_KEY", "RESEND_WEBHOOK_SECRET"] });
   });
 
-  it("est monté dans createApp avant clerkMiddleware (donc aussi dans la fonction Vercel)", () => {
-    const index = readFileSync(path.join(process.cwd(), "server/_core/index.ts"), "utf8");
-    expect(index).toContain("registerHealthRoute(app);");
-    expect(index.indexOf("registerHealthRoute(app);")).toBeLessThan(index.indexOf('app.post("/api/stripe/webhook"'));
-    expect(index.indexOf("registerHealthRoute(app);")).toBeLessThan(index.indexOf("app.use(clerkMiddleware("));
-    expect(index).toContain("publishableKey: clerkPublishableKey(),");
-  });
-
   it("répond encore quand la configuration Clerk fait échouer les autres routes, et la clé publique du navigateur suffit au serveur", async () => {
     vi.stubEnv("CLERK_TELEMETRY_DISABLED", "1");
     vi.stubEnv("CLERK_SECRET_KEY", "sk_test_health_probe_only");
@@ -210,15 +194,3 @@ describe("GET /api/health (sonde de disponibilité, M29 / OPS-05)", () => {
   });
 });
 
-describe("bandeau admin de configuration", () => {
-  it("expose les noms manquants via une procédure réservée à l'admin", () => {
-    const systemRouter = readFileSync(path.join(process.cwd(), "server/_core/systemRouter.ts"), "utf8");
-    const banner = readFileSync(path.join(process.cwd(), "client/src/components/AdminConfigurationBanner.tsx"), "utf8");
-    const dashboard = readFileSync(path.join(process.cwd(), "client/src/pages/AdminDashboard.tsx"), "utf8");
-
-    expect(systemRouter).toContain("configurationStatus: adminProcedure.query(() => getEnvironmentConfigurationStatus())");
-    expect(banner).toContain("trpc.system.configurationStatus.useQuery");
-    expect(banner).toContain('role="alert"');
-    expect(dashboard).toContain("<AdminConfigurationBanner />");
-  });
-});

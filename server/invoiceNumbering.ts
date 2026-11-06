@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { appointmentInvoices } from "../drizzle/schema";
 import { getDb } from "./db";
 
@@ -141,32 +141,52 @@ async function findAppointmentInvoice(db: Database, appointmentId: number): Prom
 }
 
 /**
+ * Factures déjà émises pour ces rendez-vous, par rendez-vous. N’attribue
+ * aucun numéro : le tableau de bord affiche et régénère une facture existante
+ * sans jamais en créer une (EXPL-02).
+ */
+export async function findAppointmentInvoices(appointmentIds: number[]): Promise<Map<number, AppointmentInvoiceRecord>> {
+  if (appointmentIds.length === 0) return new Map();
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  await ensureInvoiceSchema(db);
+  const rows = await db
+    .select({ appointmentId: appointmentInvoices.appointmentId, invoiceNumber: appointmentInvoices.invoiceNumber, issuedAt: appointmentInvoices.issuedAt, paidAt: appointmentInvoices.paidAt })
+    .from(appointmentInvoices)
+    .where(inArray(appointmentInvoices.appointmentId, appointmentIds));
+  return new Map(rows.map(({ appointmentId, ...record }) => [appointmentId, record]));
+}
+
+/**
  * Attribue au rendez-vous payé son numéro de facture, une seule fois.
  * Les appels suivants (reprise du job, double livraison du webhook) relisent le
  * numéro, la date d’émission et la date de paiement déjà enregistrés : la
  * facture régénérée est identique. Deux attributions concurrentes ne peuvent
  * pas obtenir le même numéro (index unique série + rang) ; la perdante réessaie.
+ * `issuedNow` : le numéro vient d’être attribué par cet appel, la facture n’a
+ * donc encore aucune copie archivée (EXPL-02).
  */
 export async function allocateAppointmentInvoice(input: {
   appointmentId: number;
   paidAt: Date;
   now?: Date;
-}): Promise<AppointmentInvoiceRecord> {
+}): Promise<AppointmentInvoiceRecord & { issuedNow: boolean }> {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
   await ensureInvoiceSchema(db);
 
   const existing = await findAppointmentInvoice(db, input.appointmentId);
-  if (existing) return existing;
+  if (existing) return { ...existing, issuedNow: false };
 
   const issuedAt = input.now ?? new Date();
   const series = invoiceSeriesFor(issuedAt);
   for (let attempt = 1; attempt <= MAX_ALLOCATION_ATTEMPTS; attempt += 1) {
+    let inserted: { rows?: unknown[] };
     try {
       // Timestamps are passed as ISO-8601 UTC strings: PostgreSQL drops the
       // offset for `timestamp` columns, so the stored value is UTC whatever the
       // process time zone.
-      await db.execute(sql`
+      inserted = await db.execute(sql`
         INSERT INTO "appointment_invoices" ("appointment_id", "invoice_series", "invoice_sequence", "invoice_number", "issued_at", "paid_at")
         SELECT ${input.appointmentId}, ${series}, next_value.sequence,
                ${series} || '-' || lpad(next_value.sequence::text, GREATEST(${INVOICE_SEQUENCE_DIGITS}, length(next_value.sequence::text)), '0'),
@@ -177,13 +197,15 @@ export async function allocateAppointmentInvoice(input: {
           WHERE "invoice_series" = ${series}
         ) AS next_value
         ON CONFLICT ("appointment_id") DO NOTHING
+        RETURNING "invoice_number"
       `);
     } catch (error) {
       if (isUniqueViolation(error) && attempt < MAX_ALLOCATION_ATTEMPTS) continue;
       throw error;
     }
     const allocated = await findAppointmentInvoice(db, input.appointmentId);
-    if (allocated) return allocated;
+    // Aucune ligne rendue : une attribution concurrente l’a émise avant celle-ci.
+    if (allocated) return { ...allocated, issuedNow: (inserted.rows?.length ?? 0) > 0 };
   }
   throw new Error("invoice_number_allocation_failed");
 }

@@ -41,17 +41,113 @@ export function getBookingWindowIssue(appointmentStart: Date, now: number = Date
   return null;
 }
 
+/**
+ * Stable reasons for a refused booking, sent with the tRPC error as
+ * `data.reason` so the booking page shows its own translated message instead
+ * of the French text written by the server (EN-06): the schedule refusals,
+ * then the anti-abuse limits (attempts per hour, bookings awaiting payment),
+ * the payment service being unavailable, a name without any visible letter
+ * or digit, and the anti-robot check asked only when unpaid holds pile up
+ * (ABUS-02): the page then shows the check and the patient pays as usual,
+ * unless the check service itself is down (the patient retries later).
+ */
+export const BOOKING_REFUSAL_REASONS = [
+  "slot_taken",
+  "too_soon",
+  "too_far",
+  "outside_schedule",
+  "no_availability",
+  "date_blocked",
+  "rate_limited",
+  "too_many_holds",
+  "payment_unavailable",
+  "invalid_name",
+  "security_check_required",
+  "security_check_unavailable",
+] as const;
+export type BookingRefusalReason = (typeof BOOKING_REFUSAL_REASONS)[number];
+
+export function isBookingRefusalReason(value: unknown): value is BookingRefusalReason {
+  return typeof value === "string" && (BOOKING_REFUSAL_REASONS as readonly string[]).includes(value);
+}
+
 export const BOOKING_TOO_SOON_MESSAGE = `Ce créneau n’est plus réservable : les consultations se réservent au moins ${BOOKING_MIN_LEAD_TIME_HOURS} heures à l’avance. Veuillez choisir un créneau plus tardif.`;
 export const BOOKING_TOO_FAR_MESSAGE = `Les consultations se réservent au plus ${BOOKING_HORIZON_DAYS} jours à l’avance. Veuillez choisir une date plus proche.`;
-export const BOOKING_INVALID_PHONE_MESSAGE = "Saisissez un numéro de téléphone valide (8 à 15 chiffres, indicatif international accepté, ex. +33 6 12 34 56 78).";
+export const BOOKING_INVALID_PHONE_MESSAGE = "Saisissez un numéro de téléphone valide, avec l’indicatif du pays précédé de + ou 00 (8 à 15 chiffres, ex. +33 6 12 34 56 78).";
+export const BOOKING_INVALID_NAME_MESSAGE = "Saisissez votre nom complet : il doit comporter au moins une lettre ou un chiffre.";
+
+const VISIBLE_LETTER_OR_DIGIT = new RegExp("(?!\\p{Default_Ignorable_Code_Point})[\\p{L}\\p{N}]", "u");
 
 /**
- * Plausible international phone number: optional leading "+", digits with
- * spaces, dots, dashes or parentheses as separators, 8 to 15 digits (E.164).
+ * A name the invoice can print: at least one letter or digit, of any script,
+ * once trimmed. Spaces, invisible characters (ZWJ, ZWSP, bidi marks, Hangul
+ * fillers, which Unicode counts as letters), blank braille (U+2800) or emoji
+ * alone are refused. Read in compatibility form (NFKC), as the invoice prints
+ * it: enclosed or squared letters (Ⓙⓔⓐⓝ, 🄹🄾🄷🄽) are symbols that stand for
+ * letters, while Hangul fillers stay fillers (U+1160).
  */
-export function isPlausiblePhoneNumber(value: string): boolean {
+export function hasVisibleNameCharacter(value: string): boolean {
+  return VISIBLE_LETTER_OR_DIGIT.test(value.trim().normalize("NFKC"));
+}
+
+const ARABIC_INDIC_DIGITS = /[\u0660-\u0669\u06F0-\u06F9]/g;
+const NO_BREAK_SPACES = /[\u00A0\u2007\u202F]/g;
+// Marques de direction que les répertoires Android et iOS en arabe ajoutent au
+// copier-coller (LRM, RLM, ALM, LRE…PDF, LRO, RLO, LRI…PDI), et caractères
+// invisibles de largeur nulle qu’un numéro copié emporte aussi (ZWSP, ZWNJ,
+// ZWJ, WJ, BOM).
+const INVISIBLE_MARKS = /[\u061C\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g;
+
+/**
+ * Phone number as typed or pasted, read the way the booking checks it
+ * (INTL-09): compatibility form (NFKC: full-width digits and "＋"), Arabic
+ * and Persian digits as 0-9, no-break spaces as plain spaces, without the
+ * direction marks and zero-width characters around a pasted number. Trimmed;
+ * nothing else changes.
+ */
+export function normalizePhoneInput(value: string): string {
+  return value
+    .normalize("NFKC")
+    .replace(ARABIC_INDIC_DIGITS, digit => String((digit.charCodeAt(0) & 0xf)))
+    .replace(NO_BREAK_SPACES, " ")
+    .replace(INVISIBLE_MARKS, "")
+    .trim();
+}
+
+/**
+ * Phone number in E.164 form, once normalized (normalizePhoneInput), or null
+ * when it is not plausible: the country code first, after "+" or "00" (no
+ * country code starts with 0), then digits with spaces, dots, dashes or
+ * parentheses as separators, 8 to 15 digits. Stored as "+" and the digits
+ * alone, the national "(0)" written after the country code dropped
+ * ("0033 (0)6 12 34 56 78" → "+33612345678"). A number without its country
+ * code ("06 12 34 56 78", "+06 12 34 56 78") is refused: the doctor could not
+ * tell which country to call.
+ */
+export function toE164PhoneNumber(value: string): string | null {
   const trimmed = value.trim();
-  if (!/^\+?[0-9][0-9 ().-]*[0-9]$/.test(trimmed) && !/^\+?\([0-9][0-9 ().-]*[0-9]$/.test(trimmed)) return false;
-  const digits = trimmed.replace(/\D/g, "");
-  return digits.length >= 8 && digits.length <= 15;
+  const prefix = /^\(?(\+|00)\s*\(?[1-9]/.exec(trimmed)?.[1];
+  if (!prefix || !/^\(?(\+|00)[0-9 ().-]*[0-9]$/.test(trimmed)) return null;
+  const digits = trimmed.replace(/\(\s*0\s*\)/g, "").replace(/\D/g, "").slice(prefix === "00" ? 2 : 0);
+  return digits.length >= 8 && digits.length <= 15 ? `+${digits}` : null;
+}
+
+/** Plausible international phone number (toE164PhoneNumber). */
+export function isPlausiblePhoneNumber(value: string): boolean {
+  return toE164PhoneNumber(value) !== null;
+}
+
+// La règle de z.string().email() (zod 4), que le serveur appliquait jusque-là.
+const BOOKING_EMAIL_ADDRESS = /^(?:[A-Za-z0-9_'+\-]+\.)*[A-Za-z0-9_'+\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\-]*\.)+[A-Za-z]{2,}$/;
+
+/**
+ * Address the confirmation and the invoice can reach (RES-10): one rule for
+ * the page and the server (booking, correction from the dashboard), so that
+ * the page refuses under the field what the server would refuse
+ * ("patient@gmail", "jean@gmail.c0m", "jean..x@exemple.fr"). A dot-separated
+ * local part of letters, digits and _ ' + -, a domain with an extension of
+ * two letters at least.
+ */
+export function isBookingEmailAddress(value: string): boolean {
+  return BOOKING_EMAIL_ADDRESS.test(value);
 }

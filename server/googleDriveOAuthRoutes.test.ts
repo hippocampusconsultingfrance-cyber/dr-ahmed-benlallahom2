@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   notifyOwner: vi.fn(async (_payload: { title: string; content: string }) => true),
   saveGoogleDriveConnection: vi.fn(async (_input: Record<string, unknown>) => undefined),
   exchangeGoogleDriveAuthorizationCode: vi.fn(async (_code: string) => ({ refresh_token: "refresh-token", scope: "https://www.googleapis.com/auth/drive.file" })),
+  calls: [] as string[],
+  requeued: 0,
 }));
 
 vi.mock("./_core/context", () => ({ createContext: vi.fn(async () => mocks.context) }));
@@ -17,8 +19,9 @@ vi.mock("./googleDriveExport", () => ({
   createGoogleDriveOAuthState: () => "signed-state",
   verifyGoogleDriveOAuthState: (state: string) => state === "signed-state",
   exchangeGoogleDriveAuthorizationCode: mocks.exchangeGoogleDriveAuthorizationCode,
-  saveGoogleDriveConnection: mocks.saveGoogleDriveConnection,
+  saveGoogleDriveConnection: vi.fn(async (input: Record<string, unknown>) => { mocks.calls.push("save"); return mocks.saveGoogleDriveConnection(input); }),
   googleDriveExportStatus: async () => ({ connected: mocks.connected }),
+  requeueGoogleDriveExportsAfterReconnection: vi.fn(async () => { mocks.calls.push("requeue"); return { requeued: mocks.requeued }; }),
 }));
 
 import { GOOGLE_DRIVE_MFA_REQUIRED_MESSAGE, registerGoogleDriveOAuthRoutes } from "./googleDriveOAuthRoutes";
@@ -56,6 +59,8 @@ describe("connexion Google Drive : double authentification administrateur", () =
     mocks.notifyOwner.mockClear();
     mocks.saveGoogleDriveConnection.mockClear();
     mocks.exchangeGoogleDriveAuthorizationCode.mockClear();
+    mocks.calls = [];
+    mocks.requeued = 0;
   });
 
   it("refuse un visiteur ou un membre non administrateur", async () => {
@@ -96,5 +101,25 @@ describe("connexion Google Drive : double authentification administrateur", () =
     const notification = mocks.notifyOwner.mock.calls[0]![0];
     expect(notification.title).toContain("Google Drive reconnecté");
     expect(notification.content).not.toContain("refresh-token");
+    expect(notification.content).not.toContain("remise(s) en file");
+  });
+
+  it("à la reconnexion, remet en file les copies arrêtées par un refus du jeton, après l’enregistrement du nouveau jeton (REC-09)", async () => {
+    mocks.context = { user: { openId: "owner", role: "admin" }, mfaVerified: true };
+    mocks.connected = true;
+    mocks.requeued = 6;
+    const callback = await call("/api/google-drive/oauth/callback", { code: "c", state: "signed-state" }, "__Host-google_drive_oauth_state=signed-state");
+    expect(callback.redirectedTo).toBe("/admin?googleDrive=connected");
+    expect(mocks.calls).toEqual(["save", "requeue"]);
+    expect(mocks.notifyOwner.mock.calls[0]![0].content).toContain("6 copie(s) de CV arrêtée(s) par un refus du jeton Google ont été remise(s) en file");
+  });
+
+  it("une connexion refusée par Google ne remet rien en file", async () => {
+    mocks.context = { user: { openId: "owner", role: "admin" }, mfaVerified: true };
+    mocks.exchangeGoogleDriveAuthorizationCode.mockRejectedValueOnce(new Error("google_drive_token_invalid_grant"));
+    vi.spyOn(console, "error").mockImplementationOnce(() => undefined);
+    const callback = await call("/api/google-drive/oauth/callback", { code: "c", state: "signed-state" }, "__Host-google_drive_oauth_state=signed-state");
+    expect(callback.statusCode).toBe(500);
+    expect(mocks.calls).toEqual([]);
   });
 });

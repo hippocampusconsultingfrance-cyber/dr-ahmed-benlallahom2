@@ -1,5 +1,5 @@
 import { Toaster } from "@/components/ui/sonner";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -14,6 +14,7 @@ import { SEOHead } from "./components/SEOHead";
 import SkipToContent from "./components/SkipToContent";
 import PageTransition from "./components/PageTransition";
 import { isPrivateAreaPath } from "./lib/privateAreaRoutes";
+import { scrollToTopOnNavigation } from "./lib/navigationScroll";
 
 export const routeLoadingCopy = {
   fr: { title: "Chargement de votre espace", caption: "Préparation de l’expérience médicale sécurisée…" },
@@ -113,12 +114,19 @@ function FloatingWidgets() {
   return <>{!privateArea && <WhatsAppButton />}<CookieConsent showPreferencesShortcut={!privateArea} /></>;
 }
 
+/** Chaque nouvelle page s'ouvre en haut, Retour et Avance gardent leur position (PUB-01). */
+function NavigationScroll() {
+  useEffect(() => scrollToTopOnNavigation(), []);
+  return null;
+}
+
 function App() {
   return (
     <ThemeProvider defaultTheme="dark" switchable>
       <LanguageProvider>
         <ErrorBoundary>
           <SkipToContent />
+          <NavigationScroll />
           <Toaster />
           <PageTransition><Router /></PageTransition>
           <FloatingWidgets />

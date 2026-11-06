@@ -1,36 +1,49 @@
 import { useLanguage } from "@/contexts/LanguageContext";
 import { siteConfig } from "@/data/site-config";
-import { getContactFormCopy, publicFormCopy } from "@/lib/publicFormCopy";
+import { getContactFormCopy, publicFormCopy, publicFormErrorMessage } from "@/lib/publicFormCopy";
 import { trpc } from "@/lib/trpc";
+import { CONTACT_CATEGORIES, type ContactCategory } from "@shared/contactCategories";
 import { Phone, Mail, Linkedin, Send, CheckCircle, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { Link } from "wouter";
 import { TurnstileWidget } from "./TurnstileWidget";
 
 export const contactCopy = publicFormCopy.contact;
 
+/** The page made for each kind of visitor's request (PUB-22): the form points to it once the visitor says who they are. */
+const CONTACT_CATEGORY_LINKS: Record<ContactCategory, ReadonlyArray<{ href: string; label: keyof typeof contactCopy.fr.categoryLinks }>> = {
+  patient: [{ href: "/booking", label: "booking" }, { href: "/questions-anesthesie", label: "medicalQuestions" }],
+  health_professional: [{ href: "/recruitment", label: "recruitment" }],
+  institution: [{ href: "/employers", label: "employers" }],
+  press_partner: [],
+};
+
+const emptyContactForm = { name: "", phone: "", email: "", message: "", gdprConsent: false, category: "" as ContactCategory | "" };
+
 export default function ContactSection() {
   const { content, language } = useLanguage();
   const copy = getContactFormCopy(language);
-  const [formData, setFormData] = useState({
-    name: "",
-    phone: "",
-    email: "",
-    message: "",
-    gdprConsent: false,
-  });
+  const [formData, setFormData] = useState(emptyContactForm);
   const [submitted, setSubmitted] = useState(false);
+  // Reference of the message just sent, shown on the confirmation (PUB-09).
+  const [trackingId, setTrackingId] = useState<string | null>(null);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  // A refused message has used its token (the server checks it first): a new challenge is rendered (PUB-09).
+  const [turnstileAttempt, setTurnstileAttempt] = useState(0);
 
   const submitMutation = trpc.contact.submit.useMutation({
-    onSuccess: () => {
+    onSuccess: (data) => {
       setSubmitted(true);
-      setFormData({ name: "", phone: "", email: "", message: "", gdprConsent: false });
+      setTrackingId(data.trackingId);
+      setFormData(emptyContactForm);
       setTurnstileToken(null);
       toast.success(copy.sent);
     },
     onError: (error) => {
-      toast.error(copy.sendError);
+      setTurnstileToken(null);
+      setTurnstileAttempt(value => value + 1);
+      toast.error(publicFormErrorMessage(error, copy.refusals, copy.sendError));
       console.error("Contact form error:", error);
     },
   });
@@ -53,8 +66,11 @@ export default function ContactSection() {
       message: formData.message,
       gdprConsent: formData.gdprConsent ? 1 : 0,
       turnstileToken,
+      category: formData.category || undefined,
+      language,
     });
   };
+  const categoryLinks = formData.category ? CONTACT_CATEGORY_LINKS[formData.category] : [];
 
   return (
     <section id="contact" className="contact-section py-28 sm:py-36 relative">
@@ -136,9 +152,15 @@ export default function ContactSection() {
                 <h3 className="font-display text-2xl font-bold text-foreground mb-3">
                   {copy.successTitle}
                 </h3>
-                <p className="text-muted-foreground max-w-sm mb-8">
+                <p className="text-muted-foreground max-w-sm mb-4">
                   {copy.successDescription}
                 </p>
+                {trackingId && (
+                  <p className="mb-8 text-sm text-muted-foreground">
+                    {copy.reference}{" "}
+                    <span className="font-mono font-bold tracking-wide text-primary">{trackingId}</span>
+                  </p>
+                )}
                 <button
                   onClick={() => setSubmitted(false)}
                   className="px-6 py-3 rounded-lg border border-border text-foreground font-medium hover:border-primary/50 transition-all"
@@ -148,6 +170,38 @@ export default function ContactSection() {
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="contact-form-card p-5 sm:p-8 rounded-2xl bg-card/60 backdrop-blur-sm border border-border/30 space-y-5" aria-busy={submitMutation.isPending}>
+                <fieldset>
+                  <legend className="block text-sm font-medium text-foreground mb-2">{copy.categoryLegend}</legend>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {CONTACT_CATEGORIES.map(category => (
+                      <label key={category} className="flex items-center gap-2 rounded-lg border border-border/50 px-3 py-2 text-sm text-foreground cursor-pointer has-[:checked]:border-primary/60">
+                        <input
+                          type="radio"
+                          name="category"
+                          value={category}
+                          checked={formData.category === category}
+                          onChange={() => setFormData({ ...formData, category })}
+                          className="accent-primary"
+                        />
+                        {copy.categories[category]}
+                      </label>
+                    ))}
+                  </div>
+                  <div aria-live="polite">
+                    {formData.category && copy.categoryGuides[formData.category] && (
+                      <p className="mt-3 text-sm text-muted-foreground">
+                        {copy.categoryGuides[formData.category]}{" "}
+                        {categoryLinks.map((link, index) => (
+                          <span key={link.href}>
+                            {index > 0 && " · "}
+                            <Link href={link.href} className="font-medium text-primary underline underline-offset-2">{copy.categoryLinks[link.label]}</Link>
+                          </span>
+                        ))}
+                      </p>
+                    )}
+                  </div>
+                </fieldset>
+
                 <div className="grid sm:grid-cols-2 gap-5">
                   <div>
                     <label htmlFor="contact-name" className="block text-sm font-medium text-foreground mb-2">
@@ -157,6 +211,7 @@ export default function ContactSection() {
                       id="contact-name"
                       name="name"
                       type="text"
+                      autoComplete="name"
                       required
                       placeholder={content.contact.form.namePlaceholder}
                       value={formData.name}
@@ -172,6 +227,7 @@ export default function ContactSection() {
                       id="contact-phone"
                       name="phone"
                       type="tel"
+                      autoComplete="tel"
                       placeholder={content.contact.form.phonePlaceholder}
                       value={formData.phone}
                       onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
@@ -188,6 +244,7 @@ export default function ContactSection() {
                       id="contact-email"
                       name="email"
                       type="email"
+                      autoComplete="email"
 
                     required
                     placeholder={content.contact.form.emailPlaceholder}
@@ -208,10 +265,13 @@ export default function ContactSection() {
 
                     rows={5}
                     placeholder={content.contact.form.messagePlaceholder}
+                    aria-describedby="contact-message-notice"
                     value={formData.message}
                     onChange={(e) => setFormData({ ...formData, message: e.target.value })}
                     className="form-field-premium w-full px-4 py-3 border resize-none"
                   />
+                  {/* This channel is not meant for health data (PUB-22). */}
+                  <p id="contact-message-notice" className="mt-2 text-xs text-muted-foreground">{copy.medicalNotice}</p>
                 </div>
 
                 <div className={`form-consent-item contact-consent flex items-start gap-3 rounded-lg p-4 ${consentAttempted && !formData.gdprConsent ? "form-consent-item-invalid" : ""}`}>
@@ -231,11 +291,12 @@ export default function ContactSection() {
 
                 {submitMutation.error && (
                   <p role="alert" className="form-alert text-sm text-destructive">
-                    {copy.sendError}
+                    {publicFormErrorMessage(submitMutation.error, copy.refusals, copy.sendError)}
                   </p>
                 )}
 
-                <TurnstileWidget onToken={setTurnstileToken} deferUntilVisible />
+                {/* Cloudflare is loaded when the form comes near (PERF-04); a new challenge after a refusal is rendered at once. */}
+                <TurnstileWidget key={turnstileAttempt} onToken={setTurnstileToken} deferUntilVisible={turnstileAttempt === 0} />
 
                 <button
                   type="submit"

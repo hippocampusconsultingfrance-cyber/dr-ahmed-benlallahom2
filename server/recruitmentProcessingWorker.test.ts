@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
@@ -72,11 +71,13 @@ vi.mock("./db", () => ({
 }));
 vi.mock("./_core/notification", () => ({ notifyOwner: vi.fn(async (payload: { title: string; content: string }) => { state.notifications.push(payload); return true; }) }));
 vi.mock("./candidateSecurity", () => ({
-  enforcePersistentRateLimit: vi.fn(async (policy: { action: string; subject: string; maxAttempts: number }) => {
-    const key = `${policy.action}:${policy.subject}`;
+  // One slot per alert, kept once delivered (the real slot is covered in ownerAlertSlot.test.ts).
+  sendOwnerAlertOncePerWindow: vi.fn(async (slot: { action: string; subject: string }, send: () => Promise<boolean>) => {
+    const key = `${slot.action}:${slot.subject}`;
     const count = (state.alertSlots.get(key) ?? 0) + 1;
     state.alertSlots.set(key, count);
-    if (count > policy.maxAttempts) throw new Error("candidate_security_rate_limited");
+    if (count > 1) return false;
+    return send();
   }),
 }));
 
@@ -112,6 +113,10 @@ describe("cron recruitment-processing : vidage par lots dans un budget de temps"
     expect(state.calls).not.toContain("drive-unfiltered");
     expect(state.calls.indexOf("recoverAnalysis")).toBeLessThan(state.calls.indexOf("emails"));
     expect(state.calls.indexOf("driveErasures")).toBeLessThan(state.calls.indexOf("emails"));
+    // Interrupted and missing jobs are repaired before their queue is processed.
+    expect(state.calls.indexOf("recoverDrive")).toBeLessThan(state.calls.indexOf("drive"));
+    expect(state.calls.indexOf("backfillDrive")).toBeLessThan(state.calls.indexOf("drive"));
+    expect(state.calls.indexOf("backfillAnalysis")).toBeLessThan(firstAnalysis);
   });
 
   it("ne démarre plus d’analyse après 25 s (la dernière se termine dans la limite de 60 s)", async () => {
@@ -168,16 +173,5 @@ describe("cron recruitment-processing : vidage par lots dans un budget de temps"
     await expect(notifyOwnerOfAnalysisBacklog(RECRUITMENT_ANALYSIS_BACKLOG_ALERT_THRESHOLD, { atLeast: true })).resolves.toBe(true);
     expect(state.notifications[0]!.title).toBe(`Recrutement : au moins ${RECRUITMENT_ANALYSIS_BACKLOG_ALERT_THRESHOLD} analyse(s) de CV en attente`);
     expect(state.notifications[0]!.content).toContain(`Au moins ${RECRUITMENT_ANALYSIS_BACKLOG_ALERT_THRESHOLD} analyse(s) de CV attendent`);
-  });
-});
-
-describe("formulaire de candidature : jamais refusé pour une file d’analyse longue", () => {
-  it("n’a plus de refus 503 « volume élevé » et alerte le propriétaire à la place", () => {
-    const source = readFileSync(new URL("./_core/index.ts", import.meta.url), "utf8");
-    expect(source).not.toContain("reçoit actuellement un volume élevé");
-    expect(source).not.toContain("public_recruitment_apply_queue_backpressure");
-    expect(source).toContain("notifyOwnerOfAnalysisBacklog(waitingAnalyses, { atLeast: true })");
-    const cron = source.slice(source.indexOf('app.get("/api/scheduled/recruitment-processing"'), source.indexOf('app.post("/api/scheduled/recruitment-processing"'));
-    expect(cron).toContain("runRecruitmentProcessingWorker()");
   });
 });

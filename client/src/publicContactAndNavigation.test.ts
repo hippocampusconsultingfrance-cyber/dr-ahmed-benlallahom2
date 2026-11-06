@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 import { siteConfig } from "./data/site-config";
 import { venturesEn } from "./data/ventures-en";
 import { venturesFr } from "./data/ventures-fr";
-import { footerGdprCopy } from "./components/Footer";
 
 const projectRoot = resolve(import.meta.dirname, "../..");
 const read = (file: string) => readFileSync(resolve(projectRoot, file), "utf8");
@@ -40,24 +39,13 @@ describe("coordonnées publiques uniques (PUB-CONTACT-01)", () => {
   });
 });
 
+// Le lien du pied de page vers /gdpr et celui de la page Employeurs vers /why-hippocampus, dans les
+// quatre langues : components/Footer.dom.test.ts, pages/EmployersPage.dom.test.ts.
 describe("pages orphelines reliées (PUB-NAV-01)", () => {
-  it("le pied de page mène au formulaire RGPD, libellé dans les 4 langues", () => {
-    const footer = read("client/src/components/Footer.tsx");
-    expect(footer).toContain('<Link href="/gdpr"');
-    expect(Object.keys(footerGdprCopy)).toEqual(["fr", "en", "de", "zh"]);
-    expect(footerGdprCopy.fr).toBe("Exercer mes droits RGPD");
-  });
-
   it("la politique de confidentialité (§6) renvoie vers /gdpr au lieu du formulaire de contact", () => {
     const legal = read("client/src/pages/LegalPage.tsx");
     expect(legal.match(/<Link href="\/gdpr"/g)).toHaveLength(4);
     expect(legal).not.toContain('formulaire de contact avec la mention "Demande RGPD"');
     expect(legal).not.toContain('contact form with the mention "GDPR Request"');
-  });
-
-  it("la page Employeurs mène à /why-hippocampus", () => {
-    const employers = read("client/src/pages/EmployersPage.tsx");
-    expect(employers).toContain('<Link href="/why-hippocampus"');
-    expect(employers.match(/whyLink: "/g)).toHaveLength(4);
   });
 });

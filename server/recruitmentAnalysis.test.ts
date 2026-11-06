@@ -128,6 +128,44 @@ Français : courant
     });
   });
 
+  it("dit trouvés dans le texte lu par l’outil, jamais vérifiés, les faits que l’admin lit (IA-01)", () => {
+    const sourceText = "[PAGE 1]\nMédecin anesthésiste, Hôpital, 2018-2026\nSpécialité : Anesthésie\nCompétence : Réanimation\n[PAGE 2]\nFrançais : courant\nCertification ACLS";
+    const result = normalizeRecruitmentAnalysis(analysisFixture({
+      professionalTitle: "Médecin anesthésiste",
+      specialties: ["Anesthésie"],
+      skills: ["Réanimation"],
+      languages: ["Français"],
+      normalizedLanguages: [{ language: "Français", proficiency: "fluent", evidence: "Français : courant", sourceLocation: "page 2", confidence: 98 }],
+      certifications: [{ name: "ACLS", issuingBody: null, country: null, expiresAt: null, evidence: "Certification ACLS", sourceLocation: "page 2", confidence: 95 }],
+      normalizedExperiences: [{ role: "Médecin", organization: "Hôpital", startDate: null, endDate: null, employmentType: "unknown", specialty: "", country: null, durationMonths: null, evidence: "Médecin anesthésiste, Hôpital, 2018-2026", sourceLocation: "page 1", confidence: 96 }],
+      fieldEvidence: [
+        { field: "professionalTitle", value: "Médecin anesthésiste", evidence: "Médecin anesthésiste", sourceLocation: "page 1", confidence: 97 },
+        { field: "specialty", value: "Anesthésie", evidence: "Spécialité : Anesthésie", sourceLocation: "page 1", confidence: 96 },
+        { field: "skill", value: "Réanimation", evidence: "Compétence : Réanimation", sourceLocation: "page 1", confidence: 94 },
+      ],
+    }), sourceText, { specialty: "Anesthésie", targetCountries: [], languages: [] });
+
+    expect(result.relevanceScore).not.toBeNull();
+    expect(result.summary).toBe("Lecture automatisée : 6 citation(s) sur 6 trouvée(s) dans le texte lu par l’outil, à comparer au CV. 1 expérience(s), 1 certification(s) et 1 langue(s) s’appuient sur une citation de ce texte. Revue humaine obligatoire.");
+    expect(result.strengths).toEqual([
+      "Titre professionnel trouvé dans le texte lu par l’outil : Médecin anesthésiste.",
+      "Spécialité(s) trouvée(s) dans le texte lu par l’outil : Anesthésie.",
+      "1 expérience(s) professionnelle(s) sourcée(s).",
+      "Compétence(s) trouvée(s) dans le texte lu par l’outil : Réanimation.",
+      "Langue(s) trouvée(s) dans le texte lu par l’outil : Français.",
+      "Certification(s) trouvée(s) dans le texte lu par l’outil : ACLS.",
+    ]);
+    expect(result.reasoning).toBe("Score déterministe calculé uniquement à partir de faits professionnels trouvés dans le texte lu par l’outil et rapprochés de la spécialité déclarée, à comparer au CV.");
+
+    const unscored = normalizeRecruitmentAnalysis(analysisFixture({
+      professionalTitle: "Médecin",
+      fieldEvidence: [{ field: "professionalTitle", value: "Médecin", evidence: "Médecin urgentiste", sourceLocation: "page 1", confidence: 90 }],
+    }), "[PAGE 1]\nMédecin urgentiste", { specialty: "Médecin", targetCountries: [], languages: [] });
+    expect(unscored.reasoning).toBe("Score non présenté : les citations trouvées dans le texte lu par l’outil sont insuffisantes, contradictoires ou non rapprochées de la spécialité déclarée (100 % de couverture).");
+
+    for (const text of [result.summary, result.reasoning, unscored.summary, unscored.reasoning, ...result.strengths]) expect(text).not.toMatch(/vérifié/i);
+  });
+
   it("neutralise le score lorsque les citations IA ne sont pas vérifiables dans le CV", () => {
     const result = normalizeRecruitmentAnalysis({
       summary: "Profil clinique à confirmer.",
@@ -343,7 +381,25 @@ Français : courant
     expect(result.scoreBreakdown.credentialReadiness).toBe(0);
     expect(result.dataQualityWarnings.join(" ")).toContain("dates d’expérience inversées");
     expect(result.dataQualityWarnings.join(" ")).toContain("Certification expirée");
-    expect(verifiedRecruitmentFacts(result).certifications).toHaveLength(0);
+    // No score for it, but kept among the facts with its date (IA-02): the
+    // mission and the 360° sheet show it expired, to be renewed to count.
+    expect(verifiedRecruitmentFacts(result).certifications).toEqual([expect.objectContaining({ name: "ACLS", expiresAt: "2020" })]);
+  });
+
+  it("date une certification expirée comme la fiche de la candidature : au mois, au jour ou à l’année (IA-02)", () => {
+    const result = normalizeRecruitmentAnalysis(analysisFixture({
+      certifications: [
+        { name: "ACLS", issuingBody: null, country: null, expiresAt: "2023-05", evidence: "ACLS expiration 2023-05", sourceLocation: "page 1", confidence: 95 },
+        { name: "BLS", issuingBody: null, country: null, expiresAt: "2022-03-31", evidence: "BLS expiration 2022-03-31", sourceLocation: "page 1", confidence: 95 },
+        { name: "PALS", issuingBody: null, country: null, expiresAt: "2020", evidence: "PALS expiration 2020", sourceLocation: "page 1", confidence: 95 },
+      ],
+    }), "[PAGE 1]\nACLS expiration 2023-05\nBLS expiration 2022-03-31\nPALS expiration 2020");
+
+    expect(result.dataQualityWarnings).toEqual(expect.arrayContaining([
+      "Certification expirée à confirmer : ACLS (expirée en mai 2023).",
+      "Certification expirée à confirmer : BLS (expirée le 31/03/2022).",
+      "Certification expirée à confirmer : PALS (expirée en 2020).",
+    ]));
   });
 
   it("reconnaît uniquement le blocage de facturation explicite du Gateway", () => {

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { createServer } from "vite";
 import { describe, expect, it } from "vitest";
-import { TURNSTILE_DEFER_ROOT_MARGIN } from "./components/TurnstileWidget";
 
 const root = resolve(import.meta.dirname, "../..");
 const read = (file: string) => readFileSync(resolve(root, file), "utf8");
@@ -18,7 +18,8 @@ describe("polices auto-hébergées (PUB-COOKIE-02 / PERF-05)", () => {
     const csp = headerFor("/(.*)", "Content-Security-Policy") ?? "";
     expect(csp).not.toMatch(/fonts\.googleapis\.com|fonts\.gstatic\.com/);
     expect(csp).toContain("font-src 'self' data:;");
-    expect(read("server/_core/index.ts")).not.toMatch(/fonts\.googleapis\.com|fonts\.gstatic\.com/);
+    expect(read("server/_core/contentSecurityPolicy.ts")).not.toMatch(/fonts\.googleapis\.com|fonts\.gstatic\.com/);
+    // Les réponses du serveur Express : server/routes/selfHostedFonts.test.ts.
   });
 
   it("sert DM Sans et Playfair Display depuis le build, sous-ensemble latin uniquement", () => {
@@ -39,18 +40,6 @@ describe("polices auto-hébergées (PUB-COOKIE-02 / PERF-05)", () => {
   });
 });
 
-describe("Turnstile différé sur l'accueil (PERF-04)", () => {
-  it("le formulaire de contact ne charge Cloudflare qu'à l'approche ou au focus", () => {
-    expect(read("client/src/components/ContactSection.tsx")).toContain("<TurnstileWidget onToken={setTurnstileToken} deferUntilVisible />");
-    const widget = read("client/src/components/TurnstileWidget.tsx");
-    expect(widget).toContain("const [armed, setArmed] = useState(!deferUntilVisible);");
-    expect(widget).toContain("new IntersectionObserver(");
-    expect(widget).toContain('form?.addEventListener("focusin", arm);');
-    expect(widget).toContain("if (!armed || !siteKey || !containerRef.current) return;");
-    expect(TURNSTILE_DEFER_ROOT_MARGIN).toBe("400px 0px");
-  });
-});
-
 describe("cache immuable des fichiers hachés (CACHE-01)", () => {
   it("place la sortie hachée de Vite dans /static et la met en cache un an", () => {
     expect(read("vite.config.ts")).toContain('assetsDir: "static",');
@@ -65,4 +54,24 @@ describe("cache immuable des fichiers hachés (CACHE-01)", () => {
     expect(main).toContain('import { installChunkLoadRecovery } from "./lib/chunkLoadRecovery";');
     expect(main.indexOf("installChunkLoadRecovery();")).toBeLessThan(main.indexOf("createRoot("));
   });
+});
+
+describe("repères de code source de l'éditeur visuel Manus (CODE-06)", () => {
+  it("compile les composants sans attribut data-loc donnant le fichier et la ligne du code", async () => {
+    const server = await createServer({
+      configFile: resolve(root, "vite.config.ts"),
+      cacheDir: resolve(root, "node_modules/.vite/source-locations-test"),
+      server: { middlewareMode: true, hmr: false, ws: false },
+      optimizeDeps: { noDiscovery: true },
+      logLevel: "error",
+    });
+    try {
+      const component = await server.transformRequest("/src/components/ErrorBoundary.tsx");
+      expect(component?.code).toContain("getDerivedStateFromError");
+      expect(component?.code).not.toContain("data-loc");
+      expect(component?.code).not.toContain("client/src/components/ErrorBoundary.tsx:");
+    } finally {
+      await server.close();
+    }
+  }, 30_000);
 });

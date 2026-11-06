@@ -1,4 +1,5 @@
 import { useLanguage } from "@/contexts/LanguageContext";
+import { ArrowUpRight } from "lucide-react";
 
 export default function ServicesSection() {
   const { content } = useLanguage();
@@ -68,6 +69,14 @@ export default function ServicesSection() {
               </div>
             </div>
           ))}
+        </div>
+
+        {/* Réservation à la fin des services (PUB-02) */}
+        <div className="mt-14 sm:mt-16">
+          <a href="/booking" className="cta-primary">
+            {content.hero.bookConsultation}
+            <ArrowUpRight aria-hidden="true" className="h-4 w-4" />
+          </a>
         </div>
       </div>
 

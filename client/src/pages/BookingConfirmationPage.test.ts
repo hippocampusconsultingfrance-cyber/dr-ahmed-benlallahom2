@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { confirmationContent, getBookingConfirmationState, getDisplayedConfirmationState } from "./BookingConfirmationPage";
+import { buildConfirmationCalendarDescription, confirmationContent, getBookingConfirmationState, getDisplayedConfirmationState, STATUS_STALLED_AFTER_MS } from "./BookingConfirmationPage";
 
 describe("booking confirmation state", () => {
   it("does not treat an absent or unknown Stripe status as a successful payment", () => {
@@ -27,12 +27,36 @@ describe("booking confirmation state", () => {
     expect(confirmationContent.fr.attention.eyebrow).toBe("Réservation à régulariser");
   });
 
-  it("n’affiche les étapes de confirmation qu’après un paiement, avec des liens de contact", async () => {
-    const source = await import("node:fs/promises").then((fs) => fs.readFile(new URL("./BookingConfirmationPage.tsx", import.meta.url), "utf8"));
-    expect(source).toContain('{(displayed === "confirmed" || displayed === "processing") && (');
-    expect(source).toContain("{isConfirmed && (");
-    expect(source).toContain("mailto:${siteConfig.email}");
-    expect(source).toContain("trpc.appointments.publicStatus.useQuery(");
+  it("sépare l’annonce de mise à jour automatique de sa variante « vérifiez votre email » après 2 min (RES-05)", () => {
+    expect(STATUS_STALLED_AFTER_MS).toBe(2 * 60 * 1000);
+    for (const language of ["fr", "en", "de", "zh"] as const) {
+      const { processing, appointment } = confirmationContent[language];
+      expect(processing.description).not.toContain(processing.autoUpdate);
+      expect(processing.stalled).not.toBe(processing.autoUpdate);
+      expect(appointment.addToCalendar).toBeTruthy();
+      expect(appointment.minutes(30)).toContain("30");
+      expect(appointment.localTime("22:00")).toContain("22:00");
+    }
+    expect(confirmationContent.fr.processing.stalled).toContain("vérifiez votre email ou contactez-nous");
+    expect(confirmationContent.en.processing.stalled).toContain("check your email or contact us");
+  });
+
+  it("ponctue les libellés du fichier agenda comme la langue de la page (RES-05)", () => {
+    const details = { trackingId: "APTABC123DEF45", durationMinutes: 30, email: "contact@example.test", phone: "+33 1 23 45 67 89" };
+    expect(buildConfirmationCalendarDescription(confirmationContent.fr, { ...details, amount: "150,00 €" }))
+      .toBe("Référence : APTABC123DEF45\nDurée : 30 minutes\nMontant réglé : 150,00 €\nNous contacter : contact@example.test · +33 1 23 45 67 89");
+    expect(buildConfirmationCalendarDescription(confirmationContent.en, { ...details, amount: "€150.00" }))
+      .toBe("Reference: APTABC123DEF45\nDuration: 30 minutes\nAmount paid: €150.00\nContact us: contact@example.test · +33 1 23 45 67 89");
+    expect(buildConfirmationCalendarDescription(confirmationContent.de, { ...details, amount: "150,00 €" }).split("\n")[0]).toBe("Referenz: APTABC123DEF45");
+    expect(buildConfirmationCalendarDescription(confirmationContent.zh, { ...details, amount: "€150.00" }).split("\n")).toEqual([
+      "编号：APTABC123DEF45",
+      "时长：30 分钟",
+      "已付金额：€150.00",
+      "联系我们：contact@example.test · +33 1 23 45 67 89",
+    ]);
+    for (const language of ["en", "de", "zh"] as const) {
+      expect(buildConfirmationCalendarDescription(confirmationContent[language], { ...details, amount: "€150.00" }), language).not.toContain(" :");
+    }
   });
 
   it("provides a neutral and explicit state in every supported language", () => {
@@ -41,16 +65,6 @@ describe("booking confirmation state", () => {
       expect(confirmationContent[language].unknown.description.length).toBeGreaterThan(0);
       expect(confirmationContent[language].unknown.nextSteps.length).toBeGreaterThan(0);
     }
-  });
-
-  it("keeps the confirmation route out of search indexing", async () => {
-    const source = await import("node:fs/promises").then((fs) =>
-      fs.readFile(new URL("./BookingConfirmationPage.tsx", import.meta.url), "utf8")
-    );
-
-    expect(source).toContain("noIndex");
-    // Cartes « email / facture » réservées à un paiement confirmé par le serveur.
-    expect(source).toContain("isConfirmed && (");
   });
 
   it("annonce la facture par e-mail dans les quatre langues sans lien de téléchargement public", () => {

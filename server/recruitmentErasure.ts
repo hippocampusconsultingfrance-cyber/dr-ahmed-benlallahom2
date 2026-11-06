@@ -20,6 +20,7 @@ import {
   securityEvents,
 } from "../drizzle/schema";
 import { getDb } from "./db";
+import { CANDIDATE_DOCUMENT_ACCOUNT_FOREIGN_KEY, isForeignKeyViolation } from "./databaseConstraints";
 import { mutationRowCount } from "./dbMutation";
 import { hashSecurityValue } from "./candidateSecurity";
 import { deleteCvCopiesFromGoogleDrive, type GoogleDriveCopyDeletion } from "./googleDriveExport";
@@ -101,7 +102,8 @@ async function deleteRows(label: string, counts: Record<string, number>, operati
  * 3. derived rows (AI extractions, jobs, shortlists, campaign recipients,
  *    provider events, follow-ups, audit entries holding free text, security
  *    events naming the person) and the linked candidate account with its
- *    sessions and documents are deleted, the application row last;
+ *    sessions and documents are deleted (a document uploaded meanwhile is
+ *    found again, file included, before the account), the application row last;
  * 4. a minimal proof is logged: hashes of the email and tracking id, counts.
  */
 export async function eraseCandidateApplication(
@@ -199,25 +201,49 @@ export async function eraseCandidateApplication(
   await deleteRows("recruitment_email_events", rowsDeleted, db.delete(recruitmentEmailEvents).where(or(...emailEventConditions)));
   await deleteRows("recruitment_campaign_recipients", rowsDeleted, db.delete(recruitmentCampaignRecipients).where(eq(recruitmentCampaignRecipients.applicationId, application.id)));
 
-  if (documentIds.length) {
-    await deleteRows("candidate_document_processing_jobs", rowsDeleted, db.delete(candidateDocumentProcessingJobs).where(inArray(candidateDocumentProcessingJobs.documentId, documentIds)));
-  }
-  const documentAuditConditions = [
-    ...(documentIds.length ? [inArray(candidateDocumentAuditLogs.documentId, documentIds)] : []),
-    ...(accountIds.length ? [inArray(candidateDocumentAuditLogs.candidateId, accountIds)] : []),
-  ];
-  if (documentAuditConditions.length) {
-    await deleteRows("candidate_document_audit_logs", rowsDeleted, db.delete(candidateDocumentAuditLogs).where(or(...documentAuditConditions)));
-  }
-  if (documentIds.length) {
-    await deleteRows("candidate_documents", rowsDeleted, db.delete(candidateDocuments).where(inArray(candidateDocuments.id, documentIds)));
-  }
+  // Vault documents with their processing jobs and audit entries; their stored files are deleted before.
+  const deleteDocumentRows = async (ids: number[]) => {
+    if (ids.length) {
+      await deleteRows("candidate_document_processing_jobs", rowsDeleted, db.delete(candidateDocumentProcessingJobs).where(inArray(candidateDocumentProcessingJobs.documentId, ids)));
+    }
+    const documentAuditConditions = [
+      ...(ids.length ? [inArray(candidateDocumentAuditLogs.documentId, ids)] : []),
+      ...(accountIds.length ? [inArray(candidateDocumentAuditLogs.candidateId, accountIds)] : []),
+    ];
+    if (documentAuditConditions.length) {
+      await deleteRows("candidate_document_audit_logs", rowsDeleted, db.delete(candidateDocumentAuditLogs).where(or(...documentAuditConditions)));
+    }
+    if (ids.length) {
+      await deleteRows("candidate_documents", rowsDeleted, db.delete(candidateDocuments).where(inArray(candidateDocuments.id, ids)));
+    }
+  };
+  await deleteDocumentRows(documentIds);
   let candidateSessionsDeleted = 0;
   let candidateAccountsErased = 0;
   if (accountIds.length) {
+    // Sessions first: no upload can start any more.
     candidateSessionsDeleted = mutationRowCount(await db.delete(candidateSessions).where(inArray(candidateSessions.candidateId, accountIds)));
     rowsDeleted.candidate_sessions = candidateSessionsDeleted;
-    candidateAccountsErased = mutationRowCount(await db.delete(candidateAccounts).where(inArray(candidateAccounts.id, accountIds)));
+    // A document uploaded while the erasure ran (sent before the sessions
+    // were deleted) is found again and erased with its stored file: it would
+    // otherwise survive its account, its analysis still queued (DATA-01). One
+    // stored between this check and the account deletion makes that deletion
+    // fail on the foreign key of drizzle/pg/0004: checked again.
+    for (let attempt = 1; ; attempt += 1) {
+      const lateDocuments = await db.select({ id: candidateDocuments.id, storageKey: candidateDocuments.storageKey }).from(candidateDocuments)
+        .where(or(inArray(candidateDocuments.candidateId, accountIds), eq(candidateDocuments.applicationId, application.id)));
+      if (lateDocuments.length) {
+        // On a storage failure the application row is still there: the erasure can simply be run again.
+        storageObjectsDeleted += await dependencies.storageDelete(lateDocuments.map(document => document.storageKey));
+        await deleteDocumentRows(lateDocuments.map(document => document.id));
+      }
+      try {
+        candidateAccountsErased = mutationRowCount(await db.delete(candidateAccounts).where(inArray(candidateAccounts.id, accountIds)));
+        break;
+      } catch (error) {
+        if (attempt >= 3 || !isForeignKeyViolation(error, CANDIDATE_DOCUMENT_ACCOUNT_FOREIGN_KEY)) throw error;
+      }
+    }
     rowsDeleted.candidate_accounts = candidateAccountsErased;
   }
   const securityConditions = [

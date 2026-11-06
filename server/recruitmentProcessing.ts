@@ -1,13 +1,55 @@
-import { and, desc, eq, exists, gte, inArray, isNull, lt, lte, or } from "drizzle-orm";
+import { and, desc, eq, exists, gte, inArray, isNull, lt, lte, ne, or } from "drizzle-orm";
 import { cvApplications, cvProcessingJobs } from "../drizzle/schema";
 import { getDb } from "./db";
-import { extractCvDocument, analyzeCvText, RECRUITMENT_ANALYSIS_PROMPT_VERSION, saveCvAnalysis } from "./recruitmentAnalysis";
+import { AI_ANALYSIS_BILLING_UNAVAILABLE_ERROR, extractCvDocument, analyzeCvText, isVisibilityCheckWarning, MANUAL_REVIEW_FALLBACK_MODEL, RECRUITMENT_ANALYSIS_PROMPT_VERSION, saveCvAnalysis, visibilityRequiresReview } from "./recruitmentAnalysis";
 import { storageGetSignedUrl, storagePut } from "./storage";
 import { validateCvFile } from "./recruitmentFileValidation";
 import { isProcessingDeadlineError } from "./processingDeadline";
+import { notifyOwner } from "./_core/notification";
+import { dailyOwnerAlertIdempotencyKey, sendOwnerAlertOncePerWindow } from "./candidateSecurity";
 
 const MAX_ATTEMPTS = 3;
 const PROCESSING_BATCH_SIZE = 5;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Tells the owner, at most once a day, that the AI provider refuses CV analyses
+ * for billing (card expired, credit exhausted): the dossiers stay readable,
+ * marked « Analyse IA indisponible », until the credit is restored (REC-08).
+ * An alert that could not leave is sent by a later refused analysis.
+ */
+export async function notifyOwnerOfAiAnalysisUnavailable() {
+  const action = "recruitment_ai_billing_alert";
+  return sendOwnerAlertOncePerWindow({ action, subject: "global", windowMs: DAY_MS, blockMs: DAY_MS }, () => notifyOwner({
+    title: "Recrutement : analyse IA des CV indisponible (facturation du fournisseur)",
+    content: [
+      "Le service d’IA (Vercel AI Gateway) a refusé l’analyse d’un CV pour une raison de facturation : carte bancaire expirée ou absente, ou crédit épuisé.",
+      "Les candidatures continuent d’être acceptées ; les CV concernés restent consultables et sont marqués « Analyse IA indisponible » dans l’onglet Candidatures, à examiner manuellement.",
+      "Pour reprendre : rétablissez le moyen de paiement ou le crédit dans Vercel > AI Gateway, puis cliquez sur « Mettre à jour / reprendre l’IA » dans l’onglet Candidatures.",
+      "Cette alerte est envoyée au plus une fois par jour.",
+    ].join("\n\n"),
+  }, { idempotencyKey: dailyOwnerAlertIdempotencyKey(action) })).catch(() => false);
+}
+
+/**
+ * Dossiers left « Analyse IA indisponible » by a billing refusal, until « Mettre
+ * à jour / reprendre l’IA » requeues them: the daily security review reports
+ * them every day, whatever became of the single alert above (REC-08). Rejected
+ * and archived dossiers are left out, as that button leaves them as they are.
+ */
+export async function countCvAnalysesAwaitingAiCredit(cap = 1_000) {
+  const db = await getDb();
+  if (!db) return 0;
+  const rows = await db.select({ id: cvApplications.id }).from(cvApplications)
+    .where(and(
+      eq(cvApplications.analysisStatus, "degraded"),
+      eq(cvApplications.analysisLastError, AI_ANALYSIS_BILLING_UNAVAILABLE_ERROR),
+      ne(cvApplications.status, "rejected"),
+      ne(cvApplications.status, "archived"),
+    ))
+    .limit(cap);
+  return rows.length;
+}
 
 type CvPipelineInput = {
   cvFileKey: string;
@@ -93,11 +135,6 @@ export async function executeCvExternalPipeline(
   // Persist the source evidence before calling the AI provider: a provider
   // failure must not erase an otherwise successful document extraction.
   await onExtracted?.({ validation, extraction });
-  // A partial OCR (currently capped to the first rendered pages) must never
-  // produce a trustworthy whole-document score even if those pages are clear.
-  const analysisOcrConfidence = extraction.warnings.includes("vision_ocr_first_3_pages_only")
-    ? 0
-    : extraction.ocrConfidence;
   const analysisExecution = await steps.analyze({
     firstName: input.firstName,
     lastName: input.lastName,
@@ -108,12 +145,22 @@ export async function executeCvExternalPipeline(
     message: input.message ?? undefined,
     extractedText: extraction.text,
     extractionMethod: extraction.method,
-    ocrConfidence: analysisOcrConfidence,
+    // The vision's own confidence, kept as the admin sees it: a partial OCR
+    // (pages of a scan beyond those the vision reads) never gets a
+    // whole-document score, since its reading is incomplete (below), but the
+    // quotes found on the pages read stay found.
+    ocrConfidence: extraction.ocrConfidence,
+    // IA-01: incomplete too when invisible text could not be ruled out, when
+    // the file hides more of it than a CV template does, or when too much of
+    // its text could not be checked and was set aside.
     extractionIncomplete: extraction.warnings.some(warning =>
       warning.startsWith("pdf_text_page_") ||
       warning === "pdf_text_pages_missing" ||
-      warning === "vision_ocr_first_3_pages_only"
-    ),
+      /^vision_ocr_first_\d+_pages_only$/.test(warning) ||
+      isVisibilityCheckWarning(warning)
+    ) || visibilityRequiresReview(extraction.invisibleText),
+    invisibleText: extraction.invisibleText,
+    visibilityUnchecked: extraction.warnings.some(isVisibilityCheckWarning),
   });
   return {
     validation,
@@ -275,6 +322,25 @@ export async function enqueueCvAnalysis(applicationId: number, requestedAt = new
   throw new Error("cv_analysis_enqueue_contention");
 }
 
+/** analysisLastError of an application received beyond the day's volume (ABUS-01). */
+export const CV_ANALYSIS_DEFERRED_DAILY_VOLUME = "analysis_deferred_daily_volume";
+
+/**
+ * ABUS-01: an application received beyond the day's volume is kept for human
+ * review without queueing its AI analysis, and the legacy backfill leaves it
+ * alone, as does the admin's batch resume; its own « Analyser le CV » queues it
+ * like any other.
+ */
+export async function deferCvAnalysisForDailyVolume(applicationId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  await db.update(cvApplications).set({
+    analysisStatus: "needs_review",
+    analysisLastError: CV_ANALYSIS_DEFERRED_DAILY_VOLUME,
+    updatedAt: new Date(),
+  }).where(eq(cvApplications.id, applicationId));
+}
+
 /**
  * Recreates a processing job for legacy applications left in quarantine before
  * the Vercel worker replaced Manus. Active jobs are never duplicated.
@@ -290,6 +356,7 @@ export async function backfillLegacyCvAnalysisJobs(limit = PROCESSING_BATCH_SIZE
       eq(cvApplications.fileValidationStatus, "quarantined"),
       inArray(cvApplications.status, ["new", "reviewing", "shortlisted", "placed"]),
       isNull(cvProcessingJobs.id),
+      or(isNull(cvApplications.analysisLastError), ne(cvApplications.analysisLastError, CV_ANALYSIS_DEFERRED_DAILY_VOLUME)),
     ))
     .orderBy(cvApplications.createdAt)
     .limit(Math.min(Math.max(limit, 1), PROCESSING_BATCH_SIZE));
@@ -409,18 +476,23 @@ async function processCvAnalysisJob(jobId: number) {
     });
 
     const now = new Date();
-    const completionStatus = analysisCompletionStatus(analysis);
+    // The AI Gateway refused for billing: the manual-review result is kept, in
+    // a status of its own that « Mettre à jour / reprendre l’IA » resumes.
+    const aiUnavailable = pipeline.analysisModel === MANUAL_REVIEW_FALLBACK_MODEL;
+    const completionStatus = aiUnavailable ? "degraded" as const : analysisCompletionStatus(analysis);
+    const lastError = aiUnavailable ? AI_ANALYSIS_BILLING_UNAVAILABLE_ERROR : null;
     await db.update(cvApplications).set({
       analysisStatus: completionStatus,
       analysisAttempts: job.attempts,
-      analysisLastError: null,
+      analysisLastError: lastError,
         analysisModel: pipeline.analysisModel,
       analysisPromptVersion: RECRUITMENT_ANALYSIS_PROMPT_VERSION,
       updatedAt: now,
     }).where(eq(cvApplications.id, application.id));
-    await db.update(cvProcessingJobs).set({ status: "completed", finishedAt: now, lastError: null })
+    await db.update(cvProcessingJobs).set({ status: "completed", finishedAt: now, lastError })
       .where(eq(cvProcessingJobs.id, job.id));
-    return { completed: true, applicationId: application.id, score: analysis.relevanceScore, needsReview: completionStatus === "needs_review" };
+    if (aiUnavailable) await notifyOwnerOfAiAnalysisUnavailable();
+    return { completed: true, applicationId: application.id, score: analysis.relevanceScore, needsReview: completionStatus !== "completed", aiUnavailable };
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 4_000) : "unknown_processing_error";
     const now = new Date();

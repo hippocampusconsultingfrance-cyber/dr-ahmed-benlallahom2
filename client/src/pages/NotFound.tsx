@@ -3,6 +3,7 @@ import { Home, ArrowLeft } from "lucide-react";
 import { useLocation } from "wouter";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { SEOHead } from "@/components/SEOHead";
+import LanguageMenu from "@/components/LanguageMenu";
 
 export const notFoundSeo = { noIndex: true } as const;
 
@@ -44,10 +45,11 @@ export default function NotFound() {
   const c = content[language] || content.en;
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-4">
+    <div className="relative min-h-screen bg-background flex items-center justify-center px-4">
           <SEOHead title={`${c.subtitle} | Dr. Ahmed Ben Lallahom`} description={c.description} ogUrl="https://drahmedbenlallahom.com/404" {...notFoundSeo} />
       {/* Background pattern */}
       <div className="absolute inset-0 diagnostic-grid opacity-30" />
+      <LanguageMenu className="absolute right-4 top-4 z-10 sm:right-6 sm:top-6" />
       
       <div className="relative text-center max-w-lg">
         {/* Large 404 number */}

@@ -59,6 +59,10 @@ export default function Footer() {
           <div>
             <h2 className="font-semibold text-foreground mb-4 text-sm uppercase tracking-wide">{content.footer.navigate}</h2>
             <nav className="space-y-2.5" aria-label={footerLandmarkCopy.sections[landmarkLanguage]}>
+              {/* Réservation depuis toutes les pages (PUB-02) : un lien classique ouvre /booking en haut de page. */}
+              <a className="block text-sm text-muted-foreground hover:text-primary transition-colors" href="/booking">
+                {content.hero.bookConsultation}
+              </a>
               {[
                 { id: "experience", label: content.nav.experience },
                 { id: "services", label: content.nav.services },

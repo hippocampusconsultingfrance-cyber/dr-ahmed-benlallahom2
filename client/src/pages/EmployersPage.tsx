@@ -5,7 +5,9 @@ import { SEOHead } from "@/components/SEOHead";
 import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { siteConfig } from "@/data/site-config";
 import { resolveCountryForSubmission } from "@/lib/countrySubmission";
+import { reportFieldsToCorrect, type FieldToCorrect } from "@/lib/formFieldsToCorrect";
 
 export const employerCopy = {
   fr: {
@@ -13,9 +15,11 @@ export const employerCopy = {
     title: "Déléguez le recrutement de vos équipes médicales d’élite.",
     intro: "Nous sélectionnons et qualifions, pour les hôpitaux, cliniques, plateformes pétrolières, grands groupes industriels et missions offshore, des professionnels de santé d'exception prêts à intervenir en Europe, au Canada, au Moyen-Orient, en Afrique et sur les sites isolés.",
     formTitle: "Soumettre un brief de mission",
-    formIntro: "Précisez vos besoins opérationnels. Notre cellule spécialisée vous contactera sous 24h avec une shortlist qualifiée.",
+    formIntro: "Précisez vos besoins opérationnels. Notre cellule spécialisée prend un premier contact avec vous sous 24 h ouvrées.",
     orgName: "Établissement ou entreprise",
+    orgNamePlaceholder: "Hôpital, Groupe, Société",
     contactName: "Nom du responsable",
+    contactNamePlaceholder: "Dr. / M. / Mme",
     email: "Email",
     phone: "Téléphone",
     targetEnvironment: "Environnement de la mission",
@@ -28,6 +32,7 @@ export const employerCopy = {
     country: "Pays / Zone géographique",
     countryPlaceholder: "Ex. Arabie saoudite, Canada, France",
     requiredCertifications: "Certifications obligatoires (ex. ATLS, ACLS, HUET)",
+    certificationsPlaceholder: "ATLS, ACLS, HUET, OGP, etc.",
     timeline: "Calendrier souhaité (ex. Immédiat, Q3 2026)",
     timelinePlaceholder: "Ex. Immédiat, T3 2026",
     notes: "Détails de la mission ou contraintes particulières",
@@ -37,11 +42,14 @@ export const employerCopy = {
     successTitle: "Brief de mission enregistré",
     successText: "Votre demande a bien été transmise à notre équipe exécutive. Votre référence de suivi :",
     successThanks: "Merci pour votre confiance.",
-    successNext: "Notre équipe vous contactera sous 24 heures pour préciser le besoin, les délais et les prochaines étapes.",
+    successNext: "Notre équipe prend un premier contact avec vous sous 24 h ouvrées pour préciser le besoin, les délais et les prochaines étapes.",
     successPrivacy: "Votre brief est traité de manière confidentielle par notre cellule de recrutement.",
     backHome: "Retour à l’accueil",
-    required: "Veuillez remplir les champs obligatoires.",
     genericError: "La transmission a échoué. Vérifiez vos informations et réessayez.",
+    rateLimited: "Trop de briefs ont été envoyés récemment. Patientez avant d’en soumettre un nouveau, ou écrivez-nous à {email}.",
+    serviceUnavailable: "Le service est momentanément indisponible : votre brief n’a pas été transmis. Réessayez dans quelques minutes, ou écrivez-nous à {email}.",
+    privacyNotice: "Les informations de ce brief servent uniquement à traiter votre demande de recrutement.",
+    privacyLink: "Politique de confidentialité",
     b1Title: "Shortlist qualifiée par IA & Médecins",
     b1Desc: "Double validation clinique et technique pour chaque profil présenté.",
     b2Title: "Conformité & Habilitations",
@@ -57,9 +65,11 @@ export const employerCopy = {
     title: "Delegate the recruitment of your elite medical teams.",
     intro: "We source and qualify exceptional healthcare professionals for hospitals, clinics, oil rigs, industrial groups, and offshore missions across Europe, Canada, the Middle East, Africa, and remote sites.",
     formTitle: "Submit a Mission Brief",
-    formIntro: "Specify your operational requirements. Our specialized unit will contact you within 24 hours with a qualified shortlist.",
+    formIntro: "Specify your operational requirements. Our specialized unit will make a first contact with you within 24 business hours.",
     orgName: "Organization or Company",
+    orgNamePlaceholder: "Hospital, group, company",
     contactName: "Contact Name",
+    contactNamePlaceholder: "Dr / Mr / Ms",
     email: "Professional Email",
     phone: "Phone",
     targetEnvironment: "Mission Environment",
@@ -72,6 +82,7 @@ export const employerCopy = {
     country: "Country / Region",
     countryPlaceholder: "e.g. Saudi Arabia, Canada, France",
     requiredCertifications: "Mandatory Certifications (e.g. ATLS, ACLS, HUET)",
+    certificationsPlaceholder: "ATLS, ACLS, HUET, OGP, etc.",
     timeline: "Expected Timeline (e.g. Immediate, Q3 2026)",
     timelinePlaceholder: "e.g. Immediate, Q3 2026",
     notes: "Mission details or specific constraints",
@@ -81,11 +92,14 @@ export const employerCopy = {
     successTitle: "Mission Brief Registered",
     successText: "Your request has been forwarded to our executive team. Your tracking reference:",
     successThanks: "Thank you for your trust.",
-    successNext: "Our team will contact you within 24 hours to clarify the brief, timeline, and next steps.",
+    successNext: "Our team will make a first contact with you within 24 business hours to clarify the brief, timeline, and next steps.",
     successPrivacy: "Your brief is handled confidentially by our recruitment unit.",
     backHome: "Back to Home",
-    required: "Please fill in mandatory fields.",
     genericError: "Transmission failed. Check your information and try again.",
+    rateLimited: "Too many briefs have been sent recently. Please wait before submitting a new one, or write to us at {email}.",
+    serviceUnavailable: "The service is temporarily unavailable: your brief has not been sent. Please try again in a few minutes, or write to us at {email}.",
+    privacyNotice: "The information in this brief is used only to handle your recruitment request.",
+    privacyLink: "Privacy policy",
     b1Title: "AI & Physician-Qualified Shortlist",
     b1Desc: "Double clinical and technical validation for every presented profile.",
     b2Title: "Compliance & Clearances",
@@ -101,9 +115,11 @@ export const employerCopy = {
     title: "Rekrutieren Sie Ihre medizinischen Elite-Teams.",
     intro: "Wir rekrutieren und qualifizieren herausragende medizinische Fachkräfte für Krankenhäuser, Kliniken, Offshore-Plattformen, Industriegruppen und Offshore-Einsätze in Europa, Kanada, dem Nahen Osten, Afrika und an abgelegenen Standorten.",
     formTitle: "Einsatz-Brief einreichen",
-    formIntro: "Geben Sie Ihre operativen Anforderungen an. Unser spezialisiertes Team kontaktiert Sie innerhalb von 24 Stunden.",
+    formIntro: "Geben Sie Ihre operativen Anforderungen an. Unser spezialisiertes Team nimmt innerhalb von 24 Arbeitsstunden einen ersten Kontakt mit Ihnen auf.",
     orgName: "Einrichtung oder Unternehmen",
+    orgNamePlaceholder: "Krankenhaus, Gruppe, Unternehmen",
     contactName: "Name des Ansprechpartners",
+    contactNamePlaceholder: "Dr. / Herr / Frau",
     email: "Berufliche E-Mail",
     phone: "Telefon",
     targetEnvironment: "Einsatzumgebung",
@@ -116,6 +132,7 @@ export const employerCopy = {
     country: "Land / Region",
     countryPlaceholder: "z. B. Saudi-Arabien, Kanada, Frankreich",
     requiredCertifications: "Erforderliche Zertifikate (z.B. ATLS, ACLS, HUET)",
+    certificationsPlaceholder: "ATLS, ACLS, HUET, OGP usw.",
     timeline: "Zeitplan (z.B. Sofort, Q3 2026)",
     timelinePlaceholder: "z. B. Sofort, Q3 2026",
     notes: "Einsatzdetails oder besondere Anforderungen",
@@ -125,11 +142,14 @@ export const employerCopy = {
     successTitle: "Einsatz-Brief registriert",
     successText: "Ihre Anfrage wurde an unser Executive-Team übermittelt. Tracking-Referenz:",
     successThanks: "Vielen Dank für Ihr Vertrauen.",
-    successNext: "Unser Team kontaktiert Sie innerhalb von 24 Stunden, um Bedarf, Zeitplan und nächste Schritte zu klären.",
+    successNext: "Unser Team nimmt innerhalb von 24 Arbeitsstunden einen ersten Kontakt mit Ihnen auf, um Bedarf, Zeitplan und nächste Schritte zu klären.",
     successPrivacy: "Ihr Brief wird vertraulich von unserem Recruiting-Team bearbeitet.",
     backHome: "Zur Startseite",
-    required: "Bitte füllen Sie die Pflichtfelder aus.",
     genericError: "Übertragung fehlgeschlagen. Bitte überprüfen Sie Ihre Angaben.",
+    rateLimited: "Es wurden kürzlich zu viele Briefs gesendet. Bitte warten Sie, bevor Sie einen neuen einreichen, oder schreiben Sie uns an {email}.",
+    serviceUnavailable: "Der Dienst ist vorübergehend nicht verfügbar: Ihr Brief wurde nicht übermittelt. Bitte versuchen Sie es in einigen Minuten erneut oder schreiben Sie uns an {email}.",
+    privacyNotice: "Die Angaben in diesem Brief dienen ausschließlich der Bearbeitung Ihrer Recruiting-Anfrage.",
+    privacyLink: "Datenschutzerklärung",
     b1Title: "KI- & Arzt-qualifizierte Shortlist",
     b1Desc: "Klinische und technische Doppelvalidierung für jedes Profil.",
     b2Title: "Konformität & Freigaben",
@@ -145,9 +165,11 @@ export const employerCopy = {
     title: "委托我们为您招募精英医疗团队。",
     intro: "我们为欧洲、加拿大、中东、非洲及偏远站点的医院、诊所、石油钻井平台、工业集团和离岸任务甄选并认证顶尖医疗专业人员。",
     formTitle: "提交任务需求 (Brief)",
-    formIntro: "请告知您的运营需求。我们的专业团队将在 24 小时内为您提供合格的候选人 shortlist。",
+    formIntro: "请告知您的运营需求。我们的专业团队将在 24 个工作小时内与您进行首次联系。",
     orgName: "机构或公司名称",
+    orgNamePlaceholder: "医院、集团、公司",
     contactName: "负责人姓名",
+    contactNamePlaceholder: "医生 / 先生 / 女士",
     email: "职业邮箱",
     phone: "电话",
     targetEnvironment: "任务环境",
@@ -160,6 +182,7 @@ export const employerCopy = {
     country: "国家 / 地区",
     countryPlaceholder: "例如：沙特阿拉伯、加拿大、法国",
     requiredCertifications: "强制认证（如 ATLS, ACLS, HUET）",
+    certificationsPlaceholder: "ATLS、ACLS、HUET、OGP 等",
     timeline: "期望时间表（如：即刻、2026年第三季度）",
     timelinePlaceholder: "例如：即刻、2026年第三季度",
     notes: "任务详情或特殊约束",
@@ -169,11 +192,14 @@ export const employerCopy = {
     successTitle: "任务需求已登记",
     successText: "您的需求已转发至高管团队。追踪参考号：",
     successThanks: "感谢您的信任。",
-    successNext: "我们的团队将在 24 小时内联系您，确认需求、时间表和后续步骤。",
+    successNext: "我们的团队将在 24 个工作小时内与您进行首次联系，确认需求、时间表和后续步骤。",
     successPrivacy: "您的需求将由我们的招聘团队以保密方式处理。",
     backHome: "返回首页",
-    required: "请填写必填项。",
     genericError: "传输失败，请检查后重试。",
+    rateLimited: "近期提交的需求过多。请稍候再提交新的需求，或发送邮件至 {email}。",
+    serviceUnavailable: "服务暂时不可用，您的需求尚未提交。请几分钟后重试，或发送邮件至 {email}。",
+    privacyNotice: "此需求中的信息仅用于处理您的招聘请求。",
+    privacyLink: "隐私政策",
     b1Title: "AI 与医师双重背书 Shortlist",
     b1Desc: "对每个推荐档案进行严格的临床与技术双重把关。",
     b2Title: "合规与资质认证",
@@ -206,7 +232,8 @@ const initialBrief: BriefFormState = {
   contactName: "",
   email: "",
   phone: "",
-  targetEnvironment: "Hospital / International Clinic",
+  // Value of the first option, the one the select shows (REC-12).
+  targetEnvironment: "Hôpital / Clinique internationale",
   specialtyNeeded: "",
   country: "",
   requiredCertifications: "",
@@ -215,6 +242,41 @@ const initialBrief: BriefFormState = {
   website: "",
 };
 
+/** Required fields of the brief, in the order they appear on the form. */
+type EmployerField = "organizationName" | "contactName" | "email" | "specialtyNeeded" | "country";
+const employerFieldId = (field: EmployerField) => `employer-${field}`;
+
+/** Required fields left empty, and an email that is not an address, in the order of the form. */
+export function employerInvalidFields(form: BriefFormState, submittedCountry: string): EmployerField[] {
+  const invalid: EmployerField[] = [];
+  if (!form.organizationName.trim()) invalid.push("organizationName");
+  if (!form.contactName.trim()) invalid.push("contactName");
+  if (!/^\S+@\S+\.\S+$/.test(form.email.trim())) invalid.push("email");
+  if (!form.specialtyNeeded.trim()) invalid.push("specialtyNeeded");
+  if (!submittedCountry) invalid.push("country");
+  return invalid;
+}
+
+/**
+ * Message of a brief the server refused (REC-12): the limits reached or a
+ * service unavailable, from their stable code, in the language of the page
+ * and with the contact email; any other failure keeps the generic message.
+ * The French text of the server is never shown.
+ */
+function employerSubmissionError(code: unknown, language: Language): string {
+  const t = employerCopy[language];
+  if (code === "rate_limited") return t.rateLimited.replace("{email}", siteConfig.email);
+  if (code === "service_unavailable") return t.serviceUnavailable.replace("{email}", siteConfig.email);
+  return t.genericError;
+}
+
+/** What the alert names for each refused field of the brief, and where focus goes (A11Y-03). */
+export function employerFieldsToCorrect(invalidFields: readonly EmployerField[], language: Language): FieldToCorrect[] {
+  const t = employerCopy[language];
+  const names: Record<EmployerField, string> = { organizationName: t.orgName, contactName: t.contactName, email: t.email, specialtyNeeded: t.specialtyNeeded, country: t.country };
+  return invalidFields.map(field => ({ label: names[field], focusId: employerFieldId(field) }));
+}
+
 export default function EmployersPage() {
   const { language } = useLanguage();
   const lang = (language in employerCopy ? language : "fr") as Language;
@@ -222,19 +284,25 @@ export default function EmployersPage() {
   const [form, setForm] = useState<BriefFormState>(initialBrief);
   const [status, setStatus] = useState<"idle" | "sending" | "success" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
+  const [invalidFields, setInvalidFields] = useState<ReadonlySet<string>>(() => new Set());
   const [briefId, setBriefId] = useState("");
 
-  const update = <K extends keyof BriefFormState>(key: K, value: BriefFormState[K]) =>
+  const update = <K extends keyof BriefFormState>(key: K, value: BriefFormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
+    setInvalidFields(previous => { const next = new Set(previous); next.delete(key); return next; });
+  };
+  const isInvalid = (field: EmployerField) => invalidFields.has(field);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setErrorMessage("");
     const submittedCountry = resolveCountryForSubmission(form.country, new FormData(event.currentTarget).get("country"));
 
-    if (!form.organizationName || !form.contactName || !form.email || !form.specialtyNeeded || !submittedCountry) {
+    const invalid = employerInvalidFields(form, submittedCountry);
+    setInvalidFields(new Set(invalid));
+    if (invalid.length) {
       setStatus("error");
-      setErrorMessage(t.required);
+      setErrorMessage(reportFieldsToCorrect(employerFieldsToCorrect(invalid, lang), lang));
       return;
     }
 
@@ -243,10 +311,16 @@ export default function EmployersPage() {
       const res = await fetch("/api/client-briefs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, country: submittedCountry }),
+        // The language of the page is that of the acknowledgement sent to the employer.
+        body: JSON.stringify({ ...form, country: submittedCountry, language: lang }),
       });
       const payload = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(payload.error || t.genericError);
+      if (!res.ok) {
+        console.error("Employer brief refused:", res.status, payload.code);
+        setStatus("error");
+        setErrorMessage(employerSubmissionError(payload.code, lang));
+        return;
+      }
       setBriefId(payload.briefId || "BRIEF-OK");
       setStatus("success");
     } catch (err) {
@@ -262,7 +336,13 @@ export default function EmployersPage() {
       <Navigation />
       <main className="pt-32 md:pt-40 pb-24">
         <section className="container grid gap-12 lg:grid-cols-[1fr_1.1fr] lg:items-start max-w-6xl">
-          <div className="lg:sticky lg:top-32 space-y-8">
+          {/*
+            Colonne figée seulement à partir de 1440 px (.container s'élargit), où le formulaire remet
+            ses champs deux par deux. Plus étroit, il les empile (A11Y-01) et dépasse de loin cette
+            colonne, qui resterait figée assez longtemps pour que son dernier lien reçoive le focus
+            clavier hors de l'écran ou sous le bandeau cookies (WCAG 2.4.11).
+          */}
+          <div className="min-[1440px]:sticky min-[1440px]:top-32 space-y-8">
             <div>
               <p className="section-kicker">{t.eyebrow}</p>
               <h1 className="mt-4 font-display text-4xl leading-tight text-foreground md:text-5xl">{t.title}</h1>
@@ -321,22 +401,22 @@ export default function EmployersPage() {
                 <h2 className="font-display text-3xl text-foreground">{t.formTitle}</h2>
                 <p className="mt-3 text-sm leading-6 text-muted-foreground">{t.formIntro}</p>
 
-                <form onSubmit={handleSubmit} className="mt-8 space-y-6" noValidate>
-                  <div className="grid gap-4 sm:grid-cols-2">
+                <form onSubmit={handleSubmit} className="@container mt-8 space-y-6" noValidate>
+                  <div className="grid gap-4 @xl:grid-cols-2">
                     <label className="block w-full space-y-2 text-sm text-foreground">
                       <span className="block mb-1 font-medium">{t.orgName} *</span>
-                      <input required value={form.organizationName} onChange={(e) => update("organizationName", e.target.value)} className="form-control block w-full" placeholder="Hôpital, Groupe, Société" />
+                      <input id={employerFieldId("organizationName")} required autoComplete="organization" value={form.organizationName} aria-invalid={isInvalid("organizationName")} onChange={(e) => update("organizationName", e.target.value)} className={`form-control block w-full ${isInvalid("organizationName") ? "form-field-invalid" : ""}`} placeholder={t.orgNamePlaceholder} />
                     </label>
                     <label className="block w-full space-y-2 text-sm text-foreground">
                       <span className="block mb-1 font-medium">{t.contactName} *</span>
-                      <input required value={form.contactName} onChange={(e) => update("contactName", e.target.value)} className="form-control block w-full" placeholder="Dr. / M. / Mme" />
+                      <input id={employerFieldId("contactName")} required autoComplete="name" value={form.contactName} aria-invalid={isInvalid("contactName")} onChange={(e) => update("contactName", e.target.value)} className={`form-control block w-full ${isInvalid("contactName") ? "form-field-invalid" : ""}`} placeholder={t.contactNamePlaceholder} />
                     </label>
                   </div>
 
-                  <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="grid gap-4 @xl:grid-cols-2">
                     <label className="block w-full space-y-2 text-sm text-foreground">
                       <span className="block mb-1 font-medium">{t.email} *</span>
-                      <input type="email" required value={form.email} onChange={(e) => update("email", e.target.value)} className="form-control block w-full" autoComplete="email" />
+                      <input id={employerFieldId("email")} type="email" required value={form.email} aria-invalid={isInvalid("email")} onChange={(e) => update("email", e.target.value)} className={`form-control block w-full ${isInvalid("email") ? "form-field-invalid" : ""}`} autoComplete="email" />
                     </label>
                     <label className="block w-full space-y-2 text-sm text-foreground">
                       <span className="block mb-1 font-medium">{t.phone}</span>
@@ -344,7 +424,7 @@ export default function EmployersPage() {
                     </label>
                   </div>
 
-                  <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="grid gap-4 @xl:grid-cols-2">
                     <label className="block w-full space-y-2 text-sm text-foreground">
                       <span className="block mb-1 font-medium">{t.targetEnvironment} *</span>
                       <select value={form.targetEnvironment} onChange={(e) => update("targetEnvironment", e.target.value)} className="form-control block w-full">
@@ -356,14 +436,14 @@ export default function EmployersPage() {
                     </label>
                     <label className="block w-full space-y-2 text-sm text-foreground">
                       <span className="block mb-1 font-medium">{t.specialtyNeeded} *</span>
-                      <input required value={form.specialtyNeeded} onChange={(e) => update("specialtyNeeded", e.target.value)} className="form-control block w-full" placeholder={t.specialtyPlaceholder} />
+                      <input id={employerFieldId("specialtyNeeded")} required value={form.specialtyNeeded} aria-invalid={isInvalid("specialtyNeeded")} onChange={(e) => update("specialtyNeeded", e.target.value)} className={`form-control block w-full ${isInvalid("specialtyNeeded") ? "form-field-invalid" : ""}`} placeholder={t.specialtyPlaceholder} />
                     </label>
                   </div>
 
-                  <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="grid gap-4 @xl:grid-cols-2">
                     <label className="block w-full space-y-2 text-sm text-foreground">
                       <span className="block mb-1 font-medium">{t.country} *</span>
-                      <input name="country" required value={form.country} onInput={(e) => update("country", e.currentTarget.value)} onChange={(e) => update("country", e.target.value)} autoComplete="country-name" className="form-control block w-full" placeholder={t.countryPlaceholder} />
+                      <input id={employerFieldId("country")} name="country" required value={form.country} aria-invalid={isInvalid("country")} onInput={(e) => update("country", e.currentTarget.value)} onChange={(e) => update("country", e.target.value)} autoComplete="off" className={`form-control block w-full ${isInvalid("country") ? "form-field-invalid" : ""}`} placeholder={t.countryPlaceholder} />
                     </label>
                     <label className="block w-full space-y-2 text-sm text-foreground">
                       <span className="block mb-1 font-medium">{t.timeline}</span>
@@ -373,7 +453,7 @@ export default function EmployersPage() {
 
                   <label className="block w-full space-y-2 text-sm text-foreground">
                     <span className="block mb-1 font-medium">{t.requiredCertifications}</span>
-                    <input value={form.requiredCertifications} onChange={(e) => update("requiredCertifications", e.target.value)} className="form-control block w-full" placeholder="ATLS, ACLS, HUET, OGP, etc." />
+                    <input value={form.requiredCertifications} onChange={(e) => update("requiredCertifications", e.target.value)} className="form-control block w-full" placeholder={t.certificationsPlaceholder} />
                   </label>
 
                   <label className="block w-full space-y-2 text-sm text-foreground">
@@ -393,6 +473,11 @@ export default function EmployersPage() {
                   <button type="submit" disabled={status === "sending"} className="cta-primary w-full justify-center">
                     {status === "sending" ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{t.sending}</> : t.submit}
                   </button>
+                  {/* Information at the point of collection, with the privacy policy (REC-12). */}
+                  <p className="text-xs leading-5 text-muted-foreground">
+                    {t.privacyNotice}{" "}
+                    <Link href="/legal?tab=privacy" className="text-primary underline underline-offset-2 hover:text-primary/80">{t.privacyLink}</Link>
+                  </p>
                 </form>
               </>
             )}

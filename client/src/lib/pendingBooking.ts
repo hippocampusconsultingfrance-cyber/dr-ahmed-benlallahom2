@@ -21,8 +21,8 @@ export type BookingDraft = {
   name: string;
   email: string;
   phone: string;
-  dateText: string;
-  timeText: string;
+  /** Start of the slot chosen in the grid (ISO instant), "" when none. */
+  appointmentDate: string;
   details: string;
 };
 
@@ -106,7 +106,7 @@ export function loadBookingDraft(): BookingDraft | null {
   const value = read<Partial<BookingDraft>>(DRAFT_KEY);
   if (!value || typeof value !== "object") return null;
   const field = (key: keyof BookingDraft) => (typeof value[key] === "string" ? (value[key] as string).slice(0, 5000) : "");
-  return { name: field("name"), email: field("email"), phone: field("phone"), dateText: field("dateText"), timeText: field("timeText"), details: field("details") };
+  return { name: field("name"), email: field("email"), phone: field("phone"), appointmentDate: field("appointmentDate"), details: field("details") };
 }
 
 export function saveBookingDraft(value: BookingDraft) {

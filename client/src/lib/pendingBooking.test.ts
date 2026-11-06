@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clearBookingDraft,
@@ -11,6 +10,7 @@ import {
 } from "./pendingBooking";
 
 // M5 — BOOK-BACKNAV : mémoire par onglet de la réservation en attente et de la saisie.
+// Reprise et annulation sur les pages : BookingPage.render.test.ts et BookingConfirmationPage.render.test.ts.
 
 class MemoryStorage {
   private values = new Map<string, string>();
@@ -54,8 +54,8 @@ describe("réservation en attente après un retour depuis Stripe", () => {
   it("ignore une valeur corrompue et conserve la saisie du formulaire", () => {
     (window as unknown as { sessionStorage: MemoryStorage }).sessionStorage.setItem("booking:pending:v1", "{not json");
     expect(loadPendingBooking(NOW)).toBeNull();
-    saveBookingDraft({ name: "Patient Test", email: "patient@example.test", phone: "+33612345678", dateText: "20/10/2026", timeText: "10:00", details: "Demande d’avis" });
-    expect(loadBookingDraft()).toMatchObject({ name: "Patient Test", timeText: "10:00" });
+    saveBookingDraft({ name: "Patient Test", email: "patient@example.test", phone: "+33612345678", appointmentDate: "2026-10-20T08:00:00.000Z", details: "Demande d’avis" });
+    expect(loadBookingDraft()).toMatchObject({ name: "Patient Test", appointmentDate: "2026-10-20T08:00:00.000Z" });
     clearBookingDraft();
     expect(loadBookingDraft()).toBeNull();
   });
@@ -65,15 +65,5 @@ describe("réservation en attente après un retour depuis Stripe", () => {
     expect(() => savePendingBooking(pending)).not.toThrow();
     expect(loadPendingBooking(NOW)).toBeNull();
     expect(loadBookingDraft()).toBeNull();
-  });
-
-  it("propose « Reprendre le paiement » et « Annuler et choisir un autre créneau » sur la page de réservation", () => {
-    const source = readFileSync(new URL("../pages/BookingPage.tsx", import.meta.url), "utf8");
-    expect(source).toContain("trpc.appointments.createCheckoutSession.useMutation()");
-    expect(source).toContain("trpc.appointments.cancelPending.useMutation()");
-    expect(source).toContain("savePendingBooking({");
-    expect(source).toContain('window.addEventListener("pageshow", onPageShow)');
-    const confirmation = readFileSync(new URL("../pages/BookingConfirmationPage.tsx", import.meta.url), "utf8");
-    expect(confirmation).toContain("clearPendingBooking({ checkoutSessionId: sessionId })");
   });
 });

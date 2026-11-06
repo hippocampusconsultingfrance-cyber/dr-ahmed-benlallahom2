@@ -7,7 +7,7 @@ import {
   ventureNarrativesZh,
 } from "@/data/ventureNarratives";
 import { useParams, Link } from "wouter";
-import { ArrowLeft, ExternalLink, Linkedin, User } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, ExternalLink, Linkedin, User } from "lucide-react";
 import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import { SEOHead } from "@/components/SEOHead";
@@ -69,6 +69,9 @@ export function ventureMetaDescription(description: string[]) {
   const end = lastWordBoundary >= 120 ? lastWordBoundary : 159;
   return `${excerpt.slice(0, end).trimEnd()}…`;
 }
+
+/** Seule la page de la pratique clinique mène à la consultation payante (PUB-02). */
+export const CONSULTATION_VENTURE_SLUG = "pratique-clinique";
 
 export const VENTURE_LOGO_PLACEHOLDER = "/assets/venture-placeholder.svg";
 export const TEAM_PHOTO_PLACEHOLDER = "/assets/team-placeholder.svg";
@@ -213,6 +216,12 @@ export default function VenturePage() {
               >
                 <ExternalLink className="w-4 h-4" aria-hidden="true" />
                 {copy.visit}
+              </a>
+            )}
+            {venture.slug === CONSULTATION_VENTURE_SLUG && (
+              <a href="/booking" className="cta-primary">
+                {content.hero.bookConsultation}
+                <ArrowUpRight className="w-4 h-4" aria-hidden="true" />
               </a>
             )}
           </div>

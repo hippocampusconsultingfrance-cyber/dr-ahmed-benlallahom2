@@ -51,3 +51,6 @@ export function resolveConsultationContact(env: Env = process.env): Consultation
 
 /** Same rule as the booking page: full refund more than 24 h before, none after. */
 export const PATIENT_CANCELLATION_POLICY = `Annulation : remboursement intégral si vous annulez plus de ${BOOKING_PATIENT_REFUND_DEADLINE_HOURS} heures avant le rendez-vous ; passé ce délai, la réservation n’est pas remboursable. Pour annuler, contactez-nous en indiquant votre référence.`;
+
+/** Same policy in the emails of a booking made in another language (EN-01). */
+export const PATIENT_CANCELLATION_POLICY_EN = `Cancellation: full refund if you cancel more than ${BOOKING_PATIENT_REFUND_DEADLINE_HOURS} hours before the appointment; after that, the booking cannot be refunded. To cancel, contact us quoting your reference.`;

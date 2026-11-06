@@ -12,13 +12,13 @@ export const CANDIDATE_INVITATION_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 7;
  */
 export const CANDIDATE_INVITATION_PREFILL_GRACE_MS = 1000 * 60 * 60 * 24 * 90;
 
-/** French wording of a link lifetime for emails ("30 minutes", "7 jours"). */
-export function formatCandidateLinkValidity(durationMs: number): string {
+/** Wording of a link lifetime for emails: "30 minutes", "7 jours" in French, "7 days" in English. */
+export function formatCandidateLinkValidity(durationMs: number, language: "fr" | "en" = "fr"): string {
   const minutes = Math.round(durationMs / 60_000);
   if (minutes < 120) return `${minutes} minutes`;
   const hours = Math.round(minutes / 60);
-  if (hours < 48) return `${hours} heures`;
-  return `${Math.round(hours / 24)} jours`;
+  if (hours < 48) return `${hours} ${language === "en" ? "hours" : "heures"}`;
+  return `${Math.round(hours / 24)} ${language === "en" ? "days" : "jours"}`;
 }
 const SCRYPT_N = 1 << 15;
 const SCRYPT_R = 8;

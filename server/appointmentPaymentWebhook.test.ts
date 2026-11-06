@@ -5,14 +5,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const database = vi.hoisted(() => ({ getDb: vi.fn() }));
 const fulfillment = vi.hoisted(() => ({
   enqueueAppointmentFulfillment: vi.fn(async () => undefined),
+  enqueueStripeRefundNotices: vi.fn(async () => undefined),
   processAppointmentFulfillmentNow: vi.fn(async () => ({ processed: 2, results: [] })),
+  closeUnsentAppointmentFulfillment: vi.fn(async () => 0),
 }));
 const owner = vi.hoisted(() => ({ notifyOwner: vi.fn(async () => true) }));
 vi.mock("./db", () => ({ getDb: database.getDb }));
 vi.mock("./appointmentFulfillment", () => fulfillment);
 vi.mock("./_core/notification", () => owner);
 
-import { buildUnconfirmablePaymentAlert, handleCheckoutSessionCompleted, processFulfillmentBestEffort } from "./appointmentPaymentWebhook";
+import { buildUnconfirmablePaymentAlert, handleChargeRefunded, handleCheckoutSessionCompleted, processFulfillmentBestEffort } from "./appointmentPaymentWebhook";
 
 const dialect = new PgDialect();
 
@@ -85,6 +87,7 @@ describe("webhook Stripe checkout.session.completed", () => {
   it("confirme uniquement un créneau encore réservé et envoie immédiatement confirmation et facture", async () => {
     const { writes } = fakeDatabase([[heldAppointment()]], [1]);
 
+    const startedAt = Date.now();
     const result = await handleCheckoutSessionCompleted(paidSession(), { fulfillmentTimeoutMs: 1_000 });
 
     expect(result).toMatchObject({ httpStatus: 200, outcome: "confirmed" });
@@ -96,7 +99,11 @@ describe("webhook Stripe checkout.session.completed", () => {
     expect(sql).toContain('"stripe_session_id" is null');
     expect(params).toEqual(expect.arrayContaining([42, "pending", "held", "cs_test_1"]));
     expect(fulfillment.enqueueAppointmentFulfillment).toHaveBeenCalledWith(42);
-    expect(fulfillment.processAppointmentFulfillmentNow).toHaveBeenCalledWith(42);
+    // The jobs share the immediate budget (ABUS-03): it ends with the wait for them.
+    expect(fulfillment.processAppointmentFulfillmentNow).toHaveBeenCalledWith(42, { deadlineAt: expect.any(Number) });
+    const [[, { deadlineAt }]] = fulfillment.processAppointmentFulfillmentNow.mock.calls as unknown as Array<[number, { deadlineAt: number }]>;
+    expect(deadlineAt).toBeGreaterThanOrEqual(startedAt + 1_000);
+    expect(deadlineAt).toBeLessThanOrEqual(Date.now() + 1_000);
     expect(owner.notifyOwner).not.toHaveBeenCalled();
   });
 
@@ -205,6 +212,45 @@ describe("webhook Stripe checkout.session.completed", () => {
   });
 });
 
+describe("webhook Stripe charge.refunded (RES-06)", () => {
+  const paidRow = () => heldAppointment({ paymentStatus: "completed", appointmentStatus: "confirmed", stripePaymentIntentId: "pi_test_1", slotKey: "2026-11-02T09:00:00.000Z", cancelledAt: null });
+  const fullRefund = { id: "ch_test_1", amount: 10000, amount_refunded: 10000, refunded: true, payment_intent: "pi_test_1" };
+
+  it("ne modifie que la ligne encore payée avec ce paiement et ce statut", async () => {
+    const { writes } = fakeDatabase([[paidRow()]], [1]);
+    const result = await handleChargeRefunded(fullRefund);
+
+    expect(result).toMatchObject({ httpStatus: 200, outcome: "refunded" });
+    expect(writes[0].values).toMatchObject({ paymentStatus: "refunded", appointmentStatus: "cancelled", slotKey: null, refundAmount: "100.00" });
+    const { sql, params } = dialect.sqlToQuery(writes[0].where);
+    expect(sql).toContain('"stripe_payment_intent_id" =');
+    expect(params).toEqual(expect.arrayContaining([42, "pi_test_1", "completed", "confirmed"]));
+    // Patient email and owner alert: queued, then attempted right away (RES-06).
+    expect(fulfillment.enqueueStripeRefundNotices).toHaveBeenCalledWith(42);
+    expect(fulfillment.processAppointmentFulfillmentNow).toHaveBeenCalledWith(42, { deadlineAt: expect.any(Number) });
+    expect(owner.notifyOwner).not.toHaveBeenCalled();
+    // Post-payment emails still waiting for a retry are closed as not sent (EXPL-02).
+    expect(fulfillment.closeUnsentAppointmentFulfillment).toHaveBeenCalledWith(42, expect.any(Date));
+  });
+
+  it("répond 500 si les envois ne peuvent pas être mis en file : la relivraison les remet en file", async () => {
+    fakeDatabase([[paidRow()]], [1]);
+    fulfillment.enqueueStripeRefundNotices.mockRejectedValueOnce(new Error("Database connection failed"));
+
+    await expect(handleChargeRefunded(fullRefund)).rejects.toThrow("Database connection failed");
+  });
+
+  it("demande à Stripe de relivrer quand le rendez-vous a changé entre-temps sans être remboursé", async () => {
+    owner.notifyOwner.mockClear();
+    fakeDatabase([[paidRow()], [{ ...paidRow(), appointmentStatus: "completed" }]], [0]);
+    const result = await handleChargeRefunded(fullRefund);
+
+    expect(result).toEqual({ httpStatus: 500, body: { received: false }, outcome: "changed_concurrently" });
+    expect(owner.notifyOwner).not.toHaveBeenCalled();
+    expect(fulfillment.closeUnsentAppointmentFulfillment).not.toHaveBeenCalled();
+  });
+});
+
 describe("envoi immédiat borné dans le temps", () => {
   it("rend la main après le délai sans attendre l’envoi", async () => {
     const outcome = await processFulfillmentBestEffort(1, 5, () => new Promise(() => undefined));
@@ -235,7 +281,7 @@ describe("alerte de paiement non confirmable", () => {
       appointmentStatus: "cancelled",
     });
     expect(alert.title).toBe("Paiement reçu pour un rendez-vous non confirmable (APT-9)");
-    expect(alert.content).toContain("120.00 €");
+    expect(alert.content).toContain("120,00 €");
     expect(alert.content).toContain("Remboursement ou reprogrammation manuelle requis");
   });
 });

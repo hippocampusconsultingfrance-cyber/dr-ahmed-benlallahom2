@@ -22,12 +22,14 @@ vi.mock("./appointmentHolds", async importOriginal => ({
   ...await importOriginal<typeof import("./appointmentHolds")>(),
   releaseExpiredAppointmentHolds: mocks.releaseExpiredAppointmentHolds,
 }));
+// Few holds awaiting payment: no anti-robot check (ABUS-02, covered by appointments.holdAbuse.test.ts).
+vi.mock("./appointmentHoldAbuse", () => ({ bookingChallengeRequired: vi.fn(async () => false), recordBookingHold: vi.fn(async () => undefined) }));
 vi.mock("./_core/notification", () => ({ notifyOwner: mocks.notifyOwner }));
 vi.mock("./_core/notifications", async importOriginal => ({
   ...await importOriginal<typeof import("./_core/notifications")>(),
   sendUnconfirmablePaymentEmail: mocks.sendUnconfirmablePaymentEmail,
 }));
-vi.mock("./appointmentFulfillment", () => ({ enqueueAppointmentFulfillment: vi.fn(), processAppointmentFulfillmentNow: vi.fn(async () => ({ processed: 0 })) }));
+vi.mock("./appointmentFulfillment", () => ({ enqueueAppointmentFulfillment: vi.fn(), hasDeliveriesLeftInQueue: vi.fn(async () => false), processAppointmentFulfillmentNow: vi.fn(async () => ({ processed: 0 })) }));
 
 import { appRouter, BOOKING_PAYMENT_UNAVAILABLE_MESSAGE, parisDateKey, parseAppointmentDate } from "./routers";
 import { handleCheckoutSessionCompleted } from "./appointmentPaymentWebhook";
@@ -49,7 +51,7 @@ function dbReturning(appointment: Record<string, unknown> | null) {
 }
 
 const status = (sessionId = "cs_test_own") => caller().appointments.publicStatus({ trackingId: "APTSTATUS0001", sessionId });
-const row = (overrides: Record<string, unknown> = {}) => ({ trackingId: "APTSTATUS0001", paymentStatus: "completed", appointmentStatus: "confirmed", stripeSessionId: "cs_test_own", ...overrides });
+const row = (overrides: Record<string, unknown> = {}) => ({ trackingId: "APTSTATUS0001", paymentStatus: "completed", appointmentStatus: "confirmed", stripeSessionId: "cs_test_own", appointmentDate: new Date("2026-10-29T18:00:00.000Z"), duration: 30, finalPrice: "150.00", ...overrides });
 
 let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
@@ -63,15 +65,23 @@ afterEach(() => {
 });
 
 describe("appointments.publicStatus — état réel affiché après Stripe", () => {
-  it("confirme seulement un rendez-vous payé et confirmé avec cette session", async () => {
+  it("confirme seulement un rendez-vous payé et confirmé avec cette session, avec sa date, sa durée et son montant (RES-05)", async () => {
     dbReturning(row());
-    await expect(status()).resolves.toEqual({ state: "confirmed" });
+    await expect(status()).resolves.toEqual({
+      state: "confirmed",
+      appointment: { appointmentDate: "2026-10-29T18:00:00.000Z", durationMinutes: 30, amountEur: 150 },
+    });
     expect(mocks.stripeRetrieve).not.toHaveBeenCalled();
   });
 
-  it("affiche « en cours de validation » tant que le webhook n’a pas confirmé un paiement reçu", async () => {
-    dbReturning(row({ paymentStatus: "pending", appointmentStatus: "held" }));
-    mocks.stripeRetrieve.mockResolvedValue({ id: "cs_test_own", payment_status: "paid", status: "complete", metadata: { trackingId: "APTSTATUS0001" } });
+  it("affiche « en cours de validation » quand un paiement reçu ne peut pas encore être confirmé (base indisponible) (EXPL-01)", async () => {
+    const held = { ...row({ paymentStatus: "pending", appointmentStatus: "held" }), id: 7, stripePaymentIntentId: null };
+    mocks.getDb.mockResolvedValue({
+      select: vi.fn(() => ({ from: () => ({ where: () => ({ limit: async () => [held] }) }) })),
+      update: vi.fn(() => ({ set: () => ({ where: async () => { throw new Error("connection terminated"); } }) })),
+    });
+    mocks.stripeRetrieve.mockResolvedValue({ id: "cs_test_own", payment_status: "paid", status: "complete", amount_total: 15000, payment_intent: "pi_test_own", metadata: { trackingId: "APTSTATUS0001" } });
+    // Pas encore confirmé : ni date, ni durée, ni montant ; le webhook ou la page confirmeront ensuite.
     await expect(status()).resolves.toEqual({ state: "processing" });
   });
 
@@ -140,6 +150,9 @@ describe("messages d’erreur de la réservation", () => {
     expect(error).toMatchObject({ code: "SERVICE_UNAVAILABLE", message: BOOKING_PAYMENT_UNAVAILABLE_MESSAGE });
     expect(String(error.message)).not.toContain("Stripe");
     expect(updates[0]).toMatchObject({ appointmentStatus: "cancelled", slotKey: null });
+    // Les réservations expirées sont d’abord vérifiées chez Stripe avec le même client (EXPL-01).
+    const [stripeClient] = mocks.releaseExpiredAppointmentHolds.mock.calls[0] as unknown as [() => { checkout: { sessions: { retrieve: unknown } } }];
+    expect(stripeClient().checkout.sessions.retrieve).toBe(mocks.stripeRetrieve);
   });
 
   it("refuse les caractères de contrôle (octet NUL) avant toute requête SQL", async () => {

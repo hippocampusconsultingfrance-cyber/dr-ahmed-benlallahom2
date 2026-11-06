@@ -9,23 +9,26 @@ const notifications = vi.hoisted(() => ({
   sendCustomerConfirmationSMS: vi.fn(async () => true),
   sendInvoiceEmail: vi.fn(async () => undefined),
   sendOwnerNotificationEmail: vi.fn(async () => undefined),
+  postPaymentEmailRefused: vi.fn(() => false),
 }));
 const owner = vi.hoisted(() => ({ notifyOwner: vi.fn(async () => true) }));
 vi.mock("./db", () => ({ getDb: database.getDb }));
 vi.mock("./_core/notifications", () => notifications);
 vi.mock("./_core/notification", () => owner);
 const invoicing = vi.hoisted(() => ({
-  generateInvoicePDF: vi.fn(async () => ({ buffer: Buffer.from("pdf") })),
+  generateInvoicePDF: vi.fn(async (_data: Record<string, unknown>) => ({ buffer: Buffer.from("pdf") })),
   allocateAppointmentInvoice: vi.fn(async () => ({
     invoiceNumber: "FAC-2026-000003",
     issuedAt: new Date("2026-10-12T08:00:00Z"),
     paidAt: new Date("2026-10-12T07:59:00Z"),
+    issuedNow: true,
   })),
 }));
 vi.mock("./invoice", () => ({ generateInvoicePDF: invoicing.generateInvoicePDF }));
 vi.mock("./invoiceNumbering", () => ({ allocateAppointmentInvoice: invoicing.allocateAppointmentInvoice }));
 
 import {
+  patientEmailIdempotencyKey,
   processAppointmentFulfillmentNow,
   processDueAppointmentFulfillmentJobs,
   recoverStaleAppointmentFulfillmentJobs,
@@ -132,6 +135,21 @@ describe("revendication atomique des envois post-paiement", () => {
     expect(writes.at(-1)).toMatchObject({ table: appointmentFulfillmentJobs, values: { status: "completed", lastError: null } });
   });
 
+  it("n’enregistre un SMS envoyé au patient que s’il est vraiment parti", async () => {
+    for (const smsDelivered of [false, true]) {
+      notifications.sendCustomerConfirmationSMS.mockResolvedValueOnce(smsDelivered);
+      const { writes } = fakeDatabase({
+        jobs: [[queuedJob], [{ ...queuedJob, status: "running", attempts: 1 }]],
+        appointments: [[paidAppointment()]],
+        updateRowCounts: [1],
+      });
+
+      await processDueAppointmentFulfillmentJobs();
+
+      expect(writes.filter(write => write.table === appointments).map(write => write.values)).toEqual([{ emailSent: 1, smsSent: smsDelivered ? 1 : 0 }]);
+    }
+  });
+
   it("restreint le traitement immédiat au rendez-vous payé, avec la même revendication", async () => {
     const { selectWheres, writes } = fakeDatabase({ jobs: [[queuedJob]], updateRowCounts: [0] });
 
@@ -203,13 +221,61 @@ describe("revendication atomique des envois post-paiement", () => {
 
     expect(result.results).toEqual([{ completed: true }]);
     expect(invoicing.allocateAppointmentInvoice).toHaveBeenCalledWith({ appointmentId: 42, paidAt: createdAt });
+    // Allocated by this attempt: built even if the store cannot be checked (EXPL-02).
     expect(invoicing.generateInvoicePDF).toHaveBeenCalledWith(expect.objectContaining({
       invoiceNumber: "FAC-2026-000003",
       issueDate: new Date("2026-10-12T08:00:00Z"),
       paymentDate: new Date("2026-10-12T07:59:00Z"),
       trackingId: "APT-42",
-    }));
-    expect(notifications.sendInvoiceEmail).toHaveBeenCalledWith("patient@example.com", "Patient Test", "APT-42", 100, expect.any(Buffer), "FAC-2026-000003", { idempotencyKey: "appointment-invoice-FAC-2026-000003" });
+    }), undefined, { issuedNow: true });
+    expect(notifications.sendInvoiceEmail).toHaveBeenCalledWith("patient@example.com", "Patient Test", "APT-42", 100, expect.any(Buffer), "FAC-2026-000003", { idempotencyKey: patientEmailIdempotencyKey("appointment-invoice-FAC-2026-000003", "patient@example.com"), language: "fr" });
+  });
+
+  it("écrit les emails d’une réservation faite en allemand en anglais, la facture PDF restant en français (EN-01)", async () => {
+    const createdAt = new Date("2026-10-12T07:59:00Z");
+    const confirmationJob = { ...queuedJob, createdAt };
+    fakeDatabase({
+      jobs: [[confirmationJob], [{ ...confirmationJob, status: "running", attempts: 1 }]],
+      appointments: [[paidAppointment({ language: "de" })]],
+      updateRowCounts: [1],
+    });
+    await processDueAppointmentFulfillmentJobs();
+    // The .ics stamp is the job's creation time: a retried email stays identical (RES-05).
+    expect(notifications.sendConfirmationEmail).toHaveBeenCalledWith("patient@example.com", "Patient Test", "APT-42", expect.any(Date), 100, undefined, {
+      idempotencyKey: patientEmailIdempotencyKey("appointment-confirmation-APT-42", "patient@example.com"),
+      language: "en",
+      confirmedAt: createdAt,
+    });
+
+    const invoiceJob = { ...queuedJob, id: 8, jobType: "invoice", createdAt };
+    const appointmentDate = futureDate();
+    fakeDatabase({
+      jobs: [[invoiceJob], [{ ...invoiceJob, status: "running", attempts: 1 }]],
+      appointments: [[paidAppointment({ language: "de", appointmentDate })]],
+      updateRowCounts: [1],
+    });
+    await processDueAppointmentFulfillmentJobs();
+    expect(notifications.sendInvoiceEmail).toHaveBeenCalledWith(expect.anything(), expect.anything(), "APT-42", 100, expect.any(Buffer), "FAC-2026-000003", expect.objectContaining({ language: "en" }));
+    // The PDF is generated from exactly the same data as for a French booking: no language.
+    const germanInvoiceData = invoicing.generateInvoicePDF.mock.calls.at(-1)![0];
+    expect(germanInvoiceData).not.toHaveProperty("language");
+    fakeDatabase({
+      jobs: [[invoiceJob], [{ ...invoiceJob, status: "running", attempts: 1 }]],
+      appointments: [[paidAppointment({ appointmentDate })]],
+      updateRowCounts: [1],
+    });
+    await processDueAppointmentFulfillmentJobs();
+    expect(invoicing.generateInvoicePDF.mock.calls.at(-1)![0]).toEqual(germanInvoiceData);
+
+    const ownerJob = { ...queuedJob, id: 9, jobType: "owner", createdAt };
+    fakeDatabase({
+      jobs: [[ownerJob], [{ ...ownerJob, status: "running", attempts: 1 }]],
+      appointments: [[paidAppointment({ language: "de" })]],
+      updateRowCounts: [1],
+    });
+    await processDueAppointmentFulfillmentJobs();
+    // The owner sees the language of the booking page itself.
+    expect(notifications.sendOwnerNotificationEmail).toHaveBeenCalledWith("Patient Test", "patient@example.com", "+33600000000", "APT-42", expect.any(Date), 100, { idempotencyKey: "appointment-owner-APT-42", language: "de" });
   });
 
   it("remet en file un job interrompu (instance gelée après la réponse à Stripe)", async () => {

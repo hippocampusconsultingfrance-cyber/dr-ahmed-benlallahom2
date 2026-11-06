@@ -30,6 +30,8 @@ vi.mock("./appointmentHolds", async importOriginal => ({
   ...await importOriginal<typeof import("./appointmentHolds")>(),
   releaseExpiredAppointmentHolds: mocks.releaseExpiredAppointmentHolds,
 }));
+// Few holds awaiting payment: no anti-robot check (ABUS-02, covered by appointments.holdAbuse.test.ts).
+vi.mock("./appointmentHoldAbuse", () => ({ bookingChallengeRequired: vi.fn(async () => false), recordBookingHold: vi.fn(async () => undefined) }));
 vi.mock("stripe", () => ({
   default: vi.fn().mockImplementation(() => ({
     checkout: { sessions: { create: mocks.stripeCreate, retrieve: vi.fn() } },
@@ -149,6 +151,80 @@ describe("appointments.create — plafond de créneaux retenus par email", () =>
   });
 });
 
+describe("appointments.create — maintien avant paiement et session Checkout (P0/P1)", () => {
+  const confirmationUrl = (status: "success" | "canceled", trackingId: string) => status === "success"
+    ? `https://drahmedbenlallahom.com/booking/confirmation?status=success&trackingId=${trackingId}&session_id={CHECKOUT_SESSION_ID}`
+    : "https://drahmedbenlallahom.com/booking/confirmation?status=canceled&session_id={CHECKOUT_SESSION_ID}";
+
+  it("retient le créneau sans le confirmer, et la session Stripe expire avec ce maintien, sans code promotionnel", async () => {
+    const db = fakeDb(0);
+    mocks.getDb.mockResolvedValue(db);
+    // A forged Host or Origin never chooses where Stripe sends the patient back.
+    const result = await appRouter.createCaller(publicContext({ host: "evil.example", origin: "https://evil.example" })).appointments.create(bookingInput());
+
+    const [insert] = db.execute.mock.calls[0] as unknown as [SQL];
+    const { sql, params } = dialect.sqlToQuery(insert);
+    expect(sql).toMatch(/payment_status, appointment_status, hold_expires_at, language\) VALUES/);
+    expect(params.slice(-4)).toEqual(["pending", "held", new Date(result.holdExpiresAt), "fr"]);
+
+    const [stripeParams] = mocks.stripeCreate.mock.calls[0];
+    expect(stripeParams.expires_at).toBe(Math.floor(Date.parse(result.holdExpiresAt) / 1000));
+    expect(stripeParams).not.toHaveProperty("allow_promotion_codes");
+    expect(stripeParams.success_url).toBe(confirmationUrl("success", result.trackingId));
+    expect(stripeParams.cancel_url).toBe(confirmationUrl("canceled", result.trackingId));
+  });
+
+  it("reprend le paiement avec le même libellé, la même expiration et le même retour", async () => {
+    const holdExpiresAt = new Date(Date.now() + 45 * 60 * 1000 + 789);
+    const held = { trackingId: "APTRESUME0001", customerEmail: "patient@example.com", customerName: "Patient Synthétique", finalPrice: "150.00", paymentStatus: "pending", appointmentStatus: "held", stripeSessionId: null, holdExpiresAt };
+    const update = vi.fn(() => ({ set: () => ({ where: async () => ({ rowCount: 1 }) }) }));
+    mocks.getDb.mockResolvedValue({ select: () => ({ from: () => ({ where: () => ({ limit: async () => [held] }) }) }), update });
+
+    await appRouter.createCaller(publicContext({ origin: "https://evil.example" })).appointments.createCheckoutSession({
+      trackingId: held.trackingId, finalPrice: 150, customerEmail: held.customerEmail, customerName: held.customerName,
+    });
+
+    const [stripeParams] = mocks.stripeCreate.mock.calls[0];
+    expect(stripeParams.line_items[0].price_data).toMatchObject({ unit_amount: 15000, product_data: { name: "Consultation de conseil santé – 30 minutes", description: "Rendez-vous : APTRESUME0001" } });
+    expect(stripeParams.expires_at).toBe(Math.floor(holdExpiresAt.getTime() / 1000));
+    expect(stripeParams).not.toHaveProperty("allow_promotion_codes");
+    expect(stripeParams.success_url).toBe(confirmationUrl("success", held.trackingId));
+    expect(stripeParams.cancel_url).toBe(confirmationUrl("canceled", held.trackingId));
+  });
+
+  it("refuse une adresse email invalide ou trop longue avant tout accès à l’agenda", async () => {
+    mocks.getDb.mockResolvedValue(fakeDb(0));
+    for (const customerEmail of ["pas-une-adresse", `${"a".repeat(310)}@example.com`]) {
+      await expect(appRouter.createCaller(publicContext()).appointments.create(bookingInput({ customerEmail }))).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    }
+    expect(mocks.getDb).not.toHaveBeenCalled();
+  });
+});
+
+describe("appointments.create — langue de la réservation (EN-01)", () => {
+  async function storedLanguage(input: Record<string, unknown>) {
+    const db = fakeDb(0);
+    mocks.getDb.mockResolvedValue(db);
+    await appRouter.createCaller(publicContext()).appointments.create({ ...bookingInput(), ...input } as ReturnType<typeof bookingInput>);
+    const [insert] = db.execute.mock.calls[0] as unknown as [SQL];
+    const { sql, params } = dialect.sqlToQuery(insert);
+    expect(sql).toMatch(/hold_expires_at, language\) VALUES/);
+    return params.at(-1);
+  }
+
+  it("enregistre la langue affichée par la page de réservation", async () => {
+    await expect(storedLanguage({ language: "en" })).resolves.toBe("en");
+    await expect(storedLanguage({ language: "zh" })).resolves.toBe("zh");
+  });
+
+  it("garde le français quand la page ne l’envoie pas, et refuse une langue inconnue", async () => {
+    await expect(storedLanguage({})).resolves.toBe("fr");
+    mocks.getDb.mockResolvedValue(fakeDb(0));
+    await expect(appRouter.createCaller(publicContext()).appointments.create({ ...bookingInput(), language: "es" } as unknown as ReturnType<typeof bookingInput>))
+      .rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+});
+
 describe("appointments.create — limitation de débit persistante", () => {
   beforeEach(() => {
     // Le limiteur est volontairement neutralisé sous Vitest ; on simule ici un
@@ -165,7 +241,10 @@ describe("appointments.create — limitation de débit persistante", () => {
     await expect(appRouter.createCaller(publicContext(headers)).appointments.create(bookingInput()))
       .rejects.toMatchObject({ code: "TOO_MANY_REQUESTS", message: ACTIVE_APPOINTMENT_HOLDS_LIMIT_MESSAGE });
 
-    expect(mocks.enforcePersistentRateLimit).toHaveBeenCalledTimes(2);
+    // Puis, ce refus métier rendant ses essais (RES-08), le plafond par IP des essais rendus.
+    expect(mocks.enforcePersistentRateLimit).toHaveBeenCalledTimes(3);
+    expect(mocks.enforcePersistentRateLimit.mock.invocationCallOrder[1]).toBeLessThan(db.select.mock.invocationCallOrder[0]);
+    expect(mocks.enforcePersistentRateLimit).toHaveBeenNthCalledWith(3, expect.objectContaining({ action: "public_booking_give_back_ip", subject: `ip:${requestIpHash(headers)}` }));
     expect(mocks.enforcePersistentRateLimit).toHaveBeenNthCalledWith(1, {
       action: "public_booking_create_ip",
       subject: `ip:${requestIpHash(headers)}`,
@@ -218,8 +297,10 @@ describe("appointments.create — limitation de débit persistante", () => {
     mocks.getDb.mockResolvedValue(fakeDb(MAX_ACTIVE_APPOINTMENT_HOLDS_PER_EMAIL));
 
     await expect(appRouter.createCaller(publicContext({}, "192.0.2.10")).appointments.create(bookingInput())).rejects.toThrow();
-    expect(mocks.enforcePersistentRateLimit).toHaveBeenCalledTimes(2);
+    // Par IP, par email, puis le plafond par IP des essais rendus après ce refus métier (RES-08).
+    expect(mocks.enforcePersistentRateLimit).toHaveBeenCalledTimes(3);
     expect(mocks.enforcePersistentRateLimit.mock.calls[0][0].subject).toMatch(/^ip:[0-9a-f]{64}$/);
+    expect(mocks.enforcePersistentRateLimit.mock.calls[2][0].subject).toBe(mocks.enforcePersistentRateLimit.mock.calls[0][0].subject);
 
     mocks.enforcePersistentRateLimit.mockClear();
     mocks.getDb.mockResolvedValue(fakeDb(MAX_ACTIVE_APPOINTMENT_HOLDS_PER_EMAIL));

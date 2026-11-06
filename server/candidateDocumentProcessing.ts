@@ -1,7 +1,8 @@
-import { and, asc, eq, inArray, lte } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lt, lte, ne } from "drizzle-orm";
 import { candidateDocumentAuditLogs, candidateDocumentProcessingJobs, candidateDocuments } from "../drizzle/schema";
 import { getDb } from "./db";
-import { analyzeCandidateDocument } from "./candidateDocumentAnalysis";
+import { analyzeCandidateDocument, CandidateDocumentTextSetAsideError } from "./candidateDocumentAnalysis";
+import { hiddenTextFlags } from "../shared/candidateDocumentHiddenText";
 import { storageGetSignedUrl } from "./storage";
 import { decryptCandidateDocument } from "./candidateDocumentEncryption";
 import { CANDIDATE_HUMAN_REVIEW_ONLY_FLAG, CANDIDATE_HUMAN_REVIEW_ONLY_SUMMARY, candidateDocumentAllowsAiAnalysis } from "../shared/candidateDocumentCategories";
@@ -33,6 +34,37 @@ export async function enqueueCandidateDocumentAnalysis(documentId: number) {
   await db.insert(candidateDocumentAuditLogs).values({ candidateId: (await db.select({ candidateId: candidateDocuments.candidateId }).from(candidateDocuments).where(eq(candidateDocuments.id, documentId)).limit(1))[0]?.candidateId ?? null, documentId, actorType: "system", action: "analysis_requested" });
 }
 
+/** A document uploaded longer ago than this without its analysis job was left by an interrupted upload. */
+export const CANDIDATE_DOCUMENT_MISSING_JOB_AFTER_MS = 15 * 60_000;
+
+/**
+ * DATA-02: the upload stores the document, then its analysis job. A request
+ * stopped between the two leaves a document waiting for an analysis no job
+ * would ever run: the scheduled run gives it the missing job. The job also
+ * settles a document reserved for human review (LEGAL-12) without any AI.
+ */
+export async function recreateMissingCandidateDocumentAnalysisJobs(limit = 25, now = new Date()) {
+  const db = await getDb();
+  if (!db) throw new Error("candidate_document_database_unavailable");
+  const documents = await db.select({ id: candidateDocuments.id, candidateId: candidateDocuments.candidateId })
+    .from(candidateDocuments)
+    .leftJoin(candidateDocumentProcessingJobs, eq(candidateDocumentProcessingJobs.documentId, candidateDocuments.id))
+    .where(and(
+      eq(candidateDocuments.analysisStatus, "queued"),
+      inArray(candidateDocuments.status, ["uploaded", "validating"]),
+      ne(candidateDocuments.validationStatus, "rejected"),
+      lt(candidateDocuments.createdAt, new Date(now.getTime() - CANDIDATE_DOCUMENT_MISSING_JOB_AFTER_MS)),
+      isNull(candidateDocumentProcessingJobs.id),
+    ))
+    .orderBy(asc(candidateDocuments.createdAt))
+    .limit(limit);
+  for (const document of documents) {
+    await db.insert(candidateDocumentProcessingJobs).values({ documentId: document.id, status: "queued", maxAttempts: MAX_DOCUMENT_ANALYSIS_ATTEMPTS, scheduledFor: now });
+    await db.insert(candidateDocumentAuditLogs).values({ candidateId: document.candidateId, documentId: document.id, actorType: "system", action: "analysis_requested", metadata: JSON.stringify({ reason: "analysis_job_missing_after_upload" }) });
+  }
+  return { recreated: documents.length };
+}
+
 async function privateDocumentBytes(input: { storageKey: string; encryptionAlgorithm?: string | null; encryptionIv?: string | null; encryptionAuthTag?: string | null }): Promise<Buffer> {
   const url = await storageGetSignedUrl(input.storageKey);
   const response = await fetch(url);
@@ -49,11 +81,14 @@ function retryTime(attempt: number) {
 
 function humanReviewFallback(error: unknown) {
   const reason = error instanceof Error ? error.message : "analyse_indisponible";
+  // The text left out of a document that has too little left to analyse is said, as when the AI reads one (IA-01).
+  const hiddenText = error instanceof CandidateDocumentTextSetAsideError ? error.hiddenText : undefined;
+  const flags = ["ai_analysis_unavailable", reason, ...hiddenTextFlags(hiddenText)];
   return {
     aiSummary: "Analyse automatique indisponible : le document est conservé et transmis à une revue humaine. Aucune décision automatique n’a été prise.",
-    aiExtractedData: JSON.stringify({ documentKind: "À confirmer par revue humaine", summary: "Aucune extraction fiable n’a été conservée.", issuingOrganization: null, issueDate: null, expiryDate: null, confidence: 0, flags: ["ai_analysis_unavailable", reason], missingInformation: ["Revue humaine requise"] }),
+    aiExtractedData: JSON.stringify({ documentKind: "À confirmer par revue humaine", summary: "Aucune extraction fiable n’a été conservée.", issuingOrganization: null, issueDate: null, expiryDate: null, confidence: 0, flags, missingInformation: ["Revue humaine requise"], ...(hiddenText ? { hiddenText } : {}) }),
     aiConfidence: 0,
-    aiFlags: JSON.stringify(["ai_analysis_unavailable", reason]),
+    aiFlags: JSON.stringify(flags),
   };
 }
 
@@ -102,7 +137,8 @@ export async function processDueCandidateDocumentAnalysisJobs(limit = 1) {
       completed += 1;
     } catch (error) {
       const message = error instanceof Error ? error.message : "candidate_document_analysis_failed";
-      if (attempts < job.maxAttempts) {
+      // Another attempt would read the same text: only what may fail once (download, AI) is tried again.
+      if (attempts < job.maxAttempts && !(error instanceof CandidateDocumentTextSetAsideError)) {
         await db.update(candidateDocumentProcessingJobs).set({ status: "retry", scheduledFor: retryTime(attempts), lastError: message }).where(eq(candidateDocumentProcessingJobs.id, job.id));
         await db.update(candidateDocuments).set({ status: "uploaded", analysisStatus: "queued", analysisAttempts: attempts, analysisLastError: message }).where(eq(candidateDocuments.id, document.id));
         retried += 1;

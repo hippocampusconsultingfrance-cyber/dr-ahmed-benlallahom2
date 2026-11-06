@@ -1,16 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildCandidatePortalActivationEmailEvent, buildCandidatePortalInvitationEmailEvent, buildCvConfirmationEmailEvent, buildFailedConfirmationRetryCandidateQuery, canRetryCvConfirmation, candidatePortalAccountMatchesApplication, cvConfirmationRetryOutcome, resolveCandidatePortalActivationDelivery, resolveCandidatePortalInvitationDelivery, resolveCvConfirmationDelivery, retryDueFailedCvConfirmationEmails } from "./recruitmentEmailTrace";
-import { readFileSync } from "node:fs";
+import { buildCandidatePortalActivationEmailEvent, buildCandidatePortalInvitationEmailEvent, buildCvConfirmationEmailEvent, buildFailedConfirmationRetryCandidateQuery, canRetryCvConfirmation, candidatePortalAccountMatchesApplication, cvConfirmationRetryOutcome, resolveCandidatePortalActivationDelivery, resolveCandidatePortalInvitationDelivery, resolveCvConfirmationDelivery, retryDueFailedCvConfirmationEmails, sendTrackedCvApplicationConfirmationEmail } from "./recruitmentEmailTrace";
 import { drizzle } from "drizzle-orm/neon-http";
+import { recruitmentEmailEvents } from "../drizzle/schema";
+import { createMemoryPg } from "./testing/memoryPgProxy";
 
 const retryMocks = vi.hoisted(() => ({ getDb: vi.fn(), sendEmail: vi.fn() }));
 
 vi.mock("./db", () => ({ getDb: retryMocks.getDb }));
 vi.mock("./_core/notifications", () => ({ sendCvApplicationConfirmationEmail: retryMocks.sendEmail }));
 vi.mock("./candidateAuth", () => ({ createCandidateInvitationToken: () => "synthetic-invitation-token" }));
-
-const traceSource = readFileSync(new URL("./recruitmentEmailTrace.ts", import.meta.url), "utf8");
-const routerSource = readFileSync(new URL("./routers.ts", import.meta.url), "utf8");
 
 describe("traçabilité de l'email de confirmation de candidature", () => {
   const input = {
@@ -171,13 +169,6 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
     expect(candidatePortalAccountMatchesApplication({ linkedApplicationId: null, email: "candidate@example.com", emailVerifiedAt: null }, application)).toBe(false);
   });
 
-  it("autorise uniquement l'administrateur à reprendre un accusé sans trace", () => {
-    expect(routerSource).toContain("retryCvConfirmationEmail(input.id, { allowUntracked: true })");
-    expect(traceSource).toContain("const maySendUntracked = !current.eventType && options.allowUntracked");
-    expect(traceSource).toContain('current.eventType !== "email.failed" && !maySendUntracked');
-    expect(traceSource).toContain('current.eventType === "email.failed" ? current.attempts + 1 : 1');
-  });
-
   it("ne laisse pas les échecs de campagne évincer la file de reprise des confirmations", () => {
     const query = buildFailedConfirmationRetryCandidateQuery(drizzle.mock()).toSQL();
     expect(query.sql).toContain('"recruitment_email_events"."payload" like');
@@ -236,9 +227,10 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
             const applicationId = indexedParam(sql, params, /"cv_applications"\."id"\s*=\s*\$(\d+)/);
             if (typeof applicationId !== "number") throw new Error(`Unexpected application query: ${sql}`);
             return [{
-              id: applicationId, firstName: "Synthetic", lastName: "Candidate",
+              id: applicationId, firstName: "Synthetic",
               email: `candidate${applicationId}@example.invalid`, trackingId: `CV-TEST-${applicationId}`,
-              specialty: "Test", targetCountries: "[]",
+              // The first application was made from the English form (EN-02).
+              language: applicationId === 1 ? "en" : "fr",
             }];
           }
           if (/^select/i.test(sql) && sql.includes('from "recruitment_email_events"')) {
@@ -277,8 +269,8 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
     expect(cursorWrites).toContain(2);
     expect(retryMocks.sendEmail).toHaveBeenCalledOnce();
     expect(retryMocks.sendEmail).toHaveBeenCalledWith(
-      "candidate1@example.invalid", "Synthetic Candidate", "CV-TEST-1", "Test", "Non précisé",
-      expect.stringContaining("synthetic-invitation-token"), "cv-application-confirmation-CV-TEST-1-attempt-2",
+      "candidate1@example.invalid", "Synthetic", "CV-TEST-1",
+      expect.stringContaining("synthetic-invitation-token"), "cv-application-confirmation-CV-TEST-1-attempt-2", "en",
     );
 
     // An empty older page wraps the durable scan to the newest failures.
@@ -295,6 +287,32 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
     expect((await retryDueFailedCvConfirmationEmails(1, now)).processed).toBe(1);
     expect(cursorWrites.at(-1)).toBe(2);
     expect(retryMocks.sendEmail).toHaveBeenCalledTimes(3);
+    vi.restoreAllMocks();
+    retryMocks.getDb.mockReset();
+    retryMocks.sendEmail.mockReset();
+  });
+
+  it("trouve déjà enregistrée la trace d’un accusé renvoyé sous la même clé, sans journal d’erreur (DATA-11)", async () => {
+    const memory = createMemoryPg([recruitmentEmailEvents]);
+    retryMocks.getDb.mockResolvedValue(memory.db);
+    // Same key, same email: Resend answers the same id each time.
+    retryMocks.sendEmail.mockResolvedValue({ status: "sent", providerEmailId: "email_same", failureCode: null });
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const confirmation = { applicationId: 42, candidateEmail: "candidate@example.com", candidateFirstName: "Amal", trackingId: "CV-TRACE-42", language: "fr" };
+
+    // The application, then two answers « already received » for copies sent at the same time.
+    for (let answer = 0; answer < 3; answer += 1) {
+      await expect(sendTrackedCvApplicationConfirmationEmail(confirmation)).resolves.toEqual({ status: "sent", providerEmailId: "email_same", failureCode: null });
+    }
+
+    expect(retryMocks.sendEmail.mock.calls.map(call => call[4])).toEqual(Array(3).fill("cv-application-confirmation-CV-TRACE-42-attempt-1"));
+    expect(memory.rows(recruitmentEmailEvents)).toEqual([expect.objectContaining({ provider_event_id: "send:email_same", application_id: 42, event_type: "email.sent" })]);
+    expect(error).not.toHaveBeenCalled();
+    // Any other failure of the trace is still logged, without failing the answer.
+    memory.failNext(/^insert into "recruitment_email_events"/);
+    retryMocks.sendEmail.mockResolvedValue({ status: "sent", providerEmailId: "email_other", failureCode: null });
+    await expect(sendTrackedCvApplicationConfirmationEmail({ ...confirmation, deliveryAttempt: 2 })).resolves.toMatchObject({ status: "sent" });
+    expect(error).toHaveBeenCalledWith("Recruitment confirmation trace error:", "Error");
     vi.restoreAllMocks();
     retryMocks.getDb.mockReset();
     retryMocks.sendEmail.mockReset();

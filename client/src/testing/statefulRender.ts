@@ -1,0 +1,122 @@
+/**
+ * TEST-ONLY: calls a component as a plain function and keeps its useState,
+ * useReducer, useEffect, useRef, useMemo and useCallback from one call to the next, so that a behavioural test
+ * can type and click through the props of the returned elements, then call it
+ * again — the test environment has no DOM (a test puts a fake element in a
+ * ref). A test file routes these React hooks here with
+ *   vi.mock("react", async importOriginal => (await import("@/testing/statefulRender")).withStatefulHooks(await importOriginal()));
+ * Outside renderStateful (for example while react-dom/server renders the
+ * returned tree), React's own hooks answer. Never imported by production code.
+ * The critical screens (booking payment, admin MFA gate, contact form and its
+ * anti-bot check) are also mounted by React itself in happy-dom with Testing
+ * Library: see the *.dom.test.ts files.
+ */
+import type * as React from "react";
+
+type Effect = { deps?: readonly unknown[]; cleanup?: () => void };
+type Element = { type: unknown; props: Record<string, unknown> };
+
+const store = {
+  active: false,
+  states: [] as unknown[],
+  stateCursor: 0,
+  effects: [] as Effect[],
+  effectCursor: 0,
+  refs: [] as Array<{ current: unknown }>,
+  refCursor: 0,
+  memos: [] as Array<{ deps?: readonly unknown[]; value: unknown }>,
+  memoCursor: 0,
+  pending: [] as Array<() => void>,
+};
+
+const sameDeps = (left?: readonly unknown[], right?: readonly unknown[]) =>
+  Boolean(left && right && left.length === right.length && left.every((dep, index) => Object.is(dep, right[index])));
+
+export function withStatefulHooks<T extends typeof React>(react: T): T {
+  function useState(initial: unknown) {
+    if (!store.active) return react.useState(initial);
+    const index = store.stateCursor++;
+    if (!(index in store.states)) store.states[index] = typeof initial === "function" ? (initial as () => unknown)() : initial;
+    const setState = (next: unknown) => {
+      store.states[index] = typeof next === "function" ? (next as (value: unknown) => unknown)(store.states[index]) : next;
+    };
+    return [store.states[index], setState];
+  }
+  function useEffect(effect: () => void | (() => void), deps?: readonly unknown[]) {
+    if (!store.active) return react.useEffect(effect, deps);
+    const index = store.effectCursor++;
+    const previous = store.effects[index];
+    if (previous && sameDeps(previous.deps, deps)) return;
+    store.effects[index] = { deps, cleanup: previous?.cleanup };
+    store.pending.push(() => {
+      store.effects[index]!.cleanup?.();
+      const cleanup = effect();
+      store.effects[index]!.cleanup = typeof cleanup === "function" ? cleanup : undefined;
+    });
+  }
+  function useRef(initial: unknown) {
+    if (!store.active) return react.useRef(initial);
+    const index = store.refCursor++;
+    store.refs[index] ??= { current: initial };
+    return store.refs[index];
+  }
+  function useMemo(factory: () => unknown, deps?: readonly unknown[]) {
+    if (!store.active) return react.useMemo(factory, deps as never);
+    const index = store.memoCursor++;
+    const previous = store.memos[index];
+    if (previous && sameDeps(previous.deps, deps)) return previous.value;
+    const value = factory();
+    store.memos[index] = { deps, value };
+    return value;
+  }
+  function useCallback(callback: unknown, deps?: readonly unknown[]) {
+    if (!store.active) return react.useCallback(callback as () => void, deps as never);
+    return useMemo(() => callback, deps);
+  }
+  function useReducer(reducer: (state: unknown, action: unknown) => unknown, initialArg: unknown, init?: (arg: unknown) => unknown) {
+    if (!store.active) return react.useReducer(reducer as never, initialArg as never, init as never);
+    const [state, setState] = useState(() => (init ? init(initialArg) : initialArg)) as [unknown, (next: (value: unknown) => unknown) => void];
+    return [state, (action: unknown) => setState(previous => reducer(previous, action))];
+  }
+  return { ...react, useState, useReducer, useEffect, useRef, useMemo, useCallback } as T;
+}
+
+/**
+ * One render: the component's result, after the effects it scheduled have run.
+ * `beforeEffects` runs in between, as React attaches refs before running
+ * effects: a test puts its fake element in a ref there.
+ */
+export function renderStateful<T>(component: () => T, beforeEffects?: (result: T) => void): T {
+  store.active = true;
+  store.stateCursor = 0;
+  store.effectCursor = 0;
+  store.refCursor = 0;
+  store.memoCursor = 0;
+  let result: T;
+  try {
+    result = component();
+  } finally {
+    store.active = false;
+  }
+  beforeEffects?.(result);
+  for (const run of store.pending.splice(0)) run();
+  return result;
+}
+
+/** Unmounts: runs the effects' cleanups and forgets every state and ref. */
+export function resetStatefulHooks() {
+  for (const effect of store.effects) effect?.cleanup?.();
+  store.states = [];
+  store.effects = [];
+  store.refs = [];
+  store.memos = [];
+  store.pending = [];
+}
+
+/** Every element of a returned tree (components are not expanded), to reach their props. */
+export function elementsOf(node: unknown): Element[] {
+  if (Array.isArray(node)) return node.flatMap(elementsOf);
+  if (!node || typeof node !== "object" || !("props" in node) || !("type" in node)) return [];
+  const element = node as Element;
+  return [element, ...elementsOf(element.props.children)];
+}

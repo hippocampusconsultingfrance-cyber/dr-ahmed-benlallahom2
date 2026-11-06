@@ -20,3 +20,15 @@ export function isAcceptedRecruitmentCvFile(file: { name: string; size: number; 
   const extension = file.name.toLowerCase().split(".").pop() ?? "";
   return (RECRUITMENT_CV_ACCEPTED_EXTENSIONS as readonly string[]).includes(extension);
 }
+
+/** Why the API refused a CV after opening it, read from the `cv_validation_*` code it returns. */
+export type RecruitmentCvRefusalReason = "legacyFormat" | "tooLargeWhenOpened" | "pageLimit" | "passwordProtected" | "activeContent" | "invalidContent";
+
+export function recruitmentCvRefusalReason(code: string): RecruitmentCvRefusalReason {
+  if (code === "cv_validation_legacy_doc_refused") return "legacyFormat";
+  if (code.endsWith("_decompressed_size_exceeded") || code === "cv_validation_pdf_image_too_large" || code === "cv_validation_pdf_processing_timeout") return "tooLargeWhenOpened";
+  if (code === "cv_validation_pdf_page_limit_exceeded") return "pageLimit";
+  if (code === "cv_validation_pdf_encrypted" || code === "cv_validation_docx_encrypted") return "passwordProtected";
+  if (code.endsWith("_active_content")) return "activeContent";
+  return "invalidContent";
+}

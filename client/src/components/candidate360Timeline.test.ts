@@ -13,6 +13,35 @@ describe("chronologie candidat 360°", () => {
     expect(timeline[0]).toMatchObject({ title: "Demande de complément envoyée", detail: "Pièces ou informations demandées : Attestation d’inscription et diplômes" });
   });
 
+  it("nomme la confirmation d’une certification, celle de son renouvellement et l’accord du candidat pour une mission (IA-02, RGPD-03)", () => {
+    const audit = (id: number, metadata: Record<string, unknown>) => ({ id, action: "status_update", metadata: JSON.stringify(metadata), createdAt: new Date(`2026-10-2${id}T08:00:00.000Z`) });
+    const timeline = buildCandidateTimeline({
+      createdAt: new Date("2026-10-19T08:00:00.000Z"),
+      audits: [
+        audit(1, { event: "certification_confirmed", certification: "Licence DHA" }),
+        audit(2, { event: "certification_unconfirmed", certification: "Licence DHA" }),
+        audit(3, { event: "mission_consent", briefId: 7, consentDate: "2026-10-23" }),
+        audit(4, { event: "mission_consent", briefId: 7, consentDate: null }),
+        audit(5, { event: "certification_renewed", certification: "ACLS", expiresAt: "2028-06-30", previousExpiresAt: ["2023-05"] }),
+        audit(6, { event: "certification_renewed", certification: "BLS", expiresAt: null, previousExpiresAt: ["2024"] }),
+        audit(7, { event: "certification_unconfirmed", certification: "Licence DHA", notRetainedByAnalysis: true }),
+      ],
+      campaignRecipients: [],
+      followUps: [],
+    });
+
+    expect(timeline.map(event => event.title)).toEqual([
+      "Confirmation retirée : Licence DHA (non retenue par la dernière analyse du CV)",
+      "Renouvellement confirmé : BLS (sans date d’expiration)",
+      "Renouvellement confirmé : ACLS (expire le 30/06/2028)",
+      "Accord du candidat retiré pour une mission",
+      "Accord du candidat noté pour une mission",
+      "Confirmation retirée : Licence DHA",
+      "Certification confirmée : Licence DHA",
+      "Candidature reçue",
+    ]);
+  });
+
   it("place les événements les plus récents en premier", () => {
     const timeline = buildCandidateTimeline({
       createdAt: new Date("2026-08-01T08:00:00.000Z"),
