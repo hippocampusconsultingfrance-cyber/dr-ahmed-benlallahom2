@@ -5,7 +5,8 @@ import { elementsOf, renderStateful, resetStatefulHooks } from "@/testing/statef
 
 // Page d’activation ouverte depuis le lien envoyé par email : contrôle du lien
 // en cours, formulaire occupé pendant l’activation, lien absent ou refusé avec
-// retour vers la connexion, et refus du serveur annoncé sans quitter la page.
+// retour vers la connexion, refus du serveur annoncé sans quitter la page, et
+// lien expiré pendant la saisie qui mène au renvoi d’un nouveau lien.
 
 vi.mock("react", async importOriginal => (await import("@/testing/statefulRender")).withStatefulHooks(await importOriginal()));
 
@@ -19,6 +20,8 @@ const view = vi.hoisted(() => ({
   options: {} as MutationOptions,
   mutate: vi.fn(),
   navigations: [] as string[],
+  frames: [] as Array<() => void>,
+  focused: [] as string[],
 }));
 
 vi.mock("@/contexts/LanguageContext", () => ({ useLanguage: () => ({ language: view.language }) }));
@@ -45,7 +48,8 @@ const LINK = "?email=vera%40example.test&token=activation-token-0123456789";
 const READY: Details = { data: { email: "vera@example.test", firstName: "Vera", lastName: "Rossi" }, isLoading: false, isError: false };
 
 function openLink(search: string) {
-  vi.stubGlobal("window", { location: { search }, setTimeout: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn() });
+  vi.stubGlobal("window", { location: { search }, setTimeout: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn(), requestAnimationFrame: (frame: () => void) => view.frames.push(frame) });
+  vi.stubGlobal("document", { getElementById: (id: string) => ({ focus: () => view.focused.push(id) }) });
 }
 const html = () => renderToStaticMarkup(createElement(CandidateVerifyPage));
 const render = () => renderStateful(CandidateVerifyPage) as ReactElement;
@@ -61,6 +65,8 @@ beforeEach(() => {
   view.options = {};
   view.mutate = vi.fn();
   view.navigations = [];
+  view.frames = [];
+  view.focused = [];
   openLink(LINK);
 });
 afterEach(() => {
@@ -149,10 +155,37 @@ describe("activation de l’espace candidat", () => {
     (elementsOf(render()).find(element => element.type === "form")!.props.onSubmit as (event: { preventDefault: () => void }) => void)({ preventDefault: vi.fn() });
     expect(view.mutate).toHaveBeenCalledWith({ email: "vera@example.test", token: "activation-token-0123456789", password: "correct horse battery staple", firstName: "Vera", lastName: "Rossi" });
 
-    view.options.onError!({ message: "TRPCError", data: { reason: "candidate_activation_link_invalid" } });
+    view.options.onError!({ message: "TRPCError", data: { reason: "candidate_password_compromised" } });
     const tree = render();
-    expect(elementsOf(tree).find(element => element.props.role === "status")!.props.children).toBe(copy.invalidDescription);
+    expect(elementsOf(tree).find(element => element.props.role === "status")!.props.children).toBe(copy.passwordCompromised);
     expect(elementsOf(tree).some(element => element.type === "form")).toBe(true);
     expect(view.navigations).toEqual([]);
+  });
+
+  it.each(["fr", "en", "de", "zh"] as const)("propose un nouveau lien quand le lien expire pendant la saisie du formulaire (%s, REC-17)", language => {
+    view.language = language;
+    const copy = candidateAccountCopy[language];
+    render();
+    type("candidate-activation-password", "correct horse battery staple");
+    type("candidate-activation-password-confirmation", "correct horse battery staple");
+    (elementsOf(render()).find(element => element.type === "form")!.props.onSubmit as (event: { preventDefault: () => void }) => void)({ preventDefault: vi.fn() });
+    expect(view.mutate).toHaveBeenCalledTimes(1);
+
+    // The link was valid on opening, then the server refuses it on sending.
+    view.options.onError!({ message: "Ce lien est invalide ou a expiré.", data: { reason: "candidate_activation_link_invalid" } });
+    const tree = render();
+    expect(elementsOf(tree).some(element => element.type === "form")).toBe(false);
+    expect(elementsOf(tree).find(element => element.type === "h1")!.props.children).toBe(copy.invalidTitle);
+    expect(elementsOf(tree).some(element => element.type === "p" && element.props.children === copy.invalidDescription)).toBe(true);
+    expect(elementsOf(tree).some(element => element.props.role === "status")).toBe(false);
+
+    // Focus moves from the vanished submit button to the page's new heading.
+    view.frames.forEach(frame => frame());
+    expect(view.focused).toEqual(["candidate-activation-unavailable-title"]);
+    expect(byId(tree, "candidate-activation-unavailable-title").props.tabIndex).toBe(-1);
+
+    const requestNewLink = elementsOf(tree).find(element => element.type === Button && element.props.children === copy.requestNewLink)!;
+    (requestNewLink.props.onClick as () => void)();
+    expect(view.navigations).toEqual(["/candidate/access?mode=activation&email=vera%40example.test"]);
   });
 });
