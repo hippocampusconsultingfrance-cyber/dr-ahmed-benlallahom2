@@ -12,6 +12,7 @@ import Footer from "@/components/Footer";
 import BookingLegalNotice from "@/components/BookingLegalNotice";
 import LanguageMenu from "@/components/LanguageMenu";
 import { TurnstileWidget } from "@/components/TurnstileWidget";
+import { siteConfig } from "@/data/site-config";
 import { formatVisitorTime, getBookingDateTimeFormat, getBookingLocale } from "@/lib/bookingTime";
 import { getBookingFormCopy } from "@/lib/publicFormCopy";
 import {
@@ -31,6 +32,7 @@ import {
   getBookingWindowIssue,
   isBookingRefusalReason,
   isPlausiblePhoneNumber,
+  normalizePhoneInput,
   type BookingRefusalReason,
 } from "@shared/bookingPolicy";
 
@@ -81,7 +83,13 @@ export const bookingContent = {
       windowHint: `Réservation au moins ${BOOKING_MIN_LEAD_TIME_HOURS} h à l’avance et jusqu’à ${BOOKING_HORIZON_DAYS} jours.`,
       tooSoon: bookingWindowMessages.fr.tooSoon,
       tooFar: bookingWindowMessages.fr.tooFar,
-      invalidPhone: "Saisissez un numéro de téléphone valide (8 à 15 chiffres, indicatif international accepté, ex. +33 6 12 34 56 78).",
+      invalidPhone: "Saisissez un numéro de téléphone valide, avec l’indicatif du pays précédé de + ou 00 (8 à 15 chiffres, ex. +33 6 12 34 56 78).",
+      invalidEmail: "Saisissez une adresse email complète, par exemple nom@exemple.fr.",
+      emailSuggestion: (address: string) => `Vouliez-vous dire ${address} ?`,
+      useEmailSuggestion: "Corriger l’adresse",
+      confirmationTo: (address: string) => `Confirmation et facture envoyées à ${address} après le paiement.`,
+      nearestSlots: (times: string[]) => `Horaires libres les plus proches : ${times.join(", ")}.`,
+      suggestedSlot: "horaire proposé",
       details: "Objet de la demande (sans information médicale)",
       detailsPlaceholder: "Ex. : demande d’avis, questions d’organisation, préparation de la consultation",
       detailsWarning: "N’indiquez ici aucune information de santé (symptômes, diagnostic, traitement, antécédents, résultats d’examens). Ces éléments seront abordés uniquement pendant la consultation.",
@@ -104,7 +112,7 @@ export const bookingContent = {
       outside_schedule: "Ce créneau ne fait plus partie des horaires de consultation. Choisissez-en un autre.",
       no_availability: "Aucun horaire de consultation n’est ouvert pour le moment.",
       date_blocked: "Cette date n’est plus disponible. Choisissez un autre jour.",
-      rate_limited: "Trop de tentatives de réservation ont été effectuées. Réessayez dans une heure ou contactez-nous directement.",
+      rate_limited: `Trop de tentatives de réservation ont été effectuées. Réessayez dans une heure ou appelez-nous au ${siteConfig.phone}.`,
       too_many_holds: "Vous avez déjà deux réservations en attente de paiement. Finalisez ou annulez l’un de ces paiements, ou patientez une trentaine de minutes avant de réserver un nouveau créneau.",
       payment_unavailable: "Le service de paiement est momentanément indisponible. Votre créneau n’a pas été réservé : réessayez dans quelques minutes ou contactez-nous.",
       invalid_name: "Saisissez votre nom complet : il doit comporter au moins une lettre ou un chiffre.",
@@ -125,6 +133,7 @@ export const bookingContent = {
     confirmationNextSteps: "Un email de confirmation et votre facture vous seront envoyés après validation du paiement.",
     canceledNextSteps: "Vous pouvez modifier vos informations puis relancer le paiement lorsque vous êtes prêt.",
     restartBooking: "Nouvelle réservation",
+    stepOf: (step: number, total: number) => `Étape ${step} sur ${total} : `,
     paymentError: "Une erreur est survenue pendant le paiement.",
     bookingError: "Une erreur est survenue pendant la création de la réservation.",
     invalidInput: "Certaines informations sont invalides : vérifiez votre nom, votre email, votre téléphone et la date choisie.",
@@ -178,7 +187,13 @@ export const bookingContent = {
       windowHint: `Book at least ${BOOKING_MIN_LEAD_TIME_HOURS} hours ahead and up to ${BOOKING_HORIZON_DAYS} days ahead.`,
       tooSoon: bookingWindowMessages.en.tooSoon,
       tooFar: bookingWindowMessages.en.tooFar,
-      invalidPhone: "Enter a valid phone number (8 to 15 digits, international prefix accepted, e.g. +33 6 12 34 56 78).",
+      invalidPhone: "Enter a valid phone number with its country code, after + or 00 (8 to 15 digits, e.g. +33 6 12 34 56 78).",
+      invalidEmail: "Enter a complete email address, for example name@example.com.",
+      emailSuggestion: (address: string) => `Did you mean ${address}?`,
+      useEmailSuggestion: "Use this address",
+      confirmationTo: (address: string) => `Confirmation and invoice sent to ${address} after payment.`,
+      nearestSlots: (times: string[]) => `Nearest free times: ${times.join(", ")}.`,
+      suggestedSlot: "suggested time",
       details: "Purpose of your request (no medical information)",
       detailsPlaceholder: "E.g. request for advice, practical questions, preparing the consultation",
       detailsWarning: "Do not enter any health information here (symptoms, diagnosis, treatment, medical history, test results). These will only be discussed during the consultation.",
@@ -200,7 +215,7 @@ export const bookingContent = {
       outside_schedule: "This time slot is no longer part of the consultation hours. Please choose another one.",
       no_availability: "No consultation hours are open at the moment.",
       date_blocked: "This date is no longer available. Please choose another day.",
-      rate_limited: "Too many booking attempts have been made. Please try again in an hour or contact us directly.",
+      rate_limited: `Too many booking attempts have been made. Please try again in an hour or call us on ${siteConfig.phone}.`,
       too_many_holds: "You already have two bookings awaiting payment. Complete or cancel one of these payments, or wait about thirty minutes before booking a new time slot.",
       payment_unavailable: "The payment service is temporarily unavailable. Your time slot has not been booked: please try again in a few minutes or contact us.",
       invalid_name: "Please enter your full name: it must contain at least one letter or digit.",
@@ -221,6 +236,7 @@ export const bookingContent = {
     confirmationNextSteps: "A confirmation email and your invoice will be sent after the payment is validated.",
     canceledNextSteps: "You can update your information and restart the payment whenever you are ready.",
     restartBooking: "Start a new booking",
+    stepOf: (step: number, total: number) => `Step ${step} of ${total}: `,
     paymentError: "An error occurred during payment.",
     bookingError: "An error occurred while creating your booking.",
     invalidInput: "Some information is invalid: please check your name, email, phone number and chosen date.",
@@ -273,7 +289,13 @@ export const bookingContent = {
       windowHint: `Buchung mindestens ${BOOKING_MIN_LEAD_TIME_HOURS} Stunden im Voraus und bis zu ${BOOKING_HORIZON_DAYS} Tage im Voraus.`,
       tooSoon: bookingWindowMessages.de.tooSoon,
       tooFar: bookingWindowMessages.de.tooFar,
-      invalidPhone: "Geben Sie eine gültige Telefonnummer ein (8 bis 15 Ziffern, internationale Vorwahl möglich, z. B. +49 30 1234567).",
+      invalidPhone: "Geben Sie eine gültige Telefonnummer mit Ländervorwahl nach + oder 00 ein (8 bis 15 Ziffern, z. B. +49 30 1234567).",
+      invalidEmail: "Geben Sie eine vollständige E-Mail-Adresse ein, zum Beispiel name@beispiel.de.",
+      emailSuggestion: (address: string) => `Meinten Sie ${address}?`,
+      useEmailSuggestion: "Diese Adresse verwenden",
+      confirmationTo: (address: string) => `Bestätigung und Rechnung werden nach der Zahlung an ${address} gesendet.`,
+      nearestSlots: (times: string[]) => `Nächste freie Uhrzeiten: ${times.join(", ")}.`,
+      suggestedSlot: "vorgeschlagene Uhrzeit",
       details: "Anlass Ihrer Anfrage (ohne medizinische Angaben)",
       detailsPlaceholder: "z. B. Bitte um Rat, organisatorische Fragen, Vorbereitung der Beratung",
       detailsWarning: "Geben Sie hier keine Gesundheitsdaten an (Symptome, Diagnose, Behandlung, Vorgeschichte, Untersuchungsergebnisse). Diese werden ausschließlich während der Beratung besprochen.",
@@ -295,7 +317,7 @@ export const bookingContent = {
       outside_schedule: "Dieser Termin liegt nicht mehr innerhalb der Beratungszeiten. Bitte wählen Sie einen anderen.",
       no_availability: "Derzeit sind keine Beratungszeiten freigeschaltet.",
       date_blocked: "Dieses Datum ist nicht mehr verfügbar. Bitte wählen Sie einen anderen Tag.",
-      rate_limited: "Es wurden zu viele Buchungsversuche unternommen. Bitte versuchen Sie es in einer Stunde erneut oder kontaktieren Sie uns direkt.",
+      rate_limited: `Es wurden zu viele Buchungsversuche unternommen. Bitte versuchen Sie es in einer Stunde erneut oder rufen Sie uns unter ${siteConfig.phone} an.`,
       too_many_holds: "Sie haben bereits zwei Buchungen, die auf Zahlung warten. Schließen Sie eine dieser Zahlungen ab oder stornieren Sie sie, oder warten Sie etwa dreißig Minuten, bevor Sie einen neuen Termin buchen.",
       payment_unavailable: "Der Zahlungsdienst ist vorübergehend nicht verfügbar. Ihr Termin wurde nicht reserviert: Bitte versuchen Sie es in einigen Minuten erneut oder kontaktieren Sie uns.",
       invalid_name: "Bitte geben Sie Ihren vollständigen Namen ein: Er muss mindestens einen Buchstaben oder eine Ziffer enthalten.",
@@ -316,6 +338,7 @@ export const bookingContent = {
     confirmationNextSteps: "Nach erfolgreicher Zahlung erhalten Sie eine Bestätigungs-E-Mail und Ihre Rechnung.",
     canceledNextSteps: "Sie können Ihre Angaben ändern und die Zahlung erneut starten, sobald Sie bereit sind.",
     restartBooking: "Neue Buchung",
+    stepOf: (step: number, total: number) => `Schritt ${step} von ${total}: `,
     paymentError: "Bei der Zahlung ist ein Fehler aufgetreten.",
     bookingError: "Bei der Erstellung der Buchung ist ein Fehler aufgetreten.",
     invalidInput: "Einige Angaben sind ungültig: Bitte prüfen Sie Name, E-Mail, Telefonnummer und gewähltes Datum.",
@@ -368,7 +391,13 @@ export const bookingContent = {
       windowHint: `请至少提前 ${BOOKING_MIN_LEAD_TIME_HOURS} 小时预约，最多可提前 ${BOOKING_HORIZON_DAYS} 天。`,
       tooSoon: bookingWindowMessages.zh.tooSoon,
       tooFar: bookingWindowMessages.zh.tooFar,
-      invalidPhone: "请输入有效的电话号码（8 至 15 位数字，可含国际区号，例如 +33 6 12 34 56 78）。",
+      invalidPhone: "请输入有效的电话号码，并在 + 或 00 后填写国家区号（8 至 15 位数字，例如 +33 6 12 34 56 78）。",
+      invalidEmail: "请输入完整的电子邮件地址，例如 name@example.com。",
+      emailSuggestion: (address: string) => `您是否想输入 ${address}？`,
+      useEmailSuggestion: "使用此地址",
+      confirmationTo: (address: string) => `付款后，确认信息和发票将发送至 ${address}。`,
+      nearestSlots: (times: string[]) => `最近的空闲时间：${times.join("、")}。`,
+      suggestedSlot: "推荐时间",
       details: "咨询事由（请勿填写医疗信息）",
       detailsPlaceholder: "例如：寻求建议、组织安排问题、咨询准备",
       detailsWarning: "请勿在此填写任何健康信息（症状、诊断、治疗、病史、检查结果）。这些内容仅在咨询过程中讨论。",
@@ -390,7 +419,7 @@ export const bookingContent = {
       outside_schedule: "该时段已不在咨询时间范围内，请选择其他时段。",
       no_availability: "目前没有开放的咨询时段。",
       date_blocked: "该日期已不可预约，请选择其他日期。",
-      rate_limited: "预约尝试次数过多。请一小时后再试，或直接联系我们。",
+      rate_limited: `预约尝试次数过多。请一小时后再试，或致电 ${siteConfig.phone} 联系我们。`,
       too_many_holds: "您已有两笔待付款的预约。请完成或取消其中一笔付款，或等待约三十分钟后再预约新的时段。",
       payment_unavailable: "支付服务暂时不可用，您的时段尚未预订：请几分钟后重试或联系我们。",
       invalid_name: "请填写您的全名：其中至少须包含一个文字或数字。",
@@ -411,6 +440,7 @@ export const bookingContent = {
     confirmationNextSteps: "付款确认后，您将通过电子邮件收到确认信息和发票。",
     canceledNextSteps: "您可以修改信息，并在准备好后重新开始付款。",
     restartBooking: "新建预约",
+    stepOf: (step: number, total: number) => `第 ${step} 步，共 ${total} 步：`,
     paymentError: "付款过程中发生错误。",
     bookingError: "创建预约时发生错误。",
     invalidInput: "部分信息无效：请检查您的姓名、电子邮件、电话号码和所选日期。",
@@ -594,6 +624,46 @@ export function removeBookedSlots(options: BookingSlotOption[], booked: Array<Da
 }
 
 /**
+ * Free starts closest to a slot just refused as taken (RES-10), at most
+ * `count`, in time order: what the grid puts forward instead.
+ */
+export function nearestFreeSlots<T extends BookingSlotOption>(options: T[], takenStart: number, count = 3): T[] {
+  const distance = (option: T) => Math.abs(option.start.getTime() - takenStart);
+  return options
+    .filter((option) => option.start.getTime() !== takenStart)
+    .sort((a, b) => distance(a) - distance(b) || a.start.getTime() - b.start.getTime())
+    .slice(0, count)
+    .sort((a, b) => a.start.getTime() - b.start.getTime());
+}
+
+/**
+ * Address the confirmation and the invoice can reach (RES-10): a domain with a
+ * dot and an extension of two characters at least. "patient@gmail" passes the
+ * browser's own check, never the server's.
+ */
+export function isCompleteEmailAddress(value: string): boolean {
+  return /^[^\s@]+@(?:[^\s@.]+\.)+[^\s@.]{2,}$/.test(value.trim());
+}
+
+// Fautes de frappe courantes dans le domaine d’une adresse : proposées, jamais imposées.
+const BOOKING_EMAIL_DOMAIN_TYPOS = new Map([
+  ["gmail", "gmail.com"], ["gmial.com", "gmail.com"], ["gmal.com", "gmail.com"], ["gmai.com", "gmail.com"], ["gamil.com", "gmail.com"], ["gnail.com", "gmail.com"], ["gmail.con", "gmail.com"],
+  ["hotmial.com", "hotmail.com"], ["hotmal.com", "hotmail.com"], ["hotmai.com", "hotmail.com"], ["hotmail.con", "hotmail.com"], ["hotmial.fr", "hotmail.fr"], ["hotmal.fr", "hotmail.fr"],
+  ["yahou.fr", "yahoo.fr"], ["yahou.com", "yahoo.com"], ["yaho.fr", "yahoo.fr"], ["yaho.com", "yahoo.com"], ["yahoo.con", "yahoo.com"],
+  ["outlok.com", "outlook.com"], ["outlook.con", "outlook.com"], ["outlok.fr", "outlook.fr"],
+  ["iclod.com", "icloud.com"], ["icloud.con", "icloud.com"],
+]);
+
+/** The address with a common domain typo corrected ("jeanne@gmial.com" → "jeanne@gmail.com"), or null. */
+export function suggestBookingEmail(value: string): string | null {
+  const address = value.trim();
+  const at = address.lastIndexOf("@");
+  if (at < 1) return null;
+  const domain = BOOKING_EMAIL_DOMAIN_TYPOS.get(address.slice(at + 1).toLowerCase());
+  return domain ? `${address.slice(0, at)}@${domain}` : null;
+}
+
+/**
  * Starts of a sorted list still inside the booking window at `now`, as a
  * [first, end) range: the same slots as filtering each one with
  * getBookingWindowIssue (too soon at the front, too far at the back), but the
@@ -759,6 +829,17 @@ export default function BookingPage() {
   const [dayKey, setDayKey] = useState("");
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [phoneError, setPhoneError] = useState<string | null>(null);
+  // Adresse sans domaine complet : erreur sous le champ ; faute de frappe courante : correction proposée, sans bloquer (RES-10).
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [emailSuggestion, setEmailSuggestion] = useState<string | null>(null);
+  // Refus de l’envoi affiché au-dessus du bouton de paiement, qui prend le focus (RES-10, A11Y-10) :
+  // une clé neuve à chaque refus, pour qu’un même message soit de nouveau annoncé. Créneau pris :
+  // la grille, amenée à l’écran, met en avant les horaires libres les plus proches.
+  const [submitError, setSubmitError] = useState<{ message: string; key: number; revealSlots: boolean } | null>(null);
+  const submitErrorRef = useRef<HTMLParagraphElement>(null);
+  const submitErrorCountRef = useRef(0);
+  const [takenSlot, setTakenSlot] = useState<number | null>(null);
+  const pendingTitleRef = useRef<HTMLHeadingElement>(null);
   const [paymentStatus, setPaymentStatus] = useState<"success" | "canceled" | null>(null);
   const [trackingId, setTrackingId] = useState<string | null>(null);
   const [pendingBooking, setPendingBooking] = useState<PendingBooking | null>(null);
@@ -858,6 +939,9 @@ export default function BookingPage() {
     () => (bookedSlots.data ? removeBookedSlots(dayOpenSlots, bookedSlots.data) : []).map((option) => ({ ...option, localTime: formatVisitorTime(option.start, locale) })),
     [dayOpenSlots, bookedSlots.data, locale]
   );
+  // Créneau refusé « déjà pris » : horaires libres les plus proches, relus avec les réservations rechargées (RES-10).
+  const suggestedSlots = useMemo(() => (takenSlot === null ? [] : nearestFreeSlots(daySlots, takenSlot)), [daySlots, takenSlot]);
+  const suggestedSlotTimes = new Set(suggestedSlots.map((slot) => slot.start.getTime()));
   const openingHours = useMemo(() => summarizeBookingAvailability(availabilitySlots.data ?? [], locale), [availabilitySlots.data, locale]);
   // Délai minimal (2 h, passé compris) et horizon (90 jours) : mêmes règles que le serveur.
   const bookingWindowIssue = selectedDate ? getBookingWindowIssue(selectedDate, now) : null;
@@ -960,7 +1044,27 @@ export default function BookingPage() {
     draftSlotRef.current = null;
     setDayKey(nextDayKey);
     if (selectedDate && toParisBookingDateKey(selectedDate) !== nextDayKey) setSelectedDate(null);
+    setTakenSlot(null);
   };
+
+  // Nouvel horaire choisi : le refus et les horaires proposés à la place de l’ancien n’ont plus lieu d’être.
+  const chooseSlot = (start: Date) => {
+    setSelectedDate(start);
+    setTakenSlot(null);
+    setSubmitError(null);
+  };
+
+  const showSubmitError = (message: string, revealSlots = false) => {
+    submitErrorCountRef.current += 1;
+    setSubmitError({ message, key: submitErrorCountRef.current, revealSlots });
+  };
+
+  useEffect(() => {
+    if (!submitError) return;
+    // Créneau pris : le message garde le focus (et reste annoncé), la grille vient à l’écran.
+    submitErrorRef.current?.focus({ preventScroll: submitError.revealSlots });
+    if (submitError.revealSlots) slotsFieldsetRef.current?.scrollIntoView?.({ block: "center" });
+  }, [submitError]);
 
   // Retour depuis Stripe (bouton Précédent, rechargement, page restaurée du
   // cache) : saisie conservée et réservation en attente proposée à la reprise
@@ -1023,6 +1127,13 @@ export default function BookingPage() {
     if (pendingHoldExpired) forgetPendingBooking(content.pending.closed);
   }, [pendingHoldExpired]);
 
+  // Paiement en attente retrouvé (retour depuis Stripe, page restaurée du cache) : le focus passe
+  // sur le titre de sa carte, qui est ainsi annoncée au lieu de rester sur le haut de page (A11Y-10).
+  const pendingSessionId = pendingBooking?.checkoutSessionId ?? null;
+  useEffect(() => {
+    if (pendingSessionId) pendingTitleRef.current?.focus();
+  }, [pendingSessionId]);
+
   const handleResumePayment = async () => {
     if (!pendingBooking || paymentSubmissionRef.current) return;
     paymentSubmissionRef.current = true;
@@ -1060,23 +1171,35 @@ export default function BookingPage() {
     if (paymentSubmissionRef.current || isLoading) return;
 
     if (!selectedDate) {
-      alert(content.form.date);
+      showSubmitError(bookingFormCopy.selectDate);
       return;
     }
 
-    if (getBookingWindowIssue(selectedDate) || isBlockedDate || isBookedSlot || isOutsideConfiguredAvailability || availabilityError) {
-      alert(availabilityLabel);
+    // Délai relu à l’instant de l’envoi : l’horloge de la page ne se met à jour que toutes les 30 s.
+    const windowIssue = getBookingWindowIssue(selectedDate);
+    if (windowIssue || isBlockedDate || isBookedSlot || isOutsideConfiguredAvailability || availabilityError) {
+      showSubmitError(windowIssue === "too_soon" ? content.form.tooSoon : windowIssue === "too_far" ? content.form.tooFar : availabilityLabel);
       return;
     }
 
-    if (!isPlausiblePhoneNumber(formData.phone)) {
+    const email = formData.email.trim();
+    if (!isCompleteEmailAddress(email)) {
+      setEmailError(content.form.invalidEmail);
+      setEmailSuggestion(suggestBookingEmail(email));
+      document.getElementById("booking-email")?.focus();
+      return;
+    }
+
+    // Chiffres arabes, persans ou pleine chasse et marques de direction d’un numéro collé : lus comme le serveur (INTL-09).
+    const phone = normalizePhoneInput(formData.phone);
+    if (!isPlausiblePhoneNumber(phone)) {
       setPhoneError(content.form.invalidPhone);
       document.getElementById("booking-phone")?.focus();
       return;
     }
 
     if (!calculatePrice.data) {
-      alert(content.error);
+      showSubmitError(content.form.priceError);
       return;
     }
 
@@ -1084,11 +1207,12 @@ export default function BookingPage() {
     if (securityCheckRequired && !turnstileToken) return;
 
     paymentSubmissionRef.current = true;
+    setSubmitError(null);
     try {
       const appointmentResult = await createAppointment.mutateAsync({
         customerName: formData.name,
         customerEmail: formData.email,
-        customerPhone: formData.phone,
+        customerPhone: phone,
         appointmentDate: selectedDate.toISOString(),
         requestDetails: formData.details,
         language,
@@ -1108,7 +1232,7 @@ export default function BookingPage() {
         window.location.assign(appointmentResult.checkoutUrl);
       } else {
         paymentSubmissionRef.current = false;
-        alert(content.paymentError);
+        showSubmitError(content.paymentError);
       }
     } catch (error) {
       paymentSubmissionRef.current = false;
@@ -1121,8 +1245,9 @@ export default function BookingPage() {
         setTurnstileToken(null);
         setTurnstileAttempt((attempt) => attempt + 1);
       }
+      if (refusal === "slot_taken") setTakenSlot(selectedDate.getTime());
       // Message dans la langue de la page (EN-06), jamais le texte français du serveur.
-      alert(getBookingErrorMessage(error, content));
+      showSubmitError(getBookingErrorMessage(error, content), refusal === "slot_taken");
       // Créneau pris entre-temps, date fermée… : agenda rechargé pour que la grille ne le propose plus.
       if (refusal) void Promise.all([bookedSlots.refetch(), blockedDates.refetch(), availabilitySlots.refetch()]);
     }
@@ -1136,11 +1261,16 @@ export default function BookingPage() {
     setDayKey("");
     setSelectedDate(null);
     setPhoneError(null);
+    setEmailError(null);
+    setEmailSuggestion(null);
+    setSubmitError(null);
+    setTakenSlot(null);
     setPaymentStatus(null);
     setTrackingId(null);
   };
 
   const isLoading = createAppointment.isPending;
+  const confirmationEmail = isCompleteEmailAddress(formData.email) ? formData.email.trim() : null;
 
   // Progress steps
   const steps = [
@@ -1185,27 +1315,30 @@ export default function BookingPage() {
         {/* Progress Indicator */}
         {!paymentStatus && (
           <div className="mb-8">
-            <div className="flex items-center justify-between">
+            {/* Étape courante annoncée (aria-current, « Étape 2 sur 3 »), libellés lus aussi sur téléphone (A11Y-10). */}
+            <ol className="flex items-center justify-between">
               {steps.map((step, index) => {
                 const StepIcon = step.icon;
                 const isCompleted = index < currentStep;
                 const isCurrent = index === currentStep;
-                const isActive = isCompleted || isCurrent;
                 return (
-                  <div key={index} className="flex items-center flex-1">
+                  <li key={index} className="flex items-center flex-1" aria-current={isCurrent ? "step" : undefined}>
                     <div className={`flex items-center gap-2 ${isCompleted ? 'text-primary' : isCurrent ? 'text-primary' : 'text-muted-foreground'}`}>
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300 ${isCompleted ? 'bg-primary text-primary-foreground' : isCurrent ? 'bg-primary/20 text-primary border-2 border-primary' : 'bg-muted text-muted-foreground'}`}>
-                        <StepIcon size={14} />
+                        <StepIcon size={14} aria-hidden="true" />
                       </div>
-                      <span className="text-xs font-medium hidden sm:inline">{step.label}</span>
+                      <span className="text-xs font-medium">
+                        <span className="sr-only">{content.stepOf(index + 1, steps.length)}</span>
+                        <span className="sr-only sm:not-sr-only">{step.label}</span>
+                      </span>
                     </div>
                     {index < steps.length - 1 && (
-                      <div className={`flex-1 h-0.5 mx-2 transition-all duration-300 ${index < currentStep ? 'bg-primary' : 'bg-muted'}`} />
+                      <div aria-hidden="true" className={`flex-1 h-0.5 mx-2 transition-all duration-300 ${index < currentStep ? 'bg-primary' : 'bg-muted'}`} />
                     )}
-                  </div>
+                  </li>
                 );
               })}
-            </div>
+            </ol>
           </div>
         )}
 
@@ -1217,7 +1350,7 @@ export default function BookingPage() {
                 <Clock className="w-6 h-6" />
               </span>
               <div className="min-w-0">
-                <h2 id="pending-booking-title" className="font-display text-xl font-bold mb-2">{content.pending.title}</h2>
+                <h2 id="pending-booking-title" ref={pendingTitleRef} tabIndex={-1} className="font-display text-xl font-bold mb-2 focus:outline-none">{content.pending.title}</h2>
                 <p className="text-sm text-muted-foreground leading-relaxed">{content.pending.description}</p>
                 <dl className="mt-3 grid gap-1 text-sm">
                   <div><dt className="inline font-medium">{content.pending.slot}{content.pending.labelSeparator}</dt><dd className="inline">{parisDateTimeFormat.format(new Date(pendingBooking.appointmentDate))} ({content.form.parisTime}){pendingLocalTime && `, ${content.form.localTime(pendingLocalTime)}`}</dd></div>
@@ -1287,7 +1420,8 @@ export default function BookingPage() {
         <div className="grid lg:grid-cols-[0.72fr_1.28fr] gap-6 items-start">
           <aside className="booking-rail rounded-2xl border border-border/60 bg-card/60 p-5 sm:p-6" aria-label={bookingRailCopy.label}>
             <span className="eyebrow-label mb-5">{bookingRailCopy.label}</span>
-            <h2 className="font-display text-2xl font-bold tracking-tight mb-3">{content.subtitle}</h2>
+            {/* Pas un titre : il précéderait le h1 de la page dans la lecture (A11Y-10, A11Y-15). */}
+            <p className="font-display text-2xl font-bold tracking-tight mb-3">{content.subtitle}</p>
             <p className="text-sm text-muted-foreground leading-relaxed mb-6">
               {bookingRailCopy.note}
             </p>
@@ -1361,12 +1495,44 @@ export default function BookingPage() {
                 type="email"
                 required
                 value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, email: e.target.value });
+                  if (emailError && isCompleteEmailAddress(e.target.value)) setEmailError(null);
+                  setEmailSuggestion(null);
+                }}
+                onBlur={() => {
+                  const email = formData.email.trim();
+                  setEmailError(email && !isCompleteEmailAddress(email) ? content.form.invalidEmail : null);
+                  setEmailSuggestion(suggestBookingEmail(email));
+                }}
                 autoComplete="email"
                 inputMode="email"
                 enterKeyHint="next"
+                aria-invalid={emailError ? true : undefined}
+                aria-describedby={[emailError && "booking-email-error", emailSuggestion && "booking-email-suggestion"].filter(Boolean).join(" ") || undefined}
                 className="form-field-premium w-full px-4 py-2 border"
               />
+              {emailError && <p id="booking-email-error" className="mt-2 text-sm text-destructive" role="alert">{emailError}</p>}
+              {/* Faute de frappe courante (gmial.com…) : correction proposée, l’adresse saisie reste acceptée. */}
+              <p id="booking-email-suggestion" role="status" className={emailSuggestion ? "mt-2 text-sm text-foreground" : "sr-only"}>
+                {emailSuggestion && (
+                  <>
+                    {content.form.emailSuggestion(emailSuggestion)}{" "}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData({ ...formData, email: emailSuggestion });
+                        setEmailSuggestion(null);
+                        setEmailError(null);
+                        document.getElementById("booking-email")?.focus();
+                      }}
+                      className="font-medium text-primary underline underline-offset-2"
+                    >
+                      {content.form.useEmailSuggestion}
+                    </button>
+                  </>
+                )}
+              </p>
             </div>
 
             {/* Phone */}
@@ -1382,9 +1548,9 @@ export default function BookingPage() {
                 value={formData.phone}
                 onChange={(e) => {
                   setFormData({ ...formData, phone: e.target.value });
-                  if (phoneError && isPlausiblePhoneNumber(e.target.value)) setPhoneError(null);
+                  if (phoneError && isPlausiblePhoneNumber(normalizePhoneInput(e.target.value))) setPhoneError(null);
                 }}
-                onBlur={() => setPhoneError(formData.phone.trim() && !isPlausiblePhoneNumber(formData.phone) ? content.form.invalidPhone : null)}
+                onBlur={() => setPhoneError(formData.phone.trim() && !isPlausiblePhoneNumber(normalizePhoneInput(formData.phone)) ? content.form.invalidPhone : null)}
                 autoComplete="tel"
                 inputMode="tel"
                 enterKeyHint="next"
@@ -1423,7 +1589,7 @@ export default function BookingPage() {
                 value={dayKey}
                 onChange={(e) => chooseDay(e.target.value)}
                 disabled={dayOptions.length === 0}
-                aria-describedby="booking-opening-hours availability-status"
+                aria-describedby="booking-opening-hours booking-date-hint availability-status"
                 className="form-field-premium h-11 w-full border px-4 py-2"
               >
                 <option value="">{content.form.dayPlaceholder}</option>
@@ -1433,8 +1599,11 @@ export default function BookingPage() {
               </select>
               {dayKey && (
                 // Boutons radio natifs : Tab entre dans la grille, les flèches changent d’horaire.
-                <fieldset ref={slotsFieldsetRef} className="mt-4" aria-describedby="availability-status">
+                <fieldset ref={slotsFieldsetRef} className="mt-4" aria-describedby={`${suggestedSlots.length > 0 ? "booking-nearest-slots " : ""}booking-date-hint availability-status`}>
                   <legend className="block text-xs font-medium mb-2">{content.form.slotsLegend}</legend>
+                  {suggestedSlots.length > 0 && !bookedSlots.isError && !slotsRetrying && (
+                    <p id="booking-nearest-slots" className="mb-2 text-sm font-medium text-primary">{content.form.nearestSlots(suggestedSlots.map((slot) => slot.time))}</p>
+                  )}
                   {bookedSlots.isLoading && !slotsRetrying ? (
                     <p className="text-sm text-muted-foreground">{bookingFormCopy.checkingAvailability}</p>
                   ) : bookedSlots.isError || slotsRetrying ? (
@@ -1449,27 +1618,32 @@ export default function BookingPage() {
                     <p data-slots-empty tabIndex={-1} className="text-sm text-muted-foreground focus:outline-none">{dayOpenSlots.length > 0 ? content.form.noSlotsThisDay : content.form.noSlotsLeftThisDay}</p>
                   ) : (
                     <div id="booking-slots" className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                      {daySlots.map((option) => (
-                        <label key={option.start.toISOString()} className="block cursor-pointer">
-                          <input
-                            type="radio"
-                            name="booking-slot"
-                            value={option.start.toISOString()}
-                            checked={selectedDate?.getTime() === option.start.getTime()}
-                            onChange={() => setSelectedDate(option.start)}
-                            className="peer sr-only"
-                          />
-                          <span className="flex min-h-11 flex-col items-center justify-center rounded-xl border border-border/70 bg-background/40 px-2 py-2 text-sm font-semibold text-foreground transition-colors hover:border-primary/60 peer-checked:border-primary peer-checked:bg-primary peer-checked:text-primary-foreground peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-background">
-                            <span>{option.time}</span>
-                            {option.localTime && <span className="text-[11px] font-normal leading-4 opacity-80">{content.form.localTimeShort(option.localTime)}</span>}
-                          </span>
-                        </label>
-                      ))}
+                      {daySlots.map((option) => {
+                        // Horaire libre proche d’un créneau refusé « déjà pris » : mis en avant (RES-10).
+                        const suggested = suggestedSlotTimes.has(option.start.getTime());
+                        return (
+                          <label key={option.start.toISOString()} className="block cursor-pointer" data-suggested={suggested || undefined}>
+                            <input
+                              type="radio"
+                              name="booking-slot"
+                              value={option.start.toISOString()}
+                              checked={selectedDate?.getTime() === option.start.getTime()}
+                              onChange={() => chooseSlot(option.start)}
+                              className="peer sr-only"
+                            />
+                            <span className={`flex min-h-11 flex-col items-center justify-center rounded-xl border ${suggested ? "border-primary bg-primary/15" : "border-border/70 bg-background/40"} px-2 py-2 text-sm font-semibold text-foreground transition-colors hover:border-primary/60 peer-checked:border-primary peer-checked:bg-primary peer-checked:text-primary-foreground peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-background`}>
+                              <span>{option.time}</span>
+                              {option.localTime && <span className="text-[11px] font-normal leading-4 opacity-80">{content.form.localTimeShort(option.localTime)}</span>}
+                              {suggested && <span className="sr-only"> ({content.form.suggestedSlot})</span>}
+                            </span>
+                          </label>
+                        );
+                      })}
                     </div>
                   )}
                 </fieldset>
               )}
-              <p className="mt-2 text-xs leading-5 text-muted-foreground">{content.form.dateHint} {content.form.windowHint}</p>
+              <p id="booking-date-hint" className="mt-2 text-xs leading-5 text-muted-foreground">{content.form.dateHint} {content.form.windowHint}</p>
               {localizedDate && (
                 <p className="mt-2 text-sm font-medium text-primary" aria-live="polite">
                   {localizedDate}
@@ -1497,7 +1671,7 @@ export default function BookingPage() {
             ))}
             {calculatePrice.data && (
               <Card className="summary-card-premium p-4 sm:p-5">
-                <h3 className="font-semibold mb-3">{content.pricing.title}</h3>
+                <h2 className="font-semibold mb-3">{content.pricing.title}</h2>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span>{content.pricing.dayRate}:</span>
@@ -1542,10 +1716,26 @@ export default function BookingPage() {
             {/* Vérification anti-robot, seulement quand le serveur la demande (ABUS-02). */}
             {securityCheckRequired && <TurnstileWidget key={turnstileAttempt} onToken={setTurnstileToken} />}
 
+            {/* Adresse qui recevra la confirmation, relue avant de partir vers Stripe (RES-10). */}
+            {confirmationEmail && (
+              <p id="booking-confirmation-email" className="flex items-start gap-2 text-sm text-muted-foreground">
+                <Mail className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                <span className="min-w-0 wrap-anywhere">{content.form.confirmationTo(confirmationEmail)}</span>
+              </p>
+            )}
+
+            {/* Refus de l’envoi, dans la page plutôt qu’en fenêtre d’alerte (RES-10, A11Y-10). */}
+            {submitError && (
+              <p key={`submit-error-${submitError.key}`} id="booking-submit-error" ref={submitErrorRef} tabIndex={-1} className="rounded-xl border border-destructive/35 bg-destructive/5 p-4 text-sm text-destructive focus:outline-none" role="alert">
+                {submitError.message}
+              </p>
+            )}
+
             {/* Submit Button */}
             <Button
               type="submit"
               disabled={isLoading || availabilityPending || availabilityError || isBlockedDate || isBookedSlot || isOutsideConfiguredAvailability || Boolean(bookingWindowIssue) || !selectedDate || !calculatePrice.data || (securityCheckRequired && !turnstileToken)}
+              aria-describedby={confirmationEmail ? "booking-confirmation-email" : undefined}
               className="cta-primary w-full"
               size="lg"
             >
