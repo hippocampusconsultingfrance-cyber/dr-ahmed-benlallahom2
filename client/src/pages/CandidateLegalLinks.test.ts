@@ -43,6 +43,7 @@ const { default: CandidateVerifyPage } = await import("./CandidateVerifyPage");
 const { default: CandidateResetPasswordPage } = await import("./CandidateResetPasswordPage");
 const { default: CandidatePortalPage } = await import("./CandidatePortalPage");
 const { candidateLegalFooterCopy, candidateLegalLinks } = await import("../components/CandidateLegalFooter");
+const { siteConfig } = await import("@/data/site-config");
 
 function render(page: () => unknown, search = "") {
   vi.stubGlobal("window", { location: { pathname: "/candidate/access", search }, innerWidth: 1280, addEventListener: () => undefined, removeEventListener: () => undefined });
@@ -62,7 +63,7 @@ afterEach(() => {
 
 describe("LEGAL-23 — informations légales de l’espace candidat", () => {
   it("relie le consentement de création d’accès aux conditions d’utilisation et à la politique de confidentialité dans chaque langue", () => {
-    expect(candidateLegalLinks).toEqual({ legal: "/legal", privacy: "/legal?tab=privacy", terms: "/legal?tab=terms", cookies: "/legal?tab=privacy#cookies" });
+    expect(candidateLegalLinks).toEqual({ legal: "/legal", privacy: "/legal?tab=privacy", terms: "/legal?tab=terms", cookies: "/legal?tab=privacy#cookies", gdpr: "/gdpr", contact: `mailto:${siteConfig.email}` });
     for (const [language, copy] of Object.entries(candidateAccessCopy)) {
       expect(copy.termsParts, language).toHaveLength(5);
       expect(copy.legalNotice.length, language).toBeGreaterThan(20);
@@ -84,8 +85,22 @@ describe("LEGAL-23 — informations légales de l’espace candidat", () => {
     const pages = { CandidateAccessPage, CandidateVerifyPage, CandidateResetPasswordPage, CandidatePortalPage };
     for (const [name, page] of Object.entries(pages)) {
       const html = render(page, "?email=candidat%40example.com&token=abc");
-      expect(footerLinks(html, label), name).toEqual([candidateLegalLinks.legal, candidateLegalLinks.privacy, candidateLegalLinks.terms, candidateLegalLinks.cookies]);
+      expect(footerLinks(html, label), name).toEqual([candidateLegalLinks.legal, candidateLegalLinks.privacy, candidateLegalLinks.terms, candidateLegalLinks.cookies, "/gdpr", `mailto:${siteConfig.email}`]);
       expect(html, name).toContain(candidateLegalFooterCopy[language].controller);
+    }
+  });
+
+  it.each(["fr", "en", "de", "zh"] as const)("mène depuis l’espace candidat à la demande RGPD et au contact recrutement, nommés dans la langue de la page (%s, REC-18)", language => {
+    view.language = language;
+    const copy = candidateLegalFooterCopy[language];
+    const html = render(CandidatePortalPage);
+    const nav = html.slice(html.indexOf(`<nav aria-label="${copy.label}"`), html.indexOf("</nav>", html.indexOf(`<nav aria-label="${copy.label}"`)));
+
+    expect(nav).toMatch(new RegExp(`<a href="/gdpr"[^>]*>${copy.gdpr}</a>`));
+    expect(nav).toMatch(new RegExp(`<a href="mailto:${siteConfig.email.replace(/\./g, "\\.")}"[^>]*>${copy.contact}</a>`));
+    if (language !== "fr") {
+      expect(copy.gdpr).not.toBe(candidateLegalFooterCopy.fr.gdpr);
+      expect(copy.contact).not.toBe(candidateLegalFooterCopy.fr.contact);
     }
   });
 });

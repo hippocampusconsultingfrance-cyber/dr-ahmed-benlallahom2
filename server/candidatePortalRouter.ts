@@ -34,6 +34,7 @@ import {
 } from "./_core/notifications";
 import { PublicErrorReason, publicProcedure, router } from "./_core/trpc";
 import { candidateRequestIp, verifyCandidateTurnstile } from "./candidateTurnstile";
+import { candidateDeviceLabel } from "./candidateDeviceLabel";
 import { clearPersistentRateLimit, enforcePersistentRateLimit, hashSecurityValue, isCompromisedPassword, logSecurityEvent, recordPersistentRateLimitAttempt, requestIpHash } from "./candidateSecurity";
 import { buildCandidatePortalActivationEmailEvent } from "./recruitmentEmailTrace";
 import { enforcePublicEmailIpRateLimit } from "./publicFormRateLimit";
@@ -146,7 +147,7 @@ async function createCandidateSession(candidateId: number, req: { protocol?: str
   await db.insert(candidateSessions).values({
     candidateId,
     tokenHash: hashCandidateToken(token, "session"),
-    deviceLabel: typeof req.headers["user-agent"] === "string" ? req.headers["user-agent"].slice(0, 180) : "Navigateur inconnu",
+    deviceLabel: candidateDeviceLabel(req.headers["user-agent"]),
     ipHash: requestIpHash(req.headers),
     expiresAt,
   });
