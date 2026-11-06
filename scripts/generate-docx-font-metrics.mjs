@@ -11,8 +11,9 @@
  * the unit), for the fonts Monotype and Linotype drew for Windows to the same
  * advances: P052 for Palatino Linotype and Book Antiqua, C059 for Century
  * Schoolbook, URW Bookman for Bookman Old Style, URW Gothic for Century
- * Gothic (a thousandth more, `rounding`); IPAGothic and IPAMincho for the
- * Latin and Latin-1 letters of MS Gothic and MS Mincho; DejaVu; and the free fonts of
+ * Gothic (a thousandth more, `rounding`), of these and of Gelasio, Caladea
+ * and Selawik their first characters only (`first`); IPAGothic and IPAMincho
+ * for the Latin and Latin-1 letters of MS Gothic and MS Mincho; DejaVu; and the free fonts of
  * Canva, Google Docs and recent Word (Montserrat, Open Sans, Lato…). Fonts of
  * Office and Windows of no free font of their metrics are given the advances
  * their publishers or string-pixel-width publish, character by character
@@ -93,28 +94,34 @@ import { inflateSync } from "node:zlib";
  * else the taller of its own and single spacing's least (1.15); `latin`: a
  * font of the metrics of the one it stands for in Latin and Latin-1 only
  * (IPAGothic, of MS Gothic's), beyond them never narrower than the bound of
- * an East Asian font (east-asian).
+ * an East Asian font (east-asian); `first`: a font of the advances of the one
+ * it stands for in the first characters only (FIRST_CHARACTERS: Adobe's AFM
+ * files URW's advances were checked on hold no Greek nor Cyrillic; Gelasio,
+ * Caladea and Selawik were drawn to the metrics of Latin text), the others
+ * written as lacking (0): Word's font may draw them otherwise, and the check
+ * bounds them as a character a font lacks; they still count in the widest of
+ * all (SUBSTITUTES).
  */
 const FONTS = [
   { key: "carlito", family: "Carlito", names: ["calibri", "carlito"] },
-  { key: "caladea", family: "Caladea", names: ["cambria", "caladea"] },
+  { key: "caladea", family: "Caladea", names: ["cambria", "caladea"], first: true },
   { key: "liberation-sans", family: "Liberation Sans", names: ["arial", "helvetica", "arimo", "liberation sans"] },
   { key: "liberation-serif", family: "Liberation Serif", names: ["times new roman", "times", "tinos", "liberation serif"] },
   { key: "liberation-mono", family: "Liberation Mono", names: ["courier new", "courier", "cousine", "liberation mono"], widest: false },
   { key: "liberation-sans-narrow", family: "Liberation Sans Narrow", names: ["arial narrow", "liberation sans narrow"] },
   { key: "dejavu-sans", family: "DejaVu Sans", names: ["dejavu sans"] },
   { key: "dejavu-serif", family: "DejaVu Serif", names: ["dejavu serif"] },
-  { key: "gelasio", family: "Gelasio", names: ["georgia", "gelasio"], ownLine: false, published: "georgia" },
+  { key: "gelasio", family: "Gelasio", names: ["georgia", "gelasio"], ownLine: false, published: "georgia", first: true },
   { key: "eb-garamond", family: "EB Garamond", names: ["eb garamond"], ownLine: false },
   { key: "tex-gyre-adventor", family: "TeX Gyre Adventor", names: ["tex gyre adventor"], ownLine: false },
-  { key: "p052", family: "P052", names: ["palatino linotype", "book antiqua", "palatino", "p052"], rounding: 1 },
-  { key: "c059", family: "C059", names: ["century schoolbook", "new century schoolbook", "c059"], rounding: 1 },
-  { key: "urw-bookman", family: "URW Bookman", names: ["bookman old style", "bookman", "urw bookman"], rounding: 1, styles: { regular: ["Light"], bold: ["Demi"], italic: ["Light Italic"], boldItalic: ["Demi Italic"] } },
-  { key: "urw-gothic", family: "URW Gothic", names: ["century gothic", "urw gothic"], rounding: 1, styles: { regular: ["Book"], bold: ["Demi"], italic: ["Book Oblique"], boldItalic: ["Demi Oblique"] } },
-  { key: "selawik", family: "Selawik", names: ["segoe ui", "selawik"], published: "segoe ui" },
-  { key: "selawik-light", family: "Selawik Light", names: ["segoe ui light"], published: "segoe ui", synthetic: true, styles: { regular: ["Light"] } },
-  { key: "selawik-semilight", family: "Selawik Semilight", names: ["segoe ui semilight"], published: "segoe ui", synthetic: true, styles: { regular: ["Semilight"] } },
-  { key: "selawik-semibold", family: "Selawik Semibold", names: ["segoe ui semibold"], published: "segoe ui", synthetic: true, styles: { regular: ["Semibold"] } },
+  { key: "p052", family: "P052", names: ["palatino linotype", "book antiqua", "palatino", "p052"], rounding: 1, first: true },
+  { key: "c059", family: "C059", names: ["century schoolbook", "new century schoolbook", "c059"], rounding: 1, first: true },
+  { key: "urw-bookman", family: "URW Bookman", names: ["bookman old style", "bookman", "urw bookman"], rounding: 1, first: true, styles: { regular: ["Light"], bold: ["Demi"], italic: ["Light Italic"], boldItalic: ["Demi Italic"] } },
+  { key: "urw-gothic", family: "URW Gothic", names: ["century gothic", "urw gothic"], rounding: 1, first: true, styles: { regular: ["Book"], bold: ["Demi"], italic: ["Book Oblique"], boldItalic: ["Demi Oblique"] } },
+  { key: "selawik", family: "Selawik", names: ["segoe ui", "selawik"], published: "segoe ui", first: true },
+  { key: "selawik-light", family: "Selawik Light", names: ["segoe ui light"], published: "segoe ui", synthetic: true, first: true, styles: { regular: ["Light"] } },
+  { key: "selawik-semilight", family: "Selawik Semilight", names: ["segoe ui semilight"], published: "segoe ui", synthetic: true, first: true, styles: { regular: ["Semilight"] } },
+  { key: "selawik-semibold", family: "Selawik Semibold", names: ["segoe ui semibold"], published: "segoe ui", synthetic: true, first: true, styles: { regular: ["Semibold"] } },
   { key: "ipagothic", family: "IPAGothic", names: ["ms gothic", "ｍｓ ゴシック", "ipagothic"], synthetic: true, widest: false, latin: true },
   { key: "ipamincho", family: "IPAMincho", names: ["ms mincho", "ｍｓ 明朝", "ipamincho"], synthetic: true, widest: false, latin: true },
   { key: "montserrat", family: "Montserrat", names: ["montserrat"] },
@@ -596,6 +603,11 @@ for (const { key, of, basicLatin, eastAsian, share, every, latin1, synthetic } o
 for (const { key } of FONTS.filter(font => font.latin)) {
   const bound = metrics["east-asian"].advances;
   for (const [style, advances] of Object.entries(metrics[key].advances)) metrics[key].advances[style] = advances.map((width, at) => (CHARACTERS.charCodeAt(at) > 0xff ? Math.max(width, bound[style][at]) : width));
+}
+// Of a font of the advances of another in the first characters only, and of a style standing for one of its, the others as lacking.
+const firstOnly = new Set(FONTS.filter(font => font.first).map(font => font.key));
+for (const key of [...firstOnly, ...STANDING_IN.filter(({ from }) => firstOnly.has(from)).map(({ key }) => key)]) {
+  metrics[key] = { ...metrics[key], advances: Object.fromEntries(Object.entries(metrics[key].advances).map(([style, advances]) => [style, advances.map((width, at) => (at < FIRST_CHARACTERS.length ? width : 0))])) };
 }
 for (const name of HALF_WIDTH) aliases[name.toLowerCase()] = "half-width";
 for (const name of EAST_ASIAN) aliases[name.toLowerCase()] = "east-asian-latin";

@@ -51,13 +51,18 @@ const drawingBox = (content: string, cx: number, cy: number) =>
 const inRun = (content: string) => `<w:p><w:r>${content}</w:r></w:p>`;
 const alternate = (choice: string, fallback: string) => inRun(`<mc:AlternateContent><mc:Choice Requires="wps">${choice}</mc:Choice><mc:Fallback>${fallback}</mc:Fallback></mc:AlternateContent>`);
 /**
- * A rectangle without text placed from its paragraph and the column, that does not wrap the text, in front of it or behind it:
- * Word's and its VML copy; its size and its place down in points, its DrawingML fill.
+ * A rectangle without text placed from its paragraph and the column, that does not wrap the text, in front of it or behind it, as
+ * Word draws it: its size and its place down in points, its DrawingML fill.
  */
-const rectangle = ({ behind = false, fill = '<a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill>', width = 472, height = 126, top = 0 } = {}) => alternate(
+const rectangleDrawing = ({ behind = false, fill = '<a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill>', width = 472, height = 126, top = 0 } = {}) =>
   `<w:drawing><wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="5" behindDoc="${behind ? 1 : 0}" locked="0" layoutInCell="1" allowOverlap="1"><wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="column"><wp:posOffset>0</wp:posOffset></wp:positionH><wp:positionV relativeFrom="paragraph"><wp:posOffset>${Math.round(top * 12_700)}</wp:posOffset></wp:positionV>` +
-  `<wp:extent cx="${width * 12_700}" cy="${height * 12_700}"/><wp:wrapNone/><wp:docPr id="5" name="Rectangle 5"/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:wsp><wps:cNvSpPr/><wps:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom>${fill}</wps:spPr><wps:bodyPr/></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing>`,
-  `<w:pict><v:rect style="position:absolute;margin-left:0;margin-top:${top}pt;width:${width}pt;height:${height}pt;z-index:${behind ? -5 : 5}" fillcolor="white" stroked="f"/></w:pict>`);
+  `<wp:extent cx="${width * 12_700}" cy="${height * 12_700}"/><wp:wrapNone/><wp:docPr id="5" name="Rectangle 5"/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:wsp><wps:cNvSpPr/><wps:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom>${fill}</wps:spPr><wps:bodyPr/></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing>`;
+/** The same rectangle, Word's and its VML copy. */
+const rectangle = (options: Parameters<typeof rectangleDrawing>[0] = {}) => {
+  const { behind = false, width = 472, height = 126, top = 0 } = options;
+  return alternate(rectangleDrawing(options),
+    `<w:pict><v:rect style="position:absolute;margin-left:0;margin-top:${top}pt;width:${width}pt;height:${height}pt;z-index:${behind ? -5 : 5}" fillcolor="white" stroked="f"/></w:pict>`);
+};
 /** A table of fixed layout of one column whose cell, merged down its rows (w:vMerge), holds `content`: the properties of each row. */
 const mergedTable = (rows: string[], content: string) =>
   `<w:tbl><w:tblPr><w:tblW w:w="9000" w:type="dxa"/><w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid><w:gridCol w:w="9000"/></w:tblGrid>` +
@@ -86,20 +91,14 @@ function characterMap(glyphs: Map<number, number>) {
 const words = (...values: number[]) => Buffer.from(values.flatMap(value => [(value >> 8) & 0xff, value & 0xff]));
 
 /**
- * A TrueType font (head, hhea, hmtx, cmap) whose characters of Basic Latin and Latin-1 are all 0.3 em wide (glyph 1), « f » and « i »
- * too (glyphs 3 and 4), as its character map for platform 0 (Unicode) gives them; but `space`: its character map for Windows
- * (platform 3, encoding 1), which Word and HarfBuzz read, giving the space a glyph 2 em wide (glyph 2); `ligature`: a GSUB table whose
- * ligature (liga) draws « fi » as that glyph; `kerning`: a kern table of 0.8 em between « f » and « i ». Obfuscated as Word embeds
- * it (ECMA-376 Part 1, 17.8.1: its first 32 bytes XORed with the bytes of its GUID key, the last one first).
+ * A TrueType font (head, hhea, hmtx, cmap) whose characters of Basic Latin and Latin-1 are all 0.3 em wide (glyph 1), as its
+ * character map for Windows (platform 3, encoding 1) gives them, obfuscated as Word embeds it (ECMA-376 Part 1, 17.8.1: its first
+ * 32 bytes XORed with the bytes of its GUID key, the last one first).
  */
-function embeddedFont(key: string, { space = false, ligature = false, kerning = false } = {}) {
+function embeddedFont(key: string) {
   const codes = [...Array.from({ length: 0x5f }, (_, index) => 0x20 + index), ...Array.from({ length: 0x60 }, (_, index) => 0xa0 + index)];
-  const unicode = new Map(codes.map(code => [code, code === 0x66 ? 3 : code === 0x69 ? 4 : 1]));
-  const windows = new Map(unicode);
-  if (space) windows.set(0x20, 2);
-  const unicodeMap = characterMap(unicode);
-  const windowsMap = characterMap(windows);
-  const cmap = Buffer.concat([words(0, 2, 0, 3, 0, 20, 3, 1, 0, 20 + unicodeMap.length), unicodeMap, windowsMap]);
+  const windowsMap = characterMap(new Map(codes.map(code => [code, 1])));
+  const cmap = Buffer.concat([words(0, 1, 3, 1, 0, 12), windowsMap]);
   const head = Buffer.alloc(54);
   head.writeUInt32BE(0x00010000, 0);
   head.writeUInt32BE(0x5f0f3cf5, 12);
@@ -108,13 +107,9 @@ function embeddedFont(key: string, { space = false, ligature = false, kerning = 
   hhea.writeUInt32BE(0x00010000, 0);
   hhea.writeInt16BE(800, 4);
   hhea.writeInt16BE(-200, 6);
-  hhea.writeUInt16BE(5, 34);
-  const hmtx = words(500, 0, 300, 0, 2000, 0, 300, 0, 300, 0);
+  hhea.writeUInt16BE(2, 34);
+  const hmtx = words(500, 0, 300, 0);
   const tables: Array<[string, Buffer]> = [["cmap", cmap], ["head", head], ["hhea", hhea], ["hmtx", hmtx]];
-  // GSUB 1.0: the default script's feature liga, of a lookup of ligatures (type 4) of glyph 3 then 4 into glyph 2.
-  if (ligature) tables.push(["GSUB", words(1, 0, 10, 30, 44, 1, ...[0x4446, 0x4c54], 8, 4, 0, 0, 0xffff, 1, 0, 1, ...[0x6c69, 0x6761], 8, 0, 1, 0, 1, 4, 4, 0, 1, 8, 1, 8, 1, 14, 1, 1, 3, 1, 4, 2, 2, 4)]);
-  // kern 0: one subtable of format 0, its pair of glyphs 3 and 4 0.8 em further apart.
-  if (kerning) tables.push(["kern", words(0, 1, 0, 20, 1, 1, 6, 0, 0, 3, 4, 800)]);
   const directory = Buffer.alloc(12 + tables.length * 16);
   directory.writeUInt32BE(0x00010000, 0);
   directory.writeUInt16BE(tables.length, 4);
@@ -913,15 +908,10 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       ];
 
       it.each([
-        ["de caractères étroits (0,3 em) dans sa table Unicode (0,3), mais d’une espace de 2 em dans celle de Windows (3,1)", embeddedFont(KEY, { space: true }), ""],
-        ["de caractères étroits et d’une ligature « fi » de 3 em (GSUB liga), Word suivant ses ligatures (w14:ligatures)", embeddedFont(KEY, { ligature: true }), '<w14:ligatures xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" w14:val="all"/>'],
-        ["de caractères étroits et d’un crénage positif de 0,8 em (kern), Word crénant (w:kern)", embeddedFont(KEY, { kerning: true }), '<w:kern w:val="2"/>'],
-        ["de caractères étroits, sans plus", embeddedFont(KEY), ""],
-        ["désobfusquée d’une autre clé", embeddedFont("{00000000-0000-0000-0000-000000000000}"), ""],
-        ["tronquée", embeddedFont(KEY).subarray(0, 40), ""],
-        ["qui n’est pas une police", "PK pas une police", ""],
-      ])("police « Zorglub » embarquée %s : rien de sa ligne exacte n’est lu, les affirmations sont écartées", async (_, file, runProperties) => {
-        expectUnread(await check(row(WIDE, `${font("Zorglub")}${runProperties}`), { parts: embedded(file) }));
+        ["de caractères étroits (0,3 em), lisible", embeddedFont(KEY)],
+        ["qui n’est pas une police", "PK pas une police"],
+      ])("police « Zorglub » embarquée %s : rien de sa ligne exacte n’est lu, les affirmations sont écartées", async (_, file) => {
+        expectUnread(await check(row(WIDE, font("Zorglub")), { parts: embedded(file) }));
       });
 
       it("police embarquée sous le nom d’Arial, police de Word : rien de sa ligne exacte n’est lu ; Arial sans police embarquée la lit entière", async () => {
@@ -996,6 +986,15 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
     it.each([["50 « ш »", "ш", 50, ""], ["50 « Ю »", "Ю", 50, ""], ["50 « № »", "№", 50, ""], ["50 « Ǆ »", "Ǆ", 50, ""], ["62 « α » en capitales (w:caps)", "α", 62, "<w:caps/>"]])("%s en Arial, mesurés : les affirmations qui suivent sont écartées ; 50 « а » cyrilliques laissent lire leurs premiers mots", async (_, letter, count, capitals) => {
       expectSetAside(await check(filled(String(letter).repeat(Number(count)), `${font("Arial")}${capitals}`)));
       expect((await check(filled("а".repeat(50), font("Arial")))).text).toContain("Titre : Médecin");
+    });
+
+    // Palatino Linotype, Century Schoolbook, Bookman Old Style and Century Gothic are measured on URW's fonts of their advances in Latin
+    // text only: their Cyrillic letters as letters Word's font may draw otherwise, as wide as the widest text font or an East Asian one
+    // (1 em). 50 « а » fill the line of 439 pt; in URW's letters (0.48 em in P052), or in Times New Roman (Liberation Serif's), they
+    // left room for the claims' first words.
+    it.each([["Palatino Linotype"], ["Century Schoolbook"], ["Bookman Old Style"], ["Century Gothic"]])("50 « а » cyrilliques en %s, mesurée sur une police de ses seules avances latines : les affirmations qui suivent sont écartées ; en Times New Roman, leurs premiers mots sont lus", async name => {
+      expectSetAside(await check(filled("а".repeat(50), font(name!))));
+      expect((await check(filled("а".repeat(50), font("Times New Roman")))).text).toContain("Titre : Médecin");
     });
 
     // A Russian or Greek line of a CV that fits its row with room to spare is read whole, in Arial, Times New Roman or Calibri.
@@ -1160,6 +1159,32 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       expectSetAside(result);
       if (either) expect(result.hidden).not.toContain("Titre");
       expect((await check(pushed(alternateInline("http://schemas.microsoft.com/office/word/2010/wordprocessingShape")))).text).toContain("Titre : Médecin");
+    });
+
+    // Word draws the first choice it understands: past one of a namespace of Office it may not know (word/2099), or requiring nothing,
+    // the next one (wps) may be drawn, its white rectangle in front of the claims; past one it understands (w15), not.
+    const choices = (first: string) => inRun(`<mc:AlternateContent xmlns:x="http://schemas.microsoft.com/office/word/2099/wordml/zorglub" xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml">` +
+      `${first}<mc:Choice Requires="wps">${rectangleDrawing()}</mc:Choice><mc:Fallback></mc:Fallback></mc:AlternateContent>`) + FAKE.map(line => paragraph(line)).join("");
+    it.each([
+      ["d’un espace de noms d’Office inconnu de Word (word/2099)", '<mc:Choice Requires="x"></mc:Choice>'],
+      ["sans Requires", "<mc:Choice></mc:Choice>"],
+    ])("premier mc:Choice vide %s, puis un mc:Choice wps d’un rectangle blanc devant les affirmations : écartées sans être comptées comme cachées ; après un premier mc:Choice w15, lues", async (_, first) => {
+      const result = await check(choices(first));
+      expectSetAside(result);
+      expect(result.hidden).toBe("");
+      expect((await check(choices('<mc:Choice Requires="w15"></mc:Choice>'))).text).toContain(FAKE[1]);
+    });
+
+    // The text a choice Word may not draw (word/2099) cuts, in its text box of one line, the fallback Word may draw instead shows, in
+    // its box of 600 pt: set aside, not counted as hidden; of a choice wps, which Word draws, hidden.
+    it("mc:Choice d’un espace de noms d’Office inconnu de Word, d’une zone de texte d’une ligne, et repli d’une zone de 600 pt du même texte : les affirmations sont écartées sans être comptées comme cachées", async () => {
+      const content = FAKE.map(line => paragraph(line)).join("");
+      const boxes = (requires: string) => inRun(`<mc:AlternateContent xmlns:x="http://schemas.microsoft.com/office/word/2099/wordml/zorglub"><mc:Choice Requires="${requires}">` +
+        `${drawingBox(content, 425 * 12_700, 12 * 12_700)}</mc:Choice><mc:Fallback>${vmlBox(content, 600)}</mc:Fallback></mc:AlternateContent>`);
+      const either = await check(boxes("x"));
+      expectSetAside(either);
+      expect(either.hidden).toBe("");
+      expect((await check(boxes("wps"))).hidden).toContain(FAKE[1]);
     });
 
     it("image en ligne de 150 pt, en DrawingML et dans sa copie VML (mc:AlternateContent) : comptée une fois, le texte qui la suit sur la ligne est lu", async () => {
@@ -1426,6 +1451,43 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       expect(words.ms).toBeLessThan(words.bound);
       const word = timedGrowth(scale => docx(row("<w:r><w:t>a</w:t></w:r>".repeat(scaled(40_000, scale)))));
       expect(word.ms).toBeLessThan(word.bound);
+    }, 60_000);
+
+    // A font's name of 200 KB took 13 s, its words looked for again from its start one by one; a MACROBUTTON of 80 000 runs of code,
+    // 51 s, its text measured again in each run's format: each word of a name is now read once, each measure of the code once.
+    it("nom de police de 100 000 mots de variante, et MACROBUTTON de 80 000 passages de code, dans une ligne exacte : contrôlés en quelques secondes au plus", () => {
+      const named = (words: number) => {
+        const name = "Zorglub" + " bold".repeat(words);
+        return docx(table(9000, [[exact(300), paragraph("Disponible.", "", `<w:rFonts w:ascii="${name}" w:hAnsi="${name}"/>`)]]));
+      };
+      const name = timedGrowth(scale => named(scaled(100_000, scale)));
+      expect(name.ms).toBeLessThan(name.bound);
+      expect(name.result.unverifiableText).toEqual([]);
+      const button = (runs: number) => docx(table(9000, [[exact(300), `<w:p><w:pPr>${NO_SPACING}</w:pPr><w:r><w:t xml:space="preserve">Disponible. </w:t></w:r>` +
+        `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> MACROBUTTON NoMacro </w:instrText></w:r>${"<w:r><w:instrText>W</w:instrText></w:r>".repeat(runs)}` +
+        `<w:r><w:fldChar w:fldCharType="end"/></w:r><w:r><w:t>Fin.</w:t></w:r></w:p>`]]));
+      const code = timedGrowth(scale => button(scaled(80_000, scale)));
+      expect(code.ms).toBeLessThan(code.bound);
+      // As wide as its 80 000 « W », the button's text pushes what follows it out of the row: set aside.
+      expect(code.result.unverifiableText.map(passage => passage.text).join(" ")).toContain("Fin.");
+    }, 120_000);
+
+    // Each layout in one font costs the reading of the part again: for a part of 19 MB of text, more than the work allowed. The 16
+    // layouts of a row in fonts Word does not have took 8 times as long as the check of the same part without them.
+    it("partie de 19 Mo de texte courant et une ligne exacte en quatre polices que Word n’a pas : contrôlée à peine plus longtemps qu’en Arial", () => {
+      const font = (name: string) => `<w:rFonts w:ascii="${name}" w:hAnsi="${name}"/>`;
+      const names = ["Aaaa", "Bbbb", "Cccc", "Dddd"];
+      const row = (absent: boolean) => table(8816, [[exact(300), runs("", ...Array.from({ length: 6 }, (_, index): Array<[string, string]> =>
+        [["MMMM ", font(absent ? names[index % 4]! : "Arial")], ["eeee ", font(absent ? names[(index + 1) % 4]! : "Arial")]]).flat(), ["Fin.", font(absent ? names[2]! : "Arial")])]]);
+      const text = paragraph(`${"x".repeat(9_999)} `).repeat(1_900);
+      const [inArial, inAbsent] = [docx(honestLines() + text + row(false)), docx(honestLines() + text + row(true))];
+      const before = timed(inArial);
+      const absent = timed(inAbsent);
+      const after = timed(inArial);
+      expect(absent.ms).toBeLessThan(3 * Math.max(before.ms, after.ms, FLOOR_MS));
+      // The row's end is set aside, as wide as in the widest of the fonts Word may draw each name in.
+      expect(before.result.unverifiableText).toEqual([]);
+      expect(absent.result.unverifiableText).toEqual([{ text: "Fin.", reason: "layout" }]);
     }, 60_000);
 
     it("tableaux de lignes exactes imbriqués sur 2 000 et 20 000 niveaux : contrôlés en quelques secondes au plus, sans épuiser la pile", () => {

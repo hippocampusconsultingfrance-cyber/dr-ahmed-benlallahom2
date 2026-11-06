@@ -23,9 +23,9 @@ import { DOCX_FONT_ALIASES, DOCX_FONT_AS_BASE, DOCX_FONT_AS_BEFORE, DOCX_FONT_AS
  * - objects of a size read: drawings and VML shapes in line with the text,
  *   their extent, effects and outline; symbols (w:sym), notes' and pages'
  *   numbers, dates Word writes;
- * - what Word surely draws: of a mc:AlternateContent, the mc:Choice of
- *   namespaces it understands (WORD_NAMESPACES), else the mc:Fallback; both,
- *   when it may draw either.
+ * - what Word surely draws: of a mc:AlternateContent, the first mc:Choice of
+ *   namespaces it understands (WORD_NAMESPACES), else the mc:Fallback; when
+ *   it may draw either, each choice it may draw and the fallback.
  * Anything else (a font the document embeds, a display or heavy font of no
  * metrics, a sign a font lacks, a character of no font measured, a field of
  * another type or whose code holds another, a length not read) leaves the
@@ -1744,17 +1744,30 @@ function readFontTable(xml: string | undefined) {
  */
 const VARIANT_WORD = /^(thin|hairline|extra|ultra|semi|demi|light|extralight|ultralight|semilight|demilight|book|regular|normal|roman|medium|demibold|semibold|bold|condensed|cond|semicondensed|narrow|compressed|italic|oblique|ui|display|text|small|caption|subheading|heading|banner|ext[a-z])$/;
 
+/** What parts a font's name in words (familyOf): a space, an underscore, a hyphen. */
+const NAME_SEPARATOR = /[\s_-]/;
+/** The longest name DOCX_FONT_ALIASES lists: no longer part of a name is looked up (familyOf). */
+const LONGEST_ALIAS = Object.keys(DOCX_FONT_ALIASES).reduce((longest, name) => Math.max(longest, name.length), 0);
+
 /**
  * The family a font's name not listed is a variant of (familyOf): the
  * longest name of DOCX_FONT_ALIASES it starts with, followed by words of
  * VARIANT_WORD only; none for a heavy or wide one (HEAVY_NAME), of no bound.
+ * Its words are read once each, from its end, and only a start of it no
+ * longer than a name listed is looked up, however long the name.
  */
 function familyOf(name: string) {
   if (HEAVY_NAME.test(name)) return undefined;
-  let rest = name;
-  for (let match = /[\s_-]+([^\s_-]+)$/.exec(rest); match && VARIANT_WORD.test(match[1]!); match = /[\s_-]+([^\s_-]+)$/.exec(rest)) {
-    rest = rest.slice(0, match.index);
-    if (Object.hasOwn(DOCX_FONT_ALIASES, rest)) return rest;
+  for (let end = name.length; end > 0; ) {
+    let start = end;
+    while (start > 0 && !NAME_SEPARATOR.test(name[start - 1]!)) start -= 1;
+    let cut = start;
+    while (cut > 0 && NAME_SEPARATOR.test(name[cut - 1]!)) cut -= 1;
+    // A name ending apart, or of a word with nothing before it, or not of a variant: of no family.
+    if (start === end || cut === start || !VARIANT_WORD.test(name.slice(start, end))) return undefined;
+    const rest = cut <= LONGEST_ALIAS ? name.slice(0, cut) : undefined;
+    if (rest !== undefined && Object.hasOwn(DOCX_FONT_ALIASES, rest)) return rest;
+    end = cut;
   }
   return undefined;
 }
@@ -2735,11 +2748,12 @@ type Frame = BandSizes & {
   character?: { text: string; place: TextPlace; judged?: LaidText; layout: ParagraphLayout | null; holder: Frame; deleted: boolean; start: number; field: Judgement };
   /**
    * mc:AlternateContent: the text of the mc:Choice Word draws, without spaces, the judgement of each of its characters, and how far the
-   * fallback's text matched it; whether Word may draw the fallback instead (`either`: drawnByWord), and how many choices it has.
+   * fallback's text matched it; whether Word may draw another branch instead (`either`: drawnByWord), and whether one of the choices
+   * read so far is one Word surely draws (`settled`: none after it is); how many choices it has.
    */
-  drawn?: { text: string; verdicts: Judgement[]; cursor: number; either: boolean };
+  drawn?: { text: string; verdicts: Judgement[]; cursor: number; either: boolean; settled?: boolean };
   choices?: number;
-  /** mc:Choice: the one Word draws, or may draw. */
+  /** mc:Choice: the one Word draws, or one it may draw. */
   chosen?: boolean;
   /** Tables: their look and the cells of each row; rows: their index; cells: their place, and what the table style sets there. */
   look?: TableLook;
@@ -2832,10 +2846,12 @@ const OFFICE_NAMESPACE = /^(http:\/\/schemas\.microsoft\.com\/office\/|http:\/\/
 /**
  * Whether Word draws a mc:Choice: it understands every namespace it
  * requires (WORD_NAMESPACES), and draws it (`choice`); one is of another
- * vocabulary, and it draws the mc:Fallback instead (`fallback`); or it may
- * draw either, the choice requiring nothing, or a namespace of Office or of
- * the standard the list does not hold (`either`): both are then laid out, the
- * fallback's text read only where seen in both.
+ * vocabulary, and it draws the next choice or the mc:Fallback instead
+ * (`fallback`); or it may draw either, the choice requiring nothing, or a
+ * namespace of Office or of the standard the list does not hold (`either`):
+ * it, the next choices up to one Word surely draws, and the fallback are then
+ * all laid out, the fallback's text read only where seen in each (set aside
+ * when there are several choices).
  */
 function drawnByWord(choice: XmlTag): "choice" | "fallback" | "either" {
   const namespaces = (choice.attributes.get("Requires") ?? "").split(/\s+/).filter(Boolean).map(prefix => choice.namespaces.get(prefix) ?? "");
@@ -2847,6 +2863,9 @@ function drawnByWord(choice: XmlTag): "choice" | "fallback" | "either" {
 const INVISIBLE: Judgement = { verdict: "invisible" };
 const OUT_OF_PLACE: Judgement = { verdict: "unverifiable", reason: "layout" };
 const UNLAID: Judgement = { verdict: "unverifiable", reason: "layout_unfinished" };
+/** Of text Word draws in one branch or in another, as each shows it: hidden only where both hide it, seen only where both show it, else set aside. */
+const eitherOf = (left: Judgement, right: Judgement) =>
+  left.verdict === right.verdict ? graver(left, right) : left.verdict === "unverifiable" ? left : right.verdict === "unverifiable" ? right : OUT_OF_PLACE;
 const UNBOUNDED: Pair = [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY];
 
 /**
@@ -3221,7 +3240,9 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
       return { judgement: graver(seen, missing) };
     }
     drawn.cursor = at + letters.length;
-    return { judgement: drawn.verdicts.slice(at, drawn.cursor).reduce(graver, seen) };
+    const fromChoice = drawn.verdicts.slice(at, drawn.cursor).reduce(graver, VISIBLE);
+    // Of a choice Word may not draw, the fallback it may draw instead, as both show the text (the choice cutting it, the fallback not: set aside).
+    return { judgement: drawn.either ? eitherOf(seen, fromChoice) : graver(seen, fromChoice) };
   };
   /** Text its paragraph's indents set beyond an edge of the page, where it starts (offPage). */
   const offIndents = (passage: { text: string; place: TextPlace }, effective: RunLayer) => {
@@ -3671,13 +3692,19 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
    * line (CODE_DRAWN_FIELDS): its code after its type and first argument, as
    * wide as that text in the format of the run that begins the field or of
    * any run of its code, the widest, in the font it is widest in (chooseFonts).
+   * Each measure laid out once, however many runs of its format the code has,
+   * each character of it costing a unit of layout work: past the work allowed,
+   * of no width known.
    */
   const displayWidth = (field: (typeof fields)[number]) => {
     const text = /^\s*\S+\s+\S+\s?([\s\S]*)$/.exec(field.code)?.[1] ?? "";
+    // The size of the text in each format (fontSize) by one character of it, of a complex script when the text has no other letter.
+    const sample = OTHER_LETTER.test(text) ? "" : COMPLEX_SCRIPT.exec(text)?.[0] ?? "";
+    const measures = new Set([field.effective ?? lastRunFormat ?? styles.defaults, ...field.formats].map(effective => measureOf(effective, fontSize(effective, sample))));
     let widest = 0;
-    for (const effective of Array.from(new Set([field.effective ?? lastRunFormat ?? styles.defaults, ...field.formats]))) {
+    for (const measure of Array.from(measures)) {
       budget.units -= text.length;
-      const measure = measureOf(effective, fontSize(effective, text));
+      if (budget.units <= 0) return Number.POSITIVE_INFINITY;
       if (measure.several) measure.chooseFonts(text, 0, text.length);
       let width = 0;
       for (let at = 0; at < text.length; ) {
@@ -4633,10 +4660,14 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     // The shape follows its position and size.
     if (tag.name === "a:graphic" && parent?.box) placeOff(parent, { offPage: isOffPage(parent.box, page) });
     if (tag.name === "mc:Choice" && parent?.name === "mc:AlternateContent") parent.choices = (parent.choices ?? 0) + 1;
-    const drawnChoice = tag.name === "mc:Choice" && parent?.name === "mc:AlternateContent" && !parent.drawn ? drawnByWord(tag) : "fallback";
+    // Word draws the first choice it understands: past one it may not understand (either), the next ones may be drawn too, up to one it
+    // surely draws (settled), their shapes covering the text and their objects taking room as those of a branch Word may draw.
+    const open = tag.name === "mc:Choice" && parent?.name === "mc:AlternateContent" && (!parent.drawn || (parent.drawn.either && !parent.drawn.settled));
+    const drawnChoice = open ? drawnByWord(tag) : "fallback";
     if (drawnChoice !== "fallback") {
       frame.chosen = true;
-      parent!.drawn = { text: "", verdicts: [], cursor: 0, either: drawnChoice === "either" };
+      if (parent!.drawn) parent!.drawn.settled = drawnChoice === "choice";
+      else parent!.drawn = { text: "", verdicts: [], cursor: 0, either: drawnChoice === "either" };
     }
     // Word shows the page colour, and fill effects as the page colour (gradient, texture, picture) under all the text, when the settings say so.
     if (tag.name === "w:background" && parent?.name === "w:document" && pageShown) {
@@ -4782,6 +4813,15 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
 
 /** How many layouts of one font for each name of several fonts (laidLayouts) the check makes at most. */
 const MAX_LAYOUTS = 16;
+/**
+ * What reading a part again costs in each layout of one font (laidLayouts),
+ * in units of layout work (1,000,000 take about 0.25 s): its tags, a pass
+ * over a part of 20 MB and 2.6 million tags taking 5.4 s, some 2 µs or 8 units
+ * a tag; its bytes, a pass over 19 MB of text in 1,900 paragraphs 0.11 s, some
+ * 42 bytes a unit, counted at 16.
+ */
+const LAYOUT_UNITS_PER_TAG = 8;
+const BYTES_PER_LAYOUT_UNIT = 16;
 
 /**
  * The text of a part judged in layouts of one font at a time: a run's text
@@ -4791,25 +4831,28 @@ const MAX_LAYOUTS = 16;
  * sets some text aside for its place, it is laid out again in each of them
  * alone, the document being drawn in one: for each name met in that order
  * (`axes`), crossed with the others, as long as the layouts stay within
- * MAX_LAYOUTS, the names left over laid out word by word in each; text is read
- * only if seen in every layout (mergedLayouts). Each layout costs as much
- * layout work as the tags of the part, and the work it lays out: past the work
- * allowed (`budget`), the first layout alone is kept.
+ * MAX_LAYOUTS and the work left, the names left over laid out word by word in
+ * each; text is read only if seen in every layout (mergedLayouts). Each layout
+ * costs the reading of the part again (LAYOUT_UNITS_PER_TAG,
+ * BYTES_PER_LAYOUT_UNIT) and the work it lays out: past the work allowed
+ * (`budget`), the first layout alone is kept.
  */
 function laidLayouts(xml: string, tagCount: number, first: ReturnType<typeof cutInvisibleRuns>, axes: Map<string, number>, fonts: FontsOf, budget: { units: number }, pass: (resolve: (name: string | undefined) => LaidFont) => ReturnType<typeof cutInvisibleRuns>) {
   if (!first.unverifiableText.some(passage => passage.reason === "layout")) return first;
+  // The work left must cover the reading of the part in each layout, before any is made: as many as it covers, MAX_LAYOUTS at most.
+  const reading = LAYOUT_UNITS_PER_TAG * tagCount + Math.ceil(xml.length / BYTES_PER_LAYOUT_UNIT);
+  const most = Math.min(MAX_LAYOUTS, Math.floor((budget.units - 1) / reading));
   const crossed: Array<[string, number]> = [];
   let count = 1;
   for (const [name, fontCount] of Array.from(axes)) {
-    if (count * fontCount > MAX_LAYOUTS) continue;
+    if (count * fontCount > most) continue;
     crossed.push([name, fontCount]);
     count *= fontCount;
   }
-  // The work left must cover the reading of the part in each layout, before any is made.
-  if (!crossed.length || budget.units <= count * tagCount) return first;
+  if (!crossed.length) return first;
   const layouts: Array<ReturnType<typeof cutInvisibleRuns>> = [];
   for (let layout = 0; layout < count; layout += 1) {
-    budget.units -= tagCount;
+    budget.units -= reading;
     // The font each crossed name is laid out in here, alone.
     const chosen = new Map<string, LaidFont>();
     let rest = layout;
@@ -4849,7 +4892,9 @@ function mergedLayouts(xml: string, layouts: Array<ReturnType<typeof cutInvisibl
     if (gravest.judgement.verdict === "invisible") paragraph.invisible.push(text);
     else {
       const reason = gravest.judgement.reason ?? "drawing";
-      paragraph.unverifiable.set(reason, [...(paragraph.unverifiable.get(reason) ?? []), text]);
+      const texts = paragraph.unverifiable.get(reason);
+      if (texts) texts.push(text);
+      else paragraph.unverifiable.set(reason, [text]);
     }
   }
   const invisibleText: string[] = [];
