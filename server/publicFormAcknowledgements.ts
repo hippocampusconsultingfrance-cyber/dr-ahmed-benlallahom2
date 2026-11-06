@@ -22,13 +22,13 @@ export type PublicFormAcknowledgementKind = "contact" | "clientBrief";
 
 /**
  * Indicative answer delay of each acknowledgement, e.g. « sous 2 jours
- * ouvrés » / "within 2 working days". Empty until the owner sets it: the email
- * then promises no delay (« dans les meilleurs délais » for a message, nothing
- * for a brief).
+ * ouvrés » / "within 2 working days". The brief's is the first contact the
+ * Employers page promises (REC-12). The contact's stays empty until the owner
+ * sets it: the email then says « dans les meilleurs délais ».
  */
 const RESPONSE_DELAY: Record<PublicFormAcknowledgementKind, Record<EmailLanguage, string>> = {
   contact: { fr: "", en: "" },
-  clientBrief: { fr: "", en: "" },
+  clientBrief: { fr: "sous 24 h ouvrées", en: "within 24 business hours" },
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;

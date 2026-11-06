@@ -131,6 +131,8 @@ describe("POST /api/client-briefs — accusé à l’employeur et refus traduisi
     expect(message.subject).toBe(`Your mission brief has been received — ${briefId}`);
     expect(message.text).toContain(`Reference: ${briefId}`);
     expect(message.text).toContain("Next steps");
+    // The first contact the Employers page promises (REC-12).
+    expect(message.text).toContain("within 24 business hours");
     for (const part of [message.subject, message.html, message.text]) {
       for (const typed of [brief.organizationName, brief.contactName, brief.notes, brief.specialtyNeeded, "Zoé"]) expect(part).not.toContain(typed);
     }
@@ -140,6 +142,7 @@ describe("POST /api/client-briefs — accusé à l’employeur et refus traduisi
     await postBrief(JSON.stringify(brief), "application/json");
     await postBrief(JSON.stringify({ ...brief, language: "fr" }), "application/json");
     expect(sent().map(({ message }) => message.subject.split(" — ")[0])).toEqual(["Votre brief de mission a bien été reçu", "Votre brief de mission a bien été reçu"]);
+    expect(sent()[0]!.message.text).toContain("nous revenons vers vous sous 24 h ouvrées");
   });
 
   it("garde le brief et prévient le cabinet sans accusé au-delà du plafond quotidien des accusés", async () => {

@@ -58,6 +58,16 @@ describe("brief employeur : valeur enregistrée, refus du serveur et information
     expect(screen.getByText("BRIEFABCDEFGHJKLM")).toBeTruthy();
   });
 
+  it.each([["fr", "sous 24 h ouvrées"], ["en", "within 24 business hours"]] as const)("%s : promet, avant et après l’envoi, un premier contact %s, comme l’accusé, et plus de shortlist sous 24 h", async (language, firstContact) => {
+    const { text } = await submitBrief(language, 200, { success: true, briefId: "BRIEFABCDEFGHJKLM" });
+    expect(text).toContain(firstContact);
+    cleanup();
+    mount(language);
+    const intro = screen.getByRole("heading", { name: employerCopy[language].formTitle }).nextElementSibling!.textContent!;
+    expect(intro).toContain(firstContact);
+    expect(intro.toLowerCase()).not.toContain("shortlist");
+  });
+
   it.each(["fr", "en", "de", "zh"] as const)("%s : dit que la limite est atteinte (429) au lieu de « vérifiez vos informations », sans le texte français du serveur", async language => {
     const serverText = "Trop de demandes ont été envoyées. Veuillez patienter avant de soumettre un nouveau brief.";
     const { text } = await submitBrief(language, 429, { error: serverText, code: "rate_limited" });
