@@ -14,7 +14,7 @@ const fulfillment = vi.hoisted(() => ({
 }));
 vi.mock("./appointmentFulfillment", () => fulfillment);
 const documentJobs = vi.hoisted(() => ({
-  recoverStaleCandidateDocumentJobs: vi.fn(async () => ({ recovered: 0, exhausted: 0 })),
+  recoverStaleCandidateDocumentJobs: vi.fn(async () => ({ recovered: 0, exhausted: 0, closed: 0 })),
   recreateMissingCandidateDocumentAnalysisJobs: vi.fn(async () => ({ recreated: 0 })),
   processDueCandidateDocumentAnalysisJobs: vi.fn(async () => ({ processed: 0, completed: 0, retried: 0, needsReview: 0, released: 0 })),
 }));
@@ -180,30 +180,34 @@ describe("envoi des rappels", () => {
 });
 
 describe("rendez-vous payés restés sans leurs envois (DATA-12)", () => {
-  const afterGoLive = new Date(PAID_APPOINTMENT_JOB_RECOVERY_SINCE.getTime() + HOUR);
+  // Ten days after the recovery went live.
+  const recoveryNow = new Date(PAID_APPOINTMENT_JOB_RECOVERY_SINCE.getTime() + 240 * HOUR);
+  const yesterday = new Date(recoveryNow.getTime() - 24 * HOUR);
   const seedJob = (appointmentId: number, jobType: string) => memory.seed(appointmentFulfillmentJobs, [{ appointment_id: appointmentId, job_type: jobType, status: "completed", attempts: 1 }]);
 
-  it("remet en file les envois d’un rendez-vous payé et confirmé sans tâche de confirmation ou de facture, créé depuis la mise en service de la reprise", async () => {
-    const onlyOwner = seedAppointment(1, { createdAt: afterGoLive });
+  it("remet en file les envois d’un rendez-vous payé et confirmé de la dernière semaine sans tâche de confirmation ou de facture, créé depuis la mise en service de la reprise", async () => {
+    const onlyOwner = seedAppointment(1, { createdAt: yesterday });
     seedJob(1, "owner");
-    seedAppointment(2, { createdAt: afterGoLive });
-    seedAppointment(3, { createdAt: afterGoLive });
+    seedAppointment(2, { createdAt: yesterday });
+    seedAppointment(3, { createdAt: new Date(recoveryNow.getTime() - 6 * 24 * HOUR) });
     seedJob(3, "confirmation");
-    seedAppointment(4, { createdAt: afterGoLive });
+    seedAppointment(4, { createdAt: yesterday });
     for (const jobType of ["owner", "confirmation", "invoice"]) seedJob(4, jobType);
     // Older than the recovery, refunded, unpaid, cancelled: never replayed.
     seedAppointment(5, { createdAt: new Date(PAID_APPOINTMENT_JOB_RECOVERY_SINCE.getTime() - HOUR) });
-    seedAppointment(6, { createdAt: afterGoLive, payment_status: "refunded" });
-    seedAppointment(7, { createdAt: afterGoLive, payment_status: "pending", appointment_status: "held" });
-    seedAppointment(8, { createdAt: afterGoLive, appointment_status: "cancelled" });
+    seedAppointment(6, { createdAt: yesterday, payment_status: "refunded" });
+    seedAppointment(7, { createdAt: yesterday, payment_status: "pending", appointment_status: "held" });
+    seedAppointment(8, { createdAt: yesterday, appointment_status: "cancelled" });
+    // Booked eight days ago, after the go-live: past the window, its completed jobs may already be purged.
+    seedAppointment(9, { createdAt: new Date(recoveryNow.getTime() - 8 * 24 * HOUR) });
 
-    await expect(requeuePaidAppointmentsWithoutFulfillment()).resolves.toEqual({ requeued: 3 });
+    await expect(requeuePaidAppointmentsWithoutFulfillment(25, recoveryNow)).resolves.toEqual({ requeued: 3 });
     expect(fulfillment.enqueueAppointmentFulfillment.mock.calls.map(([id]) => id)).toEqual([onlyOwner.id, 2, 3]);
   });
 
   it("le travail quotidien les remet en file avant de traiter la file, et traite la file même quand la reprise échoue", async () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
-    seedAppointment(1, { createdAt: afterGoLive });
+    seedAppointment(1, { createdAt: new Date(Math.max(PAID_APPOINTMENT_JOB_RECOVERY_SINCE.getTime(), Date.now() - HOUR)) });
     const order: string[] = [];
     fulfillment.enqueueAppointmentFulfillment.mockImplementationOnce(async () => { order.push("enqueue"); });
     fulfillment.processDueAppointmentFulfillmentJobs.mockImplementationOnce(async () => { order.push("process"); return { processed: 0, results: [] }; });
@@ -224,7 +228,7 @@ describe("traitement quotidien des documents du coffre", () => {
     documentJobs.processDueCandidateDocumentAnalysisJobs.mockResolvedValueOnce({ processed: 1, completed: 1, retried: 0, needsReview: 0, released: 0 });
 
     await expect(runCandidateDocumentProcessingWorker({ batchSize: 1, maxBatches: 6, budgetMs: 20_000 }))
-      .resolves.toEqual({ jobsRecovered: 0, jobsExhausted: 0, jobsRecreated: 0, processed: 1, completed: 1, retried: 0, needsReview: 0, released: 0 });
+      .resolves.toEqual({ jobsRecovered: 0, jobsExhausted: 0, jobsClosed: 0, jobsRecreated: 0, processed: 1, completed: 1, retried: 0, needsReview: 0, released: 0 });
     expect(documentJobs.processDueCandidateDocumentAnalysisJobs).toHaveBeenCalledTimes(2);
   });
 
@@ -235,7 +239,7 @@ describe("traitement quotidien des documents du coffre", () => {
     documentJobs.processDueCandidateDocumentAnalysisJobs.mockResolvedValueOnce({ processed: 1, completed: 0, retried: 1, needsReview: 0, released: 0 });
 
     await expect(runCandidateDocumentProcessingWorker({ batchSize: 1, maxBatches: 6, budgetMs: 20_000 }))
-      .resolves.toEqual({ jobsRecovered: 0, jobsExhausted: 0, jobsRecreated: 1, processed: 1, completed: 0, retried: 1, needsReview: 0, released: 0 });
+      .resolves.toEqual({ jobsRecovered: 0, jobsExhausted: 0, jobsClosed: 0, jobsRecreated: 1, processed: 1, completed: 0, retried: 1, needsReview: 0, released: 0 });
   });
 });
 

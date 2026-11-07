@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray, isNull, lt, lte, ne } from "drizzle-orm";
-import { candidateDocumentAuditLogs, candidateDocumentProcessingJobs, candidateDocuments } from "../drizzle/schema";
+import { candidateDocumentAuditLogs, candidateDocumentProcessingJobs, candidateDocuments, type CandidateDocument } from "../drizzle/schema";
 import { getDb } from "./db";
 import { mutationRowCount } from "./dbMutation";
 import { isProcessingDeadlineError } from "./processingDeadline";
@@ -8,7 +8,7 @@ import { hiddenTextFlags } from "../shared/candidateDocumentHiddenText";
 import { storageGetSignedUrl } from "./storage";
 import { decryptCandidateDocument } from "./candidateDocumentEncryption";
 import { CANDIDATE_HUMAN_REVIEW_ONLY_FLAG, CANDIDATE_HUMAN_REVIEW_ONLY_SUMMARY, candidateDocumentAllowsAiAnalysis } from "../shared/candidateDocumentCategories";
-import { CANDIDATE_DOCUMENT_ACTIVE_JOB_STATUSES } from "../shared/candidateDocumentReanalysis";
+import { CANDIDATE_DOCUMENT_ACTIVE_JOB_STATUSES, CANDIDATE_DOCUMENT_JOB_STALE_AFTER_MS } from "../shared/candidateDocumentReanalysis";
 
 const MAX_DOCUMENT_ANALYSIS_ATTEMPTS = 3;
 
@@ -100,10 +100,15 @@ function humanReviewFallback(error: unknown) {
   };
 }
 
-/** A job "running" for longer was left by a run that stopped: an analysis ends within the cron's 60 s (EXPL-12). */
-export const CANDIDATE_DOCUMENT_JOB_STALE_AFTER_MS = 15 * 60_000;
-
 const ANALYSIS_IN_PROGRESS_STATUSES = ["queued", "extracting", "analyzing"] as const;
+/** A document the admin has approved, rejected or archived no longer waits for its analysis. */
+const AWAITING_ANALYSIS_DOCUMENT_STATUSES = ["uploaded", "validating", "analyzing"] as const;
+
+function awaitsAnalysis(document: Pick<CandidateDocument, "status" | "analysisStatus" | "validationStatus">) {
+  return (ANALYSIS_IN_PROGRESS_STATUSES as readonly string[]).includes(document.analysisStatus)
+    && (AWAITING_ANALYSIS_DOCUMENT_STATUSES as readonly string[]).includes(document.status)
+    && document.validationStatus !== "rejected";
+}
 
 /**
  * EXPL-12: a job left "running" by a run that stopped (function limit, frozen
@@ -111,7 +116,9 @@ const ANALYSIS_IN_PROGRESS_STATUSES = ["queued", "extracting", "analyzing"] as c
  * counted, and its document leaves « analyse en cours »; once its attempts
  * are spent, the document goes to a human review, as after a last failed
  * attempt. Each job is taken back on its exact state, so two runs never both
- * take it back; a document whose analysis has ended keeps it.
+ * take it back. A document no longer waiting for its analysis (analysed
+ * already, or approved, rejected or archived by the admin meanwhile) keeps
+ * what it holds: its job is closed, and the AI never reads it again.
  */
 export async function recoverStaleCandidateDocumentJobs(staleAfterMs = CANDIDATE_DOCUMENT_JOB_STALE_AFTER_MS, now = new Date()) {
   const db = await getDb();
@@ -123,11 +130,15 @@ export async function recoverStaleCandidateDocumentJobs(staleAfterMs = CANDIDATE
     .limit(25);
   let recovered = 0;
   let exhausted = 0;
+  let closed = 0;
   for (const job of stale) {
+    const [document] = await db.select({ status: candidateDocuments.status, analysisStatus: candidateDocuments.analysisStatus, validationStatus: candidateDocuments.validationStatus })
+      .from(candidateDocuments).where(eq(candidateDocuments.id, job.documentId)).limit(1);
+    const documentSettled = !document || !awaitsAnalysis(document);
     const terminal = job.attempts >= job.maxAttempts;
-    const lastError = terminal ? "worker_interrupted_attempts_exhausted" : "worker_interrupted";
+    const lastError = documentSettled ? "worker_interrupted_document_settled" : terminal ? "worker_interrupted_attempts_exhausted" : "worker_interrupted";
     const taken = await db.update(candidateDocumentProcessingJobs)
-      .set(terminal ? { status: "completed", finishedAt: now, lastError } : { status: "retry", scheduledFor: now, startedAt: null, lastError })
+      .set(documentSettled || terminal ? { status: "completed", finishedAt: now, lastError } : { status: "retry", scheduledFor: now, startedAt: null, lastError })
       .where(and(
         eq(candidateDocumentProcessingJobs.id, job.id),
         eq(candidateDocumentProcessingJobs.status, "running"),
@@ -135,9 +146,15 @@ export async function recoverStaleCandidateDocumentJobs(staleAfterMs = CANDIDATE
         lte(candidateDocumentProcessingJobs.startedAt, staleBefore),
       ));
     if (mutationRowCount(taken) !== 1) continue;
+    if (documentSettled) {
+      closed += 1;
+      continue;
+    }
+    // Written only while the document still waits: an admin decision taken meanwhile stands.
     const analysing = and(
       eq(candidateDocuments.id, job.documentId),
       inArray(candidateDocuments.analysisStatus, [...ANALYSIS_IN_PROGRESS_STATUSES]),
+      inArray(candidateDocuments.status, [...AWAITING_ANALYSIS_DOCUMENT_STATUSES]),
       ne(candidateDocuments.validationStatus, "rejected"),
     );
     if (!terminal) {
@@ -152,7 +169,7 @@ export async function recoverStaleCandidateDocumentJobs(staleAfterMs = CANDIDATE
       .returning({ candidateId: candidateDocuments.candidateId });
     if (settled) await db.insert(candidateDocumentAuditLogs).values({ candidateId: settled.candidateId, documentId: job.documentId, actorType: "system", action: "analysis_completed", metadata: JSON.stringify({ outcome: "human_review_fallback", error: lastError }) });
   }
-  return { recovered, exhausted };
+  return { recovered, exhausted, closed };
 }
 
 export async function processDueCandidateDocumentAnalysisJobs(limit = 1) {

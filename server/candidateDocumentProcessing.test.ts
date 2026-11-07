@@ -75,7 +75,7 @@ describe("EXPL-12 — document interrompu en cours d’analyse", () => {
   it("une tâche encore récente est laissée au passage qui la traite", async () => {
     const document = seedDiploma({ status: "analyzing", analysisStatus: "analyzing" }, { status: "running", attempts: 1, startedAt: new Date(Date.now() - 5 * MINUTE) });
 
-    await expect(recoverStaleCandidateDocumentJobs()).resolves.toEqual({ recovered: 0, exhausted: 0 });
+    await expect(recoverStaleCandidateDocumentJobs()).resolves.toEqual({ recovered: 0, exhausted: 0, closed: 0 });
     expect(jobs()).toMatchObject([{ status: "running", attempts: 1 }]);
     expect(document).toMatchObject({ analysisStatus: "analyzing" });
   });
@@ -95,9 +95,34 @@ describe("EXPL-12 — document interrompu en cours d’analyse", () => {
   it("ne rouvre pas l’analyse d’un document déjà terminée quand seule sa tâche est restée « running »", async () => {
     const document = seedDiploma({ status: "needs_review", analysisStatus: "completed", aiSummary: "Analyse gardée" }, { status: "running", attempts: 3, startedAt: new Date(Date.now() - 20 * MINUTE) });
 
-    await expect(recoverStaleCandidateDocumentJobs()).resolves.toEqual({ recovered: 0, exhausted: 1 });
+    await expect(recoverStaleCandidateDocumentJobs()).resolves.toEqual({ recovered: 0, exhausted: 0, closed: 1 });
 
+    expect(jobs()).toMatchObject([{ status: "completed", lastError: "worker_interrupted_document_settled" }]);
     expect(document).toMatchObject({ status: "needs_review", analysisStatus: "completed", aiSummary: "Analyse gardée" });
+    expect(db().rows(candidateDocumentAuditLogs)).toHaveLength(0);
+  });
+
+  it("ne relance pas l’IA sur un document déjà analysé et approuvé dont la tâche est restée « running » avant sa dernière tentative", async () => {
+    const document = seedDiploma({ status: "reviewed", analysisStatus: "completed", aiSummary: "Analyse gardée", reviewNotes: "Original vérifié" }, { status: "running", attempts: 1, startedAt: new Date(Date.now() - 2 * 24 * 60 * MINUTE) });
+
+    await expect(worker()).resolves.toMatchObject({ jobsRecovered: 0, jobsExhausted: 0, jobsClosed: 1, processed: 0 });
+
+    expect(state.analyses).toEqual([]);
+    expect(jobs()).toMatchObject([{ status: "completed", attempts: 1, lastError: "worker_interrupted_document_settled" }]);
+    expect(document).toMatchObject({ status: "reviewed", analysisStatus: "completed", aiSummary: "Analyse gardée", reviewNotes: "Original vérifié" });
+  });
+
+  it("garde la décision de l’admin sur un document resté « en cours » qu’il a refusé ou archivé pendant le blocage", async () => {
+    const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * MINUTE);
+    const rejected = seedDiploma({ status: "rejected", analysisStatus: "analyzing", reviewNotes: "Document illisible" }, { status: "running", attempts: 1, startedAt: twoDaysAgo });
+    const archived = seedDiploma({ status: "archived", analysisStatus: "analyzing", analysisAttempts: 3 }, { status: "running", attempts: 3, startedAt: twoDaysAgo });
+
+    await expect(worker()).resolves.toMatchObject({ jobsRecovered: 0, jobsExhausted: 0, jobsClosed: 2, processed: 0 });
+
+    expect(state.analyses).toEqual([]);
+    expect(jobs()).toMatchObject([{ status: "completed", lastError: "worker_interrupted_document_settled" }, { status: "completed", lastError: "worker_interrupted_document_settled" }]);
+    expect(rejected).toMatchObject({ status: "rejected", reviewNotes: "Document illisible" });
+    expect(archived).toMatchObject({ status: "archived", analysisAttempts: 3, aiSummary: null });
     expect(db().rows(candidateDocumentAuditLogs)).toHaveLength(0);
   });
 
@@ -171,6 +196,26 @@ describe("DATA-06 — « Relancer l’analyse » d’un document resté sans tâ
     expect(jobs().filter(job => job.documentId === stuck.id)).toMatchObject([{ status: "queued", attempts: 0 }]);
     await expect(admin().reanalyze({ id: Number(stuck.id) })).rejects.toMatchObject({ code: "CONFLICT", message: "Une analyse de ce document est déjà en cours." });
     await expect(admin().reanalyze({ id: Number(queued.id) })).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+
+  it("relance sans attendre le passage quotidien un document dont la tâche est restée « running » depuis plus de 15 min, une seule fois (EXPL-12)", async () => {
+    const stuck = seedDiploma({ status: "analyzing", analysisStatus: "analyzing", analysisAttempts: 1 }, { status: "running", attempts: 1, startedAt: new Date(Date.now() - 2 * 24 * 60 * MINUTE) });
+    const running = seedDiploma({ originalName: "licence.pdf", status: "analyzing", analysisStatus: "analyzing" }, { status: "running", attempts: 1, startedAt: new Date(Date.now() - 5 * MINUTE) });
+
+    const listed = await admin().list({});
+    expect(listed.find(document => document.id === stuck.id)).toMatchObject({ hasActiveAnalysisJob: false });
+    expect(listed.find(document => document.id === running.id)).toMatchObject({ hasActiveAnalysisJob: true });
+    await expect(admin().reanalyze({ id: Number(running.id) })).rejects.toMatchObject({ code: "CONFLICT" });
+
+    await expect(admin().reanalyze({ id: Number(stuck.id) })).resolves.toEqual({ success: true, queued: true });
+    expect(jobs().filter(job => job.documentId === stuck.id)).toMatchObject([
+      { status: "completed", lastError: "worker_interrupted_reanalysis_requested" },
+      { status: "queued", attempts: 0 },
+    ]);
+    // The next run analyses it once: the interrupted job is not queued again.
+    await expect(worker()).resolves.toMatchObject({ jobsRecovered: 0, processed: 1, completed: 1 });
+    expect(state.analyses).toEqual([1]);
+    expect(stuck).toMatchObject({ status: "needs_review", analysisStatus: "completed" });
   });
 
   it("relance un document resté « en cours » dont la tâche s’est terminée sans le mettre à jour", async () => {

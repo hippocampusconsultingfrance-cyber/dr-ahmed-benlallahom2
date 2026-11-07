@@ -157,34 +157,44 @@ export async function drainInBatches<T extends { processed: number }>(
  * way since; scripts/db-invariants.sql lists them for the owner.
  */
 export const PAID_APPOINTMENT_JOB_RECOVERY_SINCE = new Date("2026-11-07T00:00:00Z");
+/**
+ * DATA-12: and only those created within this window. The retention run
+ * deletes a completed post-payment job 30 days after it ends
+ * (FULFILLMENT_JOB_RETENTION_DAYS): past that, a booking paid and served
+ * normally has no job left, and would get its emails again. A booking of the
+ * last week, paid after it was created, still has every job it got; Stripe
+ * itself stops redelivering after 3 days.
+ */
+export const PAID_APPOINTMENT_JOB_RECOVERY_WINDOW_MS = 7 * 24 * HOUR_MS;
 
 type Database = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 
-/** Paid, confirmed bookings created since the recovery went live (and before `createdBefore`) without a confirmation or invoice job. */
-function paidAppointmentsWithoutFulfillment(db: Database, createdBefore?: Date) {
+/** Paid, confirmed bookings created since the recovery went live, within its window (and before `createdBefore`), without a confirmation or invoice job. */
+function paidAppointmentsWithoutFulfillment(db: Database, now: Date, createdBefore?: Date) {
   const appointmentsWithJob = (jobType: "confirmation" | "invoice") => db.select({ appointmentId: appointmentFulfillmentJobs.appointmentId })
     .from(appointmentFulfillmentJobs)
     .where(eq(appointmentFulfillmentJobs.jobType, jobType));
+  const createdSince = Math.max(PAID_APPOINTMENT_JOB_RECOVERY_SINCE.getTime(), now.getTime() - PAID_APPOINTMENT_JOB_RECOVERY_WINDOW_MS);
   return db.select({ id: appointments.id }).from(appointments).where(and(
     eq(appointments.paymentStatus, "completed"),
     eq(appointments.appointmentStatus, "confirmed"),
-    gte(appointments.createdAt, PAID_APPOINTMENT_JOB_RECOVERY_SINCE),
+    gte(appointments.createdAt, new Date(createdSince)),
     ...(createdBefore ? [lt(appointments.createdAt, createdBefore)] : []),
     or(notInArray(appointments.id, appointmentsWithJob("confirmation")), notInArray(appointments.id, appointmentsWithJob("invoice"))),
   ));
 }
 
 /**
- * DATA-12: a paid, confirmed booking whose confirmation or invoice job was
- * never stored (the database refused it once the payment was recorded, and
- * Stripe no longer redelivers the event) gets its jobs back, through the
- * webhook's own idempotent enqueue: a job already there is kept as it is,
- * so nothing is sent twice. The jobs run in the same pass.
+ * DATA-12: a paid, confirmed booking of the last week whose confirmation or
+ * invoice job was never stored (the database refused it once the payment
+ * was recorded, and Stripe no longer redelivers the event) gets its jobs
+ * back, through the webhook's own idempotent enqueue: a job already there is
+ * kept as it is, so nothing is sent twice. The jobs run in the same pass.
  */
-export async function requeuePaidAppointmentsWithoutFulfillment(limit = 25) {
+export async function requeuePaidAppointmentsWithoutFulfillment(limit = 25, now = new Date()) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  const missing = await paidAppointmentsWithoutFulfillment(db).orderBy(appointments.id).limit(limit);
+  const missing = await paidAppointmentsWithoutFulfillment(db, now).orderBy(appointments.id).limit(limit);
   const { enqueueAppointmentFulfillment } = await import("./appointmentFulfillment");
   let requeued = 0;
   for (const appointment of missing) {
@@ -230,7 +240,7 @@ export async function runCandidateDocumentProcessingWorker(options: { batchSize:
   // a failure here leaves the documents already queued to their analysis.
   const recovery = await recoverStaleCandidateDocumentJobs().catch(error => {
     console.error("[CandidateDocumentProcessing] Interrupted job recovery failed:", safeErrorName(error));
-    return { recovered: 0, exhausted: 0 };
+    return { recovered: 0, exhausted: 0, closed: 0 };
   });
   // DATA-02: a document whose upload stopped before its job gets it first.
   const { recreated } = await recreateMissingCandidateDocumentAnalysisJobs().catch(error => {
@@ -244,6 +254,7 @@ export async function runCandidateDocumentProcessingWorker(options: { batchSize:
   return {
     jobsRecovered: recovery.recovered,
     jobsExhausted: recovery.exhausted,
+    jobsClosed: recovery.closed,
     jobsRecreated: recreated,
     processed,
     completed: batches.reduce((total, batch) => total + batch.completed, 0),
@@ -297,7 +308,7 @@ const QUEUE_JOB_STATUSES = ["queued", "running", "retry", "completed", "failed"]
 type DataIntegrityCounts = Record<keyof typeof DATA_INTEGRITY_LABELS, number | null>;
 
 const DATA_INTEGRITY_LABELS = {
-  paidAppointmentsWithoutJobs: "rendez-vous payé(s) depuis plus de 2 jours sans confirmation ou facture en file",
+  paidAppointmentsWithoutJobs: "rendez-vous payé(s) il y a 2 à 7 jours sans confirmation ou facture en file",
   documentsWithoutJob: "document(s) du coffre en attente d’analyse depuis plus de 2 jours sans tâche pour l’analyser",
   interruptedJobs: "tâche(s) restée(s) « en cours » depuis plus de 2 jours (paiements, CV, coffre, copies Drive)",
   jobsWithUnknownStatus: "tâche(s) dont le statut ne fait pas partie de la liste : aucun passage ne les traitera",
@@ -323,7 +334,7 @@ async function dataIntegrityPending(db: Database, now: Date): Promise<DataIntegr
   const activeDocumentJobs = db.select({ documentId: candidateDocumentProcessingJobs.documentId }).from(candidateDocumentProcessingJobs)
     .where(inArray(candidateDocumentProcessingJobs.status, [...CANDIDATE_DOCUMENT_ACTIVE_JOB_STATUSES]));
   const [paidAppointmentsWithoutJobs, documentsWithoutJob, interruptedJobs, jobsWithUnknownStatus, sessionsOfClosedAccounts, sessionsWithoutAccount] = await Promise.all([
-    counted("paid_appointments_without_jobs", () => [paidAppointmentsWithoutFulfillment(db, repairedBefore).limit(limit)]),
+    counted("paid_appointments_without_jobs", () => [paidAppointmentsWithoutFulfillment(db, now, repairedBefore).limit(limit)]),
     counted("documents_without_job", () => [db.select({ id: candidateDocuments.id }).from(candidateDocuments).where(and(
       eq(candidateDocuments.analysisStatus, "queued"),
       inArray(candidateDocuments.status, ["uploaded", "validating"]),

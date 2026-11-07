@@ -89,7 +89,16 @@ describe("bilan quotidien : contrôle de cohérence de la base (DATA-14)", () =>
     memory.seed(appointmentFulfillmentJobs, [{ appointment_id: 1, job_type: "confirmation", status: "completed" }]);
 
     await expect(runSecurityPostureReview(NOW)).resolves.toMatchObject({ dataIntegrity: { paidAppointmentsWithoutJobs: 1 } });
-    expect(report()).toContain("1 rendez-vous payé(s) depuis plus de 2 jours sans confirmation ou facture en file");
+    expect(report()).toContain("1 rendez-vous payé(s) il y a 2 à 7 jours sans confirmation ou facture en file");
+  });
+
+  it("ne signale pas un rendez-vous payé de plus d’une semaine dont la purge a supprimé les tâches terminées", async () => {
+    const later = new Date(PAID_APPOINTMENT_JOB_RECOVERY_SINCE.getTime() + 40 * 24 * HOUR);
+    // Served normally 31 days ago: its completed jobs were deleted after 30 days (RGPD-09).
+    seedAppointment(1, new Date(later.getTime() - 31 * 24 * HOUR));
+
+    await expect(runSecurityPostureReview(later)).resolves.toMatchObject({ dataIntegrity: { paidAppointmentsWithoutJobs: 0 } });
+    expect(notifyOwner).not.toHaveBeenCalled();
   });
 
   it("un contrôle en échec n’empêche pas les autres", async () => {

@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
-import { appointmentFulfillmentJobs, appointmentInvoices, appointments, securityEvents } from "../drizzle/schema";
+import {
+  adminMfaChallenges, adminMfaSessions, appointmentFulfillmentJobs, appointmentInvoices, appointments, candidateSessions, contactMessages, gdprRequests,
+  medicalQuestionAuditLogs, medicalQuestions, securityEvents,
+} from "../drizzle/schema";
 import { createMemoryPg, type MemoryPg } from "./testing/memoryPgProxy";
 
 // DATA-12 — un paiement enregistré dont la base a refusé les tâches d’après
@@ -35,26 +38,32 @@ vi.mock("./invoiceNumbering", async importOriginal => ({
 }));
 
 import { postPaymentDeliveryRetry } from "./_core/notifications";
-import { appointmentFulfillmentPacing } from "./appointmentFulfillment";
+import { appointmentFulfillmentPacing, enqueueAppointmentFulfillment } from "./appointmentFulfillment";
 import { APPOINTMENT_INVOICE_SCHEMA_OBJECTS } from "./invoiceNumbering";
+import { runPersonalDataRetention } from "./personalDataRetention";
 import { PAID_APPOINTMENT_JOB_RECOVERY_SINCE, runAppointmentFulfillmentWorker } from "./scheduledJobs";
 
+const DAY = 24 * 3_600_000;
 const dialect = new PgDialect();
 let memory: MemoryPg;
 const worker = () => runAppointmentFulfillmentWorker({ batchSize: 5, maxBatches: 4, budgetMs: 35_000 });
 const emailsTo = (to: string) => resend.calls.filter(call => (call.message.to as string[])[0] === to);
 
-function seedPaidAppointment(trackingId: string, createdAt: Date) {
+function seedPaidAppointment(trackingId: string, createdAt: Date, appointmentDate = new Date(Date.now() + 10 * DAY)) {
   return memory.seed(appointments, [{
     tracking_id: trackingId, customer_name: "Patient Test", customer_email: `${trackingId.toLowerCase()}@example.test`, customer_phone: "+33600000000",
-    request_details: "Demande d’avis", appointment_date: new Date(Date.now() + 10 * 24 * 3_600_000), base_price: "100.00", final_price: "100.00",
+    request_details: "Demande d’avis", appointment_date: appointmentDate, base_price: "100.00", final_price: "100.00",
     payment_status: "completed", appointment_status: "confirmed", stripe_session_id: `cs_${trackingId}`, stripe_payment_intent_id: `pi_${trackingId}`,
     createdAt, updatedAt: createdAt,
   }])[0]! as { id: number };
 }
 
 beforeEach(() => {
-  memory = createMemoryPg([appointments, appointmentFulfillmentJobs, appointmentInvoices, securityEvents]);
+  memory = createMemoryPg([
+    appointments, appointmentFulfillmentJobs, appointmentInvoices, securityEvents,
+    // Read by the retention run.
+    adminMfaChallenges, adminMfaSessions, candidateSessions, contactMessages, gdprRequests, medicalQuestionAuditLogs, medicalQuestions,
+  ]);
   // appointment_invoices exists, as in production: the runtime DDL check finds every object.
   const execute = memory.db.execute.bind(memory.db);
   Object.assign(memory.db, {
@@ -70,17 +79,19 @@ beforeEach(() => {
   appointmentFulfillmentPacing.delayMs = 0;
   vi.stubEnv("RESEND_API_KEY", "re_test_recovery");
   vi.spyOn(console, "log").mockImplementation(() => undefined);
+  vi.spyOn(console, "info").mockImplementation(() => undefined);
   vi.spyOn(console, "error").mockImplementation(() => undefined);
 });
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
 
 describe("DATA-12 — rendez-vous payé resté sans tâche de confirmation ni de facture", () => {
   it("le travail quotidien envoie au patient sa confirmation et sa facture, une seule fois, sans renvoyer la notification déjà partie au médecin", async () => {
-    // Booked on the day the recovery went live (never later than now).
-    const createdAt = PAID_APPOINTMENT_JOB_RECOVERY_SINCE;
+    // Booked within the last hour (never before the recovery went live).
+    const createdAt = new Date(Math.max(PAID_APPOINTMENT_JOB_RECOVERY_SINCE.getTime(), Date.now() - 3_600_000));
     const { id } = seedPaidAppointment("APTRECOVER01", createdAt);
     // The webhook stored the owner job, then the database refused the confirmation job (answer 500, Stripe gave up).
     memory.seed(appointmentFulfillmentJobs, [{ appointment_id: id, job_type: "owner", status: "completed", attempts: 1, max_attempts: 7, finished_at: createdAt }]);
@@ -97,6 +108,26 @@ describe("DATA-12 — rendez-vous payé resté sans tâche de confirmation ni de
     resend.calls.length = 0;
     await expect(worker()).resolves.toMatchObject({ missingJobs: { requeued: 0 } });
     expect(resend.calls).toHaveLength(0);
+  });
+
+  it("ne renvoie rien d’un rendez-vous servi normalement quand la purge supprime ses tâches terminées, 30 jours après", async () => {
+    vi.useFakeTimers({ now: new Date(PAID_APPOINTMENT_JOB_RECOVERY_SINCE.getTime() + 3_600_000), toFake: ["Date"] });
+    // Paid for a consultation in 40 days: its confirmation would still be sent again.
+    const { id } = seedPaidAppointment("APTRECOVER03", new Date(), new Date(Date.now() + 40 * DAY));
+    await enqueueAppointmentFulfillment(id);
+    await worker();
+    expect(memory.rows(appointmentFulfillmentJobs).map(row => [row.job_type, row.status])).toEqual([["owner", "completed"], ["confirmation", "completed"], ["invoice", "completed"]]);
+    expect(resend.calls).toHaveLength(3);
+
+    // 31 days later: the retention run at 04:50 deletes the three completed jobs, then the post-payment run at 06:20.
+    resend.calls.length = 0;
+    vi.setSystemTime(new Date(Date.now() + 31 * DAY));
+    await expect(runPersonalDataRetention({ now: new Date() })).resolves.toMatchObject({ fulfillmentJobs: 3 });
+    vi.setSystemTime(new Date(Date.now() + 90 * 60_000));
+    await expect(worker()).resolves.toMatchObject({ missingJobs: { requeued: 0 }, processed: 0 });
+    expect(resend.calls).toHaveLength(0);
+    expect(owner.notifyOwner).not.toHaveBeenCalled();
+    expect(memory.rows(appointmentFulfillmentJobs)).toHaveLength(0);
   });
 
   it("ne rejoue jamais un rendez-vous payé avant la mise en service de la reprise", async () => {

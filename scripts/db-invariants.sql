@@ -22,15 +22,21 @@
 -- - « payé sans tâche » : seulement les rendez-vous créés depuis la mise en
 --   service de la file d'après paiement (paramètre queue_live_since ci-dessous :
 --   le webhook ne fait plus que mettre en file depuis le 31 août 2026 ; avancer
---   la date à celle du déploiement réel si elle est connue). Le cron
---   appointment-fulfillment rend leurs tâches à ceux créés depuis le 7 novembre
---   2026 (DATA-12) ; pour un plus ancien, relivrer l'événement depuis Stripe.
+--   la date à celle du déploiement réel si elle est connue), et depuis moins de
+--   30 jours : la purge quotidienne (RGPD-09) supprime une tâche terminée
+--   30 jours après sa fin, si bien qu'un rendez-vous plus ancien, servi
+--   normalement, n'a plus de tâche. Le cron appointment-fulfillment rend leurs
+--   tâches à ceux des 7 derniers jours créés depuis le 7 novembre 2026
+--   (DATA-12) ; pour un autre, relivrer l'événement depuis Stripe.
 -- - recipient_count : un effacement retire les destinataires de la candidature
 --   effacée ; seul « plus de destinataires que recipient_count » est un écart.
 -- - candidatures en double : même adresse, spécialité, CV et pays visés, comme
 --   l'index cv_applications_submission_unique (0004).
 -- - document « queued » sans tâche : sans tâche active (queued, retry, running),
 --   déposé depuis plus d'un jour, comme le reprend le cron du coffre.
+-- - document « en cours d'analyse » sans tâche : seulement s'il attend encore son
+--   analyse ; celui que l'admin a approuvé, refusé ou archivé pendant le blocage
+--   garde sa décision, et le cron ferme sa tâche interrompue (EXPL-12).
 -- - listes de statuts : celles de drizzle/schema.ts aujourd'hui (dont les
 --   alertes et remboursements de la file d'après paiement).
 -- - famille MAJ : indicative (aucun code ne tient ces dates), pas de donnée à corriger.
@@ -85,9 +91,9 @@ SELECT 'FK' AS famille, 'blog_posts.author_id -> utilisateur absent' AS invarian
 UNION ALL
 SELECT 'FK' AS famille, 'security_events candidat -> compte absent' AS invariant, 'code (effacement, partiel)' AS tenu_par, (SELECT count(*) FROM (select id from security_events e where security_event_actor_kind='candidate' and actor_reference ~ '^[0-9]+$' and not exists (select 1 from candidate_accounts c where c.id::text=e.actor_reference)) q) AS violations
 UNION ALL
-SELECT 'METIER' AS famille, 'rendez-vous payé (créé depuis la mise en service de la file) sans tâche de confirmation' AS invariant, 'code (cron appointment-fulfillment pour les rendez-vous créés depuis le 2026-11-07, DATA-12 ; avant : rejeu Stripe)' AS tenu_par, (SELECT count(*) FROM (select a.id, a.tracking_id from appointments a where a.payment_status='completed' and a."createdAt" >= (select queue_live_since from params) and not exists (select 1 from appointment_fulfillment_jobs j where j.appointment_id=a.id and j.job_type='confirmation')) q) AS violations
+SELECT 'METIER' AS famille, 'rendez-vous payé (créé depuis la mise en service de la file et depuis moins de 30 jours) sans tâche de confirmation' AS invariant, 'code (cron appointment-fulfillment pour les rendez-vous créés depuis le 2026-11-07 et dans les 7 derniers jours, DATA-12 ; sinon : rejeu Stripe)' AS tenu_par, (SELECT count(*) FROM (select a.id, a.tracking_id from appointments a where a.payment_status='completed' and a."createdAt" >= (select queue_live_since from params) and a."createdAt" >= (now() at time zone 'UTC') - interval '30 days' and not exists (select 1 from appointment_fulfillment_jobs j where j.appointment_id=a.id and j.job_type='confirmation')) q) AS violations
 UNION ALL
-SELECT 'METIER' AS famille, 'rendez-vous payé (créé depuis la mise en service de la file) sans tâche de facture' AS invariant, 'code (cron appointment-fulfillment pour les rendez-vous créés depuis le 2026-11-07, DATA-12 ; avant : rejeu Stripe)' AS tenu_par, (SELECT count(*) FROM (select a.id, a.tracking_id from appointments a where a.payment_status='completed' and a."createdAt" >= (select queue_live_since from params) and not exists (select 1 from appointment_fulfillment_jobs j where j.appointment_id=a.id and j.job_type='invoice')) q) AS violations
+SELECT 'METIER' AS famille, 'rendez-vous payé (créé depuis la mise en service de la file et depuis moins de 30 jours) sans tâche de facture' AS invariant, 'code (cron appointment-fulfillment pour les rendez-vous créés depuis le 2026-11-07 et dans les 7 derniers jours, DATA-12 ; sinon : rejeu Stripe)' AS tenu_par, (SELECT count(*) FROM (select a.id, a.tracking_id from appointments a where a.payment_status='completed' and a."createdAt" >= (select queue_live_since from params) and a."createdAt" >= (now() at time zone 'UTC') - interval '30 days' and not exists (select 1 from appointment_fulfillment_jobs j where j.appointment_id=a.id and j.job_type='invoice')) q) AS violations
 UNION ALL
 SELECT 'METIER' AS famille, 'tâche facture terminée sans numéro de facture' AS invariant, 'code' AS tenu_par, (SELECT count(*) FROM (select j.id, j.appointment_id from appointment_fulfillment_jobs j where j.job_type='invoice' and j.status='completed' and coalesce(j.last_error,'')='' and not exists (select 1 from appointment_invoices i where i.appointment_id=j.appointment_id)) q) AS violations
 UNION ALL
@@ -133,7 +139,7 @@ SELECT 'FILE' AS famille, 'tâche terminée sans finished_at / en cours sans sta
 UNION ALL
 SELECT 'FILE' AS famille, 'tâche restée ''running'' depuis plus d''un jour (paiement, CV, coffre, copie Drive)' AS invariant, 'code (reprise en tête de chaque cron, EXPL-12)' AS tenu_par, (SELECT count(*) FROM (select 'fulfillment' t, id from appointment_fulfillment_jobs where status='running' and started_at < (now() at time zone 'UTC') - interval '1 day' union all select 'cv', id from cv_processing_jobs where job_status='running' and started_at < (now() at time zone 'UTC') - interval '1 day' union all select 'doc', id from candidate_document_processing_jobs where status='running' and started_at < (now() at time zone 'UTC') - interval '1 day' union all select 'drive', id from cv_google_drive_export_jobs where status='running' and started_at < (now() at time zone 'UTC') - interval '1 day') q) AS violations
 UNION ALL
-SELECT 'FILE' AS famille, 'document du coffre ''en cours d''analyse'' sans tâche active' AS invariant, 'code (relance possible depuis l''admin, DATA-06)' AS tenu_par, (SELECT count(*) FROM (select d.id from candidate_documents d where d.analysis_status in ('extracting','analyzing') and not exists (select 1 from candidate_document_processing_jobs j where j.document_id=d.id and j.status in ('queued','retry','running'))) q) AS violations
+SELECT 'FILE' AS famille, 'document du coffre ''en cours d''analyse'' sans tâche active, pas encore tranché par l''admin' AS invariant, 'code (relance possible depuis l''admin, DATA-06)' AS tenu_par, (SELECT count(*) FROM (select d.id from candidate_documents d where d.analysis_status in ('extracting','analyzing') and d.status in ('uploaded','validating','analyzing') and not exists (select 1 from candidate_document_processing_jobs j where j.document_id=d.id and j.status in ('queued','retry','running'))) q) AS violations
 UNION ALL
 SELECT 'UNIQ' AS famille, 'client_brief_candidates en double (même mission, même candidat)' AS invariant, 'rien (select puis insert)' AS tenu_par, (SELECT count(*) FROM (select brief_id, application_id, count(*) from client_brief_candidates group by 1,2 having count(*)>1) q) AS violations
 UNION ALL
