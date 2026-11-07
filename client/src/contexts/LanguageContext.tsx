@@ -4,6 +4,7 @@ import { contentEn } from "@/data/content-en";
 import { contentDe } from "@/data/content-de";
 import { contentZh } from "@/data/content-zh";
 import { siteConfig } from "@/data/site-config";
+import { readStoredPreference, writeStoredPreference } from "@/lib/browserStorage";
 import { readInitialLanguage, removeLanguageParameter, shouldSuggestEnglish, type UserLanguage } from "./userPreferences";
 
 type Language = UserLanguage;
@@ -29,8 +30,9 @@ function browserLanguages(): readonly string[] {
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<{ language: Language; chosen: boolean }>(() => {
     if (typeof window !== "undefined") {
-      // Un lien en ?lang=en|fr|de|zh l’emporte sur la langue mémorisée (EN-03).
-      return readInitialLanguage(window.location.search, localStorage.getItem("language"), siteConfig.defaultLanguage as Language);
+      // Un lien en ?lang=en|fr|de|zh l’emporte sur la langue mémorisée (EN-03). Stockage refusé par le
+      // navigateur : la langue par défaut, et le choix fait pour cette visite seulement (browserStorage).
+      return readInitialLanguage(window.location.search, readStoredPreference("language"), siteConfig.defaultLanguage as Language);
     }
     return { language: siteConfig.defaultLanguage as Language, chosen: false };
   });
@@ -41,7 +43,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   // Persister la langue choisie et synchroniser les métadonnées documentaires pour le SEO et l’accessibilité.
   // La langue par défaut n’est pas mémorisée : l’anglais reste proposé tant que le visiteur n’a pas choisi (EN-08).
   useEffect(() => {
-    if (chosen) localStorage.setItem("language", language);
+    if (chosen) writeStoredPreference("language", language);
     document.documentElement.lang = language;
   }, [language, chosen]);
 

@@ -71,16 +71,26 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
 
   /**
    * Sans consentement enregistré (par défaut), le bandeau cookies est ouvert en bas de l'écran. Avec
-   * language: null, aucune langue n'est mémorisée, pour un navigateur réglé sur `locale`.
+   * language: null, aucune langue n'est mémorisée, pour un navigateur réglé sur `locale`. Avec
+   * blockedStorage, le navigateur refuse tout stockage au site, comme Chromium quand ses données sont
+   * bloquées : lire localStorage ou sessionStorage lève une SecurityError. Les erreurs de la page sont
+   * ajoutées à `pageErrors`.
    */
-  async function open(route: string, { width = 1440, height = 800, theme = "dark" as Theme, touch = false, consent = false, language = "fr" as string | null, locale = "en-US", turnstileToken = null as string | null } = {}) {
+  async function open(route: string, { width = 1440, height = 800, theme = "dark" as Theme, touch = false, consent = false, language = "fr" as string | null, locale = "en-US", turnstileToken = null as string | null, blockedStorage = false, pageErrors = [] as string[] } = {}) {
     const context = await browser.newContext({ viewport: { width, height }, isMobile: touch, hasTouch: touch, locale });
-    await context.addInitScript(({ storedLanguage, storedTheme, storedConsent }) => {
+    await context.addInitScript(({ storedLanguage, storedTheme, storedConsent, blocked }) => {
+      if (blocked) {
+        for (const name of ["localStorage", "sessionStorage"]) {
+          Object.defineProperty(window, name, { configurable: true, get: () => { throw new DOMException(`Failed to read the '${name}' property from 'Window': Access is denied for this document.`, "SecurityError"); } });
+        }
+        return;
+      }
       if (storedLanguage) localStorage.setItem("language", storedLanguage);
       localStorage.setItem("theme", storedTheme);
       if (storedConsent) localStorage.setItem(storedConsent.key, storedConsent.value);
-    }, { storedLanguage: language, storedTheme: theme, storedConsent: consent ? { key: COOKIE_CONSENT_STORAGE_KEY, value: JSON.stringify(createCookieConsent(false)) } : null });
+    }, { storedLanguage: language, storedTheme: theme, storedConsent: consent ? { key: COOKIE_CONSENT_STORAGE_KEY, value: JSON.stringify(createCookieConsent(false)) } : null, blocked: blockedStorage });
     const page = await context.newPage();
+    page.on("pageerror", (error) => pageErrors.push(error.message));
     await page.route("**/api/trpc/**", (request) => {
       const procedures = new URL(request.request().url()).pathname.replace(/^.*\/api\/trpc\//, "").split(",");
       return request.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(procedures.map(() => ({ result: { data: superjson.serialize(null) } }))) });
@@ -572,6 +582,27 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
     expect(await page.getByRole("button", { name: "EN — Change language" }).count()).toBe(1);
     await page.context().close();
   }, 60_000);
+
+  it("affiche l'accueil et le formulaire de candidature quand le navigateur refuse tout stockage au site (REC-22)", async () => {
+    for (const route of ["/", "/recruitment/standard"]) {
+      const pageErrors: string[] = [];
+      const page = await open(route, { width: 390, height: 844, blockedStorage: true, pageErrors });
+      expect(await page.evaluate(() => { try { return typeof localStorage; } catch (error) { return (error as DOMException).name; } }), route).toBe("SecurityError");
+      // Language and theme by default, no choice read: the cookie banner asks, and closes once answered.
+      expect(await page.evaluate(() => ({ lang: document.documentElement.lang, dark: document.documentElement.classList.contains("dark") })), route).toEqual({ lang: "fr", dark: true });
+      await page.getByRole("button", { name: "Essentiels uniquement" }).click();
+      await page.locator(".cookie-consent-banner").waitFor({ state: "detached" });
+      if (route === "/recruitment/standard") {
+        await page.locator("#recruitment-firstName").fill("Ahmed");
+        await page.getByRole("button", { name: "FR — Changer de langue" }).click();
+        await page.getByRole("menuitem", { name: "English" }).click();
+        await page.waitForFunction(() => document.documentElement.lang === "en");
+        expect(await page.locator("#recruitment-firstName").inputValue()).toBe("Ahmed");
+      }
+      expect(pageErrors, route).toEqual([]);
+      await page.context().close();
+    }
+  }, 120_000);
 
   it("laisse atteindre au clavier la dernière entrée du menu mobile sur un écran peu haut, bandeau cookies fermé ou ouvert", async () => {
     // L'en-tête étant vraiment fixe (PUB-01), le menu doit défiler lui-même : sous 640 px, thème,

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { isPrivateAreaPath } from "@/lib/privateAreaRoutes";
+import { readStoredPreference, removeStoredPreference, writeStoredPreference } from "@/lib/browserStorage";
 import { COOKIE_CONSENT_STORAGE_KEY, createCookieConsent, readValidCookieConsent, type CookieConsentValue } from "./cookieConsentState";
 import { COOKIE_CONSENT_CHANGE_EVENT } from "./analyticsConsentLogic";
 
@@ -89,9 +90,10 @@ export default function CookieConsent() {
 
   useEffect(() => {
     // Choix absent, illisible, non daté ou expiré (6 mois si refus, 13 mois si accord) : on redemande.
-    const consent = readValidCookieConsent(localStorage.getItem(COOKIE_CONSENT_STORAGE_KEY));
+    // Stockage refusé par le navigateur : aucun choix lu, le bandeau s'affiche, et le choix fait vaut pour la visite.
+    const consent = readValidCookieConsent(readStoredPreference(COOKIE_CONSENT_STORAGE_KEY));
     if (!consent) {
-      localStorage.removeItem(COOKIE_CONSENT_STORAGE_KEY);
+      removeStoredPreference(COOKIE_CONSENT_STORAGE_KEY);
       setShowBanner(true);
       return;
     }
@@ -115,7 +117,7 @@ export default function CookieConsent() {
     const consent = createCookieConsent(performance);
     setCookieConsent(consent);
     setDraftPerformance(performance);
-    localStorage.setItem(COOKIE_CONSENT_STORAGE_KEY, JSON.stringify(consent));
+    writeStoredPreference(COOKIE_CONSENT_STORAGE_KEY, JSON.stringify(consent));
     window.dispatchEvent(new Event(COOKIE_CONSENT_CHANGE_EVENT));
     setShowBanner(false);
     setShowPreferences(false);
