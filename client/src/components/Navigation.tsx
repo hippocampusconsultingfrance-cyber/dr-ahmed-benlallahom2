@@ -46,7 +46,9 @@ function DisplayMenu({ label, toggles, open, setOpen }: { label: string; toggles
 
   if (toggles.length === 0) return null;
   return (
-    <div ref={containerRef} className="relative hidden sm:block">
+    // Tab past its last entry closes the window, which no longer covers the page under the header; a focus
+    // lost to nothing (a click in Safari) leaves it to the click-outside handler above.
+    <div ref={containerRef} className="relative hidden sm:block" onBlur={(event) => { if (open && event.relatedTarget instanceof Node && !event.currentTarget.contains(event.relatedTarget)) setOpen(false); }}>
       <button
         type="button"
         ref={buttonRef}

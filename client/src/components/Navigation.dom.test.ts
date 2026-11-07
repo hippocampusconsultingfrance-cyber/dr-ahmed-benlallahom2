@@ -70,6 +70,25 @@ describe("menu Affichage (PUB-08)", () => {
     expect(within(submenu).getAllByRole("button").map((entry) => entry.textContent)).toEqual([copy.enableLight, "Lisibilité renforcée", "Noir OLED"]);
   });
 
+  it("se ferme quand le focus clavier sort de la fenêtre, et reste ouvert tant qu’il y circule", () => {
+    mount();
+    const button = screen.getByRole("button", { name: copy.display });
+    const menu = openDisplayMenu();
+    const [first, second, last] = within(menu).getAllByRole("button");
+    // Tab from the button through the entries: the window stays open.
+    fireEvent.blur(button, { relatedTarget: first });
+    fireEvent.blur(first, { relatedTarget: second });
+    expect(screen.getByRole("group", { name: copy.display })).toBe(menu);
+    // A focus lost to nothing (a click in Safari) leaves the window to the click-outside handler.
+    fireEvent.blur(second, { relatedTarget: null });
+    expect(screen.getByRole("group", { name: copy.display })).toBe(menu);
+    // Tab past the last entry, to « Rechercher sur le site »: the window closes.
+    const search = mainNavigation().closest("header")!.querySelector<HTMLElement>('a[href="/search"]')!;
+    fireEvent.blur(last, { relatedTarget: search });
+    expect(screen.queryByRole("group", { name: copy.display })).toBeNull();
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+  });
+
   it("n’offre le noir OLED qu’en thème sombre", () => {
     mount();
     fireEvent.click(within(openDisplayMenu()).getByRole("button", { name: copy.enableLight }));
