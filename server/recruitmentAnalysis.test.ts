@@ -667,11 +667,118 @@ describe("une même citation ne compte qu’une fois (IA-04)", () => {
       expect(result.fieldEvidence.map(item => item.evidenceVerified)).toEqual([true, true, true]);
       // Before: 30 points and a score of 35.
       expect(result.scoreBreakdown.specialtyMatch).toBe(15);
-      expect(result.relevanceScore).toBe(20);
+      // The header and the skills line: two places of the CV, not the three of a score.
+      expect(result.relevanceScore).toBeNull();
     }
     // The specialty also written on a line of its own is a second quote.
     const ownLine = `[PAGE 1]\n${header}\n${skillLine}\n[PAGE 2]\n${header}\nPoste actuel : ${title}`;
     expect(normalizeRecruitmentAnalysis(quotedTwice([header, "page 1"], [title, "page 2"]), ownLine, declared).scoreBreakdown.specialtyMatch).toBe(30);
+  });
+
+  /** A CV whose only line naming the specialty is « Médecin anesthésiste réanimateur », with an experience and a language line. */
+  const oneTitleLine = (paged: boolean) => {
+    const page = paged ? "page 1, " : "";
+    const lines = ["Dr Camille Martin", "Médecin anesthésiste réanimateur", "2016-2024 : Praticien hospitalier, Hôpital Nord, Marseille", "Anglais courant"];
+    return {
+      source: paged ? `[PAGE 1]\n${lines.join("\n")}` : lines.join("\n"),
+      quoting: (titleQuote: string, specialtyQuote: string) => analysisFixture({
+        professionalTitle: titleQuote,
+        specialties: [specialtyQuote],
+        normalizedExperiences: [{ role: "Praticien hospitalier", organization: "Hôpital Nord", startDate: "2016", endDate: "2024", employmentType: "permanent", specialty: "", country: null, durationMonths: null, evidence: lines[2]!, sourceLocation: `${page}Expérience`, confidence: 95 }],
+        normalizedLanguages: [{ language: "Anglais", proficiency: "fluent", evidence: "Anglais courant", sourceLocation: `${page}Langues`, confidence: 95 }],
+        fieldEvidence: [
+          { field: "professionalTitle", value: titleQuote, evidence: titleQuote, sourceLocation: `${page}Titre`, confidence: 95 },
+          { field: "specialty", value: specialtyQuote, evidence: specialtyQuote, sourceLocation: `${page}Titre`, confidence: 95 },
+        ],
+      }),
+    };
+  };
+
+  it("une seule ligne coupée en deux citations jointives (« Médecin anesthésiste » et « réanimateur ») : 15 points, comme la ligne entière, en PDF comme en DOCX", () => {
+    for (const paged of [true, false]) {
+      const { source, quoting } = oneTitleLine(paged);
+      const split = normalizeRecruitmentAnalysis(quoting("Médecin anesthésiste", "réanimateur"), source, declared);
+      const whole = normalizeRecruitmentAnalysis(quoting("Médecin anesthésiste réanimateur", "Médecin anesthésiste réanimateur"), source, declared);
+      expect(split.fieldEvidence.map(item => item.evidenceVerified)).toEqual([true, true]);
+      // Before: 30 points and a score of 50.
+      expect(split.scoreBreakdown.specialtyMatch).toBe(15);
+      expect(split.relevanceScore).toBe(35);
+      expect(whole.relevanceScore).toBe(35);
+    }
+  });
+
+  it("deux phrases d’une même ligne sont deux endroits du CV, deux parties d’une phrase n’en sont qu’un", () => {
+    const fixture = (title: string, specialty: string, skill: string) => analysisFixture({
+      professionalTitle: title,
+      specialties: [specialty],
+      skills: [skill],
+      fieldEvidence: [
+        { field: "professionalTitle", value: title, evidence: title, sourceLocation: "page 1", confidence: 95 },
+        { field: "specialty", value: specialty, evidence: specialty, sourceLocation: "page 1", confidence: 95 },
+        { field: "skill", value: skill, evidence: skill, sourceLocation: "page 1", confidence: 95 },
+      ],
+    });
+    const sentences = normalizeRecruitmentAnalysis(fixture("Médecin anesthésiste", "Anesthésie-réanimation", "ventilation mécanique"),
+      "[PAGE 1]\nTitre : Médecin anesthésiste. Spécialité : Anesthésie-réanimation ; compétence : ventilation mécanique.", declared);
+    expect(sentences.scoreBreakdown.specialtyMatch).toBe(30);
+    expect(sentences.relevanceScore).toBe(35);
+    const parts = normalizeRecruitmentAnalysis(fixture("Médecin anesthésiste", "Anesthésie-réanimation", "ventilation mécanique"),
+      "[PAGE 1]\nMédecin anesthésiste, Anesthésie-réanimation, ventilation mécanique", declared);
+    expect(parts.scoreBreakdown.specialtyMatch).toBe(15);
+    expect(parts.relevanceScore).toBeNull();
+  });
+
+  describe("un pied de page répété sur chaque page", () => {
+    const footer = "Médecin anesthésiste-réanimateur – 10 ans d’expérience – Licence DHA – Anglais courant";
+    /** A nurse's CV: only its footer, written on each of its `pages` pages, names a physician. */
+    const nurseCv = (pages: number) => Array.from({ length: pages }, (_, index) => [
+      `[PAGE ${index + 1}]`,
+      ...(index === 0 ? ["Karim Benali", "Infirmier diplômé d’État", "2014-2024 : Infirmier, Clinique du Parc, Lyon"] : [`Suite du parcours, page ${index + 1}`]),
+      footer,
+    ].join("\n")).join("\n");
+    /** Every fact quoted from the footer, each on the page `at` gives it. */
+    const footerEverywhere = (at: (index: number) => number) => analysisFixture({
+      professionalTitle: "Médecin anesthésiste-réanimateur",
+      specialties: ["Médecin anesthésiste-réanimateur"],
+      yearsExperience: 10,
+      normalizedLanguages: [{ language: "Anglais", proficiency: "fluent", evidence: footer, sourceLocation: `page ${at(3)}`, confidence: 95 }],
+      certifications: [{ name: "Licence DHA", issuingBody: null, country: null, expiresAt: null, evidence: footer, sourceLocation: `page ${at(0)}`, confidence: 95 }],
+      fieldEvidence: [
+        { field: "professionalTitle", value: "Médecin anesthésiste-réanimateur", evidence: footer, sourceLocation: `page ${at(0)}, pied de page`, confidence: 95 },
+        { field: "specialty", value: "Médecin anesthésiste-réanimateur", evidence: footer, sourceLocation: `page ${at(1)}, pied de page`, confidence: 95 },
+        { field: "yearsExperience", value: "10 ans", evidence: footer, sourceLocation: `page ${at(2)}, pied de page`, confidence: 95 },
+      ],
+    });
+
+    it("cité en entier page par page : une seule preuve, sans score, sur quatre pages comme sur une", () => {
+      const everyPage = normalizeRecruitmentAnalysis(footerEverywhere(index => index + 1), nurseCv(4), declared);
+      const onePage = normalizeRecruitmentAnalysis(footerEverywhere(() => 1), nurseCv(4), declared);
+      const oneSheet = normalizeRecruitmentAnalysis(footerEverywhere(() => 1), nurseCv(1), declared);
+      for (const result of [everyPage, onePage, oneSheet]) {
+        expect(result.fieldEvidence.every(item => item.evidenceVerified)).toBe(true);
+        // Before: 4 quotes on 4 pages, a score of 45.
+        expect(result.summary).toMatch(/^Lecture automatisée : 1 citation\(s\) sur 1 trouvée\(s\)/);
+        expect(result.relevanceScore).toBeNull();
+      }
+    });
+
+    it("coupé en deux pour le titre et la spécialité, puis cité page par page : 15 points et toujours pas de score", () => {
+      const attack = analysisFixture({
+        ...footerEverywhere(index => index + 1),
+        professionalTitle: "Médecin anesthésiste",
+        specialties: ["réanimateur"],
+        fieldEvidence: [
+          { field: "professionalTitle", value: "Médecin anesthésiste", evidence: "Médecin anesthésiste", sourceLocation: "page 1, pied de page", confidence: 95 },
+          { field: "specialty", value: "réanimateur", evidence: "réanimateur – 10 ans d’expérience", sourceLocation: "page 2, pied de page", confidence: 95 },
+          { field: "yearsExperience", value: "10 ans", evidence: footer, sourceLocation: "page 3, pied de page", confidence: 95 },
+        ],
+      });
+      const result = normalizeRecruitmentAnalysis(attack, nurseCv(4), declared);
+      expect(result.fieldEvidence.every(item => item.evidenceVerified)).toBe(true);
+      // Before: 30 points of specialty and a score of 60.
+      expect(result.scoreBreakdown.specialtyMatch).toBe(15);
+      expect(result.relevanceScore).toBeNull();
+    });
   });
 });
 

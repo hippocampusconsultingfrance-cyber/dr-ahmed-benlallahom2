@@ -1223,45 +1223,105 @@ function locationPage(sourceLocation: string) {
 }
 
 /**
- * Where a quote was read (IA-04): the quote, with the page it was checked on
- * when the text has [PAGE n] markers. Never the wording of sourceLocation,
- * which the AI writes freely: « page 1, en-tête » and « page 1, rubrique
- * Titre » cite the same sentence. Without markers (a DOCX), the quote alone,
- * whatever section the AI names.
+ * What a quote cites (IA-04): the quote itself, normalized. Never the wording
+ * of sourceLocation, which the AI writes freely (« page 1, en-tête » and
+ * « page 1, rubrique Titre » cite the same sentence), nor the page: a footer
+ * repeated on each page and cited page by page is still one sentence, and the
+ * same CV gets the same score whether it has one page or four.
  */
-function evidenceProvenance(item: { evidence: string; sourceLocation: string }, paged: boolean) {
-  return `${normalizeEvidenceText(item.evidence)}|${paged ? locationPage(item.sourceLocation) ?? "" : ""}`;
+const evidenceProvenance = (item: { evidence: string }) => normalizeEvidenceText(item.evidence);
+
+/**
+ * Where a passage of the CV ends (IA-04): a line break, or the end of a
+ * sentence (a full stop, question or exclamation mark, or semicolon, then a
+ * space; the ideographic and Arabic ones with or without a space). Commas,
+ * dashes and pipes join the parts of one passage: « Médecin
+ * anesthésiste-réanimateur – 10 ans d'expérience – Licence DHA » is one.
+ */
+const PASSAGE_END = /[\n\r\f\v\u0085\u2028\u2029]+|(?<=[.!?;])[ \t\u00a0]+|(?<=[\u3002\uff01\uff1f\uff1b\u061f\u061b])[ \t\u00a0]*/;
+
+/**
+ * The CV's text normalized as quotes are, passage by passage (IA-04): `text`
+ * is what normalizeEvidenceText makes of the whole text, so a quote is found
+ * in it as verifyCvEvidence finds it, and `starts` says where each passage
+ * starts in it.
+ */
+function normalizedSourcePassages(sourceText: string) {
+  const starts: number[] = [];
+  let text = "";
+  for (const passage of sourceText.split(PASSAGE_END)) {
+    const normalized = normalizeEvidenceText(passage);
+    if (!normalized) continue;
+    if (text) text += " ";
+    starts.push(text.length);
+    text += normalized;
+  }
+  return { text, starts };
+}
+type NormalizedSourcePassages = ReturnType<typeof normalizedSourcePassages>;
+
+/** The passage a position of the normalized text is in. */
+function passageAt(starts: number[], position: number) {
+  let low = 0;
+  let high = starts.length - 1;
+  while (low < high) {
+    const middle = (low + high + 1) >> 1;
+    if (starts[middle]! <= position) low = middle;
+    else high = middle - 1;
+  }
+  return low;
 }
 
-const hasPageMarkers = (sourceText: string) => /\[PAGE\s+\d+\]/i.test(sourceText);
+/** A normalized quote with the passages each place of it covers (its first and last), and all those passages. */
+type PlacedQuote = { quote: string; places: Array<[number, number]>; passages: Set<number> };
 
-/** Where a normalized quote is written in the normalized text: the start and end of each place. */
-function quotePlaces(text: string, quote: string) {
+function placeQuote(source: NormalizedSourcePassages, quote: string): PlacedQuote {
   const places: Array<[number, number]> = [];
-  for (let index = text.indexOf(quote); index !== -1 && quote; index = text.indexOf(quote, index + 1)) places.push([index, index + quote.length]);
-  return places;
+  const passages = new Set<number>();
+  for (let index = quote ? source.text.indexOf(quote) : -1; index !== -1; index = source.text.indexOf(quote, index + 1)) {
+    const place: [number, number] = [passageAt(source.starts, index), passageAt(source.starts, index + quote.length - 1)];
+    places.push(place);
+    for (let passage = place[0]; passage <= place[1]; passage += 1) passages.add(passage);
+  }
+  return { quote, places, passages };
 }
 
 /**
- * Two different quotes written in two places of the text (IA-04): one of them
- * is written somewhere that overlaps no place of the other. A header repeated
- * on each page, cited whole for one field and in part (or overlapping) for the
- * other, overlaps itself on every page: it stays one quote.
+ * Two different quotes written in two places of the CV (IA-04): one of them is
+ * written in a passage (a line, or a sentence of it) where the other is not.
+ * Two parts of one passage (« Médecin anesthésiste » and « réanimateur ») are
+ * one place, as is a header or footer repeated on each page, cited whole for
+ * one field and in part for the other: on every page, both are in the same
+ * passage.
  */
-function quotesAreApart(text: string, left: string, right: string) {
-  if (left === right) return false;
-  const leftPlaces = quotePlaces(text, left);
-  const rightPlaces = quotePlaces(text, right);
-  const placeOutside = (places: Array<[number, number]>, others: Array<[number, number]>) =>
-    places.some(([start, end]) => others.every(([otherStart, otherEnd]) => end <= otherStart || otherEnd <= start));
-  return leftPlaces.length > 0 && rightPlaces.length > 0 &&
-    (placeOutside(leftPlaces, rightPlaces) || placeOutside(rightPlaces, leftPlaces));
+function quotesAreApart(left: PlacedQuote, right: PlacedQuote) {
+  if (left.quote === right.quote || left.places.length === 0 || right.places.length === 0) return false;
+  const placeOutside = (places: Array<[number, number]>, otherPassages: Set<number>) =>
+    places.some(([first, last]) => {
+      for (let passage = first; passage <= last; passage += 1) if (otherPassages.has(passage)) return false;
+      return true;
+    });
+  return placeOutside(left.places, right.passages) || placeOutside(right.places, left.passages);
 }
 
-function distinctEvidence<T extends EvidenceBearing>(evidence: T[], paged: boolean): T[] {
+/** Whether `count` of these quotes are written each in a place of the CV apart from the others' (IA-04). */
+function quotesInDistinctPlaces(quotes: PlacedQuote[], count: number) {
+  const placed = quotes.filter(item => item.places.length > 0);
+  if (placed.length < count) return false;
+  const apart = placed.map(left => placed.map(right => quotesAreApart(left, right)));
+  const choose = (chosen: number[], from: number): boolean => {
+    if (chosen.length === count) return true;
+    for (let index = from; index < placed.length; index += 1)
+      if (chosen.every(other => apart[other]![index]) && choose([...chosen, index], index + 1)) return true;
+    return false;
+  };
+  return choose([], 0);
+}
+
+function distinctEvidence<T extends EvidenceBearing>(evidence: T[]): T[] {
   const unique = new Map<string, T>();
   for (const item of evidence) {
-    const key = evidenceProvenance(item, paged);
+    const key = evidenceProvenance(item);
     const existing = unique.get(key);
     if (!existing || (!isVerifiedFact(existing) && isVerifiedFact(item)))
       unique.set(key, item);
@@ -1293,9 +1353,8 @@ function verifiedScoreBreakdown(input: {
   experiences: NormalizedExperience[];
   languages: NormalizedLanguage[];
   certifications: NormalizedCertification[];
-  sourceText: string;
+  sourcePassages: NormalizedSourcePassages;
 }) {
-  const paged = hasPageMarkers(input.sourceText);
   const verifiedFields = input.fieldEvidence.filter(isVerifiedFact);
   const hasVerifiedField = (field: CvEvidenceField) =>
     verifiedFields.some(item => item.field === field);
@@ -1306,7 +1365,7 @@ function verifiedScoreBreakdown(input: {
   );
   const verifiedExperiences = distinctEvidence(distinctExperiencesByFact(
     input.experiences.filter(isVerifiedFact)
-  ), paged);
+  ));
   const languagePoints = new Map<string, number>();
   const proficiencyPoints: Record<NormalizedLanguage["proficiency"], number> = {
     basic: 3,
@@ -1336,10 +1395,11 @@ function verifiedScoreBreakdown(input: {
   const paramedicalDeclared = namesParamedicalProfession(input.targetSpecialty);
   const paramedicalTitle = !paramedicalDeclared && verifiedFields.some(item => item.field === "professionalTitle" && namesParamedicalProfession(item.value, paramedicalTerms));
   // IA-04: 15 points from one quote, 30 only from two different quotes written
-  // in two places of the CV. The same sentence cited for the title and the
+  // on two lines of the CV. The same sentence cited for the title and the
   // specialty counts once, whatever the wording of its place, on another page
-  // (a header repeated on each page) or in part (« Médecin anesthésiste » out
-  // of « Titre : Médecin anesthésiste » when it is written nowhere else).
+  // (a header repeated on each page), in part (« Médecin anesthésiste » out
+  // of « Titre : Médecin anesthésiste » when it is written nowhere else) or
+  // cut in two (« Médecin anesthésiste » and « réanimateur » of one line).
   const specialtyQuotes = uniqueStrings(
     verifiedFields
       .filter(item =>
@@ -1349,9 +1409,8 @@ function verifiedScoreBreakdown(input: {
       )
       .map(item => normalizeEvidenceText(item.evidence))
   );
-  const normalizedSource = specialtyQuotes.length > 1 ? normalizeEvidenceText(input.sourceText) : "";
-  const twoSpecialtyQuotes = specialtyQuotes.some((quote, index) =>
-    specialtyQuotes.slice(index + 1).some(other => quotesAreApart(normalizedSource, quote, other)));
+  const twoSpecialtyQuotes = specialtyQuotes.length > 1 &&
+    quotesInDistinctPlaces(specialtyQuotes.map(quote => placeQuote(input.sourcePassages, quote)), 2);
   return {
     specialtyMatch: twoSpecialtyQuotes ? 30 : specialtyQuotes.length > 0 ? 15 : 0,
     experienceEvidence: Math.min(
@@ -1392,7 +1451,6 @@ export function normalizeRecruitmentAnalysis(
       `Confiance OCR insuffisante (${declared.extractionConfidence} %) : toutes les preuves nécessitent une vérification manuelle.`
     );
   }
-  const paged = hasPageMarkers(sourceText);
   // IA-07: on a scan, and on the pages the vision read again, a quote is found
   // in what the vision transcribed, not in the file: the admin is told to
   // compare it with the scan. The marking changes no score: whether the score
@@ -1582,12 +1640,13 @@ export function normalizeRecruitmentAnalysis(
       ...(fromTranscription(item.sourceLocation) ? { fromTranscription: true as const } : {}),
     }));
   const evidenceExperiences = distinctExperiencesByFact(normalizedExperiences);
+  const sourcePassages = normalizedSourcePassages(sourceText);
   const allEvidence = distinctEvidence([
     ...evidenceExperiences,
     ...normalizedLanguages,
     ...certifications,
     ...fieldEvidence,
-  ], paged);
+  ]);
   const evidenceCoverage = evidenceCoverageOf(allEvidence);
   const uniqueContradictions = contradictions;
   const unverifiedCount =
@@ -1599,15 +1658,20 @@ export function normalizeRecruitmentAnalysis(
     experiences: normalizedExperiences,
     languages: normalizedLanguages,
     certifications,
-    sourceText,
+    sourcePassages,
   });
   const score = Object.values(scoreBreakdown).reduce(
     (total, value) => total + value,
     0
   );
+  // IA-04: three verified quotes written in three places of the CV, not three
+  // parts of one line, nor one footer cited on three pages.
   const scoreIsTrustworthy =
     !declared.extractionIncomplete &&
-    allEvidence.filter(isVerifiedFact).length >= 3 &&
+    quotesInDistinctPlaces(
+      uniqueStrings(allEvidence.filter(isVerifiedFact).map(evidenceProvenance)).map(quote => placeQuote(sourcePassages, quote)),
+      3
+    ) &&
     evidenceCoverage >= 80 &&
     uniqueContradictions.length === 0 &&
     scoreBreakdown.specialtyMatch > 0 &&
