@@ -1281,6 +1281,57 @@ describe("dossier d’un CV qui cache du texte, de bout en bout (IA-01)", () => 
     expect(String(dossier(id).ai_weaknesses)).not.toContain("texte invisible");
   }, PDF_TEST_TIMEOUT_MS);
 
+  it("CV honnête à deux colonnes, titre et spécialité sur la même rangée : chaque cellule sur sa ligne en PDF comme en DOCX, le même score, rien d’ajouté ni de retiré au texte (IA-04)", async () => {
+    const rows = [
+      ["Spécialité : anesthésie-réanimation", "Médecin anesthésiste-réanimateur"],
+      ["Langues : Français (langue maternelle)", "Anglais (courant)"],
+      ["Certification : ACLS", "Expérience : Praticien hospitalier, CHU de Lyon"],
+    ] as const;
+    const twoColumnsPdf = () => pdf(document => {
+      document.fontSize(11).fillColor("black").text(PHYSICIAN_CV[0]!, 50, 60, { lineBreak: false });
+      rows.forEach(([left, right], index) => {
+        document.text(left, 50, 90 + index * 20, { lineBreak: false });
+        document.text(right, 300, 90 + index * 20, { lineBreak: false });
+      });
+    });
+    const twoColumnsDocx = () => docx(paragraph(PHYSICIAN_CV[0]!) + `<w:tbl>${rows.map(([left, right]) => `<w:tr>${cell(paragraph(left))}${cell(paragraph(right))}</w:tr>`).join("")}</w:tbl>`);
+    const reading = (location: string) => aiReading({
+      professionalTitle: "Médecin anesthésiste-réanimateur",
+      specialties: ["anesthésie-réanimation"],
+      normalizedLanguages: [
+        { language: "Français", proficiency: "native", ...quote("Français (langue maternelle)", location) },
+        { language: "Anglais", proficiency: "fluent", ...quote("Anglais (courant)", location) },
+      ],
+      certifications: [{ name: "ACLS", issuingBody: null, country: null, expiresAt: null, ...quote("Certification : ACLS", location) }],
+      normalizedExperiences: [{ role: "Praticien hospitalier", organization: "CHU de Lyon", startDate: null, endDate: null, employmentType: "unknown", specialty: "", country: null, durationMonths: null, ...quote("Expérience : Praticien hospitalier, CHU de Lyon", location) }],
+      fieldEvidence: [
+        { field: "professionalTitle", value: "Médecin anesthésiste-réanimateur", ...quote("Médecin anesthésiste-réanimateur", location) },
+        { field: "specialty", value: "anesthésie-réanimation", ...quote("Spécialité : anesthésie-réanimation", location) },
+      ],
+    });
+    const read: Array<{ prompt: string; text: string; score: unknown; breakdown: Record<string, number> }> = [];
+    for (const [file, mimeType, location] of [[await twoColumnsPdf(), "application/pdf", "page 1"], [twoColumnsDocx(), DOCX, "section Profil"]] as const) {
+      state.prompts = [];
+      state.reading = reading(location);
+      const id = seedDossier(file, mimeType);
+      await processDueCvAnalysisJobs(5);
+      read.push({ prompt: state.prompts[0]!, text: String(dossier(id).extracted_text), score: dossier(id).ai_score, breakdown: JSON.parse(String(dossier(id).ai_extracted_skills)).scoreBreakdown });
+    }
+    const [fromPdf, fromDocx] = read as [typeof read[number], typeof read[number]];
+    // Each cell on its own line, as mammoth reads the DOCX; before, « Spécialité : anesthésie-réanimation Médecin anesthésiste-réanimateur » on one.
+    const lines = (text: string) => text.split("\n").map(line => line.trim()).filter(line => line && !/^\[PAGE \d+\]$/.test(line));
+    expect(lines(fromPdf.text)).toEqual([PHYSICIAN_CV[0], ...rows.flat()]);
+    expect(lines(fromDocx.text)).toEqual(lines(fromPdf.text));
+    expect(fromPdf.prompt).toContain("Spécialité : anesthésie-réanimation\nMédecin anesthésiste-réanimateur");
+    // Only line breaks where pdf.js wrote a space: the same text otherwise.
+    expect(normalized(fromPdf.text)).toBe(`[PAGE 1] ${[PHYSICIAN_CV[0], ...rows.flat()].join(" ")}`);
+    // Before: 15 points of specialty in PDF, 30 in DOCX, and a score 15 lower.
+    expect(fromPdf.breakdown.specialtyMatch).toBe(30);
+    expect(fromPdf.breakdown).toEqual(fromDocx.breakdown);
+    expect(fromPdf.score).not.toBeNull();
+    expect(fromPdf.score).toBe(fromDocx.score);
+  }, PDF_TEST_TIMEOUT_MS);
+
   it("CV lisible qui cache aussi une phrase : au-delà de 30 caractères, revue humaine sans score ni faits structurés", async () => {
     state.reading = honestReading;
     const id = seedDossier(await pdf(document => {

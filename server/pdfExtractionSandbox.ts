@@ -48,6 +48,46 @@ export type PdfReaderTask = { kind: "text"; first: number } | { kind: "render"; 
 
 const VISIBILITY_TIME_SHARE = 0.6;
 
+/**
+ * IA-04: a page's text items with each wide gap between two texts of one
+ * line read as a line break. pdf.js writes such a gap as one whitespace item
+ * as wide as the gap, which joins with a space the cells of a table row, or
+ * two columns side by side (« Spécialité : anesthésie-réanimation » and
+ * « Médecin anesthésiste-réanimateur »), where mammoth puts each cell of a
+ * DOCX on its own line: the same CV then has the same lines, and the same
+ * places of evidence, in PDF and in DOCX. A gap is wide from one em (the
+ * height of its line's text) when it is twice as wide as any other gap of
+ * its line, or from two and a half: the even gaps of a justified line stay
+ * spaces. Only whitespace becomes a line break, no text is added or removed.
+ * Self-contained: the isolated reader runs it as its source.
+ */
+export function textCellsAsLines<Content extends { items: readonly unknown[] }>(content: Content): Content {
+  const CELL_GAP_EM = 1;
+  const LONE_CELL_GAP_EM = 2.5;
+  const OTHER_GAPS_FACTOR = 2;
+  type Item = { str?: unknown; width?: unknown; height?: unknown; hasEOL?: unknown };
+  const items = content.items as readonly Item[];
+  const text = (item: Item) => typeof item.str === "string" && item.str.trim() !== "";
+  const gap = (item: Item) => typeof item.str === "string" && item.str !== "" && item.str.trim() === "" && !item.hasEOL && typeof item.width === "number" && item.width > 0;
+  const breaks = new Set<number>();
+  let start = 0;
+  for (let index = 0; index <= items.length; index += 1) {
+    if (index < items.length && !items[index]!.hasEOL) continue;
+    const line = Array.from({ length: index - start }, (_, offset) => start + offset);
+    const em = Math.max(0, ...line.filter(at => text(items[at]!)).map(at => Number(items[at]!.height) || 0));
+    const gaps = line.filter(at => gap(items[at]!));
+    for (const at of gaps) {
+      const width = items[at]!.width as number;
+      const others = Math.max(0, ...gaps.filter(other => other !== at).map(other => items[other]!.width as number));
+      const between = line.some(other => other < at && text(items[other]!)) && line.some(other => other > at && text(items[other]!));
+      if (em > 0 && between && width >= CELL_GAP_EM * em && (width >= OTHER_GAPS_FACTOR * others || width >= LONE_CELL_GAP_EM * em)) breaks.add(at);
+    }
+    start = index + 1;
+  }
+  if (breaks.size === 0) return content;
+  return { ...content, items: items.map((item, index) => (breaks.has(index) ? { ...item, str: "\n" } : item)) };
+}
+
 let standardFontDirectory: string | null | undefined;
 
 /**
@@ -87,6 +127,7 @@ const startedAt = Date.now();
 // The visibility check, as this module was compiled; esbuild's keepNames (tsx) wraps functions in __name.
 const __name = target => target;
 const visibleTextContent = ${visibleTextContent.toString()};
+const textCellsAsLines = ${textCellsAsLines.toString()};
 
 (async () => {
   let parser = null;
@@ -109,7 +150,7 @@ const visibleTextContent = ${visibleTextContent.toString()};
     if (task.kind === "text") {
       // What parser.getText({ first }) does, page by page, with the visible text content only: its
       // own page text assembly (getPageText; it and load are private in pdf-parse's typings)
-      // keeps the text laid out as before.
+      // keeps the text laid out as before, a wide gap within a line read as a line break.
       const doc = await parser.load();
       const total = doc.numPages;
       const pages = [];
@@ -130,6 +171,7 @@ const visibleTextContent = ${visibleTextContent.toString()};
           visibility.unverifiableText.push({ page: num, reason: "unfinished", text: layer });
           content = { ...content, items: [] };
         }
+        content = textCellsAsLines(content);
         const text = await parser.getPageText({ getViewport: options => page.getViewport(options), getTextContent: async () => content }, {}, total);
         pages.push({ num, text });
         page.cleanup();

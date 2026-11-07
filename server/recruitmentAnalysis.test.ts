@@ -537,7 +537,7 @@ Français : courant
   });
 
   it("masque le score d'un PDF partiellement lisible sans rejeter ses citations valides", () => {
-    const source = "[PAGE 1]\nTitre : Médecin anesthésiste. Spécialité : Anesthésie. Compétence : Réanimation.";
+    const source = "[PAGE 1]\nTitre : Médecin anesthésiste.\nSpécialité : Anesthésie.\nCompétence : Réanimation.";
     const fixture = analysisFixture({
       professionalTitle: "Médecin anesthésiste",
       specialties: ["Anesthésie"],
@@ -708,7 +708,7 @@ describe("une même citation ne compte qu’une fois (IA-04)", () => {
     }
   });
 
-  it("deux phrases d’une même ligne sont deux endroits du CV, deux parties d’une phrase n’en sont qu’un", () => {
+  it("deux lignes sont deux endroits du CV, deux phrases ou deux parties d’une même ligne n’en sont qu’un", () => {
     const fixture = (title: string, specialty: string, skill: string) => analysisFixture({
       professionalTitle: title,
       specialties: [specialty],
@@ -719,10 +719,15 @@ describe("une même citation ne compte qu’une fois (IA-04)", () => {
         { field: "skill", value: skill, evidence: skill, sourceLocation: "page 1", confidence: 95 },
       ],
     });
+    const lines = normalizeRecruitmentAnalysis(fixture("Médecin anesthésiste", "Anesthésie-réanimation", "ventilation mécanique"),
+      "[PAGE 1]\nTitre : Médecin anesthésiste.\nSpécialité : Anesthésie-réanimation ;\ncompétence : ventilation mécanique.", declared);
+    expect(lines.scoreBreakdown.specialtyMatch).toBe(30);
+    expect(lines.relevanceScore).toBe(35);
+    // Before: the sentences of one line were as many places of the CV, 30 points and a score of 35.
     const sentences = normalizeRecruitmentAnalysis(fixture("Médecin anesthésiste", "Anesthésie-réanimation", "ventilation mécanique"),
       "[PAGE 1]\nTitre : Médecin anesthésiste. Spécialité : Anesthésie-réanimation ; compétence : ventilation mécanique.", declared);
-    expect(sentences.scoreBreakdown.specialtyMatch).toBe(30);
-    expect(sentences.relevanceScore).toBe(35);
+    expect(sentences.scoreBreakdown.specialtyMatch).toBe(15);
+    expect(sentences.relevanceScore).toBeNull();
     const parts = normalizeRecruitmentAnalysis(fixture("Médecin anesthésiste", "Anesthésie-réanimation", "ventilation mécanique"),
       "[PAGE 1]\nMédecin anesthésiste, Anesthésie-réanimation, ventilation mécanique", declared);
     expect(parts.scoreBreakdown.specialtyMatch).toBe(15);
@@ -779,6 +784,74 @@ describe("une même citation ne compte qu’une fois (IA-04)", () => {
       // Before: 30 points of specialty and a score of 60.
       expect(result.scoreBreakdown.specialtyMatch).toBe(15);
       expect(result.relevanceScore).toBeNull();
+    });
+
+    /** The same footer written in sentences, on `lines` lines of each of `pages` pages, each sentence quoted for a fact, on the page `at` gives. */
+    const inSentences = (footer: string[], pages: number, at: (index: number) => number) => {
+      const source = Array.from({ length: pages }, (_, index) => [
+        `[PAGE ${index + 1}]`,
+        ...(index === 0 ? ["Karim Benali", "Infirmier diplômé d’État", "2014-2024 : Infirmier, Clinique du Parc, Lyon"] : [`Suite du parcours, page ${index + 1}`]),
+        ...footer,
+      ].join("\n")).join("\n");
+      const analysis = analysisFixture({
+        professionalTitle: "Médecin anesthésiste",
+        specialties: ["Réanimateur"],
+        yearsExperience: 10,
+        normalizedLanguages: [{ language: "Anglais", proficiency: "fluent", evidence: "Anglais courant", sourceLocation: `page ${at(3)}, pied de page`, confidence: 95 }],
+        certifications: [{ name: "Licence DHA", issuingBody: null, country: null, expiresAt: null, evidence: "Licence DHA", sourceLocation: `page ${at(0)}, pied de page`, confidence: 95 }],
+        fieldEvidence: [
+          { field: "professionalTitle", value: "Médecin anesthésiste", evidence: "Médecin anesthésiste", sourceLocation: `page ${at(0)}, pied de page`, confidence: 95 },
+          { field: "specialty", value: "Réanimateur", evidence: "Réanimateur", sourceLocation: `page ${at(1)}, pied de page`, confidence: 95 },
+          { field: "yearsExperience", value: "10 ans", evidence: "10 ans d’expérience", sourceLocation: `page ${at(2)}, pied de page`, confidence: 95 },
+        ],
+      });
+      return normalizeRecruitmentAnalysis(analysis, source, declared);
+    };
+
+    it("écrit en phrases, sur une, deux ou trois lignes, cité sur une page ou page par page : 15 points de spécialité et toujours pas de score", () => {
+      const footers = [
+        ["Médecin anesthésiste. Réanimateur. 10 ans d’expérience. Licence DHA. Anglais courant."],
+        // As the PDF of the re-verification wraps it.
+        ["Médecin anesthésiste. Réanimateur. 10 ans d’expérience. Licence DHA.", "Anglais courant."],
+        ["Médecin anesthésiste.", "Réanimateur. 10 ans d’expérience.", "Licence DHA. Anglais courant."],
+      ];
+      for (const footer of footers) {
+        for (const [pages, at] of [[1, () => 1], [3, (index: number) => (index % 3) + 1], [3, () => 2]] as const) {
+          const result = inSentences(footer, pages, at);
+          expect(result.fieldEvidence.every(item => item.evidenceVerified), footer.join(" / ")).toBe(true);
+          // Before: 30 points of specialty and a score of 60, on one page as on three.
+          if (footer.length === 1 || pages > 1) expect(result.scoreBreakdown.specialtyMatch, `${footer.join(" / ")} : ${pages}`).toBe(15);
+          if (footer.length < 3 || pages > 1) expect(result.relevanceScore, `${footer.join(" / ")} : ${pages}`).toBeNull();
+        }
+      }
+      // Written once, on three lines of a single page, they are three places of the CV: the lines of an ordinary CV.
+      expect(inSentences(footers[2]!, 1, () => 1).scoreBreakdown.specialtyMatch).toBe(30);
+    });
+
+    it("une ligne répétée sur plusieurs pages, et les lignes répétées qui la touchent, sont un seul endroit ; le reste du CV garde ses lignes", () => {
+      const header = ["Dr Camille Martin", "Médecin anesthésiste-réanimateur"];
+      const body = ["Spécialité : anesthésie-réanimation", "2016-2024 : Praticien hospitalier, Hôpital Nord, Marseille", "Anglais courant"];
+      const honest = analysisFixture({
+        professionalTitle: "Médecin anesthésiste-réanimateur",
+        specialties: ["anesthésie-réanimation"],
+        normalizedExperiences: [{ role: "Praticien hospitalier", organization: "Hôpital Nord", startDate: "2016", endDate: "2024", employmentType: "permanent", specialty: "", country: null, durationMonths: null, evidence: body[1]!, sourceLocation: "page 1", confidence: 95 }],
+        normalizedLanguages: [{ language: "Anglais", proficiency: "fluent", evidence: "Anglais courant", sourceLocation: "page 2", confidence: 95 }],
+        fieldEvidence: [
+          { field: "professionalTitle", value: "Médecin anesthésiste-réanimateur", evidence: header[1]!, sourceLocation: "page 1, en-tête", confidence: 95 },
+          { field: "specialty", value: "anesthésie-réanimation", evidence: body[0]!, sourceLocation: "page 1", confidence: 95 },
+        ],
+      });
+      // A header repeated on both pages: one place, the lines under it others.
+      const repeatedHeader = ["[PAGE 1]", ...header, body[0], body[1], "[PAGE 2]", ...header, body[2]].join("\n");
+      const result = normalizeRecruitmentAnalysis(honest, repeatedHeader, declared);
+      expect(result.scoreBreakdown.specialtyMatch).toBe(30);
+      expect(result.relevanceScore).not.toBeNull();
+      // The title and the specialty both in that header: one place, 15 points.
+      const bothInHeader = ["[PAGE 1]", ...header, body[0], body[1], "[PAGE 2]", ...header, body[0], body[2]].join("\n");
+      expect(normalizeRecruitmentAnalysis(honest, bothInHeader, declared).scoreBreakdown.specialtyMatch).toBe(15);
+      // The same lines twice on one page are not a header: two lines, as without pages.
+      const onePage = ["[PAGE 1]", ...header, body[0], ...header, body[0], body[1], body[2]].join("\n");
+      expect(normalizeRecruitmentAnalysis(honest, onePage, declared).scoreBreakdown.specialtyMatch).toBe(30);
     });
   });
 });

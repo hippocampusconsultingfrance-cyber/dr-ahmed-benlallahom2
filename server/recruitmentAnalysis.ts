@@ -8,7 +8,7 @@ import { declaredCertificationNames, latestCertificationExpiry, sameRecruitmentF
 import { certificationDateIsCurrent, certificationExpiryInFrench } from "../shared/recruitmentFactOrigins";
 import { assertPdfDecompressionWithinLimits, DOCUMENT_DECOMPRESSION_LIMITS, truncateExtractedText } from "./documentDecompressionLimits";
 import { withoutInvisibleDocxText, type DocxUnverifiableReason } from "./docxVisibleText";
-import { pdfStandardFontDataUrl, PdfReaderUnavailableError, readPdfIsolated, type PdfTextReading } from "./pdfExtractionSandbox";
+import { pdfStandardFontDataUrl, PdfReaderUnavailableError, readPdfIsolated, textCellsAsLines, type PdfTextReading } from "./pdfExtractionSandbox";
 import type { PdfUnverifiableReason } from "./pdfVisibleText";
 import { CV_ANALYSIS_STEP_MINIMUM_MS, ProcessingDeadlineError, stepTimeoutMs } from "./processingDeadline";
 import {
@@ -558,6 +558,13 @@ function incompleteExtractionReason(declared: Pick<RecruitmentDeclaredContext, "
   return "Score non présenté : l’extraction du document est incomplète, au moins une page nécessite une vérification manuelle. Revue humaine requise : ouvrir le CV.";
 }
 
+/** What the in-process reading uses of pdf-parse, as the isolated reader does (load and getPageText are private in its typings). */
+type PdfParserPages = {
+  load(): Promise<{ numPages: number; getPage(num: number): Promise<PdfParserPage> }>;
+  getPageText(page: { getViewport: PdfParserPage["getViewport"]; getTextContent(): Promise<unknown> }, params: object, total: number): Promise<string>;
+};
+type PdfParserPage = { getViewport(options: { scale: number }): unknown; getTextContent(): Promise<{ items: readonly unknown[] }>; cleanup(): void };
+
 async function createPdfParser(buffer: Buffer) {
   // pdf.js expects browser geometry primitives. The worker entrypoint installs
   // the Node-compatible canvas implementation and must load before pdf-parse.
@@ -704,8 +711,17 @@ async function extractCvDocumentUnbounded(buffer: Buffer, mimeType: string): Pro
         return readPdfIsolated(buffer, { kind: "text", first }, step.limits).then(reading => step.checkVisibility(reading), step.rethrow);
       },
       async (parser): Promise<PdfTextReading> => {
-        const read = await parser.getText({ first });
-        return { total: Number.isInteger(read.total) ? read.total : null, pages: read.pages.map(page => ({ num: page.num, text: page.text })) };
+        // What the isolated reader does, without the visibility check: a wide gap within a line read as a line break (IA-04).
+        const reader = parser as unknown as PdfParserPages;
+        const doc = await reader.load();
+        const pages: PdfTextReading["pages"] = [];
+        for (let num = 1; num <= Math.min(doc.numPages, first); num += 1) {
+          const page = await doc.getPage(num);
+          const content = textCellsAsLines(await page.getTextContent());
+          pages.push({ num, text: await reader.getPageText({ getViewport: options => page.getViewport(options), getTextContent: async () => content }, {}, doc.numPages) });
+          page.cleanup();
+        }
+        return { total: Number.isInteger(doc.numPages) ? doc.numPages : null, pages };
       },
     );
     const pages = result.pages.map(page => ({ number: page.num, text: cleanText(page.text) }));
@@ -1326,36 +1342,68 @@ function locationPage(sourceLocation: string) {
  */
 const evidenceProvenance = (item: { evidence: string }) => normalizeEvidenceText(item.evidence);
 
-/**
- * Where a passage of the CV ends (IA-04): a line break, or the end of a
- * sentence (a full stop, question or exclamation mark, or semicolon, then a
- * space; the ideographic and Arabic ones with or without a space). Commas,
- * dashes and pipes join the parts of one passage: « Médecin
- * anesthésiste-réanimateur – 10 ans d'expérience – Licence DHA » is one.
- */
-const PASSAGE_END = /[\n\r\f\v\u0085\u2028\u2029]+|(?<=[.!?;])[ \t\u00a0]+|(?<=[\u3002\uff01\uff1f\uff1b\u061f\u061b])[ \t\u00a0]*/;
+/** Where a line of the CV ends (IA-04): only a line break, not the end of a sentence. */
+const LINE_END = /\r\n|[\n\r\f\v\u0085\u2028\u2029]/;
+/** A page marker the server writes before each page's text (never the document's, escaped by escapeCvPageMarkers). */
+const PAGE_MARKER_LINE = /^\s*\[PAGE\s+(\d+)\]\s*$/i;
 
 /**
- * The CV's text normalized as quotes are, passage by passage (IA-04): `text`
- * is what normalizeEvidenceText makes of the whole text, so a quote is found
- * in it as verifyCvEvidence finds it, and `starts` says where each passage
- * starts in it.
+ * The CV's text normalized as quotes are, line by line (IA-04): `text` is
+ * what normalizeEvidenceText makes of the whole text, so a quote is found in
+ * it as verifyCvEvidence finds it; `starts` says where each line starts in
+ * it, and `places` the place of the CV each line is, the same number for
+ * the lines of one place. A line is a place, whatever its punctuation:
+ * « Médecin anesthésiste. Réanimateur. » is one, as are its parts. A line
+ * written on two pages or more (a header, a footer), with the lines next to
+ * it that are too, is one place on all of them: a footer of two lines cited
+ * page by page, whole or in parts, is still one place of the CV.
  */
 function normalizedSourcePassages(sourceText: string) {
   const starts: number[] = [];
+  const lines: Array<{ normalized: string; page: number | null }> = [];
   let text = "";
-  for (const passage of sourceText.split(PASSAGE_END)) {
-    const normalized = normalizeEvidenceText(passage);
+  let page: number | null = null;
+  for (const line of sourceText.split(LINE_END)) {
+    const marker = PAGE_MARKER_LINE.exec(line);
+    if (marker) page = Number(marker[1]);
+    const normalized = normalizeEvidenceText(line);
     if (!normalized) continue;
     if (text) text += " ";
     starts.push(text.length);
     text += normalized;
+    lines.push({ normalized, page: marker ? null : page });
   }
-  return { text, starts };
+  const pagesOf = new Map<string, Set<number>>();
+  for (const line of lines) {
+    if (line.page !== null) pagesOf.set(line.normalized, (pagesOf.get(line.normalized) ?? new Set()).add(line.page));
+  }
+  const repeated = lines.map(line => (pagesOf.get(line.normalized)?.size ?? 0) >= 2);
+  // Each line is its own place, but a repeated one: the place of the first line with its text, or of the repeated line just before it on its page.
+  const places = lines.map((_, index) => index);
+  const placeOf = (index: number) => {
+    let root = index;
+    while (places[root] !== root) root = places[root]!;
+    for (let at = index; at !== root;) {
+      const next = places[at]!;
+      places[at] = root;
+      at = next;
+    }
+    return root;
+  };
+  const join = (left: number, right: number) => { places[placeOf(right)] = placeOf(left); };
+  const firstWith = new Map<string, number>();
+  lines.forEach((line, index) => {
+    if (!repeated[index]) return;
+    const first = firstWith.get(line.normalized);
+    if (first === undefined) firstWith.set(line.normalized, index);
+    else join(first, index);
+    if (index > 0 && repeated[index - 1] && lines[index - 1]!.page === line.page) join(index - 1, index);
+  });
+  return { text, starts, places: lines.map((_, index) => placeOf(index)) };
 }
 type NormalizedSourcePassages = ReturnType<typeof normalizedSourcePassages>;
 
-/** The passage a position of the normalized text is in. */
+/** The line a position of the normalized text is in. */
 function passageAt(starts: number[], position: number) {
   let low = 0;
   let high = starts.length - 1;
@@ -1367,41 +1415,37 @@ function passageAt(starts: number[], position: number) {
   return low;
 }
 
-/** A normalized quote with the passages each place of it covers (its first and last), and all those passages. */
-type PlacedQuote = { quote: string; places: Array<[number, number]>; passages: Set<number> };
+/** A normalized quote with the places of the CV each copy of it covers, and all those places. */
+type PlacedQuote = { quote: string; copies: number[][]; places: Set<number> };
 
 function placeQuote(source: NormalizedSourcePassages, quote: string): PlacedQuote {
-  const places: Array<[number, number]> = [];
-  const passages = new Set<number>();
+  const copies: number[][] = [];
+  const places = new Set<number>();
   for (let index = quote ? source.text.indexOf(quote) : -1; index !== -1; index = source.text.indexOf(quote, index + 1)) {
-    const place: [number, number] = [passageAt(source.starts, index), passageAt(source.starts, index + quote.length - 1)];
-    places.push(place);
-    for (let passage = place[0]; passage <= place[1]; passage += 1) passages.add(passage);
+    const covered = new Set<number>();
+    for (let line = passageAt(source.starts, index); line <= passageAt(source.starts, index + quote.length - 1); line += 1) covered.add(source.places[line]!);
+    copies.push(Array.from(covered));
+    covered.forEach(place => places.add(place));
   }
-  return { quote, places, passages };
+  return { quote, copies, places };
 }
 
 /**
- * Two different quotes written in two places of the CV (IA-04): one of them is
- * written in a passage (a line, or a sentence of it) where the other is not.
- * Two parts of one passage (« Médecin anesthésiste » and « réanimateur ») are
+ * Two different quotes written in two places of the CV (IA-04): a copy of one
+ * of them lies in places where the other is not. Two parts of one line
+ * (« Médecin anesthésiste » and « réanimateur », or two of its sentences) are
  * one place, as is a header or footer repeated on each page, cited whole for
- * one field and in part for the other: on every page, both are in the same
- * passage.
+ * one field and in part for the other.
  */
 function quotesAreApart(left: PlacedQuote, right: PlacedQuote) {
-  if (left.quote === right.quote || left.places.length === 0 || right.places.length === 0) return false;
-  const placeOutside = (places: Array<[number, number]>, otherPassages: Set<number>) =>
-    places.some(([first, last]) => {
-      for (let passage = first; passage <= last; passage += 1) if (otherPassages.has(passage)) return false;
-      return true;
-    });
-  return placeOutside(left.places, right.passages) || placeOutside(right.places, left.passages);
+  if (left.quote === right.quote || left.copies.length === 0 || right.copies.length === 0) return false;
+  const copyOutside = (copies: number[][], otherPlaces: Set<number>) => copies.some(copy => copy.every(place => !otherPlaces.has(place)));
+  return copyOutside(left.copies, right.places) || copyOutside(right.copies, left.places);
 }
 
 /** Whether `count` of these quotes are written each in a place of the CV apart from the others' (IA-04). */
 function quotesInDistinctPlaces(quotes: PlacedQuote[], count: number) {
-  const placed = quotes.filter(item => item.places.length > 0);
+  const placed = quotes.filter(item => item.copies.length > 0);
   if (placed.length < count) return false;
   const apart = placed.map(left => placed.map(right => quotesAreApart(left, right)));
   const choose = (chosen: number[], from: number): boolean => {
@@ -1494,7 +1538,8 @@ function verifiedScoreBreakdown(input: {
   // specialty counts once, whatever the wording of its place, on another page
   // (a header repeated on each page), in part (« Médecin anesthésiste » out
   // of « Titre : Médecin anesthésiste » when it is written nowhere else) or
-  // cut in two (« Médecin anesthésiste » and « réanimateur » of one line).
+  // cut in two (« Médecin anesthésiste » and « réanimateur » of one line,
+  // whatever its punctuation).
   const specialtyQuotes = uniqueStrings(
     verifiedFields
       .filter(item =>
