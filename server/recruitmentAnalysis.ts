@@ -2156,11 +2156,12 @@ export async function saveCvAnalysis(
     ? { certifications: [], languages: [], experiences: [], skills: [] }
     : verifiedRecruitmentFacts(analysis);
   // The AI was unavailable (IA-02): this analysis did not read the CV and says
-  // nothing of the certifications and languages read there. Their rows stay,
-  // with the CV's dates, so that a certification the CV says has expired is
-  // not left merely « déclarée » and a language keeps its reading in the CV,
-  // and so do the facts the filters read, when the previous analysis was
-  // under this prompt. A CV that hides text is still not trusted (IA-01).
+  // nothing of the certifications and languages read there. The certification
+  // rows stay, with the CV's dates, so that a certification the CV says has
+  // expired is not left merely « déclarée », and so do the facts the filters
+  // read (the normalized ones, the languages read in the CV), when the
+  // previous analysis was under this prompt. A CV that hides text is still
+  // not trusted (IA-01).
   const aiUnavailable = generation?.model === MANUAL_REVIEW_FALLBACK_MODEL;
   const cvNotRead = aiUnavailable
     && !visibilityRequiresReview(analysis.invisibleText) && !analysis.visibilityUnchecked;
@@ -2267,7 +2268,12 @@ export async function saveCvAnalysis(
         isNull(cvCandidateCertifications.confirmedAt),
         cvNotReadByAi ? ne(cvCandidateCertifications.source, "cv_expiry") : undefined
       ));
-  const deleteLanguages = cvNotRead
+  // The languages read in the CV are among the facts the filters read: they
+  // stay only when the previous analysis was under this prompt. Read under an
+  // older one, which the Langue filter and a mission ignore, they would count
+  // again once this analysis carries the current version without having read
+  // them.
+  const deleteLanguages = cvNotRead && keptNormalizedFacts
     ? db.select({ id: cvApplications.id }).from(cvApplications).where(sql`FALSE`)
     : db
       .delete(cvCandidateLanguages)
