@@ -61,18 +61,33 @@ function csvListCell(value: string | null) {
 }
 
 /**
- * ADM-26: a phone number as the exports write it. An international number
- * leaves with « 00 » instead of its « + », the same number dialled from
- * abroad (« +216 51 000 010 » gives « 00216 51 000 010 »): a « + » is read as
- * a formula, so csvCell would show it behind an apostrophe to clean by hand.
- * Written without spaces, its « 00 » is set apart by one (« 00 21651000010 »),
- * so that a spreadsheet keeps it as text, leading zeros included. The other
- * columns keep the protection.
+ * What a spreadsheet opening the file (Calc or Excel, in French as in English
+ * or German) reads as a number or a date rather than text: digits alone, digits
+ * grouped by three like thousands (« 51 000 010 »), a decimal number, a date
+ * (« 06-12-34 »).
+ */
+const SPREADSHEET_NUMBER_OR_DATE = /^(?:\d+|\d{1,3}(?:[ ,.\u00a0\u202f]\d{3})+|\d+[.,]\d+|\d{1,4}[-/.]\d{1,2}(?:[-/.]\d{1,4})?)$/;
+
+/**
+ * ADM-26: a phone number as the exports write it, so that a spreadsheet keeps
+ * it as text, leading zeros included, with nothing to clean by hand before it
+ * is passed on. An international number leaves with « 00 » instead of its
+ * « + », the same number dialled from abroad (« +216 51 000 010 » gives
+ * « 00216 51 000 010 »): a « + » is read as a formula, so csvCell would show
+ * it behind an apostrophe. A number a spreadsheet would read as a number or a
+ * date (SPREADSHEET_NUMBER_OR_DATE) leaves with its digits set apart: its
+ * « 00 » by one space (« +21651000010 » and « 0021651000010 » give
+ * « 00 21651000010 »), the others by two from the end (« 0612345678 » gives
+ * « 06 12 34 56 78 »). Any other number leaves as typed. The other columns
+ * keep the protection.
  */
 function csvPhoneValue(phone: string | null) {
-  if (!phone?.startsWith("+")) return phone;
-  const number = phone.slice(1);
-  return /\s/.test(number) ? `00${number}` : `00 ${number}`;
+  if (!phone) return phone;
+  const typed = phone.trim();
+  const written = typed.startsWith("+") ? `00${typed.slice(1)}` : typed;
+  if (!SPREADSHEET_NUMBER_OR_DATE.test(written)) return written;
+  const digits = written.replace(/\D/g, "");
+  return digits.startsWith("00") ? `00 ${digits.slice(2)}` : digits.replace(/\B(?=(?:\d{2})+$)/g, " ");
 }
 
 /** What really happened to a manual CV re-analysis (ADM-REC-02). */

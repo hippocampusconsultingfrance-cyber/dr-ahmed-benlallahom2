@@ -278,6 +278,33 @@ describe("actions d’administration du recrutement", () => {
     expect(cells(shortlist.csv, "c2@test.local", "Téléphone")).toBe("\"00 21651000010\"");
   });
 
+  it("exporte en texte un numéro saisi sans « + » qu’un tableur lirait comme un nombre ou une date, zéros de tête compris (ADM-26)", async () => {
+    // Calc in French reads each of these as a number (612345678, 21651000010, 51000010) or a date (12/06/34).
+    const typed = {
+      "0612345678": "06 12 34 56 78",
+      "0021651000010": "00 21651000010",
+      "21651000010": "2 16 51 00 00 10",
+      "51 000 010": "51 00 00 10",
+      "06-12-34": "06 12 34",
+      // Already text: left as typed, a « + » aside.
+      "+1-202-555-0143": "001-202-555-0143",
+      "07911 123456": "07911 123456",
+      "(0)6 12 34 56 78": "(0)6 12 34 56 78",
+    };
+    const candidates = Object.keys(typed).map((phone, index) => seedCandidate(index + 1, { phone }));
+    const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-PHONE-2", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Qatar" }]);
+    memory.seed(clientBriefCandidates, candidates.map(candidate => ({ brief_id: brief!.id, application_id: candidate.id, association_status: "shortlisted", candidate_consent_at: consentAt })));
+    const phones = (csv: string) => {
+      const [header, ...rows] = csv.split("\n");
+      const column = header!.split(";").indexOf("\"Téléphone\"");
+      return Object.fromEntries(rows.map(row => [row.split(";")[2], row.split(";")[column]]));
+    };
+    const expected = Object.fromEntries(Object.values(typed).map((phone, index) => [`"c${index + 1}@test.local"`, `"${phone}"`]));
+
+    expect(phones((await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: candidates.map(candidate => candidate.id as number) })).csv)).toEqual(expected);
+    expect(phones((await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number })).csv)).toEqual(expected);
+  });
+
   it("écrit dans l’export du vivier les pays et les langues en clair, et le statut en mots (INTL-10)", async () => {
     const candidate = seedCandidate(1, { target_countries: JSON.stringify(["Émirats arabes unis", "Qatar"]), languages: JSON.stringify(["Arabic", "French"]), status: "shortlisted" });
     const pool = await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: [candidate.id as number] });
