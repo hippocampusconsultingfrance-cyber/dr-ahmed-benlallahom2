@@ -403,3 +403,17 @@ describe("Google Drive déconnecté (REC-09)", () => {
     expect(copyOf(requested)).toMatchObject({ status: "completed", updated_at: copyOf(requested).finished_at });
   });
 });
+
+describe("copie Drive remise en file à la main en SQL (EXPL-17)", () => {
+  it("est prise au passage suivant malgré une date à la microseconde, et deux passages simultanés ne la copient qu’une fois", async () => {
+    seedConnection();
+    // UPDATE … SET status = 'queued', scheduled_for = now() - interval '1 min': PostgreSQL keeps the microseconds.
+    const requeued = seedCopy(1, { status: "queued", attempts: 2, scheduled_for: "2026-11-01 09:59:00.123456" });
+
+    const [first, second] = await Promise.all([processDueCvGoogleDriveExports(5), processDueCvGoogleDriveExports(5)]);
+
+    expect(first.processed + second.processed).toBe(1);
+    expect(state.uploads).toEqual(["CVDRIVE00000001"]);
+    expect(copyOf(requeued)).toMatchObject({ status: "completed", attempts: 3 });
+  });
+});

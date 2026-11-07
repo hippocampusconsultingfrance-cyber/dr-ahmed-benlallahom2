@@ -237,11 +237,12 @@ describe("reprise traçable des exports Google Drive", () => {
             expect(values).toMatchObject({ status: "running", attempts: 2 });
             expect(sql).toMatch(/"id"\s*=\s*\$\d+/);
             expect(sql).toMatch(/"status"\s*=\s*\$\d+/);
-            expect(sql).toMatch(/"scheduled_for"\s*=\s*\$\d+/);
+            // Due when claimed, without an exact date to match (EXPL-17).
+            expect(sql).not.toMatch(/"scheduled_for"\s*=\s*\$\d+/);
             expect(sql).toMatch(/"scheduled_for"\s*<=\s*\$\d+/);
             expect(sql).toMatch(/"attempts"\s*=\s*\$\d+/);
             expect(sql).toMatch(/"attempts"\s*<\s*"cv_google_drive_export_jobs"\."max_attempts"/);
-            expect(params).toEqual(expect.arrayContaining([candidate.id, candidate.status, scheduledFor.toISOString(), candidate.attempts]));
+            expect(params).toEqual(expect.arrayContaining([candidate.id, candidate.status, candidate.attempts]));
             return { rowCount: 0 }; // A rival worker rescheduled or claimed this row.
           },
         }) };
