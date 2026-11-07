@@ -37,19 +37,21 @@ function hashAsTyped(password: string) {
   return ["scrypt", N, 8, 1, salt.toString("base64url"), hash.toString("base64url")].join("$");
 }
 
+// Up to six scrypt derivations with the production parameters per test: 30 s, as
+// in candidateLoginThrottling.test.ts, so that a loaded machine does not time out.
 describe("INTL-12 — mot de passe candidat normalisé en NFKC", () => {
   it("vérifie un mot de passe quelle que soit la forme Unicode de sa saisie", async () => {
     const stored = await hashCandidatePassword(decomposed);
     for (const typed of [decomposed, composed, fullWidth]) await expect(matchCandidatePassword(typed, stored), typed).resolves.toBe("normalized");
     await expect(verifyCandidatePassword("Phrase de passe resistante 2026", stored)).resolves.toBe(false);
-  });
+  }, 30_000);
 
   it("accepte encore un hachage de la forme saisie, enregistré avant la normalisation, et seulement sous cette forme", async () => {
     const stored = hashAsTyped(decomposed);
     await expect(matchCandidatePassword(decomposed, stored)).resolves.toBe("as_typed");
     await expect(matchCandidatePassword(composed, stored)).resolves.toBe(false);
     await expect(matchCandidatePassword("Un tout autre mot de passe 2026", stored)).resolves.toBe(false);
-  });
+  }, 30_000);
 
   describe("connexion", () => {
     const email = "nadia.nfkc@example.test";
@@ -70,7 +72,7 @@ describe("INTL-12 — mot de passe candidat normalisé en NFKC", () => {
       await expect(matchCandidatePassword(composed, rehashed)).resolves.toBe("normalized");
       await expect(client().api.login({ email, password: composed })).resolves.toEqual({ success: true });
       await expect(client().api.login({ email, password: fullWidth })).resolves.toEqual({ success: true });
-    });
+    }, 30_000);
 
     it("garde le hachage d’un mot de passe déjà normalisé, et refuse un mauvais mot de passe sans y toucher", async () => {
       const stored = await hashCandidatePassword(composed);
@@ -80,6 +82,6 @@ describe("INTL-12 — mot de passe candidat normalisé en NFKC", () => {
       expect(accountByEmail(db(), email)!.passwordHash).toBe(stored);
       await expect(client().api.login({ email, password: "Un tout autre mot de passe 2026" })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
       expect(accountByEmail(db(), email)!.passwordHash).toBe(stored);
-    });
+    }, 30_000);
   });
 });

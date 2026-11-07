@@ -44,8 +44,6 @@ function seed(index: number, extra: Record<string, unknown> = {}) {
   }])[0]!;
 }
 
-const lastNames = (items: Array<{ lastName: string }>) => items.map(item => item.lastName).sort();
-
 beforeEach(() => {
   memory = createMemoryPg([cvApplications, cvCandidateCertifications, cvCandidateLanguages, recruitmentMatchProfiles, candidateAccounts, cvGoogleDriveExportJobs, recruitmentEmailEvents]);
   state.memory = memory;

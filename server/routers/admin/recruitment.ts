@@ -69,7 +69,7 @@ function csvListCell(value: string | null) {
  * so that a spreadsheet keeps it as text, leading zeros included. The other
  * columns keep the protection.
  */
-export function csvPhoneValue(phone: string | null) {
+function csvPhoneValue(phone: string | null) {
   if (!phone?.startsWith("+")) return phone;
   const number = phone.slice(1);
   return /\s/.test(number) ? `00${number}` : `00 ${number}`;
@@ -410,7 +410,9 @@ export const adminRecruitmentRouter = router({
       analysesNeedsReview: sql<number>`SUM(CASE WHEN ${cvApplications.analysisStatus} IN ('needs_review', 'degraded') THEN 1 ELSE 0 END)`,
       analysesFailed: sql<number>`SUM(CASE WHEN ${cvApplications.analysisStatus} = 'failed' THEN 1 ELSE 0 END)`,
       contacted: sql<number>`SUM(CASE WHEN ${cvApplications.lastContactedAt} IS NOT NULL THEN 1 ELSE 0 END)`,
-      responded: sql<number>`SUM(CASE WHEN ${cvApplications.lastCandidateResponseAt} IS NOT NULL THEN 1 ELSE 0 END)`,
+      // ADM-13: the answers of the contacted profiles only, so that the rate never goes past 100 %
+      // when « Le candidat a répondu » is recorded for a candidate no campaign has contacted.
+      responded: sql<number>`SUM(CASE WHEN ${cvApplications.lastContactedAt} IS NOT NULL AND ${cvApplications.lastCandidateResponseAt} IS NOT NULL THEN 1 ELSE 0 END)`,
     }).from(cvApplications);
     const [campaignStats] = await db.select({
       total: sql<number>`COUNT(*)`,

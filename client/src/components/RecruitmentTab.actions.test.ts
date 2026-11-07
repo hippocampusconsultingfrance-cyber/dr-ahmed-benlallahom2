@@ -23,6 +23,7 @@ const state = vi.hoisted(() => {
     /** The analysis the open card reads (ADM-20): null while it loads. */
     analysisLoading: false,
     detailRequests: [] as unknown[],
+    utils: { list: { invalidate: vi.fn(), cancel: vi.fn(), getData: vi.fn(), setData: vi.fn() }, detail: { invalidate: vi.fn() } },
     mutations,
     toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
     mutation: (path: string) => (options?: MutationOptions) => {
@@ -44,7 +45,7 @@ const listed = (application: Record<string, unknown>) => ({
 });
 vi.mock("@/lib/trpc", () => ({
   trpc: {
-    useUtils: () => ({ admin: { recruitment: { list: { invalidate: vi.fn(), cancel: vi.fn(), getData: vi.fn(), setData: vi.fn() }, detail: { invalidate: vi.fn() } } } }),
+    useUtils: () => ({ admin: { recruitment: state.utils } }),
     useQueries: (build: (t: unknown) => unknown[]) => {
       const t = { admin: { recruitment: { list: (input: unknown) => input } } };
       return build(t).map(() => ({ data: { items: state.applications.map(listed), total: state.applications.length }, isLoading: false, error: null, refetch: vi.fn() }));
@@ -410,6 +411,17 @@ describe("ADM-20 — analyse du CV chargée à l’ouverture de la carte", () =>
     expect(state.detailRequests).toEqual([]);
     expect(pageText()).toContain("L’analyse sera disponible après extraction du texte.");
   });
+
+  it("« Actualiser » recharge aussi l’analyse de la carte ouverte, qu’une analyse terminée entre-temps a pu remplacer", () => {
+    state.applications = [dossier(1, { analysisStatus: "completed", aiSummary: "Synthèse de la lecture du CV." })];
+    open(1);
+    state.utils.list.invalidate.mockClear();
+    state.utils.detail.invalidate.mockClear();
+
+    action("Actualiser")!.props.onClick();
+    expect(state.utils.list.invalidate).toHaveBeenCalledTimes(1);
+    expect(state.utils.detail.invalidate).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("ADM-13 — profils de matching", () => {
@@ -424,6 +436,8 @@ describe("ADM-13 — profils de matching", () => {
     expect(action("Supprimer")).toBeUndefined();
     render().find(element => element.props["aria-controls"] === "recruitment-profiles-panel")!.props.onClick();
     expect(pageText()).toContain("Anesthésie · Qatar · Anglais");
+    // Each button names its profile for a screen reader.
+    expect(action("Supprimer")!.props["aria-label"]).toBe("Supprimer le profil de matching Golfe anesthésie");
 
     action("Supprimer")!.props.onClick();
     expect(String(confirm.mock.calls[0]![0])).toContain("« Golfe anesthésie »");

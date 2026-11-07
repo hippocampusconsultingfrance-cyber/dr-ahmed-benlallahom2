@@ -318,6 +318,20 @@ describe("actions d’administration du recrutement", () => {
     expect(memory.rows(recruitmentAuditLogs)).toHaveLength(2);
   });
 
+  it("le taux de réponse ne compte que les réponses des profils contactés par une campagne (ADM-13)", async () => {
+    const contactedAt = "2026-10-01 09:00:00.000";
+    const answered = seedCandidate(1, { last_contacted_at: contactedAt });
+    seedCandidate(2, { last_contacted_at: contactedAt });
+    // Reached by « Proposer un échange » or writing on their own: no campaign has contacted them.
+    const neverContacted = seedCandidate(3);
+    await admin().admin.recruitment.candidate.markResponse({ id: answered.id as number });
+    await admin().admin.recruitment.candidate.markResponse({ id: neverContacted.id as number });
+
+    const dashboard = await admin().admin.recruitment.dashboard();
+    expect(dashboard!.candidateStats).toMatchObject({ total: 3, contacted: 2, responded: 1 });
+    expect(memory.rows(cvApplications).filter(row => row.last_candidate_response_at !== null)).toHaveLength(2);
+  });
+
   it("refuse un export du vivier dont plus aucun candidat sélectionné n’est exportable, au lieu d’un fichier vide (REC-01)", async () => {
     const refused = seedCandidate(1, { status: "rejected" });
     await expect(admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: [refused.id as number] }))

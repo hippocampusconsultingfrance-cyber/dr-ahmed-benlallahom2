@@ -32,15 +32,17 @@ function MetricCard({ icon: Icon, label, value, detail, tone }: MetricCardProps)
  * ADM-13: « Relances à faire », the manual follow-ups suggested after a
  * campaign, nearest due date first, marked handled or dismissed several at a
  * time. Neither sends an email. pending: how many there are in all, the list
- * reading the first ones only.
+ * reading the first ones only; due: how many of them are past their due date,
+ * the number the banner gives.
  */
-function RecruitmentFollowUpsList({ pending }: { pending: number }) {
+function RecruitmentFollowUpsList({ pending, due }: { pending: number; due: number }) {
   const utils = trpc.useUtils();
   const followUps = trpc.admin.recruitment.followUps.list.useQuery({ status: "suggested" });
   const [selected, setSelected] = useState<number[]>([]);
   const updateMany = trpc.admin.recruitment.followUps.updateMany.useMutation({
     onSuccess: (result, input) => {
-      toast.success(`${result.updated} relance${result.updated > 1 ? "s" : ""} ${input.status === "completed" ? "marquée(s) traitée(s)" : "ignorée(s)"}. Aucun email n’a été envoyé.`);
+      const plural = result.updated > 1 ? "s" : "";
+      toast.success(`${result.updated} relance${plural} ${input.status === "completed" ? `marquée${plural} traitée${plural}` : `ignorée${plural}`}. Aucun email n’a été envoyé.`);
       setSelected([]);
       void utils.admin.recruitment.followUps.list.invalidate();
       void utils.admin.recruitment.dashboard.invalidate();
@@ -58,7 +60,7 @@ function RecruitmentFollowUpsList({ pending }: { pending: number }) {
   return (
     <section id="recruitment-follow-ups" className="mt-5 rounded-xl border border-border bg-card p-4" aria-labelledby="recruitment-follow-ups-title">
       <h3 id="recruitment-follow-ups-title" className="text-sm font-semibold text-foreground">Relances à faire</h3>
-      <p className="mt-1 text-xs leading-5 text-muted-foreground">L’échéance la plus proche en premier. « Marquer traitée » et « Ignorer » n’envoient aucun email : contactez le candidat depuis sa fiche ou l’espace Mailing.</p>
+      <p className="mt-1 text-xs leading-5 text-muted-foreground">{pending ? `${pending} relance${pending > 1 ? "s" : ""} à faire, dont ${due} échue${due > 1 ? "s" : ""}. ` : null}L’échéance la plus proche en premier. « Marquer traitée » et « Ignorer » n’envoient aucun email : contactez le candidat depuis sa fiche ou l’espace Mailing.</p>
       {followUps.error ? (
         <div className="mt-3"><AdminErrorState title="Impossible de charger les relances" description={followUps.error.message} onRetry={() => void followUps.refetch()} retrying={followUps.isFetching} headingLevel={4} /></div>
       ) : followUps.isLoading ? (
@@ -140,7 +142,7 @@ export default function RecruitmentDashboardPanel() {
         <button type="button" aria-expanded={followUpsOpen} aria-controls="recruitment-follow-ups" onClick={() => setFollowUpsOpen(open => !open)} className="rounded-full border border-primary/25 bg-background/70 px-3 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-primary/10"><span className="font-semibold text-foreground">{nonNegativeCount(data.followUpStats.due)}</span> relance{nonNegativeCount(data.followUpStats.due) > 1 ? "s" : ""} manuelle{nonNegativeCount(data.followUpStats.due) > 1 ? "s" : ""} à examiner</button>
       </div>
 
-      {followUpsOpen ? <RecruitmentFollowUpsList pending={nonNegativeCount(data.followUpStats.pending)} /> : null}
+      {followUpsOpen ? <RecruitmentFollowUpsList pending={nonNegativeCount(data.followUpStats.pending)} due={nonNegativeCount(data.followUpStats.due)} /> : null}
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard icon={UserRound} label="CV enregistrés" value={totalCandidates} detail="Volume total de candidatures conservées." tone="bg-primary/10 text-primary" />

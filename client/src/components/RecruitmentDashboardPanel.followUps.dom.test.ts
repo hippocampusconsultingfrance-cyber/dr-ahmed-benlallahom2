@@ -14,6 +14,7 @@ type Task = { id: number; applicationId: number; firstName: string; lastName: st
 const view = vi.hoisted(() => ({
   tasks: [] as Task[],
   pending: 0,
+  due: 0,
   listInputs: [] as unknown[],
   updates: [] as Array<{ ids: number[]; status: string }>,
   invalidated: [] as string[],
@@ -45,7 +46,7 @@ vi.mock("@/lib/trpc", async () => {
                 candidateStats: { total: 12, marketingEligible: 6, contacted: 4, responded: 1, analysesQueued: 0, analysesInProgress: 0, analysesNeedsReview: 0, analysesCompleted: 12, analysesFailed: 0 },
                 campaignStats: { total: 1, sent: 1 },
                 deliveryStats: { delivered: 4, failed: 0, delayed: 0 },
-                followUpStats: { pending: view.pending, due: 2 },
+                followUpStats: { pending: view.pending, due: view.due },
                 briefStats: { total: 0, active: 0 },
               },
               isLoading: false,
@@ -75,11 +76,12 @@ function mount() {
 }
 
 const task = (id: number, lastName: string, dueAt: string, kind = "follow_up_7"): Task => ({ id, applicationId: id * 10, firstName: "Dr", lastName, specialty: "Anesthésie", kind, dueAt: new Date(dueAt), status: "suggested" });
-const banner = () => screen.getByRole("button", { name: /relances manuelles à examiner/ });
+const banner = () => screen.getByRole("button", { name: /manuelles? à examiner/ });
 
 beforeEach(() => {
   view.tasks = [task(1, "Échue", "2026-01-05T09:00:00.000Z"), task(2, "Proche", "2099-01-06T09:00:00.000Z", "follow_up_14"), task(3, "Lointaine", "2099-02-01T09:00:00.000Z")];
   view.pending = 3;
+  view.due = 1;
   view.listInputs = [];
   view.updates = [];
   view.invalidated = [];
@@ -97,6 +99,9 @@ describe("ADM-13 — relances à faire depuis le pilotage recrutement", () => {
     expect(banner().getAttribute("aria-expanded")).toBe("true");
     const list = screen.getByRole("region", { name: "Relances à faire" });
     expect(view.listInputs.at(-1)).toEqual({ status: "suggested" });
+    // The banner counts the follow-ups past due, the list shows those to come too: it says both.
+    expect(banner().textContent).toBe("1 relance manuelle à examiner");
+    expect(list.textContent).toContain("3 relances à faire, dont 1 échue.");
     const items = within(list).getAllByRole("listitem").map(item => item.textContent);
     expect(items.map(text => text?.match(/Dr (\S+)/)?.[1])).toEqual(["Échue", "Proche", "Lointaine"]);
     expect(items[0]).toContain("Relance J+7");
@@ -119,7 +124,7 @@ describe("ADM-13 — relances à faire depuis le pilotage recrutement", () => {
     expect(markHandled().textContent).toBe("Marquer traitées (2)");
     fireEvent.click(markHandled());
 
-    await waitFor(() => expect(view.toasts).toEqual([["success", "2 relances marquée(s) traitée(s). Aucun email n’a été envoyé."]]));
+    await waitFor(() => expect(view.toasts).toEqual([["success", "2 relances marquées traitées. Aucun email n’a été envoyé."]]));
     expect(view.updates).toEqual([{ ids: [1, 3], status: "completed" }]);
     expect(view.invalidated).toEqual(expect.arrayContaining(["followUps.list", "dashboard", "candidate.detail"]));
     // The selection is emptied.
@@ -135,12 +140,13 @@ describe("ADM-13 — relances à faire depuis le pilotage recrutement", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "Tout sélectionner (3)" }));
     fireEvent.click(screen.getByRole("button", { name: "Ignorer (3)" }));
     await waitFor(() => expect(view.updates).toEqual([{ ids: [1, 2, 3], status: "dismissed" }]));
-    expect(view.toasts).toEqual([["success", "3 relances ignorée(s). Aucun email n’a été envoyé."]]);
+    expect(view.toasts).toEqual([["success", "3 relances ignorées. Aucun email n’a été envoyé."]]);
   });
 
   it("dit qu’il n’y a aucune relance à faire", () => {
     view.tasks = [];
     view.pending = 0;
+    view.due = 0;
     mount();
     fireEvent.click(banner());
     expect(screen.getByText("Aucune relance à faire.")).toBeTruthy();

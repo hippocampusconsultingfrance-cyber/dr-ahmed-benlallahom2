@@ -360,7 +360,8 @@ export default function RecruitmentTab() {
             <BrainCircuit className={`mr-2 h-4 w-4 ${reanalyzeFailed.isPending ? "animate-pulse" : ""}`} />
             Mettre à jour / reprendre l’IA
           </Button>
-          <Button variant="outline" onClick={() => void utils.admin.recruitment.list.invalidate()} disabled={isLoading}>
+          {/* The open card's analysis too, which an analysis finished meanwhile has replaced (ADM-20). */}
+          <Button variant="outline" onClick={() => { void utils.admin.recruitment.list.invalidate(); void utils.admin.recruitment.detail.invalidate(); }} disabled={isLoading}>
             <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
             Actualiser
           </Button>
@@ -427,7 +428,7 @@ export default function RecruitmentTab() {
                     <p className="font-medium text-foreground">{profile.name} · {profile.minimumScore}+</p>
                     {criteria ? <p className="text-xs text-muted-foreground">{criteria}</p> : null}
                   </div>
-                  <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" disabled={deleteProfile.isPending} onClick={() => { if (window.confirm(`Supprimer le profil de matching « ${profile.name} » ? Il ne sera plus proposé dans le filtre ; aucune candidature n’est modifiée.`)) deleteProfile.mutate({ id: profile.id }); }}>
+                  <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" aria-label={`Supprimer le profil de matching ${profile.name}`} disabled={deleteProfile.isPending} onClick={() => { if (window.confirm(`Supprimer le profil de matching « ${profile.name} » ? Il ne sera plus proposé dans le filtre ; aucune candidature n’est modifiée.`)) deleteProfile.mutate({ id: profile.id }); }}>
                     <Trash2 className="mr-2 h-4 w-4" /> Supprimer
                   </Button>
                 </li>

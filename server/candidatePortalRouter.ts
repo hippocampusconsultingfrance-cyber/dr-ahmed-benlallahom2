@@ -575,7 +575,7 @@ export const candidatePortalRouter = router({
     const candidate = (await db.select().from(candidateAccounts).where(eq(candidateAccounts.email, email)).limit(1))[0];
     const genericError = candidateRefusal("UNAUTHORIZED", "Email ou mot de passe incorrect.", "candidate_credentials_invalid");
     const usable = Boolean(candidate && candidate.status === "active" && candidate.emailVerifiedAt);
-    // One scrypt derivation in every case: unknown, pending and disabled accounts take as long as a wrong password.
+    // The same scrypt derivations whether the account exists or not: unknown, pending and disabled accounts take as long as a wrong password.
     const valid = await verifyCandidatePasswordInConstantTime(input.password, usable ? candidate!.passwordHash : null);
     if (!usable || !valid) {
       if (usable) {

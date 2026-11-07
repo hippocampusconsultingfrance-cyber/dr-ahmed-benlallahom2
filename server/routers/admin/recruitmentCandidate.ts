@@ -293,6 +293,9 @@ export const adminRecruitmentFollowUpsRouter = router({
       .where(and(inArray(recruitmentFollowUpTasks.id, input.ids), eq(recruitmentFollowUpTasks.status, "suggested")));
     if (!tasks.length) return { success: true, updated: 0 };
     const now = new Date();
+    // The change and its audit lines in one batch. A follow-up another admin handles between the read
+    // above and the batch keeps its status (the update is filtered on 'suggested') but is still counted
+    // and logged here: a rare race, accepted rather than splitting the change from its audit.
     await db.batch([
       db.update(recruitmentFollowUpTasks)
         .set({ status: input.status, completedAt: now, completedByOpenId: ctx.user.openId, updatedAt: now })

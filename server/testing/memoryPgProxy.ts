@@ -6,7 +6,7 @@
  * [DISTINCT] / INSERT / UPDATE / DELETE with AND/OR/IN/IS NULL predicates, IN
  * (SELECT one column FROM a table [WHERE …]) without correlation, lower(), translate(),
  * replace(), normalize(), the || concatenation, LIKE / ILIKE with the backslash
- * escape, ORDER BY, LIMIT,
+ * escape, CASE, COUNT(*) and SUM() over the rows read, ORDER BY, LIMIT,
  * RETURNING, ON CONFLICT DO NOTHING / DO UPDATE [WHERE]). Anything else throws, so a
  * test never passes on a silently ignored statement. DDL statements sent with
  * `db.execute` (CREATE ... IF NOT EXISTS, ALTER ... IF NOT EXISTS) are recorded
@@ -514,11 +514,16 @@ export function createMemoryPg(tables: PgTable[], options: { now?: () => Date; m
 
     if (parser.acceptWord("select")) {
       const distinct = parser.acceptWord("distinct");
-      const selections: Array<{ count: true } | { expr: Expr }> = [];
+      const selections: Array<{ count: true } | { sum: Expr } | { expr: Expr }> = [];
       do {
         if (parser.isWord("count")) {
           parser.additive();
           selections.push({ count: true });
+        } else if (parser.isWord("sum") && parser.peek(1)?.text === "(") {
+          parser.next();
+          parser.expectPunct("(");
+          selections.push({ sum: parser.expression() });
+          parser.expectPunct(")");
         } else {
           selections.push({ expr: parser.expression() });
         }
@@ -560,8 +565,10 @@ export function createMemoryPg(tables: PgTable[], options: { now?: () => Date; m
         else if (parser.acceptWord("for", "update")) continue;
         else throw new Error(`memoryPgProxy: unsupported select clause in ${sqlText}`);
       }
-      if (selections.some(selection => "count" in selection)) {
-        return { rows: [selections.map(selection => "count" in selection ? rows.length : null)], rowCount: 1 };
+      if (selections.some(selection => "count" in selection || "sum" in selection)) {
+        // As PostgreSQL: SUM leaves NULL out, and is NULL over no row.
+        const sum = (expr: Expr) => rows.map(row => evaluate(expr, row, params, now)).filter(value => value !== null).reduce<number | null>((total, value) => (total ?? 0) + Number(value), null);
+        return { rows: [selections.map(selection => "count" in selection ? rows.length : "sum" in selection ? sum(selection.sum) : null)], rowCount: 1 };
       }
       const project = (row: Row) => selections.map(selection => evaluate((selection as { expr: Expr }).expr, row, params, now));
       // DISTINCT before the page: each combination of the values selected once.
