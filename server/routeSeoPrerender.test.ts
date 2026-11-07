@@ -98,6 +98,17 @@ describe("pré-rendu SEO des routes publiques pour Vercel", () => {
     );
   });
 
+  it("n’émet ni meta keywords ni meta language, ignorées par Google (SEOP-05)", () => {
+    const pages = buildPrerenderedPages(readProjectFile("client/index.html"));
+
+    expect(pages.length).toBeGreaterThan(10);
+    for (const page of pages) {
+      expect(page.html, page.file).not.toMatch(/<meta name="(?:keywords|language)"/);
+      // La langue reste déclarée par l'attribut standard.
+      expect(page.html, page.file).toContain('<html lang="fr">');
+    }
+  });
+
   it("ne pré-rend aucun parcours privé ou dynamique, laissé à la page de repli", () => {
     const routes = getPrerenderRoutes();
     for (const path of ["/booking/confirmation", "/admin", "/candidate/access", "/candidate/portal", "/candidate/verify", "/404"]) {

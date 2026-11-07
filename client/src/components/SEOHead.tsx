@@ -6,7 +6,6 @@ import { resolveClientSeo } from "@shared/routeMetadata";
 interface SEOHeadProps {
   title: string;
   description: string;
-  keywords?: string;
   ogImage?: string;
   ogUrl?: string;
   twitterHandle?: string;
@@ -25,7 +24,6 @@ interface SEOHeadProps {
 export function SEOHead({
   title,
   description,
-  keywords,
   ogImage,
   ogUrl,
   // Aucun compte X/Twitter officiel n'est connu : twitter:site et
@@ -38,7 +36,7 @@ export function SEOHead({
   const { language } = useLanguage();
 
   useEffect(() => {
-    const seo = resolveClientSeo(location, language, { title, description, keywords, ogImage, ogUrl, noIndex });
+    const seo = resolveClientSeo(location, language, { title, description, ogImage, ogUrl, noIndex });
 
     // Update title
     document.title = seo.title;
@@ -64,9 +62,6 @@ export function SEOHead({
 
     // Standard meta tags
     updateMeta("description", seo.description);
-    if (seo.keywords) {
-      updateMeta("keywords", seo.keywords);
-    }
     updateMeta("robots", seo.robots);
 
     // Open Graph tags
@@ -123,7 +118,7 @@ export function SEOHead({
     } else if (script) {
       script.remove();
     }
-  }, [location, language, title, description, keywords, ogImage, ogUrl, twitterHandle, structuredData, noIndex]);
+  }, [location, language, title, description, ogImage, ogUrl, twitterHandle, structuredData, noIndex]);
 
   return null;
 }

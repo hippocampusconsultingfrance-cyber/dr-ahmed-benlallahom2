@@ -38,7 +38,6 @@ export default function Home() {
       <SEOHead
         title="Dr. Ahmed Ben Lallahom | Anesthésie et Santé"
         description="Anesthésiste-réanimateur et entrepreneur en santé basé en France. Excellence clinique et vision stratégique pour l'innovation en santé."
-        keywords="anesthésiste, réanimateur, entrepreneur santé, consultant médical, France, excellence clinique, formation, services"
         ogUrl="https://drahmedbenlallahom.com"
       />
       <Navigation />
