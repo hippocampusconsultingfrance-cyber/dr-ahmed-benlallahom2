@@ -51,7 +51,7 @@ vi.mock("./_core/notification", () => ({
 }));
 vi.mock("./storage", () => ({ storageGetSignedUrl: vi.fn(async (key: string) => `https://blob.test/${key}`) }));
 
-const { deleteCvCopiesFromGoogleDrive, encryptGoogleDriveRefreshToken, googleDriveExportStatus, processDueCvGoogleDriveExports, requeueGoogleDriveExportsAfterReconnection, saveGoogleDriveConnection } = await import("./googleDriveExport");
+const { deleteCvCopiesFromGoogleDrive, encryptGoogleDriveRefreshToken, googleDriveExportStatus, processDueCvGoogleDriveExports, recoverStaleCvGoogleDriveExportJobs, requeueGoogleDriveExportsAfterReconnection, saveGoogleDriveConnection } = await import("./googleDriveExport");
 const { appRouter } = await import("./routers");
 
 let memory: MemoryPg;
@@ -415,5 +415,18 @@ describe("copie Drive remise en file à la main en SQL (EXPL-17)", () => {
     expect(first.processed + second.processed).toBe(1);
     expect(state.uploads).toEqual(["CVDRIVE00000001"]);
     expect(copyOf(requeued)).toMatchObject({ status: "completed", attempts: 3 });
+  });
+
+  it("remise en file sans ses tentatives : de nouveau « échouée » avec la cause de son dernier échec, pas comme un passage interrompu, puis « Relancer la copie » la copie", async () => {
+    seedConnection();
+    const requeued = seedCopy(1, { status: "queued", attempts: 5, last_error: "google_drive_upload_500", scheduled_for: new Date(Date.now() - 60_000) });
+
+    await expect(recoverStaleCvGoogleDriveExportJobs()).resolves.toEqual({ recovered: 0, exhausted: 1 });
+    expect(copyOf(requeued)).toMatchObject({ status: "failed", attempts: 5, last_error: "google_drive_upload_500" });
+    expect(state.uploads).toEqual([]);
+
+    await admin().admin.recruitment.driveExport.retry({ id: requeued });
+    expect(state.uploads).toEqual(["CVDRIVE00000001"]);
+    expect(copyOf(requeued)).toMatchObject({ status: "completed" });
   });
 });
