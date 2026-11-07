@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { INVALID_CHARACTERS_REASON } from "./publicFormRefusalReasons";
-import { cleanTextInput } from "./textInputCleaning";
+import { cleanTextInput, EMAIL_INVISIBLE_CHARACTER } from "./textInputCleaning";
 
 /**
  * INTL-05: the text a public form takes, on one line (names, phones,
@@ -36,9 +36,6 @@ export { cleanTextInput };
 // Written as escapes: none of these characters appears as such in the source.
 const SINGLE_LINE_REFUSED = new RegExp("[\\u0000-\\u001F\\u007F-\\u009F\\u2028\\u2029\\u202D\\u202E]");
 const MULTI_LINE_REFUSED = new RegExp("[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F-\\u009F\\u202D\\u202E]");
-// An address holds no invisible character at all: the controls, the zero-width characters, the
-// direction marks, embeddings, overrides and isolates, the word joiner and the byte order mark.
-const EMAIL_REFUSED = new RegExp("[\\u0000-\\u001F\\u007F-\\u009F\\u200B-\\u200F\\u2028-\\u202E\\u2060-\\u2069\\uFEFF]");
 
 function textInput(refused: RegExp, schema: z.ZodString) {
   return z.string()
@@ -68,7 +65,8 @@ export function multiLineText(schema: z.ZodString = z.string()) {
  * to type again rather than an address said invalid that looks complete.
  */
 export function emailText(schema: z.ZodString) {
-  return textInput(EMAIL_REFUSED, schema);
+  // An address holds no invisible character at all (EMAIL_INVISIBLE_CHARACTER, which the booking page checks too).
+  return textInput(EMAIL_INVISIBLE_CHARACTER, schema);
 }
 
 /** Whether a validation error (a ZodError) refuses a field for its characters. */
