@@ -121,6 +121,41 @@ describe("langues du recrutement comparées par code (IA-02)", () => {
     }
   });
 
+  it("lit une langue absente de la table à côté d’un tiret comme une langue, pas comme un niveau, et un tiret collé d’un côté comme un séparateur (IA-02)", () => {
+    // Before: « Serbo-croate – Anglais » was English alone, met by an English speaker.
+    for (const [required, texts] of [
+      ["Serbo-croate – Anglais", ["Serbo-croate", "Anglais"]],
+      ["Wolof – Anglais", ["Wolof", "Anglais"]],
+      ["Anglais – Wolof", ["Anglais", "Wolof"]],
+      ["Anglais - Wolof courant", ["Anglais", "Wolof courant"]],
+      ["Berbère - Arabe - courant", ["Berbère", "Arabe - courant"]],
+      // Levels, a language test or a level with its digits stay with their language.
+      ["Anglais - IELTS 7.5", ["Anglais - IELTS 7.5"]],
+      ["Anglais – très bon niveau", ["Anglais – très bon niveau"]],
+      ["Englisch - fließend", ["Englisch - fließend"]],
+      ["Anglais - mother tongue - Arabe", ["Anglais - mother tongue", "Arabe"]],
+      ["英语 - 流利", ["英语 - 流利"]],
+      ["Arabe littéraire – dialecte du Golfe", ["Arabe littéraire – dialecte du Golfe"]],
+      // A dash with a space on one side only, or a full width or small em dash.
+      ["Anglais- Arabe", ["Anglais", "Arabe"]],
+      ["Anglais -Arabe", ["Anglais", "Arabe"]],
+      [`Anglais ${String.fromCodePoint(0xff0d)} Arabe`, ["Anglais", "Arabe"]],
+      [`Anglais${String.fromCodePoint(0xfe58)}Arabe`, ["Anglais", "Arabe"]],
+      [`Anglais ${String.fromCodePoint(0x2e3a)} Arabe`, ["Anglais", "Arabe"]],
+      ["Anglais- courant", ["Anglais- courant"]],
+      ["serbo-croate", ["serbo-croate"]],
+    ] as const) {
+      expect(recruitmentLanguageRequirements(required).map(requirement => requirement.text), required).toEqual(texts);
+    }
+    // As with « / »: a candidate who speaks English only meets one requirement of the two.
+    for (const required of ["Serbo-croate – Anglais", "Wolof – Anglais", "Anglais – Wolof", "Serbo-croate / Anglais", "Anglais- Arabe"]) {
+      expect(recruitmentLanguageRequirements(required).map(requirement => meetsRequiredLanguage(["English"], requirement)).sort(), required).toEqual([false, true]);
+    }
+    const [wolof] = recruitmentLanguageRequirements("Wolof – Anglais");
+    expect(wolof).toEqual({ text: "Wolof", codes: [], anyOf: [] });
+    expect(meetsRequiredLanguage(["Wolof (courant)"], wolof!)).toBe(true);
+  });
+
   it("lit une exigence qui laisse le choix comme une seule, tenue par l’une de ses langues (IA-02)", () => {
     const choices: Array<[string, string[], string[]]> = [
       ["Anglais ou arabe", ["en", "ar"], ["Anglais", "arabe"]], ["English or Arabic", ["en", "ar"], ["English", "Arabic"]],

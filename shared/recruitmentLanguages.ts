@@ -195,13 +195,16 @@ export type RecruitmentLanguageRequirement = { text: string; codes: readonly Rec
  */
 const REQUIREMENT_SEPARATOR = new RegExp("[,;/+&|\\n、，；／＋＆]|\\s(?:et|and|und|y|e)\\s", "giu");
 /** A conjunction between two Chinese names (« 英语和阿拉伯语 »), that may also be a character of one (埃及, Egypt, in « 埃及阿拉伯语 »). */
-const CHINESE_CONJUNCTION = new RegExp("[和及与與]", "gu");
+const CHINESE_CONJUNCTION_CHARACTERS = "和及与與";
+const CHINESE_CONJUNCTION = new RegExp(`[${CHINESE_CONJUNCTION_CHARACTERS}]`, "gu");
 /**
  * A dash between two names (« Anglais - Arabe », « Anglais – Arabe »), that
  * may also introduce a level (« Anglais - courant »): a hyphen or minus sign
- * between spaces, an en or em dash. Not a hyphen within a word (« serbo-croate »).
+ * with a space on at least one side (« Anglais- Arabe », « Anglais -Arabe »),
+ * an en, em or two-em dash, a full width or small em dash. Not a hyphen
+ * within a word (« serbo-croate »).
  */
-const DASH = new RegExp("\\s[-\u2010\u2011\u2212]+\\s|[\u2012-\u2015]", "gu");
+const DASH = new RegExp("\\s[-\u2010\u2011\u2212\ufe63]+\\s?|[-\u2010\u2011\u2212\ufe63]+\\s|[\u2012-\u2015\u2e3a\u2e3b\ufe58\uff0d]+", "gu");
 /** What separates two languages only when each side names one. */
 const BETWEEN_NAMES = new RegExp(`${CHINESE_CONJUNCTION.source}|${DASH.source}`, "gu");
 /** What makes a required text an alternative: « ou », « or », « oder », « o », « et/ou », « and/or », « 或 ». */
@@ -215,23 +218,72 @@ const OPTION_CONNECTOR = new RegExp("^(?:et|and|und|y|e|ou|or|oder|o)\\s+|\\s+(?
 const READ_REQUIREMENTS = new Map<string, readonly RecruitmentLanguageRequirement[]>();
 
 /**
+ * Words that say a level, not a language (IA-02): « courant », « langue
+ * maternelle », « notions », « fluent », « fließend », « 流利 »…, the names of
+ * language tests (IELTS, TOEFL, OET…), the small words between them, and any
+ * word with a digit (« C1 », « 7,5 »).
+ */
+const LEVEL_WORDS = new Set([
+  "courant", "courante", "couramment", "natif", "native", "langue", "maternelle", "maternel", "bilingue", "notion", "notions", "debutant", "debutante",
+  "intermediaire", "avance", "avancee", "scolaire", "professionnel", "professionnelle", "lu", "ecrit", "ecrite", "parle", "parlee", "bon", "bonne", "tres",
+  "excellent", "excellente", "niveau", "base", "bases", "maitrise", "operationnel", "operationnelle", "conversationnel", "technique", "medical", "medicale",
+  "oral", "orale", "de", "d", "du", "des", "la", "le", "les", "en", "a", "au",
+  "fluent", "fluently", "fluency", "mother", "tongue", "bilingual", "basic", "basics", "beginner", "elementary", "intermediate", "advanced", "proficient",
+  "proficiency", "working", "professional", "business", "conversational", "good", "very", "level", "limited", "full", "written", "spoken", "reading", "the", "of", "an",
+  "fliessend", "muttersprache", "muttersprachlich", "grundkenntnisse", "kenntnisse", "gut", "gute", "sehr", "verhandlungssicher", "fortgeschritten",
+  "anfanger", "mittel", "mittelstufe", "fachsprache", "nativo", "nativa", "fluido", "fluida", "materna",
+  "ielts", "toefl", "toeic", "oet", "delf", "dalf", "tcf", "tef", "goethe", "telc", "testdaf", "hsk", "cambridge", "cefr", "cecrl",
+].map(foldLanguageText));
+const UNSPACED_LEVEL_WORDS = ["流利", "母语", "母語", "熟练", "熟練", "精通", "基础", "基礎", "一般", "良好", "初级", "初級", "中级", "中級", "高级", "高級", "口语", "口語", "书面", "書面", "日常", "水平"];
+const NOT_A_WORD = new RegExp("[^\\p{L}\\p{N}]+", "u");
+const DIGIT = new RegExp("\\p{N}", "u");
+
+/** Words that start a variety of the language before them (« Arabe – dialecte du Golfe »), not another language. */
+const VARIETY_WORDS = new Set(["dialecte", "dialect", "dialekt", "accent", "variante", "variant"]);
+
+/**
+ * Whether a part names a level and nothing else: each of its words, or what
+ * it writes without spaces, a level word above; or a variety of the language
+ * before it.
+ */
+function namesOnlyLevel(text: string) {
+  const folded = UNSPACED_LEVEL_WORDS.reduce((current, word) => current.replaceAll(word, " "), foldLanguageText(text));
+  const words = folded.split(NOT_A_WORD).filter(Boolean);
+  return VARIETY_WORDS.has(words[0] ?? "") || words.every(word => DIGIT.test(word) || LEVEL_WORDS.has(word));
+}
+
+/**
  * The parts of a text at a Chinese conjunction or a dash, each that names a
- * language with the parts after it that name none (a level: « Anglais - C1
- * - Arabe » is « Anglais - C1 » and « Arabe »), and the parts before the
- * first one that names one with it (埃 in 埃及阿拉伯语, Egyptian Arabic).
+ * language with the parts after it that name a level (« Anglais - C1 -
+ * Arabe » is « Anglais - C1 » and « Arabe »), and the parts before the first
+ * one that names one with it (埃 in 埃及阿拉伯语, Egyptian Arabic). Between
+ * dashes, a part that names neither a language of the table nor a level is a
+ * language of its own, required by its words as with « / »: « Wolof –
+ * Anglais » and « Serbo-croate – Anglais » are two, not English at a level.
  */
 function partsBetweenNames(text: string) {
-  const groups: Array<{ start: number; end: number; names: boolean }> = [];
-  let cursor = 0;
-  for (const part of partsOutsideBrackets(text, BETWEEN_NAMES)) {
-    const start = text.indexOf(part, cursor);
-    cursor = start + part.length;
-    const names = recruitmentLanguageCodes(part).length > 0;
-    const last = groups.at(-1);
-    if (last && (!names || !last.names)) Object.assign(last, { end: cursor, names: names || last.names });
-    else groups.push({ start, end: cursor, names });
+  const outside = blankBrackets(text);
+  const parts: Array<{ start: number; end: number; dashes: boolean }> = [];
+  let start = 0;
+  let dashBefore = true;
+  BETWEEN_NAMES.lastIndex = 0;
+  for (let found = BETWEEN_NAMES.exec(outside); ; found = BETWEEN_NAMES.exec(outside)) {
+    const dashAfter = !found || !CHINESE_CONJUNCTION_CHARACTERS.includes(found[0]);
+    parts.push({ start, end: found ? found.index : text.length, dashes: dashBefore && dashAfter });
+    if (!found) break;
+    start = found.index + found[0].length;
+    dashBefore = dashAfter;
   }
-  return groups.map(({ start, end }) => text.slice(start, end));
+  const groups: Array<{ start: number; end: number; names: boolean }> = [];
+  for (const part of parts) {
+    const written = text.slice(part.start, part.end);
+    if (!LETTER_OR_DIGIT.test(written)) continue;
+    const names = recruitmentLanguageCodes(written).length > 0 || (part.dashes && !namesOnlyLevel(written));
+    const last = groups.at(-1);
+    if (last && (!names || !last.names)) Object.assign(last, { end: part.end, names: names || last.names });
+    else groups.push({ start: part.start, end: part.end, names });
+  }
+  return groups.map(({ start, end }) => text.slice(start, end).trim());
 }
 
 /** The parts of a text between the separators found outside its brackets, each trimmed, those with a letter or a digit. */
