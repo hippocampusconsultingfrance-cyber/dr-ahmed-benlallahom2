@@ -7,6 +7,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { COOKIE_CONSENT_STORAGE_KEY, createCookieConsent } from "@/components/cookieConsentState";
 import { contentDe } from "@/data/content-de";
 import { contentFr } from "@/data/content-fr";
+import { homeSeo } from "@/pages/Home";
+import { STATIC_ROUTE_METADATA } from "@shared/routeMetadata";
 
 /**
  * Pages publiques dans un vrai navigateur : le client est servi par Vite et tRPC répond par des
@@ -71,16 +73,26 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
 
   /**
    * Sans consentement enregistré (par défaut), le bandeau cookies est ouvert en bas de l'écran. Avec
-   * language: null, aucune langue n'est mémorisée, pour un navigateur réglé sur `locale`.
+   * language: null, aucune langue n'est mémorisée, pour un navigateur réglé sur `locale`. Avec
+   * blockedStorage, le navigateur refuse tout stockage au site, comme Chromium quand ses données sont
+   * bloquées : lire localStorage ou sessionStorage lève une SecurityError. Les erreurs de la page sont
+   * ajoutées à `pageErrors`.
    */
-  async function open(route: string, { width = 1440, height = 800, theme = "dark" as Theme, touch = false, consent = false, language = "fr" as string | null, locale = "en-US", turnstileToken = null as string | null } = {}) {
+  async function open(route: string, { width = 1440, height = 800, theme = "dark" as Theme, touch = false, consent = false, language = "fr" as string | null, locale = "en-US", turnstileToken = null as string | null, blockedStorage = false, pageErrors = [] as string[] } = {}) {
     const context = await browser.newContext({ viewport: { width, height }, isMobile: touch, hasTouch: touch, locale });
-    await context.addInitScript(({ storedLanguage, storedTheme, storedConsent }) => {
+    await context.addInitScript(({ storedLanguage, storedTheme, storedConsent, blocked }) => {
+      if (blocked) {
+        for (const name of ["localStorage", "sessionStorage"]) {
+          Object.defineProperty(window, name, { configurable: true, get: () => { throw new DOMException(`Failed to read the '${name}' property from 'Window': Access is denied for this document.`, "SecurityError"); } });
+        }
+        return;
+      }
       if (storedLanguage) localStorage.setItem("language", storedLanguage);
       localStorage.setItem("theme", storedTheme);
       if (storedConsent) localStorage.setItem(storedConsent.key, storedConsent.value);
-    }, { storedLanguage: language, storedTheme: theme, storedConsent: consent ? { key: COOKIE_CONSENT_STORAGE_KEY, value: JSON.stringify(createCookieConsent(false)) } : null });
+    }, { storedLanguage: language, storedTheme: theme, storedConsent: consent ? { key: COOKIE_CONSENT_STORAGE_KEY, value: JSON.stringify(createCookieConsent(false)) } : null, blocked: blockedStorage });
     const page = await context.newPage();
+    page.on("pageerror", (error) => pageErrors.push(error.message));
     await page.route("**/api/trpc/**", (request) => {
       const procedures = new URL(request.request().url()).pathname.replace(/^.*\/api\/trpc\//, "").split(",");
       return request.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(procedures.map(() => ({ result: { data: superjson.serialize(null) } }))) });
@@ -527,6 +539,55 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
     await home.context().close();
   }, 120_000);
 
+  it("garde l'accueil et la confirmation de réservation dans l'écran en allemand, en anglais et en chinois, de 320 px (PUB-17, PUB-19)", async () => {
+    for (const language of ["de", "en", "zh"]) {
+      for (const width of [320, 360]) {
+        for (const route of ["/", "/booking/confirmation?status=success&trackingId=VISUAL-TEST-2026"]) {
+          const page = await open(route, { width, height: 844, consent: true, language });
+          // Revealed sections only: one not yet shown is shifted (.fade-in-up).
+          await page.evaluate(() => document.querySelectorAll(".fade-in-up").forEach((section) => section.classList.add("visible")));
+          await page.evaluate(revealSettled);
+          const layout = await page.evaluate(() => {
+            const outside = (element: Element, frame: Element | null) => frame !== null && element.getBoundingClientRect().right > frame.getBoundingClientRect().right + 0.5;
+            return {
+              pageWidth: document.documentElement.scrollWidth,
+              // « Gesundheitsunternehmen » in its column of the home page, « Datenschutzerklärung » in its card.
+              outOfCard: [
+                ...[...document.querySelectorAll(".stat-card p")].filter((label) => outside(label, label.closest(".stat-card"))),
+                ...[...document.querySelectorAll(".privacy-trust-card a, .privacy-trust-card p")].filter((text) => outside(text, text.closest(".privacy-trust-card"))),
+              ].map((element) => element.textContent),
+            };
+          });
+          expect(layout, `${route} en ${language} à ${width} px`).toEqual({ pageWidth: width, outOfCard: [] });
+          await page.context().close();
+        }
+      }
+    }
+  }, 180_000);
+
+  it("donne à l'accueil passé en anglais son titre, sa description et og:locale anglais, et rend en français ceux de la page pré-rendue (EN-10)", async () => {
+    const page = await open("/", { consent: true });
+    const head = () => page.evaluate(() => ({
+      lang: document.documentElement.lang,
+      title: document.title,
+      description: document.querySelector<HTMLMetaElement>('meta[name="description"]')?.content,
+      ogLocale: document.querySelector<HTMLMetaElement>('meta[property="og:locale"]')?.content,
+    }));
+    const french = await head();
+    expect(french).toMatchObject({ lang: "fr", title: STATIC_ROUTE_METADATA["/"].title, description: STATIC_ROUTE_METADATA["/"].description, ogLocale: "fr_FR" });
+
+    await page.getByRole("button", { name: "FR — Changer de langue" }).click();
+    await page.getByRole("menuitem", { name: "English" }).click();
+    await page.waitForFunction(() => document.documentElement.lang === "en");
+    expect(await head()).toEqual({ lang: "en", title: homeSeo.en.title, description: homeSeo.en.description, ogLocale: "en_GB" });
+
+    await page.getByRole("button", { name: "EN — Change language" }).click();
+    await page.getByRole("menuitem", { name: "Français" }).click();
+    await page.waitForFunction(() => document.documentElement.lang === "fr");
+    expect(await head()).toEqual(french);
+    await page.context().close();
+  }, 60_000);
+
   it("propose l'anglais à un navigateur sans français, sans changer la page tant que le visiteur ne choisit pas (EN-08)", async () => {
     for (const width of [320, 360, 1440]) {
       const page = await open("/", { width, language: null, locale: "en-US", consent: true });
@@ -572,6 +633,27 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
     expect(await page.getByRole("button", { name: "EN — Change language" }).count()).toBe(1);
     await page.context().close();
   }, 60_000);
+
+  it("affiche l'accueil et le formulaire de candidature quand le navigateur refuse tout stockage au site (REC-22)", async () => {
+    for (const route of ["/", "/recruitment/standard"]) {
+      const pageErrors: string[] = [];
+      const page = await open(route, { width: 390, height: 844, blockedStorage: true, pageErrors });
+      expect(await page.evaluate(() => { try { return typeof localStorage; } catch (error) { return (error as DOMException).name; } }), route).toBe("SecurityError");
+      // Language and theme by default, no choice read: the cookie banner asks, and closes once answered.
+      expect(await page.evaluate(() => ({ lang: document.documentElement.lang, dark: document.documentElement.classList.contains("dark") })), route).toEqual({ lang: "fr", dark: true });
+      await page.getByRole("button", { name: "Essentiels uniquement" }).click();
+      await page.locator(".cookie-consent-banner").waitFor({ state: "detached" });
+      if (route === "/recruitment/standard") {
+        await page.locator("#recruitment-firstName").fill("Ahmed");
+        await page.getByRole("button", { name: "FR — Changer de langue" }).click();
+        await page.getByRole("menuitem", { name: "English" }).click();
+        await page.waitForFunction(() => document.documentElement.lang === "en");
+        expect(await page.locator("#recruitment-firstName").inputValue()).toBe("Ahmed");
+      }
+      expect(pageErrors, route).toEqual([]);
+      await page.context().close();
+    }
+  }, 120_000);
 
   it("laisse atteindre au clavier la dernière entrée du menu mobile sur un écran peu haut, bandeau cookies fermé ou ouvert", async () => {
     // L'en-tête étant vraiment fixe (PUB-01), le menu doit défiler lui-même : sous 640 px, thème,

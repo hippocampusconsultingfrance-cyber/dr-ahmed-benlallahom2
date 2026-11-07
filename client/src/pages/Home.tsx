@@ -12,11 +12,27 @@ import MedicalQuestionsTeaser from "@/components/MedicalQuestionsTeaser";
 import Footer from "@/components/Footer";
 import { useScrollReveal } from "@/hooks/useScrollReveal";
 import { SEOHead } from "@/components/SEOHead";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { scrollToSectionTop } from "@/lib/scrollToSection";
+import { STATIC_ROUTE_METADATA } from "@shared/routeMetadata";
 import { useEffect } from "react";
+
+/**
+ * Title and description of the home page in the language shown (EN-10): in French, those of the
+ * prerendered page (shared/routeMetadata.ts), which SEOHead keeps; in the other languages, their
+ * translation, applied when the visitor switches language without reloading.
+ */
+export const homeSeo = {
+  fr: STATIC_ROUTE_METADATA["/"],
+  en: { title: "Dr. Ahmed Ben Lallahom | Medicine and Consulting", description: "Anesthesiologist-intensivist, healthcare entrepreneur and medical consultant based in France." },
+  de: { title: "Dr. Ahmed Ben Lallahom | Medizin und Beratung", description: "Anästhesist und Intensivmediziner, Unternehmer im Gesundheitswesen und medizinischer Berater mit Sitz in Frankreich." },
+  zh: { title: "Dr. Ahmed Ben Lallahom | 医学与咨询", description: "常驻法国的麻醉学家和重症医学专家、医疗保健企业家及医学顾问。" },
+} as const;
 
 export default function Home() {
   const revealRef = useScrollReveal();
+  const { language } = useLanguage();
+  const seo = homeSeo[language] ?? homeSeo.fr;
 
   useEffect(() => {
     const scrollToHashTarget = () => {
@@ -35,11 +51,7 @@ export default function Home() {
 
   return (
     <div ref={revealRef} className="min-h-screen bg-background">
-      <SEOHead
-        title="Dr. Ahmed Ben Lallahom | Anesthésie et Santé"
-        description="Anesthésiste-réanimateur et entrepreneur en santé basé en France. Excellence clinique et vision stratégique pour l'innovation en santé."
-        ogUrl="https://drahmedbenlallahom.com"
-      />
+      <SEOHead title={seo.title} description={seo.description} ogUrl="https://drahmedbenlallahom.com" />
       <Navigation />
       <main>
         <HeroSection />

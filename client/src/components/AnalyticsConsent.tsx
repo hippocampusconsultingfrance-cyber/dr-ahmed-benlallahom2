@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { isPrivateAreaPath } from "@/lib/privateAreaRoutes";
+import { readStoredPreference } from "@/lib/browserStorage";
 import { COOKIE_CONSENT_STORAGE_KEY } from "./cookieConsentState";
 import { COOKIE_CONSENT_CHANGE_EVENT, shouldLoadAnalytics } from "./analyticsConsentLogic";
 
@@ -19,7 +20,8 @@ function syncAnalyticsScript(privateArea: boolean) {
     return;
   }
 
-  const permitted = shouldLoadAnalytics(localStorage.getItem(COOKIE_CONSENT_STORAGE_KEY));
+  // Choix illisible (stockage refusé par le navigateur) : pas de mesure.
+  const permitted = shouldLoadAnalytics(readStoredPreference(COOKIE_CONSENT_STORAGE_KEY));
   const endpoint = import.meta.env.VITE_ANALYTICS_ENDPOINT?.replace(/\/$/, "");
   const websiteId = import.meta.env.VITE_ANALYTICS_WEBSITE_ID;
 

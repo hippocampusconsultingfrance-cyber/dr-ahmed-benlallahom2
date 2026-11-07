@@ -1,5 +1,6 @@
 import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { isAcceptedRecruitmentCvFile, RECRUITMENT_CV_ACCEPT_ATTRIBUTE, RECRUITMENT_CV_MAX_BYTES } from "@shared/recruitmentCvLimits";
+import { cleanTextInput } from "@shared/textInputCleaning";
 import { CheckCircle2, Clock3, FileUp, Globe2, Loader2, Search, ShieldCheck, UserCheck, UsersRound, X } from "lucide-react";
 import { Link } from "wouter";
 import { SEOHead } from "@/components/SEOHead";
@@ -406,7 +407,11 @@ export default function RecruitmentPage() {
     closeDiplomaCountryList();
   };
 
-  /** Up/Down move the active option (opening the list), Enter picks it, Escape closes the list (A11Y-11). */
+  /**
+   * Up/Down move the active option (opening the list), Enter picks it, Escape closes the list (A11Y-11).
+   * The list closed, Escape does nothing: Chromium would empty the search field while the country
+   * chosen stays in the form, its note and the draft.
+   */
   const handleDiplomaCountryKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
@@ -415,9 +420,9 @@ export default function RecruitmentPage() {
     } else if (event.key === "Enter" && activeDiplomaCountry) {
       event.preventDefault();
       chooseDiplomaCountry(activeDiplomaCountry);
-    } else if (event.key === "Escape" && diplomaCountryOpen) {
+    } else if (event.key === "Escape") {
       event.preventDefault();
-      closeDiplomaCountryList();
+      if (diplomaCountryOpen) closeDiplomaCountryList();
     }
   };
 
@@ -530,7 +535,7 @@ export default function RecruitmentPage() {
                     {[{ key: "firstName" as const, label: t.firstName }, { key: "lastName" as const, label: t.lastName }].map(field => <label key={field.key} className="recruitment-field-group"><span>{field.label} *</span><input id={`recruitment-${field.key}`} required value={form[field.key]} aria-invalid={isInvalid(field.key)} onChange={event => update(field.key, event.target.value)} className={`recruitment-field ${isInvalid(field.key) ? "form-field-invalid" : ""}`} autoComplete={field.key === "firstName" ? "given-name" : "family-name"} /></label>)}
                   </div>
                   <div className="grid gap-5 sm:grid-cols-2">
-                    <label className="recruitment-field-group"><span>{lang === "fr" ? "Email" : t.email} *</span><input id="recruitment-email" type="email" required value={form.email} aria-invalid={isInvalid("email")} onChange={event => update("email", event.target.value)} className={`recruitment-field ${isInvalid("email") ? "form-field-invalid" : ""}`} autoComplete="email" /></label>
+                    <label className="recruitment-field-group"><span>{lang === "fr" ? "Email" : t.email} *</span><input id="recruitment-email" type="email" required value={form.email} aria-invalid={isInvalid("email")} onChange={event => update("email", cleanTextInput(event.target.value))} className={`recruitment-field ${isInvalid("email") ? "form-field-invalid" : ""}`} autoComplete="email" /></label>
                     <label className="recruitment-field-group"><span>{t.phone}</span><input id="recruitment-phone" type="tel" value={form.phone} onChange={event => update("phone", event.target.value)} className="recruitment-field" autoComplete="tel" /></label>
                   </div>
                   <div className="grid gap-5 sm:grid-cols-2">
@@ -625,8 +630,9 @@ export default function RecruitmentPage() {
                     </div>
                     {form.diplomaCountry && <p className="text-xs font-medium text-primary">{diplomaCopy.label} : {form.diplomaCountry}</p>}
                     {diplomaCountryListShown && (
-                      // Options hors de l’ordre de tabulation ; mousedown annulé pour garder le focus dans le champ.
-                      <ul id="recruitment-diploma-country-options" role="listbox" aria-label={diplomaCopy.label} className="recruitment-country-options" onMouseDown={event => event.preventDefault()}>
+                      // Liste et options hors de l’ordre de tabulation : défilante, la liste serait sinon un arrêt
+                      // de Tab où flèches et Entrée ne font rien ; mousedown annulé pour garder le focus dans le champ.
+                      <ul id="recruitment-diploma-country-options" role="listbox" tabIndex={-1} aria-label={diplomaCopy.label} className="recruitment-country-options" onMouseDown={event => event.preventDefault()}>
                         {filteredDiplomaCountries.map((country, index) => (
                           <li key={country.code} id={diplomaCountryOptionId(country.code)} role="option" aria-selected={index === diplomaCountryActiveIndex} className="recruitment-country-option cursor-pointer" onClick={() => chooseDiplomaCountry(country)}>
                             <span>{country.label}</span><span className="text-xs text-muted-foreground">{country.code}</span>

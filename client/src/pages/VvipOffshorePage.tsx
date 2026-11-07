@@ -1,5 +1,6 @@
 import { FormEvent, useMemo, useRef, useState } from "react";
 import { isAcceptedRecruitmentCvFile, RECRUITMENT_CV_ACCEPT_ATTRIBUTE } from "@shared/recruitmentCvLimits";
+import { cleanTextInput } from "@shared/textInputCleaning";
 import { CheckCircle2, Clock3, FileUp, Globe2, Loader2, ShieldCheck, UserCheck, Zap, Award, Compass, Lock } from "lucide-react";
 import { Link } from "wouter";
 import { SEOHead } from "@/components/SEOHead";
@@ -645,7 +646,7 @@ export default function VvipOffshorePage() {
                     <div className="grid gap-4 @xl:grid-cols-2">
                       <label className="block w-full space-y-1.5 text-sm text-foreground">
                         <span className="block font-medium">{t.email} *</span>
-                        <input id="vvip-email" type="email" required value={form.email} aria-invalid={isInvalid("email")} onChange={(e) => update("email", e.target.value)} className={`form-control block w-full ${isInvalid("email") ? "form-field-invalid" : ""}`} autoComplete="email" />
+                        <input id="vvip-email" type="email" required value={form.email} aria-invalid={isInvalid("email")} onChange={(e) => update("email", cleanTextInput(e.target.value))} className={`form-control block w-full ${isInvalid("email") ? "form-field-invalid" : ""}`} autoComplete="email" />
                       </label>
                       <label className="block w-full space-y-1.5 text-sm text-foreground">
                         <span className="block font-medium">{t.phone}</span>

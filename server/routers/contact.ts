@@ -9,7 +9,7 @@ import { enforcePublicFormRateLimit, verifyPublicFormTurnstile, enforcePublicFor
 import { sendPublicFormAcknowledgement } from "../publicFormAcknowledgements";
 import { SITE_LANGUAGES } from "../emailLanguage";
 import { CONTACT_CATEGORIES, type ContactCategory } from "../../shared/contactCategories";
-import { multiLineText, singleLineText } from "../../shared/textInput";
+import { emailText, multiLineText, singleLineText } from "../../shared/textInput";
 import { adminLink } from "../adminLinks";
 
 /** Who wrote, as the owner's notification names it (PUB-22). */
@@ -26,7 +26,7 @@ export const contactRouter = router({
       z.object({
         // INTL-05 : sans caractère de contrôle ni inversion du sens du texte.
         name: singleLineText(z.string().min(1, "Le nom est requis").max(255)),
-        email: z.string().email("Email invalide").max(320),
+        email: emailText(z.string().email("Email invalide").max(320)),
         phone: singleLineText(z.string().max(50)).optional(),
         message: multiLineText(z.string().min(1, "Le message est requis").max(5000)),
         gdprConsent: z.number().int().min(0).max(1),

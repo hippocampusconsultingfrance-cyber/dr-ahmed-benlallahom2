@@ -100,7 +100,8 @@ export default function AboutSection() {
               ].map((stat) => (
                 <div key={stat.label} className="stat-card">
                   <AnimatedCounter target={stat.value} />
-                  <p className="text-sm text-muted-foreground mt-2 font-medium">{stat.label}</p>
+                  {/* A long German compound (« Gesundheitsunternehmen ») breaks, hyphenated, inside its column from 320 px. */}
+                  <p className="text-sm text-muted-foreground mt-2 font-medium [overflow-wrap:anywhere] [&:lang(de)]:hyphens-auto">{stat.label}</p>
                 </div>
               ))}
             </div>

@@ -390,12 +390,26 @@ describe.skipIf(!executablePath)("nom du CV choisi dans les formulaires de candi
     expect(await page.getByText(`Country where the diploma was obtained : ${options[1]}`).isVisible()).toBe(true);
     expect(await page.locator("main form [role=alert]").count()).toBe(0);
 
+    // The country chosen, Escape leaves the field as it is: Chromium no longer empties the search
+    // field while the country stays in the note and the form.
+    await page.keyboard.press("Escape");
+    expect(await state()).toMatchObject({ expanded: "false", value: options[1], focused: "recruitment-diploma-country-search" });
+    expect(await page.getByText(`Country where the diploma was obtained : ${options[1]}`).isVisible()).toBe(true);
+
     // From the field, Tab reaches its clear button, then leaves it for the target countries: the list closes.
     await input.fill("Alb");
     await page.keyboard.press("Tab");
     expect(await state()).toMatchObject({ expanded: "true", focused: "Clear the country search" });
     await page.keyboard.press("Tab");
     expect(await state()).toMatchObject({ expanded: "false", focused: "recruitment-target-country-0" });
+    // The whole list, which scrolls, is not a Tab stop of its own either, with or without a search.
+    for (const search of ["", "a"]) {
+      await input.fill(search);
+      expect(await page.locator("#recruitment-diploma-country-options").evaluate((list) => list.scrollHeight > list.clientHeight), `« ${search} »`).toBe(true);
+      await page.keyboard.press("Tab");
+      if (search) await page.keyboard.press("Tab");
+      expect(await state(), `« ${search} »`).toMatchObject({ expanded: "false", focused: "recruitment-target-country-0" });
+    }
 
     // The clear button gives the focus back to the field; a click on an option leaves it there.
     await page.getByRole("button", { name: "Clear the country search" }).click();

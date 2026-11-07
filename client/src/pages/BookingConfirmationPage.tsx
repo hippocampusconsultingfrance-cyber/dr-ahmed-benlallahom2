@@ -511,10 +511,12 @@ export default function BookingConfirmationPage() {
             </ol>
           </div>
           )}
-          <div className="privacy-trust-card">
-            <ShieldCheck className="w-6 h-6 text-primary" aria-hidden="true" />
-            <p className="text-sm text-muted-foreground leading-relaxed">{copy.privacy}</p>
-            <BookingLegalNotice showPurpose={false} className="mt-2" />
+          {/* The links under the text, aligned with it, rather than in a third column that a German link
+              (« Datenschutzerklärung ») pushed out of the card and the page on a phone; the icon keeps its size. */}
+          <div className="privacy-trust-card flex-wrap">
+            <ShieldCheck className="w-6 h-6 shrink-0 text-primary" aria-hidden="true" />
+            <p className="min-w-0 flex-1 text-sm text-muted-foreground leading-relaxed [overflow-wrap:anywhere]">{copy.privacy}</p>
+            <BookingLegalNotice showPurpose={false} className="basis-full pl-[2.35rem] [overflow-wrap:anywhere]" />
           </div>
         </section>
 

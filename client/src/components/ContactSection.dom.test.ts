@@ -172,6 +172,25 @@ describe("formulaire de contact et vérification anti-robot (navigateur simulé)
     ]);
   });
 
+  it("garde une adresse collée sans les marques de direction ni l’espace laissés aux extrémités, et l’envoie ainsi (INTL-05)", async () => {
+    mount();
+    fireEvent.focusIn(field("contact-name"));
+    await waitFor(() => expect(challenges).toHaveLength(1));
+    fireEvent.change(field("contact-name"), { target: { value: "Jeanne Martin" } });
+    // LRM before, RLM and a no-break space after, as a paste from a right-to-left text leaves them.
+    fireEvent.change(field("contact-email"), { target: { value: "‎jeanne@example.test‏ " } });
+    expect(field("contact-email").value).toBe("jeanne@example.test");
+    expect(field("contact-email").checkValidity()).toBe(true);
+    fireEvent.change(field("contact-message"), { target: { value: "Je souhaite organiser une consultation pré-anesthésique." } });
+    fireEvent.click(field("gdprConsent"));
+    challenges[0]!.callback("single-use-token");
+    await waitFor(() => expect(sendButton()).toHaveProperty("disabled", false));
+    fireEvent.click(sendButton());
+
+    expect(await screen.findByText(copy.successTitle)).toBeTruthy();
+    expect(view.submit).toHaveBeenCalledWith(expect.objectContaining({ email: "jeanne@example.test" }));
+  });
+
   it("refuse l’envoi sans consentement, même avec un jeton", async () => {
     mount();
     fireEvent.focusIn(field("contact-name"));

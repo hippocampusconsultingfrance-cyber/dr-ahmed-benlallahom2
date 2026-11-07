@@ -36,7 +36,26 @@ export const PAGE_REDIRECTS: Readonly<Record<string, string>> = {
   "/vvip-offshore": "/recruitment/vvip-offshore",
 };
 
+/**
+ * Address of a page without its trailing slash (vercel.json, "trailingSlash":
+ * false), or null when there is none to drop: the home page, and /api, whose
+ * routes Express answers as they are. Leading slashes and backslashes are
+ * reduced to one slash, so that "//autre.site/" never leaves the site.
+ */
+export function pageAddressWithoutTrailingSlash(path: string): string | null {
+  if (path === "/" || !path.endsWith("/") || path === "/api" || path.startsWith("/api/")) return null;
+  return `/${path.replace(/^[/\\]+/, "").replace(/\/+$/, "")}`;
+}
+
 export function registerPageRedirects(app: Express) {
+  // /booking/ → /booking in 308, query kept, as Vercel does (SEOP-11); an old address straight to its page.
+  app.use((req, res, next) => {
+    const withoutSlash = req.method === "GET" || req.method === "HEAD" ? pageAddressWithoutTrailingSlash(req.path) : null;
+    if (!withoutSlash) return next();
+    const destination = PAGE_REDIRECTS[withoutSlash] ?? withoutSlash;
+    const queryStart = req.originalUrl.indexOf("?");
+    res.redirect(308, queryStart === -1 ? destination : destination + req.originalUrl.slice(queryStart));
+  });
   for (const [source, destination] of Object.entries(PAGE_REDIRECTS)) {
     app.get(source, (req, res) => {
       const queryStart = req.originalUrl.indexOf("?");

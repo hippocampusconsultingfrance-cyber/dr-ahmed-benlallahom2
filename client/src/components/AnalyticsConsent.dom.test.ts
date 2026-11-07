@@ -40,7 +40,8 @@ describe("mesure d'audience selon la route (ADM-16)", () => {
     expect(script()?.dataset.websiteId).toBe("site-test");
   });
 
-  it.each(["/admin", "/admin/", "/candidate/access", "/candidate/portal"])("ne se charge jamais sur %s, même après accord", path => {
+  // wouter affiche aussi l'admin et l'espace candidat sous /ADMIN ou /Candidate/access.
+  it.each(["/admin", "/admin/", "/candidate/access", "/candidate/portal", "/ADMIN", "/Admin", "/Candidate/access"])("ne se charge jamais sur %s, même après accord", path => {
     open(path);
     expect(script()).toBeNull();
     // Un accord donné ou relu pendant la visite n'y change rien.

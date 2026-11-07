@@ -26,6 +26,7 @@ const pages: Array<[string, ComponentType]> = [
 afterEach(() => {
   cleanup();
   localStorage.clear();
+  window.history.replaceState(null, "", "/");
 });
 
 describe("« Gérer les cookies » sur les pages publiques sans pied de page (PUB-12)", () => {
@@ -50,5 +51,22 @@ describe("« Gérer les cookies » sur les pages publiques sans pied de page (PU
     fireEvent.click(within(dialog).getAllByRole("button", { name: copy.close })[0]);
     await waitFor(() => expect(screen.queryByRole("dialog", { name: copy.settings })).toBeNull());
     await waitFor(() => expect(document.activeElement).toBe(manage));
+  });
+});
+
+describe("« Gérer les cookies » absent des 404 des espaces privés (PUB-12, ADM-16)", () => {
+  // CookieConsent n'est pas monté sous /admin et /candidate (App, FloatingWidgets) : le bouton n'y ouvrirait rien.
+  it.each(["/admin/x", "/candidate/xyz", "/ADMIN/x", "/Candidate/xyz"].flatMap((path) => (["fr", "en"] as const).map((language) => [path, language] as const)))("%s (%s) : la 404 n'affiche pas le bouton", (path, language) => {
+    localStorage.setItem("language", language);
+    window.history.replaceState(null, "", path);
+    render(createElement(LanguageProvider, null, createElement(NotFound)));
+    expect(screen.getByRole("heading", { level: 2 })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: cookieCopy[language].manage })).toBeNull();
+  });
+
+  it("le garde sur la 404 d'une adresse publique", () => {
+    window.history.replaceState(null, "", "/does-not-exist");
+    render(createElement(LanguageProvider, null, createElement(NotFound)));
+    expect(screen.getByRole("button", { name: cookieCopy.fr.manage })).toBeTruthy();
   });
 });

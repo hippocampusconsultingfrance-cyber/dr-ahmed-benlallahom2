@@ -148,10 +148,12 @@ export const adminAppointmentsRouter = router({
     // as any other invalid one, not Zod's raw report (bounded by the JSON body limit).
     .input(z.object({ trackingId: z.string().min(1).max(20), customerEmail: z.string() }))
     .mutation(async ({ input, ctx }) => {
-      const customerEmail = input.customerEmail.trim();
-      if (!bookingCustomerEmail.safeParse(customerEmail).success) {
+      // Stored as the booking stores it: without what a paste leaves at either end (INTL-05).
+      const parsedEmail = bookingCustomerEmail.safeParse(input.customerEmail);
+      if (!parsedEmail.success) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Adresse email invalide : saisissez une adresse complète, par exemple prenom.nom@exemple.fr." });
       }
+      const customerEmail = parsedEmail.data;
       const { updateAppointmentCustomerEmailByAdmin } = await import("../../appointmentAdminActions");
       // The correction is traced with it, both or neither (DATA-01).
       return updateAppointmentCustomerEmailByAdmin({ trackingId: input.trackingId, customerEmail, actorOpenId: ctx.user.openId });

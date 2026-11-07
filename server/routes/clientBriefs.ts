@@ -4,7 +4,7 @@ import { z } from "zod";
 import { notifyOwner } from "../_core/notification";
 import { secureReference } from "../_core/secureReference";
 import { SITE_LANGUAGES } from "../emailLanguage";
-import { multiLineText, refusesTextInputCharacters, singleLineText, TEXT_INPUT_INVALID_CHARACTERS, TEXT_INPUT_INVALID_CHARACTERS_MESSAGE } from "../../shared/textInput";
+import { emailText, multiLineText, refusesTextInputCharacters, singleLineText, TEXT_INPUT_INVALID_CHARACTERS, TEXT_INPUT_INVALID_CHARACTERS_MESSAGE } from "../../shared/textInput";
 import { safeErrorName } from "./routeHelpers";
 
 /**
@@ -18,7 +18,7 @@ export function registerClientBriefRoute(app: Express) {
   const clientBriefSchema = z.object({
     organizationName: singleLineText(z.string().min(1).max(180)),
     contactName: singleLineText(z.string().min(1).max(120)),
-    email: z.string().trim().email().max(320),
+    email: emailText(z.string().email().max(320)),
     phone: singleLineText(z.string().max(50)).optional().default(""),
     targetEnvironment: singleLineText(z.string().min(1).max(120)),
     specialtyNeeded: singleLineText(z.string().min(1).max(160)),

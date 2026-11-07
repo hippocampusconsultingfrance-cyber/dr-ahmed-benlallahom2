@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { HIGH_READABILITY_STORAGE_KEY, readHighReadabilityPreference } from "./readabilityPreference";
 import { OLED_DARK_STORAGE_KEY, readOledDarkPreference } from "./oledPreference";
 import { readThemePreference, type UserTheme } from "./userPreferences";
+import { readStoredPreference, writeStoredPreference } from "@/lib/browserStorage";
 
 type Theme = UserTheme;
 
@@ -30,12 +31,13 @@ export function ThemeProvider({
 }: ThemeProviderProps) {
   const [theme, setTheme] = useState<Theme>(() => {
     if (switchable) {
-      return readThemePreference(localStorage.getItem("theme"), defaultTheme);
+      return readThemePreference(readStoredPreference("theme"), defaultTheme);
     }
     return defaultTheme;
   });
-  const [highReadability, setHighReadability] = useState(() => readHighReadabilityPreference(localStorage.getItem(HIGH_READABILITY_STORAGE_KEY)));
-  const [oledDark, setOledDark] = useState(() => readOledDarkPreference(localStorage.getItem(OLED_DARK_STORAGE_KEY)));
+  // Storage blocked by the browser: the defaults, and the choices of this visit only (browserStorage).
+  const [highReadability, setHighReadability] = useState(() => readHighReadabilityPreference(readStoredPreference(HIGH_READABILITY_STORAGE_KEY)));
+  const [oledDark, setOledDark] = useState(() => readOledDarkPreference(readStoredPreference(OLED_DARK_STORAGE_KEY)));
 
   useEffect(() => {
     const root = document.documentElement;
@@ -46,18 +48,18 @@ export function ThemeProvider({
     }
 
     if (switchable) {
-      localStorage.setItem("theme", theme);
+      writeStoredPreference("theme", theme);
     }
   }, [theme, switchable]);
 
   useEffect(() => {
     document.documentElement.classList.toggle("high-readability", highReadability);
-    localStorage.setItem(HIGH_READABILITY_STORAGE_KEY, String(highReadability));
+    writeStoredPreference(HIGH_READABILITY_STORAGE_KEY, String(highReadability));
   }, [highReadability]);
 
   useEffect(() => {
     document.documentElement.classList.toggle("oled-dark", oledDark);
-    localStorage.setItem(OLED_DARK_STORAGE_KEY, String(oledDark));
+    writeStoredPreference(OLED_DARK_STORAGE_KEY, String(oledDark));
   }, [oledDark]);
 
   const toggleTheme = switchable
