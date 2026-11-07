@@ -5,6 +5,7 @@ import type { UserLanguage } from "@/contexts/userPreferences";
 import { localeDay, todayInParis } from "@/lib/parisDay";
 import { trpc } from "@/lib/trpc";
 import { CERTIFICATION_RENEWAL_MAX_YEARS, certificationDateIsCurrent, certificationExpiryDate, latestCertificationRenewalDay, RECRUITMENT_FACT_ORIGIN_LABELS, RECRUITMENT_FACT_ORIGINS, type CertificationExpiryDate, type RecruitmentFact } from "@shared/recruitmentFactOrigins";
+import { isDatabaseRefusalReason } from "@shared/databaseRefusalReasons";
 import { isCertificationRenewalRefusalReason } from "@shared/recruitmentMissionRefusalReasons";
 
 type CertificationReviewProps = {
@@ -56,6 +57,7 @@ const reviewCopy = {
       renewal_date_too_far: (day: string) => `La nouvelle date d’expiration est à plus de ${CERTIFICATION_RENEWAL_MAX_YEARS} ans : vérifiez-la sur le justificatif (le ${day} au plus tard).`,
       renewal_required: () => "Cette certification a expiré : confirmez son renouvellement, avec la nouvelle date d’expiration lue sur le justificatif, ou cochez qu’il n’en porte pas.",
     },
+    databaseRefusals: { duplicate_record: "Cet enregistrement existe déjà : rechargez la page pour voir son état actuel.", related_record_invalid: "Cette opération vise un élément qui n’existe plus, ou qui est encore utilisé ailleurs : rechargez la page, puis réessayez.", value_not_allowed: "Cette valeur n’est pas acceptée pour cet enregistrement : rien n’a été modifié. Rechargez la page, puis réessayez." },
   },
   en: {
     locale: "en-GB",
@@ -85,6 +87,7 @@ const reviewCopy = {
       renewal_date_too_far: (day: string) => `The new expiry date is more than ${CERTIFICATION_RENEWAL_MAX_YEARS} years ahead: check it on the certificate (${day} at the latest).`,
       renewal_required: () => "This certification has expired: confirm its renewal, with the new expiry date read on the certificate, or tick that it has none.",
     },
+    databaseRefusals: { duplicate_record: "This record already exists: reload the page to see its current state.", related_record_invalid: "This operation concerns an item that no longer exists, or that is still used elsewhere: reload the page, then try again.", value_not_allowed: "This value is not accepted for this record: nothing was changed. Reload the page, then try again." },
   },
   de: {
     locale: "de-DE",
@@ -114,6 +117,7 @@ const reviewCopy = {
       renewal_date_too_far: (day: string) => `Das neue Ablaufdatum liegt mehr als ${CERTIFICATION_RENEWAL_MAX_YEARS} Jahre in der Zukunft: Prüfen Sie es auf dem Nachweis (spätestens am ${day}).`,
       renewal_required: () => "Dieses Zertifikat ist abgelaufen: Bestätigen Sie seine Erneuerung mit dem neuen Ablaufdatum auf dem Nachweis oder kreuzen Sie an, dass er keines trägt.",
     },
+    databaseRefusals: { duplicate_record: "Dieser Eintrag existiert bereits: Laden Sie die Seite neu, um seinen aktuellen Stand zu sehen.", related_record_invalid: "Dieser Vorgang betrifft ein Element, das nicht mehr existiert oder noch anderweitig verwendet wird: Laden Sie die Seite neu und versuchen Sie es erneut.", value_not_allowed: "Dieser Wert ist für diesen Eintrag nicht zulässig: Es wurde nichts geändert. Laden Sie die Seite neu und versuchen Sie es erneut." },
   },
   zh: {
     locale: "zh-CN",
@@ -143,6 +147,7 @@ const reviewCopy = {
       renewal_date_too_far: (day: string) => `新的到期日期晚于 ${CERTIFICATION_RENEWAL_MAX_YEARS} 年之后：请在证书上核对（最晚为 ${day}）。`,
       renewal_required: () => "该证书已过期：请确认其续期，填写证书上的新到期日期，或勾选证书上没有到期日期。",
     },
+    databaseRefusals: { duplicate_record: "该记录已存在：请刷新页面查看其当前状态。", related_record_invalid: "此操作涉及的项目已不存在，或仍在其他地方使用：请刷新页面后重试。", value_not_allowed: "此记录不接受该值：未作任何更改。请刷新页面后重试。" },
   },
 } as const;
 
@@ -194,15 +199,18 @@ export default function CertificationReview({ applicationId, certifications, lan
       refresh();
     },
     // The server's stable reason, worded in the admin's language with the day
-    // it names (the latest renewal date accepted); any other error as it came.
-    // A refusal can come from a sheet older than the dossier (renewal_required:
-    // an analysis read since that the certification has expired, while the
-    // sheet still offers « Confirmer »): read again, it shows the renewal box
-    // the toast asks for.
+    // it names (the latest renewal date accepted), and a write a database
+    // constraint refused (DATA-01), as the mission screen words it; any other
+    // error as it came. A refusal can come from a sheet older than the dossier
+    // (renewal_required: an analysis read since that the certification has
+    // expired, while the sheet still offers « Confirmer »): read again, it
+    // shows the renewal box the toast asks for.
     onError: mutationError => {
       const reason = mutationError.data?.reason;
       const date = mutationError.data?.date;
-      toast.error(isCertificationRenewalRefusalReason(reason) && (reason !== "renewal_date_too_far" || date) ? copy.refusals[reason](date ? localeDay(date, copy.locale) : "") : mutationError.message);
+      toast.error(isCertificationRenewalRefusalReason(reason) && (reason !== "renewal_date_too_far" || date) ? copy.refusals[reason](date ? localeDay(date, copy.locale) : "")
+        : isDatabaseRefusalReason(reason) ? copy.databaseRefusals[reason]
+          : mutationError.message);
       refresh();
     },
   });
