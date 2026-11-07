@@ -167,3 +167,27 @@ describe("coffre illisible (ADM-10)", () => {
     expect(retry.disabled).toBe(true);
   });
 });
+
+describe("état d’analyse affiché sur la carte (EXPL-12)", () => {
+  const badge = () => screen.getByRole("button", { name: /Relancer l’IA|Rerun AI|KI erneut starten|重新运行 AI/ }).parentElement!.querySelector("span")!.textContent;
+
+  it.each([
+    ["fr", "Analyse en attente"],
+    ["en", "Analysis pending"],
+    ["de", "Analyse ausstehend"],
+    ["zh", "等待分析"],
+  ] as const)("en %s, un document qui attend le passage quotidien est dit « %s », pas « queued »", (language, label) => {
+    view.language = language;
+    view.list.data = [diploma({ status: "uploaded", analysisStatus: "queued", validationStatus: "quarantined", hasActiveAnalysisJob: true })];
+    mount();
+    expect(badge()).toBe(label);
+  });
+
+  it.each([["reviewed"], ["rejected"], ["archived"]] as const)("un document « %s » par l’admin avant ou pendant son analyse n’est plus affiché « En analyse » une fois sa tâche fermée", status => {
+    // What the worker now leaves on a document it closes because the admin decided (server/candidateDocumentProcessing.ts).
+    view.list.data = [diploma({ status, analysisStatus: "needs_review", validationStatus: "quarantined", reviewNotes: "Original vérifié", hasActiveAnalysisJob: false })];
+    mount();
+    expect(badge()).toBe("Revue humaine requise");
+    expect(screen.getByText("Analyse non disponible : une revue humaine est requise.")).toBeTruthy();
+  });
+});
