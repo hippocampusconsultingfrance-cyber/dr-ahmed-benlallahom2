@@ -430,8 +430,13 @@ async function ensureOwnerNotification(db: Database, appointment: Appointment, f
   }
 }
 
-function ownerNotificationKey(appointment: Pick<Appointment, "trackingId">) {
-  return `appointment-owner-${appointment.trackingId}`;
+/**
+ * Key of the owner's booking notification, per address as written, which it
+ * quotes: sent again after a correction of the patient's address (« Renvoyer »),
+ * it leaves under a new key, which Resend does not refuse with 409 (ABUS-03).
+ */
+function ownerNotificationKey(appointment: Pick<Appointment, "trackingId" | "customerEmail">) {
+  return patientEmailIdempotencyKey(`appointment-owner-${appointment.trackingId}`, appointment.customerEmail);
 }
 
 /**

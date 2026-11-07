@@ -275,7 +275,7 @@ describe("revendication atomique des envois post-paiement", () => {
     });
     await processDueAppointmentFulfillmentJobs();
     // The owner sees the language of the booking page itself.
-    expect(notifications.sendOwnerNotificationEmail).toHaveBeenCalledWith("Patient Test", "patient@example.com", "+33600000000", "APT-42", expect.any(Date), 100, { idempotencyKey: "appointment-owner-APT-42", language: "de" });
+    expect(notifications.sendOwnerNotificationEmail).toHaveBeenCalledWith("Patient Test", "patient@example.com", "+33600000000", "APT-42", expect.any(Date), 100, { idempotencyKey: patientEmailIdempotencyKey("appointment-owner-APT-42", "patient@example.com"), language: "de" });
   });
 
   it("remet en file un job interrompu (instance gelée après la réponse à Stripe)", async () => {

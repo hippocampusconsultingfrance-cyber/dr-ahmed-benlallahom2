@@ -56,6 +56,7 @@ vi.mock("./_core/notification", async importOriginal => ({ ...await importOrigin
 
 import { appRouter } from "./routers";
 import { postPaymentDeliveryRetry } from "./_core/notifications";
+import { buildOwnerNotificationEmail } from "./_core/notification";
 import { appointmentFulfillmentPacing, enqueueStripeRefundNotices, patientEmailIdempotencyKey, processAppointmentFulfillmentNow, processDueAppointmentFulfillmentJobs } from "./appointmentFulfillment";
 import { refundAppointmentPayment } from "./appointmentAdminActions";
 import { STRIPE_REFUND_CANCELLATION_REASON } from "./appointmentPaymentWebhook";
@@ -440,6 +441,30 @@ describe("EXPL-02 — adresse du patient corrigée depuis la fiche du rendez-vou
       patientEmailIdempotencyKey("appointment-confirmation-failure-APTCASSE0002-refused", "Patient.Refus@Example.test"),
       patientEmailIdempotencyKey("appointment-confirmation-failure-APTCASSE0002-refused", "patient.refus@example.test"),
     ]);
+  });
+
+  it("la notification de réservation au médecin, qui cite l’adresse, repartie après une correction de sa seule casse : une autre clé, que Resend ne refuse pas (409)", async () => {
+    const ownerAddress = buildOwnerNotificationEmail({ title: "Test", content: "Test" }).to[0]!;
+    const { id } = seedAppointment("APTCASSE0003", { customer_email: "Patient.Medecin@Example.test" });
+    seedJob(id, "owner");
+    seedJob(id, "confirmation");
+    // The owner's mailbox does not answer, the patient's address is refused.
+    resend.down.add(ownerAddress);
+    resend.rejected.add("Patient.Medecin@Example.test");
+    await processAppointmentFulfillmentNow(id);
+    expect(job(id, "owner")).toMatchObject({ status: "retry" });
+    expect(job(id, "confirmation")).toMatchObject({ status: "failed" });
+
+    await admin().appointments.updateCustomerEmail({ trackingId: "APTCASSE0003", customerEmail: "patient.medecin@example.test" });
+    resend.down.clear();
+    const retry = await admin().appointments.retryFulfillment({ trackingId: "APTCASSE0003" });
+
+    expect(retry.deliveries.map(delivery => delivery.state)).toEqual(["sent", "sent"]);
+    const bookings = emailsTo(ownerAddress);
+    expect(bookings[0]!.options?.idempotencyKey).toBe(patientEmailIdempotencyKey("appointment-owner-APTCASSE0003", "Patient.Medecin@Example.test"));
+    expect(bookings.at(-1)!.message.text).toContain("Email : patient.medecin@example.test");
+    expect(bookings.at(-1)!.options?.idempotencyKey).toBe(patientEmailIdempotencyKey("appointment-owner-APTCASSE0003", "patient.medecin@example.test"));
+    expect(resend.conflicts).toBe(0);
   });
 
   it("vaut aussi pour l’email d’un remboursement refusé", async () => {
