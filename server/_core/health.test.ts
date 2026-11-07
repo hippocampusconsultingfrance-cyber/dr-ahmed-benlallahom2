@@ -6,6 +6,7 @@ import {
   PRODUCTION_REQUIRED_ENVIRONMENT_VARIABLES,
   assertCriticalProductionEnvironment,
   clerkPublishableKey,
+  getConfigurationWarnings,
   getEnvironmentConfigurationStatus,
   getMissingCriticalProductionEnvironment,
   reportCriticalProductionEnvironment,
@@ -16,6 +17,34 @@ const completeEnvironment = (): NodeJS.ProcessEnv => ({
   NODE_ENV: "production",
   ...Object.fromEntries(PRODUCTION_REQUIRED_ENVIRONMENT_VARIABLES.map(name => [name, `secret-value-of-${name}`])),
 });
+
+/** The keys a production deployment takes: live Stripe and Clerk, the site's Turnstile widget, the site's address. */
+const liveKeys = (): NodeJS.ProcessEnv => ({
+  STRIPE_SECRET_KEY: "sk_live_STRIPE-LIVE-VALUE",
+  CLERK_SECRET_KEY: "sk_live_CLERK-LIVE-VALUE",
+  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "pk_live_CLERK-PUBLIC-LIVE-VALUE",
+  TURNSTILE_SECRET_KEY: "0x4AAAAAAA-TURNSTILE-LIVE-VALUE",
+  VITE_TURNSTILE_SITE_KEY: "0x4AAAAAAA-TURNSTILE-SITE-VALUE",
+  PUBLIC_APP_ORIGIN: "https://drahmedbenlallahom.com",
+});
+
+/** The keys of a preproduction: test Stripe and Clerk, Cloudflare's always-pass Turnstile keys, the preview's own address. */
+const testKeys = (): NodeJS.ProcessEnv => ({
+  STRIPE_SECRET_KEY: "sk_test_STRIPE-TEST-VALUE",
+  CLERK_SECRET_KEY: "sk_test_CLERK-TEST-VALUE",
+  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "pk_test_CLERK-PUBLIC-TEST-VALUE",
+  TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA",
+  VITE_TURNSTILE_SITE_KEY: "1x00000000000000000000AA",
+  PUBLIC_APP_ORIGIN: "https://site-git-main-equipe.vercel.app",
+});
+
+const deployment = (vercelEnv: string | undefined, keys: NodeJS.ProcessEnv): NodeJS.ProcessEnv => ({
+  ...completeEnvironment(),
+  ...keys,
+  ...(vercelEnv === undefined ? {} : { VERCEL_ENV: vercelEnv }),
+});
+
+const ALL_PRODUCTION_WARNINGS = ["stripe_test_key_in_production", "clerk_test_key_in_production", "turnstile_test_key", "public_origin_mismatch"];
 
 const healthyDb = () => Promise.resolve({ execute: vi.fn().mockResolvedValue({ rows: [{ "?column?": 1 }] }) });
 
@@ -35,7 +64,7 @@ describe("variables critiques de production (M27 / OPS-01)", () => {
   });
 
   it("ne contrôle qu'en production", () => {
-    expect(getEnvironmentConfigurationStatus({ NODE_ENV: "development" })).toEqual({ ok: true, missing: [], enforced: false });
+    expect(getEnvironmentConfigurationStatus({ NODE_ENV: "development" })).toEqual({ ok: true, missing: [], enforced: false, warnings: [] });
     expect(getEnvironmentConfigurationStatus({ NODE_ENV: "production" }).missing).toHaveLength(PRODUCTION_REQUIRED_ENVIRONMENT_VARIABLES.length);
   });
 
@@ -57,6 +86,71 @@ describe("variables critiques de production (M27 / OPS-01)", () => {
   });
 });
 
+describe("incohérences de configuration selon VERCEL_ENV (EXPL-20)", () => {
+  it("en production, signale une clé de test, la clé Turnstile de test et une autre adresse publique ; en préproduction, une clé live", () => {
+    const matrix = [
+      ["production", liveKeys(), []],
+      ["production", testKeys(), ALL_PRODUCTION_WARNINGS],
+      ["preview", testKeys(), []],
+      ["preview", liveKeys(), ["live_key_in_preview"]],
+      ["development", liveKeys(), []],
+      ["development", testKeys(), []],
+      // Outside Vercel nothing tells production apart (server/candidateTurnstile.ts reads it the same way).
+      [undefined, liveKeys(), []],
+      [undefined, testKeys(), []],
+    ] as const;
+    for (const [vercelEnv, keys, warnings] of matrix) {
+      expect(getConfigurationWarnings(deployment(vercelEnv, keys)), `${vercelEnv} × ${keys.STRIPE_SECRET_KEY}`).toEqual(warnings);
+    }
+  });
+
+  it("reconnaît chaque clé : clé restreinte Stripe, clé publique Clerk du serveur ou du navigateur, les clés Turnstile de test secrètes et de site", () => {
+    const production = (keys: NodeJS.ProcessEnv) => getConfigurationWarnings(deployment("production", { ...liveKeys(), ...keys }));
+    expect(production({ STRIPE_SECRET_KEY: "rk_test_RESTRICTED" })).toEqual(["stripe_test_key_in_production"]);
+    expect(production({ CLERK_SECRET_KEY: " sk_test_CLERK " })).toEqual(["clerk_test_key_in_production"]);
+    expect(production({ CLERK_PUBLISHABLE_KEY: "pk_test_SERVER" })).toEqual(["clerk_test_key_in_production"]);
+    expect(production({ NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "pk_test_BROWSER" })).toEqual(["clerk_test_key_in_production"]);
+    for (const secret of ["1x0000000000000000000000000000000AA", "2x0000000000000000000000000000000AA", "3x0000000000000000000000000000000AA"]) {
+      expect(production({ TURNSTILE_SECRET_KEY: secret })).toEqual(["turnstile_test_key"]);
+    }
+    // A test site key with the site's real secret: its dummy token is refused, every public form with it.
+    for (const siteKey of ["1x00000000000000000000AA", "2x00000000000000000000AB", "1x00000000000000000000BB", "2x00000000000000000000BB", " 3x00000000000000000000FF "]) {
+      expect(production({ VITE_TURNSTILE_SITE_KEY: siteKey }), siteKey).toEqual(["turnstile_test_key"]);
+    }
+    expect(production({ TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA", VITE_TURNSTILE_SITE_KEY: "1x00000000000000000000AA" })).toEqual(["turnstile_test_key"]);
+
+    const preview = (keys: NodeJS.ProcessEnv) => getConfigurationWarnings(deployment("preview", { ...testKeys(), ...keys }));
+    expect(preview({ STRIPE_SECRET_KEY: "rk_live_RESTRICTED" })).toEqual(["live_key_in_preview"]);
+    expect(preview({ NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "pk_live_BROWSER" })).toEqual(["live_key_in_preview"]);
+  });
+
+  it("compare l’adresse publique telle que les liens envoyés la lisent : vide, l’adresse du site s’applique", () => {
+    const production = (origin: string | undefined) => getConfigurationWarnings(deployment("production", { ...liveKeys(), PUBLIC_APP_ORIGIN: origin }));
+    expect(production(undefined)).toEqual([]);
+    expect(production("")).toEqual([]);
+    for (const origin of ["https://drahmedbenlallahom.com/", "https://www.drahmedbenlallahom.com", "http://drahmedbenlallahom.com", "https://site-git-main-equipe.vercel.app"]) {
+      expect(production(origin), origin).toEqual(["public_origin_mismatch"]);
+    }
+  });
+
+  it("donne des codes sans jamais les valeurs, n’empêche pas le statut ok, et les journalise au démarrage", () => {
+    const environment = deployment("production", testKeys());
+    const status = getEnvironmentConfigurationStatus(environment);
+    expect(status).toEqual({ ok: true, missing: [], enforced: true, warnings: ALL_PRODUCTION_WARNINGS });
+    expect(JSON.stringify(status)).not.toMatch(/VALUE|1x0{10}|vercel\.app/);
+
+    const log = vi.fn();
+    expect(reportCriticalProductionEnvironment(environment, log).ok).toBe(true);
+    expect(log).toHaveBeenCalledTimes(1);
+    const message = String(log.mock.calls[0][0]);
+    expect(message).toBe("[Config] WARNING: configuration inconsistent with VERCEL_ENV=production: stripe_test_key_in_production, clerk_test_key_in_production, turnstile_test_key, public_origin_mismatch. The /admin banner says what to change.");
+
+    const silent = vi.fn();
+    reportCriticalProductionEnvironment(deployment("production", liveKeys()), silent);
+    expect(silent).not.toHaveBeenCalled();
+  });
+});
+
 describe("GET /api/health (sonde de disponibilité, M29 / OPS-05)", () => {
   it("répond ok quand la base répond à SELECT 1 et que la configuration est complète", async () => {
     const db = { execute: vi.fn().mockResolvedValue({ rows: [] }) };
@@ -64,7 +158,7 @@ describe("GET /api/health (sonde de disponibilité, M29 / OPS-05)", () => {
 
     expect(report.status).toBe("ok");
     expect(report.checks.database.status).toBe("ok");
-    expect(report.checks.configuration).toEqual({ status: "ok", missing: [] });
+    expect(report.checks.configuration).toEqual({ status: "ok", missing: [], warnings: [] });
     expect(db.execute).toHaveBeenCalledTimes(1);
     const query = db.execute.mock.calls[0][0] as { queryChunks?: Array<{ value?: string[] }> };
     expect(JSON.stringify(query.queryChunks)).toContain("select 1");
@@ -99,7 +193,7 @@ describe("GET /api/health (sonde de disponibilité, M29 / OPS-05)", () => {
     const report = await buildHealthReport({ getDatabase: healthyDb, environment });
 
     expect(report.status).toBe("error");
-    expect(report.checks.configuration).toEqual({ status: "missing", missing: ["CRON_SECRET", "CLERK_OWNER_USER_ID"] });
+    expect(report.checks.configuration).toEqual({ status: "missing", missing: ["CRON_SECRET", "CLERK_OWNER_USER_ID"], warnings: [] });
     expect(JSON.stringify(report)).not.toContain("secret-value-of");
   });
 
@@ -152,7 +246,23 @@ describe("GET /api/health (sonde de disponibilité, M29 / OPS-05)", () => {
 
     const owner = await run(environment, `Bearer ${environment.CRON_SECRET}`);
     expect(owner.status).toBe(503);
-    expect(owner.body.checks.configuration).toEqual({ status: "missing", missing: ["TURNSTILE_SECRET_KEY", "CANDIDATE_DOCUMENT_ENCRYPTION_KEY", "RESEND_WEBHOOK_SECRET"] });
+    expect(owner.body.checks.configuration).toEqual({ status: "missing", missing: ["TURNSTILE_SECRET_KEY", "CANDIDATE_DOCUMENT_ENCRYPTION_KEY", "RESEND_WEBHOOK_SECRET"], warnings: [] });
+  });
+
+  it("ne dit pas au public qu’une clé de test tourne en production ; le détail en donne le code, jamais la valeur (EXPL-20)", async () => {
+    const environment = deployment("production", testKeys());
+    const anonymous = await run(environment);
+    expect(anonymous.status).toBe(200);
+    expect(anonymous.body.checks.configuration).toEqual({ status: "ok" });
+    for (const code of ALL_PRODUCTION_WARNINGS) expect(anonymous.text).not.toContain(code);
+
+    const owner = await run(environment, `Bearer ${environment.CRON_SECRET}`);
+    expect(owner.status).toBe(200);
+    expect(owner.body.checks.configuration).toEqual({ status: "ok", missing: [], warnings: ALL_PRODUCTION_WARNINGS });
+    for (const response of [anonymous, owner]) {
+      for (const value of Object.values(testKeys())) expect(response.text).not.toContain(value);
+      expect(response.text).not.toContain("secret-value-of");
+    }
   });
 
   it("répond encore quand la configuration Clerk fait échouer les autres routes, et la clé publique du navigateur suffit au serveur", async () => {

@@ -1,3 +1,5 @@
+import { SITE_ORIGIN } from "../../shared/routeMetadata";
+
 /**
  * Variables sans lesquelles une fonction de production cesse de marcher.
  * Vérifiées :
@@ -60,6 +62,66 @@ export function assertCriticalProductionEnvironment(environment: NodeJS.ProcessE
   }
 }
 
+/**
+ * Contrôles de cohérence (EXPL-20) selon VERCEL_ENV, en plus de la présence des
+ * variables : en production, une clé Stripe ou Clerk de test, une clé Turnstile
+ * de test (secrète ou de site) ou une PUBLIC_APP_ORIGIN qui n'est pas l'adresse du site ;
+ * en préproduction (Preview), une clé live. Seuls ces CODES sont exposés (bandeau
+ * admin, /api/health détaillé, journaux), jamais les valeurs. Sans VERCEL_ENV
+ * (développement, serveur lancé hors de Vercel), rien ne distingue la production :
+ * aucun avertissement.
+ */
+export const CONFIGURATION_WARNINGS = [
+  "stripe_test_key_in_production",
+  "clerk_test_key_in_production",
+  "turnstile_test_key",
+  "public_origin_mismatch",
+  "live_key_in_preview",
+] as const;
+
+export type ConfigurationWarning = (typeof CONFIGURATION_WARNINGS)[number];
+
+/** Clés secrètes de test publiées par Cloudflare : tout jeton y est accepté (1x), refusé (2x) ou dit déjà utilisé (3x). */
+const TURNSTILE_TEST_SECRETS = new Set([
+  "1x0000000000000000000000000000000AA",
+  "2x0000000000000000000000000000000AA",
+  "3x0000000000000000000000000000000AA",
+]);
+
+/**
+ * Clés de site de test publiées par Cloudflare : le widget n'y produit qu'un
+ * jeton factice, que la clé secrète d'un vrai widget refuse. VITE_TURNSTILE_SITE_KEY
+ * est intégrée au site au build, et Vercel la donne aussi au serveur.
+ */
+const TURNSTILE_TEST_SITE_KEYS = new Set([
+  "1x00000000000000000000AA",
+  "2x00000000000000000000AB",
+  "1x00000000000000000000BB",
+  "2x00000000000000000000BB",
+  "3x00000000000000000000FF",
+]);
+
+const keyPrefixed = (value: string | undefined, prefixes: readonly string[]) => prefixes.some(prefix => value?.trim().startsWith(prefix));
+const clerkKeys = (environment: NodeJS.ProcessEnv) => [environment.CLERK_SECRET_KEY, environment.CLERK_PUBLISHABLE_KEY, environment.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY];
+
+export function getConfigurationWarnings(environment: NodeJS.ProcessEnv = process.env): ConfigurationWarning[] {
+  const warnings: ConfigurationWarning[] = [];
+  if (environment.VERCEL_ENV === "production") {
+    if (keyPrefixed(environment.STRIPE_SECRET_KEY, ["sk_test_", "rk_test_"])) warnings.push("stripe_test_key_in_production");
+    if (clerkKeys(environment).some(key => keyPrefixed(key, ["sk_test_", "pk_test_"]))) warnings.push("clerk_test_key_in_production");
+    if (TURNSTILE_TEST_SECRETS.has(environment.TURNSTILE_SECRET_KEY?.trim() ?? "") || TURNSTILE_TEST_SITE_KEYS.has(environment.VITE_TURNSTILE_SITE_KEY?.trim() ?? "")) {
+      warnings.push("turnstile_test_key");
+    }
+    // Lue telle quelle par les liens envoyés (`process.env.PUBLIC_APP_ORIGIN || …`) : vide, l'adresse du site s'applique.
+    if (environment.PUBLIC_APP_ORIGIN && environment.PUBLIC_APP_ORIGIN !== SITE_ORIGIN) warnings.push("public_origin_mismatch");
+  } else if (environment.VERCEL_ENV === "preview") {
+    if (keyPrefixed(environment.STRIPE_SECRET_KEY, ["sk_live_", "rk_live_"]) || clerkKeys(environment).some(key => keyPrefixed(key, ["sk_live_", "pk_live_"]))) {
+      warnings.push("live_key_in_preview");
+    }
+  }
+  return warnings;
+}
+
 export type EnvironmentConfigurationStatus = {
   /** true quand aucune variable critique ne manque (ou hors production). */
   ok: boolean;
@@ -67,12 +129,14 @@ export type EnvironmentConfigurationStatus = {
   missing: ProductionRequiredEnvironmentVariable[];
   /** Le contrôle ne s'applique qu'en production. */
   enforced: boolean;
+  /** Codes des incohérences relevées (EXPL-20), jamais les valeurs ; ne changent pas `ok`. */
+  warnings: ConfigurationWarning[];
 };
 
 export function getEnvironmentConfigurationStatus(environment: NodeJS.ProcessEnv = process.env): EnvironmentConfigurationStatus {
   const enforced = environment.NODE_ENV === "production";
   const missing = enforced ? getMissingCriticalProductionEnvironment(environment) : [];
-  return { ok: missing.length === 0, missing, enforced };
+  return { ok: missing.length === 0, missing, enforced, warnings: getConfigurationWarnings(environment) };
 }
 
 /**
@@ -90,6 +154,9 @@ export function reportCriticalProductionEnvironment(
       `[Config] CRITICAL: ${status.missing.length} production environment variable(s) missing: ${status.missing.join(", ")}. ` +
         "Set them in Vercel > Settings > Environment Variables (Production), then redeploy. The /admin banner lists them too."
     );
+  }
+  if (status.warnings.length > 0) {
+    log(`[Config] WARNING: configuration inconsistent with VERCEL_ENV=${environment.VERCEL_ENV}: ${status.warnings.join(", ")}. The /admin banner says what to change.`);
   }
   return status;
 }
