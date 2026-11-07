@@ -5,7 +5,7 @@ import type { TrpcContext } from "./_core/context";
 const mocks = vi.hoisted(() => ({
   getDb: vi.fn(),
   sendCandidatePortalAccessEmail: vi.fn(),
-  logRecruitmentAction: vi.fn(),
+  traceRecruitmentActionDone: vi.fn(),
 }));
 
 vi.mock("./db", () => ({ getDb: mocks.getDb }));
@@ -15,7 +15,7 @@ vi.mock("./_core/notifications", async importOriginal => ({
 }));
 vi.mock("./recruitmentAudit", async importOriginal => ({
   ...await importOriginal<typeof import("./recruitmentAudit")>(),
-  logRecruitmentAction: mocks.logRecruitmentAction,
+  traceRecruitmentActionDone: mocks.traceRecruitmentActionDone,
 }));
 vi.mock("./candidateAuth", async importOriginal => ({
   ...await importOriginal<typeof import("./candidateAuth")>(),
@@ -61,7 +61,7 @@ function fakeDb(invitationEvents: Array<{ eventType: string; providerEmailId: st
 describe("invitation administrateur et livraison incertaine", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.logRecruitmentAction.mockResolvedValue(undefined);
+    mocks.traceRecruitmentActionDone.mockResolvedValue(undefined);
   });
 
   it("trace une exception de livraison comme inconnue et n’annonce pas un refus du fournisseur", async () => {
@@ -76,9 +76,10 @@ describe("invitation administrateur et livraison incertaine", () => {
     expect(db.insertedEvents).toHaveLength(1);
     expect(db.insertedEvents[0]).toMatchObject({ eventType: "email.delivery_unknown" });
     expect(JSON.parse(String(db.insertedEvents[0].payload))).toMatchObject({ outcome: "unknown", failureCode: "delivery_exception" });
-    expect(mocks.logRecruitmentAction).toHaveBeenCalledWith(expect.objectContaining({
+    // Traced as unknown, the admin told the delivery is uncertain even if the trace is refused (DATA-01).
+    expect(mocks.traceRecruitmentActionDone).toHaveBeenCalledWith([expect.objectContaining({
       metadata: expect.objectContaining({ outcome: "unknown" }),
-    }));
+    })], expect.stringContaining("incertaine"));
   });
 
   it("bloque un nouvel envoi tant que la livraison précédente reste inconnue", async () => {

@@ -3,7 +3,7 @@ import { and, eq, gte, inArray, isNull, like, lt, lte, ne, notInArray, notLike, 
 import { cvApplications, cvGoogleDriveExportJobs, googleDriveConnections } from "../drizzle/schema";
 import { hashSecurityValue, sendOwnerAlertOncePerWindow } from "./candidateSecurity";
 import { getDb } from "./db";
-import { logRecruitmentAction } from "./recruitmentAudit";
+import { logRecruitmentActionsDone } from "./recruitmentAudit";
 import { storageGetSignedUrl } from "./storage";
 import { ENV } from "./_core/env";
 import { notifyOwner } from "./_core/notification";
@@ -711,13 +711,15 @@ async function processGoogleDriveExportJob(jobId: number) {
     const now = new Date();
     const completed = await db.update(cvGoogleDriveExportJobs).set({ status: "completed", driveFileId: driveFile.id, driveFileUrl: driveFile.webViewLink, lastError: null, finishedAt: now, updatedAt: now }).where(currentGoogleDriveClaim(job));
     if (googleDriveMutationRowCount(completed) !== 1) return { skipped: true, reason: "claim_lost" as const };
-    // Telemetry and audit must not reopen a successfully copied CV on failure.
+    // Telemetry and audit must not reopen a successfully copied CV on failure,
+    // nor one of them skip the other. The copy is on Drive and recorded: an
+    // audit line the database refuses is logged, the copy stands (DATA-01).
     try {
       await db.update(googleDriveConnections).set({ lastUsedAt: now, lastError: null }).where(eq(googleDriveConnections.id, connection.id));
-      await logRecruitmentAction({ applicationId: application.id, adminOpenId: connection.authorizedByOpenId, action: "export", metadata: { destination: "google_drive", driveFileId: driveFile.id, trackingId: application.trackingId, reusedExistingFile: Boolean(existingDriveFile) } });
     } catch {
       console.error("google_drive_export_post_commit_failed", { applicationId: application.id });
     }
+    await logRecruitmentActionsDone([{ applicationId: application.id, adminOpenId: connection.authorizedByOpenId, action: "export", metadata: { destination: "google_drive", driveFileId: driveFile.id, trackingId: application.trackingId, reusedExistingFile: Boolean(existingDriveFile) } }]);
     return { completed: true, applicationId: application.id, driveFileId: driveFile.id, reusedExistingFile: Boolean(existingDriveFile) };
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 500) : "google_drive_export_unknown";

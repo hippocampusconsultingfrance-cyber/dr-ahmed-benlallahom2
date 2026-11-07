@@ -6,11 +6,11 @@ import { encryptGoogleDriveRefreshToken, processDueCvGoogleDriveExports, retryCv
 
 const database = vi.hoisted(() => ({ getDb: vi.fn() }));
 const storage = vi.hoisted(() => ({ storageGetSignedUrl: vi.fn() }));
-const audit = vi.hoisted(() => ({ logRecruitmentAction: vi.fn() }));
+const audit = vi.hoisted(() => ({ logRecruitmentActionsDone: vi.fn() }));
 
 vi.mock("./db", () => ({ getDb: database.getDb }));
 vi.mock("./storage", () => ({ storageGetSignedUrl: storage.storageGetSignedUrl }));
-vi.mock("./recruitmentAudit", () => ({ logRecruitmentAction: audit.logRecruitmentAction }));
+vi.mock("./recruitmentAudit", () => ({ logRecruitmentActionsDone: audit.logRecruitmentActionsDone }));
 vi.mock("./_core/env", () => ({ ENV: {
   googleDriveClientId: "test-client", googleDriveClientSecret: "test-secret", googleDriveCvFolderId: "test-folder",
 } }));
@@ -155,7 +155,7 @@ beforeEach(() => {
   vi.stubEnv("CANDIDATE_DOCUMENT_ENCRYPTION_KEY", Buffer.alloc(32, 7).toString("base64"));
   vi.stubGlobal("fetch", vi.fn(() => { throw new Error("unexpected network request"); }));
   storage.storageGetSignedUrl.mockImplementation(() => { throw new Error("unexpected storage access"); });
-  audit.logRecruitmentAction.mockImplementation(() => { throw new Error("unexpected audit write"); });
+  audit.logRecruitmentActionsDone.mockImplementation(() => { throw new Error("unexpected audit write"); });
 });
 
 afterEach(() => {
@@ -256,7 +256,7 @@ describe("reprise traçable des exports Google Drive", () => {
     expect(db.select).toHaveBeenCalledTimes(2);
     expect(globalThis.fetch).not.toHaveBeenCalled();
     expect(storage.storageGetSignedUrl).not.toHaveBeenCalled();
-    expect(audit.logRecruitmentAction).not.toHaveBeenCalled();
+    expect(audit.logRecruitmentActionsDone).not.toHaveBeenCalled();
   });
 
   it.each(["completed", "retry"] as const)(
@@ -271,7 +271,7 @@ describe("reprise traçable des exports Google Drive", () => {
       expect(jobWrites.map(write => write.status)).toEqual(["running", outcome]);
       expect(telemetryWrites).toEqual([]);
       expect(db.update).toHaveBeenCalledTimes(2);
-      expect(audit.logRecruitmentAction).not.toHaveBeenCalled();
+      expect(audit.logRecruitmentActionsDone).not.toHaveBeenCalled();
       expect(storage.storageGetSignedUrl).not.toHaveBeenCalled();
     },
   );
@@ -283,9 +283,8 @@ describe("reprise traçable des exports Google Drive", () => {
         outcomeRowCount: 1, telemetryFails: failingStep === "telemetry",
       });
       stubDriveFetch();
-      audit.logRecruitmentAction.mockImplementation(async () => {
-        if (failingStep === "audit") throw new Error("audit unavailable");
-      });
+      // A refused audit line: logged by the audit module, which says it was not recorded (DATA-01).
+      audit.logRecruitmentActionsDone.mockImplementation(async () => failingStep !== "audit");
       const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
       const result = await processDueCvGoogleDriveExports(1, [candidate.applicationId]);
@@ -297,8 +296,11 @@ describe("reprise traçable des exports Google Drive", () => {
       expect(runningJob.status).toBe("completed");
       expect(jobWrites.map(write => write.status)).toEqual(["running", "completed"]);
       expect(telemetryWrites).toHaveLength(1);
-      expect(audit.logRecruitmentAction).toHaveBeenCalledTimes(failingStep === "audit" ? 1 : 0);
-      expect(consoleError).toHaveBeenCalledWith("google_drive_export_post_commit_failed", { applicationId: candidate.applicationId });
+      // A failed telemetry write no longer skips the copy's audit line.
+      expect(audit.logRecruitmentActionsDone).toHaveBeenCalledTimes(1);
+      expect(audit.logRecruitmentActionsDone).toHaveBeenCalledWith([expect.objectContaining({ applicationId: candidate.applicationId, action: "export" })]);
+      if (failingStep === "telemetry") expect(consoleError).toHaveBeenCalledWith("google_drive_export_post_commit_failed", { applicationId: candidate.applicationId });
+      else expect(consoleError).not.toHaveBeenCalled();
       expect(storage.storageGetSignedUrl).not.toHaveBeenCalled();
     },
   );

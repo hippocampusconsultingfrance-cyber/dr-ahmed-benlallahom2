@@ -1,5 +1,10 @@
+import { TRPCError } from "@trpc/server";
+import type { BatchItem } from "drizzle-orm/batch";
 import { getDb } from "./db";
 import { recruitmentAuditLogs } from "../drizzle/schema";
+import { PublicErrorReason } from "./_core/trpc";
+import { postgresConstraintName } from "./databaseConstraints";
+import { postgresErrorCode } from "./languageColumns";
 import { foldAdminSearchText } from "../shared/adminSearchFolding";
 import { meetsRequiredLanguage, recruitmentLanguageRequirements } from "../shared/recruitmentLanguages";
 
@@ -38,6 +43,54 @@ export async function logRecruitmentAction(input: RecruitmentAuditRecord): Promi
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
   await recruitmentAuditInsert(db, [input]);
+}
+
+/**
+ * A change in the database and its audit lines in one batch, both or neither
+ * (DATA-01): when the database refuses a line, the change is not recorded
+ * either, and the screen rightly says that nothing was changed. The batch's
+ * results, the change's first.
+ */
+export function recordWithRecruitmentAudit(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, change: BatchItem<"pg">, records: RecruitmentAuditRecord[]) {
+  return db.batch([change, recruitmentAuditInsert(db, records)]);
+}
+
+/** Reason sent with AUDIT_NOT_RECORDED_MESSAGE, for a screen to word it in its language. */
+export const AUDIT_NOT_RECORDED_REASON = "audit_not_recorded";
+
+/** Said once the action is done but its trace could not be written: never « rien n’a été modifié » (DATA-01). */
+export const AUDIT_NOT_RECORDED_MESSAGE = "Sa trace n’a pas pu être écrite dans le journal d’audit.";
+
+/**
+ * Writes the audit lines of an action already done, which no batch can undo
+ * (an email sent, a CV analysed, a copy on Drive, a job queued by its own
+ * module): when the database refuses them, the failure is logged, the
+ * constraint's name only (the error's detail holds the row's values), and
+ * false returned, the action standing.
+ */
+export async function logRecruitmentActionsDone(records: RecruitmentAuditRecord[]): Promise<boolean> {
+  if (!records.length) return true;
+  try {
+    const db = await getDb();
+    if (!db) throw new Error("Database connection failed");
+    await recruitmentAuditInsert(db, records);
+    return true;
+  } catch (error) {
+    console.error("[Recruitment] Action done, its audit lines not recorded", { actions: Array.from(new Set(records.map(record => record.action))), count: records.length, code: postgresErrorCode(error), constraint: postgresConstraintName(error) });
+    return false;
+  }
+}
+
+/**
+ * The same for an admin's action: when its lines are refused, the admin is
+ * told that it is done (`done`, « L’action est faite. » unless it ended
+ * otherwise, an invitation refused by the sender) and that its trace could
+ * not be written, so as not to do it again, rather than the « rien n’a été
+ * modifié » of a refused write.
+ */
+export async function traceRecruitmentActionDone(records: RecruitmentAuditRecord[], done = "L’action est faite."): Promise<void> {
+  if (await logRecruitmentActionsDone(records)) return;
+  throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `${done} ${AUDIT_NOT_RECORDED_MESSAGE}`, cause: new PublicErrorReason(AUDIT_NOT_RECORDED_REASON) });
 }
 
 export function parseRecruitmentJsonArray(value: string | null | undefined): string[] {

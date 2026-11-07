@@ -18,7 +18,7 @@ import { storageGetSignedUrl } from "../../storage";
 import { canAdminDownloadCv, CV_DOWNLOAD_UNAVAILABLE_MESSAGE } from "../../recruitmentDownloadPolicy";
 import { eq, and, or, sql, desc, inArray, isNull, ne } from "drizzle-orm";
 import { sendRecruitmentTemplateEmail, type RecruitmentEmailLanguage, type RecruitmentEmailTemplate } from "../../_core/notifications";
-import { logRecruitmentAction, matchesRecruitmentProfile, parseRecruitmentJsonArray, RECRUITMENT_PROFILE_SCAN_LIMIT, recruitmentAuditInsert } from "../../recruitmentAudit";
+import { logRecruitmentAction, matchesRecruitmentProfile, parseRecruitmentJsonArray, RECRUITMENT_PROFILE_SCAN_LIMIT, recordWithRecruitmentAudit, recruitmentAuditInsert, traceRecruitmentActionDone } from "../../recruitmentAudit";
 import { analysedLanguageNames } from "../../clientBriefMatching";
 import { certificationFactLabel, recruitmentFactLabel, type RecruitmentFact } from "../../../shared/recruitmentFactOrigins";
 import { recruitmentApplicationStatusLabel } from "../../../shared/recruitmentApplicationStatuses";
@@ -100,7 +100,7 @@ export const adminRecruitmentRouter = router({
       if (result.outcome === "not_found") throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable." });
       if (result.outcome === "blocked") throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Cette adresse a rejeté ou bloqué l’e-mail. Vérifiez-la avant tout nouvel envoi." });
       if (result.outcome === "exhausted") throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Les tentatives automatiques sont épuisées. Vérifiez la configuration Resend avant un nouvel essai." });
-      await logRecruitmentAction({ applicationId: input.id, adminOpenId: ctx.user.openId, action: "email", metadata: { template: "application_confirmation_retry", outcome: result.outcome } });
+      await traceRecruitmentActionDone([{ applicationId: input.id, adminOpenId: ctx.user.openId, action: "email", metadata: { template: "application_confirmation_retry", outcome: result.outcome } }]);
       return result;
     }),
   }),
@@ -117,21 +117,20 @@ export const adminRecruitmentRouter = router({
         ? { processed: 0, waitingForAuthorization: false, reconnectRequired: false, results: [] as Array<Record<string, unknown>> }
         : await processDueCvGoogleDriveExports(1, [application.id]);
       const outcome = driveRetryOutcome(queue, processing);
-      await logRecruitmentAction({
+      await traceRecruitmentActionDone([{
         applicationId: application.id,
         adminOpenId: ctx.user.openId,
         action: "export",
         metadata: { event: "google_drive_retry", ...queue, processed: processing.processed, outcome: outcome.outcome },
-      });
+      }]);
       return { success: true, ...queue, processed: processing.processed, ...outcome };
     }),
     // « Relancer toutes les copies échouées » (REC-09).
     retryAllFailed: adminProcedure.mutation(async ({ ctx }) => {
       const { googleDriveConnectionWait, processDueCvGoogleDriveExports, retryAllFailedCvGoogleDriveExports } = await import("../../googleDriveExport");
       const queue = await retryAllFailedCvGoogleDriveExports();
-      for (const applicationId of queue.applicationIds) {
-        await logRecruitmentAction({ applicationId, adminOpenId: ctx.user.openId, action: "export", metadata: { event: "google_drive_retry", batch: true } });
-      }
+      // Requeued already: their lines in one statement, all or none.
+      await traceRecruitmentActionDone(queue.applicationIds.map(applicationId => ({ applicationId, adminOpenId: ctx.user.openId, action: "export" as const, metadata: { event: "google_drive_retry", batch: true } })));
       // A few copies inline (each one downloads and uploads a CV); the cron copies the rest.
       // Nothing to copy: the connection's real state all the same (REC-09).
       const processing = queue.requeued > 0
@@ -514,15 +513,15 @@ export const adminRecruitmentRouter = router({
 
       // A status change alone must never erase the recruiter's note: the
       // note is only written when the client sends it (empty clears it).
-      await db
+      // With its audit line, both or neither (DATA-01).
+      await recordWithRecruitmentAudit(db, db
         .update(cvApplications)
         .set({
           status: input.status,
           ...(input.adminNotes !== undefined ? { adminNotes: input.adminNotes || null } : {}),
           updatedAt: new Date(),
         })
-        .where(eq(cvApplications.id, input.id));
-      await logRecruitmentAction({ applicationId: input.id, adminOpenId: ctx.user.openId, action: "status_update", metadata: { status: input.status } });
+        .where(eq(cvApplications.id, input.id)), [{ applicationId: input.id, adminOpenId: ctx.user.openId, action: "status_update", metadata: { status: input.status } }]);
 
       return { success: true };
     }),
@@ -541,6 +540,7 @@ export const adminRecruitmentRouter = router({
       if (!canAdminDownloadCv(application)) {
         throw new TRPCError({ code: "NOT_FOUND", message: CV_DOWNLOAD_UNAVAILABLE_MESSAGE });
       }
+      // Traced before the link is made: refused, nothing was downloaded (DATA-01).
       await logRecruitmentAction({ applicationId: input.id, adminOpenId: ctx.user.openId, action: "download", metadata: { fileName: application.cvOriginalName } });
       const signedUrl = await storageGetSignedUrl(application.cvFileKey);
       return { url: signedUrl, fileName: application.cvOriginalName };
@@ -573,12 +573,12 @@ export const adminRecruitmentRouter = router({
       const queue = await enqueueCvAnalysis(application.id);
       const processing = await processDueCvAnalysisJobs(1, [application.id]);
       const outcome = reanalysisOutcome(queue, processing);
-      await logRecruitmentAction({
+      await traceRecruitmentActionDone([{
         applicationId: application.id,
         adminOpenId: ctx.user.openId,
         action: "reanalyze",
         metadata: { queued: queue.queued, accelerated: queue.accelerated, alreadyRunning: queue.alreadyRunning, processed: processing.processed, outcome: outcome.outcome },
-      });
+      }]);
       return { success: true, queued: queue.queued || queue.accelerated, processed: processing.processed, ...outcome };
     }),
 
@@ -610,7 +610,7 @@ export const adminRecruitmentRouter = router({
       let aiUnavailable = false;
       for (const application of resumableApplications) {
         await enqueueCvAnalysis(application.id);
-        await logRecruitmentAction({ applicationId: application.id, adminOpenId: ctx.user.openId, action: "reanalyze", metadata: { queued: true, batch: true } });
+        await traceRecruitmentActionDone([{ applicationId: application.id, adminOpenId: ctx.user.openId, action: "reanalyze", metadata: { queued: true, batch: true } }], `L’analyse de ${queued + 1} dossier(s) est relancée.`);
         queued += 1;
         // One analysis inline at most (an AI call can take ~35 s): the rest is
         // queued for the cron, so the admin request stays under the 60 s limit.
@@ -646,7 +646,7 @@ export const adminRecruitmentRouter = router({
         input.template as RecruitmentEmailTemplate,
         { language: input.language as RecruitmentEmailLanguage, customRequest: input.customRequest },
       );
-      await logRecruitmentAction({ applicationId: input.id, adminOpenId: ctx.user.openId, action: "email", metadata: { template: input.template, language: input.language, customRequest: input.customRequest || null, resendId: result.id } });
+      await traceRecruitmentActionDone([{ applicationId: input.id, adminOpenId: ctx.user.openId, action: "email", metadata: { template: input.template, language: input.language, customRequest: input.customRequest || null, resendId: result.id } }], "L’email est envoyé.");
       return { success: true };
     }),
 
