@@ -511,6 +511,50 @@ Les corrections de code peuvent être faites **par lots testés**, comme pour la
 - **IA-01** : corrigés le DOCX à longue chaîne de styles qui bloquait le serveur (80 à 90 s), la régression des CV de type Canva en Calibri et en Arial, et les nouvelles façons de cacher du texte (cellule fusionnée, texte vertical, colonne ou cellule hors page, forme posée devant, effets de texte de Word). En cours : du texte visible encore écarté dans les CV serrés écrits dans une police absente de la table de largeurs (Montserrat, Lato, Roboto, Garamond, etc.).
 - **ABUS-03** : en cours, deux cas limites où l'alerte d'échec au médecin part sans créneau d'envoi près de la fin du budget d'une page.
 
+**Suivi au 7 novembre — derniers écarts des lots 3 à 5.** La vérification de bout en bout du 6 novembre a validé PUB-01, IA-02, CODE-14 et les trois écritures de DATA-01 qu'elle visait. Les écarts qu'elle a trouvés ont été corrigés le 7 novembre, chaque correction relue par un relecteur chargé d'y trouver des défauts, puis corrigée :
+- **EXPL-02** : les textes saisis par des tiers passent à la ligne dans tous les onglets de l'admin sur téléphone (liens longs dans Messages, les certifications et Réservations, avec « Voir tout ») ; les tailles du coffre s'affichent en Ko/Mo.
+- **ABUS-03** :
+  - les envois sont identifiés par l'adresse exacte : une correction qui ne change que les majuscules ne provoque plus de refus de Resend ;
+  - une alerte mise en file cite l'adresse réellement refusée ;
+  - l'alerte de quota épuisé est mise en file au lieu d'attendre le prochain dépassement.
+- **DATA-01** :
+  - chaque modification de l'admin est écrite d'un seul coup avec sa ligne d'audit ;
+  - une action déjà faite au-dehors (email, analyse, copie Drive) n'est plus annoncée « rien n'a été modifié » quand seule sa trace manque.
+- **CODE-14** : le test de la CI fige la liste des étapes et des scripts du job qualité. Il refuse aussi les réglages pnpm ou npm, les fonctions, alias et écritures dans `$GITHUB_ENV` qui neutraliseraient une étape, et les configurations vitest, TypeScript ou knip qui écartent des fichiers.
+- **IA-02** : « Anglais - Arabe » donne deux langues ; « hébraïque » et les adjectifs voisins sont reconnus.
+- **IA-01**, 10e et 11e tours :
+  - chaque largeur qui sert à prouver qu'un texte tient dans sa place est une borne supérieure de ce que Word dessine ;
+  - dans un cadre de taille fixe, un texte n'est lu qu'après ce que la vérification sait borner (refus par défaut) ;
+  - la vérification de bout en bout a validé la sécurité : aucun piège n'obtient de score ni de certification, et aucune consigne cachée n'atteint l'IA.
+
+  Le prix de cette prudence : du texte honnête est mis de côté dans les cadres fixes. C'est le cas de l'arabe, de l'hébreu et du persan, des symboles et emojis en cellule étroite, et des polices Aptos, Calibri Light et Garamond. Un 12e tour, en cours, vise ces faux positifs et les constructions de Word qui ne sont encore traitées nulle part.
+
+### Lot 6 — constats restés hors des cinq lots
+Les 169 constats restants ont été triés dans le code actuel. Pour chacun, la partie qui dépend d'une de vos décisions reste hors code. Le plan est dans `AUDIT_AMELIORATIONS_2026-10-24.lot6.json` : 6 vagues, 28 unités, les fichiers prévus et les décisions connues. Chaque vague est relue par un relecteur chargé d'y trouver des défauts, corrigée, fusionnée, validée, puis poussée.
+
+**Vague 1 (fusionnée le 6 novembre)** : réservation (RES-08, RES-10, INTL-09, A11Y-10), accusés de réception des formulaires (PUB-09, REC-12, A11Y-09, PUB-22, A11Y-16), confirmations dans l'admin (ADM-10, ADM-11, ADM-23), espace candidat (REC-15, REC-17, REC-18, A11Y-19), agenda et emails des rendez-vous (ADM-18, EXPL-13, RES-12).
+
+**Vague 2 (fusionnée le 7 novembre)** :
+
+| ID | État | Reste à faire |
+|---|---|---|
+| IA-04, IA-05, IA-06, IA-09 | ✅ une citation répétée ne compte qu'une fois ; formulaire, message (500 premiers caractères) et CV donnés à l'IA comme des données, entre des balises que le candidat ne peut ni fermer ni imiter ; coffre : confiance hors de 0 à 100 refusée, plus d'« indice de confiance » affiché ; chaque technique de masquage des PDF testée seule (consigne `recruitment-v8`) | Relancer l'analyse des CV déjà reçus après le déploiement (voir « À faire de votre côté ») |
+| IA-07 | ⏳ citations lues dans la transcription d'un scan marquées « à contrôler sur le scan » | Décider du score d'un CV lu par la vision |
+| EXPL-12, DATA-06, EXPL-17, DATA-14 | ✅ analyse du coffre bloquée reprise après 15 min, sans relire un document déjà tranché par l'admin ; dépôt dans le coffre confirmé dès le document enregistré ; copie Drive remise en file à la main reprise au passage suivant ; `scripts/db-invariants.sql` et rappel quotidien des incohérences | Lancer `scripts/db-invariants.sql` une fois en production |
+| DATA-12 | ⏳ rendez-vous payé sans tâche de confirmation ou de facture repris par la tâche quotidienne pendant 7 jours | Colonne `paid_at` (date du paiement sur la facture) prête mais non fusionnée : elle demande une migration, à regrouper avec la 0005 de la vague 5. D'ici là, une facture reprise porte la date de sa tâche |
+| REC-14, ADM-13, ADM-20, ADM-26 | ✅ « Renvoyer quand même » une invitation incertaine après 10 min, sans doublon chez Resend ; « Le candidat a répondu », relances à faire traitées en lot, suppression d'un profil de matching ; Candidatures plus légère (analyse chargée à l'ouverture de la fiche, filtres appliqués après la frappe) ; téléphones exportés avec « 00 » | Sort des modèles d'offres ; compter « Proposer un échange » comme un contact ? |
+| INTL-12, INTL-10 | ⏳ filtres de spécialité sans majuscules ni accents, `%` et `_` pris tels quels ; mot de passe candidat normalisé (NFKC) ; pays, langues et statut en clair dans l'export du vivier | Format d'export pour les employeurs étrangers |
+| REC-22, A11Y-11, PUB-17, PUB-18, A11Y-08 | ✅ formulaire de candidature en premier sur téléphone, brouillon gardé dans l'onglet (sans le fichier, le consentement ni aucune donnée de santé) ; liste des pays utilisable au clavier ; `/legal` sans faux onglets ; « MAINTENANCE » et adresses longues tiennent sur téléphone ; contour du focus visible en couleurs forcées | Garder le titre au-dessus du formulaire sur téléphone ? |
+| PUB-19 | ⏳ adresses longues coupées proprement | Créer une adresse courte (contact@, recrutement@) |
+| ADM-06, EXPL-20 | ✅ vue d'ensemble de ce qui attend (rendez-vous du jour et du lendemain, questions santé, messages non lus, demandes RGPD et leur échéance, documents à revoir, chiffre d'affaires du mois) ; clé de test en production ou clé réelle en préproduction signalée par un code, jamais par sa valeur | Confirmer les définitions des indicateurs |
+| ADM-09, INTL-05, INTL-11, RGPD-17 | ✅ le lien d'une notification ouvre son élément dans l'admin, même après la connexion ; caractères de contrôle refusés avec un message clair, textes collés nettoyés ; référence en tête des sujets des emails au médecin ; emails pseudonymisés dans le journal de sécurité | — |
+| ADM-08, DATA-13 | ⏳ onglets de l'admin sur plusieurs lignes ; dates passées à la base en UTC | Regrouper les onglets ? ; `SHOW timezone` une fois sur Neon |
+| PUB-08, PUB-12, ADM-16, EN-10, EN-08, A11Y-18 | ✅ rubriques dans l'en-tête dès 1024 px, menu « Affichage », pied de page en 4 colonnes ; « Gérer les cookies » en bas de page ; ni bannière cookies ni mesure d'audience dans `/admin` et `/candidate` ; langue changée sans recharger ; anglais proposé à un navigateur qui ne déclare pas le français | Renommer « Leadership » (décision) ; relire les nouveaux textes |
+| SECU-03, SECU-04, SECU-08, SEOP-11 | ✅ ni `ws:` ni `wss:` dans la politique de sécurité de production ; plus d'en-tête `X-Powered-By` ; relais `/manus-storage` supprimé ; une seule adresse par page (redirection 308 sans barre finale, `/vvip-offshore` redirigé) | Contrôles sur une préproduction (voir « À faire de votre côté ») |
+| SEOP-05 | ⏳ balises `keywords` et `language` retirées | Titres, descriptions et H1 |
+
+**Vagues 3 à 6** : à faire. Elles couvrent le gabarit des emails, les finitions de l'admin, la FAQ, la recherche et la 404, le typage des tests, le premier affichage, l'accueil, les campagnes, les journaux, le poids du serveur, les pays et fichiers, le tarif et l'heure de Paris, l'effacement RGPD, la sécurité de l'admin, les tests de bout en bout et la mise en forme du code.
+
 ### À faire de votre côté
 - **Comptes et secrets, tout de suite** :
   - double authentification (clé d'accès « passkey » enregistrée sur votre téléphone ou ordinateur, ou clé de sécurité physique) sur la boîte Gmail, puis sur Vercel, GitHub, Stripe, Neon et Resend (EXPL-10) ;
@@ -526,6 +570,12 @@ Les corrections de code peuvent être faites **par lots testés**, comme pour la
   - accords écrits pour les portraits et logos de tiers (RGPD-21), registre des traitements à refaire (RGPD-08) ;
   - WhatsApp : numéro à tester, compte professionnel, mention dans la politique (PUB-29, RGPD-18).
 - **International et référencement** : relecture de l'anglais (EN-09) ; retirer ou compléter l'allemand et le chinois (EN-12) ; décider de viser ou non le trafic anglophone (SEOP-02) ; Search Console et Bing (SEOP-18) ; portrait d'au moins 1200 px (SEOP-10).
+- **Après le déploiement du lot 6, vague 2** :
+  - **analyses des CV** : la consigne passe à `recruitment-v8`, et les analyses enregistrées avant restent sans score ni faits jusqu'à une nouvelle analyse. Relancez-les avec « Mettre à jour / reprendre l'IA » dans Candidatures, 10 dossiers par clic, soit un appel à l'IA par dossier ;
+  - **préproduction** : `/booking/` doit répondre 308 vers `/booking`, et `/api/health` ne doit plus montrer `X-Powered-By`. Les webhooks Stripe (`/api/stripe/webhook`) et Resend (`/api/webhooks/resend`), les tâches planifiées et le retour OAuth de Google Drive doivent être déclarés sans barre finale : « Send test webhook » doit répondre 2xx, pas 308 ;
+  - **configuration** : ouvrir `/admin` en production et en préproduction, puis corriger dans Vercel ce que signale « Configuration à vérifier » ;
+  - **base** : lancer une fois `scripts/db-invariants.sql` et `SHOW timezone` (UTC attendu) dans l'éditeur SQL de Neon ;
+  - **relecture** : les nouveaux textes du menu, du pied de page, de l'offre d'anglais et de « Gérer les cookies », ainsi que la phrase de la politique de confidentialité qui renvoie à « Gérer les cookies ».
 
 ### Avec l'avocat et le comptable
 - **Comptable** : régime de TVA et entité qui facture (RES-03). Les factures d'avoir (RES-07) suivront.
