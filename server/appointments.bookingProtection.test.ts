@@ -193,6 +193,32 @@ describe("appointments.create — maintien avant paiement et session Checkout (P
     expect(stripeParams.cancel_url).toBe(confirmationUrl("canceled", held.trackingId));
   });
 
+  it("reprend le paiement avec le nom tel que la page l’a gardé, alors qu’il est enregistré nettoyé (INTL-05)", async () => {
+    // Espaces finaux (suggestion du clavier), RLM collés autour d’un nom arabe, forme NFD.
+    const typedNames: Array<[string, string]> = [
+      ["Patient Synthétique  ", "Patient Synthétique"],
+      ["‏محمد العتيبي‏", "محمد العتيبي"],
+      ["Zoë Ørsted", "Zoë Ørsted"],
+    ];
+    for (const [typedName, storedName] of typedNames) {
+      const db = fakeDb(0);
+      mocks.getDb.mockResolvedValue(db);
+      const booked = await appRouter.createCaller(publicContext()).appointments.create({ ...bookingInput(), customerName: typedName });
+      const [insert] = db.execute.mock.calls[0] as unknown as [SQL];
+      expect(dialect.sqlToQuery(insert).params[1], JSON.stringify(typedName)).toBe(storedName);
+
+      // Retour arrière depuis Stripe : la page renvoie le nom et l’adresse qu’elle a gardés.
+      const held = { trackingId: booked.trackingId, customerEmail: "Patient@Example.com", customerName: storedName, finalPrice: "100.00", paymentStatus: "pending", appointmentStatus: "held", stripeSessionId: null, holdExpiresAt: new Date(Date.now() + 45 * 60 * 1000) };
+      mocks.getDb.mockResolvedValue({ select: () => ({ from: () => ({ where: () => ({ limit: async () => [held] }) }) }), update: vi.fn(() => ({ set: () => ({ where: async () => ({ rowCount: 1 }) }) })) });
+      const resume = { trackingId: held.trackingId, finalPrice: 100, customerEmail: "Patient@Example.com" };
+      await expect(appRouter.createCaller(publicContext()).appointments.createCheckoutSession({ ...resume, customerName: typedName }), JSON.stringify(typedName))
+        .resolves.toMatchObject({ success: true, checkoutUrl: "https://checkout.stripe.test/session" });
+      // Un autre nom reste refusé.
+      await expect(appRouter.createCaller(publicContext()).appointments.createCheckoutSession({ ...resume, customerName: "Patient Autre" }))
+        .rejects.toMatchObject({ code: "BAD_REQUEST", message: "Les informations du paiement ne correspondent pas au rendez-vous" });
+    }
+  });
+
   it("refuse une adresse email invalide ou trop longue avant tout accès à l’agenda", async () => {
     mocks.getDb.mockResolvedValue(fakeDb(0));
     for (const customerEmail of ["pas-une-adresse", `${"a".repeat(310)}@example.com`]) {

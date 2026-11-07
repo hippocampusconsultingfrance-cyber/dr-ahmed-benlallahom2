@@ -29,8 +29,11 @@ const EDGES = new RegExp(`^[${EDGE_MARKS}]+|[${EDGE_MARKS}]+$`, "g");
 const SINGLE_LINE_REFUSED = new RegExp("[\\u0000-\\u001F\\u007F-\\u009F\\u2028\\u2029\\u202D\\u202E]");
 const MULTI_LINE_REFUSED = new RegExp("[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F-\\u009F\\u202D\\u202E]");
 
-/** Step 1: NFC, without the spaces and invisible marks at either end. */
-function cleanTextInput(value: string): string {
+/**
+ * Step 1: NFC, without the spaces and invisible marks at either end. Also
+ * compares a value stored cleaned with the one a page kept as typed.
+ */
+export function cleanTextInput(value: string): string {
   return value.normalize("NFC").replace(EDGES, "");
 }
 

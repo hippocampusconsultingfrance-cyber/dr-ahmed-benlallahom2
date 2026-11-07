@@ -24,7 +24,7 @@ import {
   toE164PhoneNumber,
   type BookingRefusalReason,
 } from "../../shared/bookingPolicy";
-import { multiLineText, singleLineText } from "../../shared/textInput";
+import { cleanTextInput, multiLineText, singleLineText } from "../../shared/textInput";
 import { getSafeCheckoutOrigin } from "./publicOrigin";
 import { enforcePublicFormRateLimit, givePublicFormAttemptBack, withinBookingGiveBackCap } from "./publicForms";
 import { parisDateKey, parseAppointmentDate, isNightRateForParis, isBookableAppointmentTime } from "./parisTime";
@@ -425,7 +425,10 @@ export const appointmentsRouter = router({
         if (!Number.isFinite(expectedPrice) || Math.round(expectedPrice * 100) !== Math.round(input.finalPrice * 100)) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "Le montant du paiement ne correspond pas au rendez-vous" });
         }
-        if (appointment.customerEmail !== input.customerEmail || appointment.customerName !== input.customerName) {
+        // Nom enregistré nettoyé (INTL-05), gardé tel que tapé par la page
+        // (espace final, marque de direction) : comparés nettoyés tous deux,
+        // ce qui vaut aussi pour un créneau retenu avant ce nettoyage.
+        if (appointment.customerEmail !== input.customerEmail || cleanTextInput(appointment.customerName) !== cleanTextInput(input.customerName)) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "Les informations du paiement ne correspondent pas au rendez-vous" });
         }
 
@@ -459,7 +462,7 @@ export const appointmentsRouter = router({
           customer_email: input.customerEmail,
           metadata: {
             trackingId: input.trackingId,
-            customerName: input.customerName,
+            customerName: appointment.customerName,
           },
           expires_at: stripeExpiresAt(appointment.holdExpiresAt),
           success_url: `${getSafeCheckoutOrigin()}/booking/confirmation?status=success&trackingId=${encodeURIComponent(input.trackingId)}&session_id={CHECKOUT_SESSION_ID}`,
