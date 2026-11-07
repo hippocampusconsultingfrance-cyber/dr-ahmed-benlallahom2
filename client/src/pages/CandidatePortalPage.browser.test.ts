@@ -31,6 +31,8 @@ const LONG_NAME = "attestation-de-travail-chu-de-lyon-service-anesthesie-reanima
 const MEDIUM_NAME = "Diplome_docteur_medecine_2019.pdf";
 /** An « Autre document » label of the 160 characters the form allows, without a space. */
 const LONG_OTHER_LABEL = "Attestation_de_reussite_au_concours_de_praticien_attache_associe_session_2024_CHU_de_Lyon_service_anesthesie_reanimation_et_medecine_perioperatoire_signee".padEnd(160, "x");
+/** A size in the portal's language, as the application form gives it (EXPL-02): Ko in French, KB otherwise, after a no-break space. */
+const sizeIn = (language: string, kilobytes: number) => `${kilobytes}\u00a0${language === "fr" ? "Ko" : "KB"}`;
 type Procedure = () => unknown;
 const procedures: Record<string, Procedure> = {
   "candidatePortal.me": () => ({ id: 7, email: "vera@test.local", firstName: "Vera", lastName: "Exemple", emailVerifiedAt: new Date(Date.UTC(2026, 8, 1)), linkedApplicationId: null, documentConsentAt: new Date(Date.UTC(2026, 8, 1)) }),
@@ -103,7 +105,7 @@ describe.skipIf(!executablePath)("coffre du candidat dans un navigateur", () => 
     expect(layout.lineRight).toBeLessThanOrEqual(Math.min(width, layout.cardRight));
     expect(layout.truncated).toBe(true);
     // The extension and the size stay readable right after the cut name; the whole name is in the title.
-    expect(layout.extension).toBe(".pdf · 1 KB");
+    expect(layout.extension).toBe(`.pdf · ${sizeIn(language, 1)}`);
     expect(layout.extensionRight).toBeLessThanOrEqual(Math.min(width, layout.cardRight));
     expect(layout.title).toBe(LONG_NAME);
     await page.context().close();
@@ -126,7 +128,7 @@ describe.skipIf(!executablePath)("coffre du candidat dans un navigateur", () => 
       };
     }, MEDIUM_NAME);
     expect(layout.cut).toBe(false);
-    expect(layout.shown).toBe(`${MEDIUM_NAME} · 78 KB`);
+    expect(layout.shown).toBe(`${MEDIUM_NAME} · ${sizeIn(language, 78)}`);
     expect(layout.extensionRight).toBeLessThanOrEqual(layout.cardRight);
     await page.context().close();
   }, 60_000);
