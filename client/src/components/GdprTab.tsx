@@ -1,5 +1,5 @@
 import { trpc } from "@/lib/trpc";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Shield, Eye, CheckCircle, XCircle, Clock } from "lucide-react";
 import { toast } from "sonner";
@@ -10,11 +10,23 @@ import { formatGdprRequestDate, formatGdprRequestDateTime, GDPR_REQUEST_STATUS_L
 import { adminListCount, adminPageOffsets, ADMIN_PAGE_SIZE, mergeAdminPages, useAdminPageCount } from "@/components/adminPagination";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 
-export default function GdprTab() {
+/**
+ * `reference`: the request the dashboard's address names (ADM-09,
+ * /admin?tab=gdpr&ref=G…), set apart, brought on screen and focused once the
+ * list shows it.
+ */
+export default function GdprTab({ reference = "" }: { reference?: string } = {}) {
   const utils = trpc.useUtils();
   const { pageCount, loadMore } = useAdminPageCount("all");
   const pages = trpc.useQueries(t => adminPageOffsets(pageCount).map(offset => t.admin.gdprRequests.list({ limit: ADMIN_PAGE_SIZE, offset })));
   const { items, total, isLoading, isLoadingMore, error, loadMoreError, retryLoadMore, retry, retrying } = mergeAdminPages(pages);
+  const linkedRequestRef = useRef<HTMLDivElement | null>(null);
+  const linkedRequestShown = Boolean(reference) && items.some(req => req.trackingId === reference);
+  useEffect(() => {
+    if (!linkedRequestShown || !linkedRequestRef.current) return;
+    linkedRequestRef.current.scrollIntoView({ block: "center" });
+    linkedRequestRef.current.focus({ preventScroll: true });
+  }, [linkedRequestShown]);
   // Note or reason being typed, per request (RGPD-12); the saved note otherwise.
   const [notes, setNotes] = useState<Record<number, string>>({});
   const [personalDataSearch, setPersonalDataSearch] = useState({ email: "", nonce: 0 });
@@ -58,8 +70,15 @@ export default function GdprTab() {
             const open = isGdprRequestOpen(req.status);
             const overdue = isGdprRequestOverdue(req, now);
             const update = (status: "in_progress" | "completed" | "rejected") => updateStatus.mutate({ id: req.id, status, notes: reason || undefined });
+            const linked = Boolean(reference) && req.trackingId === reference;
             return (
-              <div key={req.id} className="bg-card border border-border rounded-lg p-4">
+              <div
+                key={req.id}
+                ref={linked ? linkedRequestRef : undefined}
+                tabIndex={linked ? -1 : undefined}
+                aria-current={linked ? "true" : undefined}
+                className={`bg-card border rounded-lg p-4 ${linked ? "border-primary ring-2 ring-primary/40 focus:outline-none" : "border-border"}`}
+              >
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1">

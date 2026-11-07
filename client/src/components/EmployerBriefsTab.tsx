@@ -53,7 +53,8 @@ function matchReasons(match: MissionMatch, copy: (typeof briefCopy)[keyof typeof
   ];
 }
 
-export default function EmployerBriefsTab() {
+/** `reference`: the mission the dashboard's address names (ADM-09, /admin?tab=employerBriefs&ref=BRIEF…), selected once the list is read. */
+export default function EmployerBriefsTab({ reference = "" }: { reference?: string } = {}) {
   const { language } = useLanguage();
   const copy = briefCopy[language as keyof typeof briefCopy] ?? briefCopy.fr;
   const locale = language === "zh" ? "zh-CN" : language === "de" ? "de-DE" : language === "en" ? "en-GB" : "fr-FR";
@@ -73,6 +74,10 @@ export default function EmployerBriefsTab() {
   const [consentDates, setConsentDates] = useState<Record<number, string>>({});
   const [missionGoneNotice, setMissionGoneNotice] = useState(false);
   const { data: briefs, isLoading, error, refetch: refetchBriefs, isFetching: briefsFetching } = trpc.admin.clientBriefs.list.useQuery();
+  const linkedBriefId = reference ? briefs?.find(brief => brief.briefId === reference)?.id ?? null : null;
+  useEffect(() => {
+    if (linkedBriefId !== null) setSelectedBriefId(linkedBriefId);
+  }, [linkedBriefId]);
   // With no mission selected, an id no mission has, never read (the query is
   // off): no candidates of a mission seen earlier under the empty state.
   const matchesInput = useMemo(() => ({ briefId: selectedBriefId ?? 0, page: matchPage, limit: 25, minimumMatch, shortlist: shortlistFilter }), [selectedBriefId, matchPage, minimumMatch, shortlistFilter]);

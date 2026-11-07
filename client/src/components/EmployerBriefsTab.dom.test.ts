@@ -81,8 +81,8 @@ const brief = (id: number, organizationName: string): Brief => ({ id, briefId: `
 const EMPTY_STATE = "Shortlist assistée";
 const MISSION_GONE = "Cette mission n’existe plus : elle a été supprimée entre-temps.";
 
-function mount(client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })) {
-  render(createElement(QueryClientProvider, { client }, createElement(EmployerBriefsTab)));
+function mount(client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } }), props: { reference?: string } = {}) {
+  render(createElement(QueryClientProvider, { client }, createElement(EmployerBriefsTab, props)));
   return client;
 }
 /** Opens a mission from the list on the left, as the admin does. */
@@ -293,6 +293,28 @@ describe("écriture refusée par une contrainte de la base, dans la langue de l�
     server.associate = vi.fn(async () => { throw refusal("BAD_REQUEST", "something_else"); });
     fireEvent.click(screen.getAllByRole("button", { name: "Shortlist" })[0]!);
     await waitFor(() => expect(server.toasts).toEqual([["error", "Refus du serveur (something_else)."]]));
+  });
+});
+
+describe("mission ouverte depuis le lien d’une notification (ADM-09)", () => {
+  it("sélectionne, une fois la liste lue, la mission que l’adresse nomme, et lit ses candidats", async () => {
+    mount(undefined, { reference: "BRIEF-7" });
+    expect(await screen.findByText("Amal Haddad")).toBeTruthy();
+    expect(server.candidateReads).toEqual([7]);
+    expect(screen.getByText("Hôpital du Golfe").closest("article")!.className).toContain("border-primary");
+    expect(screen.getByText("Clinique du Nord").closest("article")!.className).not.toContain("border-primary");
+    expect(screen.queryByText(EMPTY_STATE)).toBeNull();
+
+    // Another mission chosen afterwards stays chosen.
+    await openMission("Clinique du Nord");
+    expect(await screen.findByText("Jean Martin")).toBeTruthy();
+    expect(screen.queryByText("Amal Haddad")).toBeNull();
+  });
+
+  it("ouvre la liste sans sélection pour une référence qu’aucune mission n’a", async () => {
+    mount(undefined, { reference: "BRIEF-404" });
+    expect(await screen.findByText(EMPTY_STATE)).toBeTruthy();
+    expect(server.candidateReads).toEqual([]);
   });
 });
 

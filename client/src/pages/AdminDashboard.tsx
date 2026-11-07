@@ -184,10 +184,10 @@ export default function AdminDashboard() {
       <main className="max-w-7xl mx-auto px-4 py-5 sm:py-8">
         <AdminConfigurationBanner />
         {activeTab === "overview" && <OverviewTab onNavigate={setActiveTab} />}
-        {/* A list that searches by reference opens on the element the address names; another reference mounts it again. */}
+        {/* A list opens on the element the address names (searched, selected or set apart); another reference mounts it again. */}
         {activeTab === "appointments" && <AppointmentsTab key={reference} initialSearch={reference} />}
         {activeTab === "contacts" && <ContactsTab key={reference} initialSearch={reference} />}
-        {activeTab === "gdpr" && <GdprTab />}
+        {activeTab === "gdpr" && <GdprTab key={reference} reference={reference} />}
         {activeTab === "testimonials" && <TestimonialsTab />}
         {activeTab === "availability" && <AvailabilityTab />}
         {/* The recruitment tabs load when first opened (adminLazyTabs.ts). */}
@@ -196,7 +196,7 @@ export default function AdminDashboard() {
           {activeTab === "candidateDocuments" && <CandidateDocumentsAdminTab />}
           {activeTab === "vivier" && <VivierTab onCompose={candidateIds => { setMailingSelectedIds(candidateIds); setActiveTab("mailing"); }} />}
           {activeTab === "mailing" && <MailingTab initialSelectedIds={mailingSelectedIds} />}
-          {activeTab === "employerBriefs" && <EmployerBriefsTab />}
+          {activeTab === "employerBriefs" && <EmployerBriefsTab key={reference} reference={reference} />}
         </Suspense>
         {activeTab === "security" && <SecurityOperationsTab />}
         {activeTab === "medicalQuestions" && <MedicalQuestionsAdminTab key={reference} initialSearch={reference} />}
