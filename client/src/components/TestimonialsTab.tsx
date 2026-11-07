@@ -4,6 +4,7 @@ import { CheckCircle, XCircle, Star, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { AdminErrorState } from "@/components/AdminStatePanel";
+import AdminClampedText from "@/components/AdminClampedText";
 
 export default function TestimonialsTab() {
   const { data: testimonialsList, isLoading, error, refetch, isFetching } = trpc.admin.testimonials.list.useQuery();
@@ -45,7 +46,8 @@ export default function TestimonialsTab() {
         {testimonialsList?.map((t) => (
           <div key={t.id} className="bg-card border border-border rounded-lg p-4">
             <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
-              <div className="flex-1 min-w-0">
+              {/* EXPL-02: what the author typed wraps inside the card, and « Voir tout » shows the whole testimonial before it is approved. */}
+              <div className="flex-1 min-w-0 wrap-anywhere">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1">
                   <span className="font-semibold text-foreground">{t.authorName}</span>
                   <div className="flex">
@@ -59,7 +61,7 @@ export default function TestimonialsTab() {
                   {t.featured === 1 && <span className="px-2 py-0.5 rounded text-xs font-medium bg-cyan-500/20 text-cyan-400">Featured</span>}
                 </div>
                 <p className="break-words text-sm font-medium text-foreground">{t.title}</p>
-                <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{t.content}</p>
+                <AdminClampedText text={t.content} className="text-sm text-muted-foreground mt-1" />
               </div>
               <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:flex-nowrap">
                 {t.status !== "approved" && (

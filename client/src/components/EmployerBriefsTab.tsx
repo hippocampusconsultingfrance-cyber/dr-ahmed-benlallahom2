@@ -173,8 +173,9 @@ export default function EmployerBriefsTab() {
   if (error) return <AdminErrorState title={copy.loadError} description={error.message} onRetry={() => void refetchBriefs()} retrying={briefsFetching} retryLabel={copy.retry} />;
 
   return (
+    // EXPL-02: what employers and candidates typed (organisation, contact, needs, notes, names) wraps in both columns.
     <div className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-      <section className="space-y-3">
+      <section className="min-w-0 space-y-3 wrap-anywhere">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold text-foreground">{copy.title}</h2>
@@ -207,7 +208,7 @@ export default function EmployerBriefsTab() {
         {(!briefs || briefs.length === 0) && <p className="rounded-xl border border-dashed border-border py-10 text-center text-sm text-muted-foreground">{copy.noBrief}</p>}
       </section>
 
-      <section className="rounded-xl border border-border bg-card p-5">
+      <section className="min-w-0 rounded-xl border border-border bg-card p-5 wrap-anywhere">
         {!selectedBriefId && <div className="flex min-h-72 flex-col items-center justify-center text-center"><UsersRound className="mb-3 h-8 w-8 text-primary" /><h2 className="font-semibold text-foreground">{copy.shortlistAssisted}</h2>{missionGoneNotice && <p role="status" className="mt-2 max-w-sm text-sm text-amber-700 dark:text-amber-300">{copy.missionGone}</p>}<p className="mt-2 max-w-sm text-sm text-muted-foreground">{copy.selectBrief}</p></div>}
         {selectedBriefId && matches.isLoading && <PublicContentSkeleton cards={2} columns={2} label={copy.calculating} />}
           {selectedBrief && <section className="mb-5 rounded-lg border border-border bg-background p-4" aria-label={`${copy.details} ${selectedBrief.briefId}`}>

@@ -61,7 +61,8 @@ export default function GdprTab() {
             return (
               <div key={req.id} className="bg-card border border-border rounded-lg p-4">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                  <div className="flex-1 min-w-0">
+                  {/* EXPL-02: what the person typed (name, description, with its line breaks) and the note wrap inside the card. */}
+                  <div className="flex-1 min-w-0 wrap-anywhere">
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1">
                       <span className="font-semibold text-foreground">{req.name}</span>
                       <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-700 text-slate-200">
@@ -84,7 +85,7 @@ export default function GdprTab() {
                       ) : null}
                     </div>
                     {req.description && (
-                      <p className="text-sm text-foreground mt-2">{req.description}</p>
+                      <p className="whitespace-pre-line text-sm text-foreground mt-2">{req.description}</p>
                     )}
                     {open ? (
                       <label className="mt-3 block text-sm font-medium text-foreground" htmlFor={`gdpr-request-note-${req.id}`}>

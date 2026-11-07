@@ -219,7 +219,8 @@ export default function CertificationReview({ applicationId, certifications, lan
           const draft = renewalDrafts[certification.name];
           const renewal = renewalOf(draft);
           return (
-            <li key={certification.name} className="rounded-lg border border-border bg-background p-3">
+            // A certification declared with a link or a word of hundreds of letters wraps inside its row (EXPL-02).
+            <li key={certification.name} className="min-w-0 rounded-lg border border-border bg-background p-3 wrap-anywhere">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
                   <p className="font-medium text-foreground">{certification.name}{expiry ? <span className={`font-normal ${expired ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}> · {certification.expiryUnverified ? copy.expiryPerCv(expiry) : expiry}</span> : null}</p>

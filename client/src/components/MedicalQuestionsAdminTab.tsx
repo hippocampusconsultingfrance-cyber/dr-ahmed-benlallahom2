@@ -291,7 +291,7 @@ export default function MedicalQuestionsAdminTab() {
       </div>
 
       {/* scroll-mt: room for the sticky admin header (two rows below sm). */}
-      <div ref={detailRef} tabIndex={-1} role="region" aria-label="Question sélectionnée" className="min-w-0 scroll-mt-28 rounded-3xl border border-border bg-card/50 p-6 sm:scroll-mt-20">
+      <div ref={detailRef} tabIndex={-1} role="region" aria-label="Question sélectionnée" className="min-w-0 scroll-mt-28 rounded-3xl border border-border bg-card/50 p-6 wrap-anywhere sm:scroll-mt-20">
         {selected.isLoading ? (
           <PublicContentSkeleton cards={1} label="Chargement de la demande" />
         ) : selected.error ? (

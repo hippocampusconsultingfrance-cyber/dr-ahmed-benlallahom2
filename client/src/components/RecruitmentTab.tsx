@@ -444,7 +444,7 @@ export default function RecruitmentTab() {
                   <button type="button" onClick={() => setExpandedId(expanded ? null : application.id)} className="min-w-0 text-left">
                     <div className="flex items-start gap-3">
                       <span className="mt-1 rounded-full bg-primary/10 p-2 text-primary"><UserRound className="h-4 w-4" /></span>
-                      <div className="min-w-0">
+                      <div className="min-w-0 wrap-anywhere">
                         <h3 className="font-semibold text-foreground">{application.firstName} {application.lastName}</h3>
                         <p className="text-sm text-muted-foreground">{application.specialty} · {application.trackingId}</p>
                         <p className="mt-1 text-sm text-muted-foreground">{countries.join(", ") || "Pays non précisés"}</p>
@@ -508,7 +508,7 @@ export default function RecruitmentTab() {
                       {application.message && <p className="pt-2"><strong className="text-foreground">Message :</strong> {application.message}</p>}
                     </div>
 
-                    <div className="rounded-xl border border-border bg-background/60 p-4 md:col-span-2" aria-label={`Certifications de ${application.firstName} ${application.lastName}`}>
+                    <div className="min-w-0 rounded-xl border border-border bg-background/60 p-4 wrap-anywhere md:col-span-2" aria-label={`Certifications de ${application.firstName} ${application.lastName}`}>
                       <h4 className="mb-2 font-semibold text-foreground">Certifications et origine</h4>
                       <CertificationReview applicationId={application.id} certifications={application.certificationFacts ?? []} />
                     </div>
@@ -571,7 +571,7 @@ export default function RecruitmentTab() {
                       </div>
                     </div>
 
-                    <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 md:col-span-2">
+                    <div className="min-w-0 rounded-xl border border-primary/20 bg-primary/5 p-4 wrap-anywhere md:col-span-2">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div className="flex items-start gap-3">
                           <span className="rounded-lg bg-primary/10 p-2 text-primary"><BrainCircuit className="h-5 w-5" /></span>
@@ -710,7 +710,7 @@ export default function RecruitmentTab() {
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Composer un email candidat</DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="wrap-anywhere">
               {emailComposer ? `Message individuel à ${emailComposer.candidateName}.` : "Préparez un message individuel."}
             </DialogDescription>
           </DialogHeader>
