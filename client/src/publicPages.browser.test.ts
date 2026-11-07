@@ -539,6 +539,32 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
     await home.context().close();
   }, 120_000);
 
+  it("garde l'accueil et la confirmation de réservation dans l'écran en allemand, en anglais et en chinois, de 320 px (PUB-17, PUB-19)", async () => {
+    for (const language of ["de", "en", "zh"]) {
+      for (const width of [320, 360]) {
+        for (const route of ["/", "/booking/confirmation?status=success&trackingId=VISUAL-TEST-2026"]) {
+          const page = await open(route, { width, height: 844, consent: true, language });
+          // Revealed sections only: one not yet shown is shifted (.fade-in-up).
+          await page.evaluate(() => document.querySelectorAll(".fade-in-up").forEach((section) => section.classList.add("visible")));
+          await page.evaluate(revealSettled);
+          const layout = await page.evaluate(() => {
+            const outside = (element: Element, frame: Element | null) => frame !== null && element.getBoundingClientRect().right > frame.getBoundingClientRect().right + 0.5;
+            return {
+              pageWidth: document.documentElement.scrollWidth,
+              // « Gesundheitsunternehmen » in its column of the home page, « Datenschutzerklärung » in its card.
+              outOfCard: [
+                ...[...document.querySelectorAll(".stat-card p")].filter((label) => outside(label, label.closest(".stat-card"))),
+                ...[...document.querySelectorAll(".privacy-trust-card a, .privacy-trust-card p")].filter((text) => outside(text, text.closest(".privacy-trust-card"))),
+              ].map((element) => element.textContent),
+            };
+          });
+          expect(layout, `${route} en ${language} à ${width} px`).toEqual({ pageWidth: width, outOfCard: [] });
+          await page.context().close();
+        }
+      }
+    }
+  }, 180_000);
+
   it("donne à l'accueil passé en anglais son titre, sa description et og:locale anglais, et rend en français ceux de la page pré-rendue (EN-10)", async () => {
     const page = await open("/", { consent: true });
     const head = () => page.evaluate(() => ({
