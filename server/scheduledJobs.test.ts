@@ -12,8 +12,9 @@ vi.mock("./appointmentFulfillment", () => ({
   processDueAppointmentFulfillmentJobs: vi.fn(async () => ({ processed: 0, results: [] })),
 }));
 const documentJobs = vi.hoisted(() => ({
+  recoverStaleCandidateDocumentJobs: vi.fn(async () => ({ recovered: 0, exhausted: 0 })),
   recreateMissingCandidateDocumentAnalysisJobs: vi.fn(async () => ({ recreated: 0 })),
-  processDueCandidateDocumentAnalysisJobs: vi.fn(async () => ({ processed: 0, completed: 0, retried: 0, needsReview: 0 })),
+  processDueCandidateDocumentAnalysisJobs: vi.fn(async () => ({ processed: 0, completed: 0, retried: 0, needsReview: 0, released: 0 })),
 }));
 vi.mock("./candidateDocumentProcessing", () => documentJobs);
 
@@ -178,11 +179,21 @@ describe("traitement quotidien des documents du coffre", () => {
   it("analyse les documents en file même quand la recréation des tâches manquantes échoue (DATA-02)", async () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     documentJobs.recreateMissingCandidateDocumentAnalysisJobs.mockRejectedValueOnce(new Error("candidate_document_database_unavailable"));
-    documentJobs.processDueCandidateDocumentAnalysisJobs.mockResolvedValueOnce({ processed: 1, completed: 1, retried: 0, needsReview: 0 });
+    documentJobs.processDueCandidateDocumentAnalysisJobs.mockResolvedValueOnce({ processed: 1, completed: 1, retried: 0, needsReview: 0, released: 0 });
 
     await expect(runCandidateDocumentProcessingWorker({ batchSize: 1, maxBatches: 6, budgetMs: 20_000 }))
-      .resolves.toEqual({ jobsRecreated: 0, processed: 1, completed: 1, retried: 0, needsReview: 0 });
+      .resolves.toEqual({ jobsRecovered: 0, jobsExhausted: 0, jobsRecreated: 0, processed: 1, completed: 1, retried: 0, needsReview: 0, released: 0 });
     expect(documentJobs.processDueCandidateDocumentAnalysisJobs).toHaveBeenCalledTimes(2);
+  });
+
+  it("analyse les documents en file même quand la reprise des tâches interrompues échoue (EXPL-12)", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    documentJobs.recoverStaleCandidateDocumentJobs.mockRejectedValueOnce(new Error("candidate_document_database_unavailable"));
+    documentJobs.recreateMissingCandidateDocumentAnalysisJobs.mockResolvedValueOnce({ recreated: 1 });
+    documentJobs.processDueCandidateDocumentAnalysisJobs.mockResolvedValueOnce({ processed: 1, completed: 0, retried: 1, needsReview: 0, released: 0 });
+
+    await expect(runCandidateDocumentProcessingWorker({ batchSize: 1, maxBatches: 6, budgetMs: 20_000 }))
+      .resolves.toEqual({ jobsRecovered: 0, jobsExhausted: 0, jobsRecreated: 1, processed: 1, completed: 0, retried: 1, needsReview: 0, released: 0 });
   });
 });
 

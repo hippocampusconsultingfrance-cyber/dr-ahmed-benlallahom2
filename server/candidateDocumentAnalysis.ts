@@ -1,4 +1,5 @@
 import { invokeLLM, type Message } from "./_core/llm";
+import { isProcessingDeadlineError } from "./processingDeadline";
 import { extractCvDocument, type InvisibleTextSummary } from "./recruitmentAnalysis";
 import { hiddenTextFlags } from "../shared/candidateDocumentHiddenText";
 
@@ -114,6 +115,8 @@ export async function analyzeCandidateDocument(input: { buffer: Buffer; mimeType
       // The admin is told, in the document's flags, what was left out of what the AI read.
       return { analysis: hiddenText ? { ...analysis, flags: [...hiddenTextFlags(hiddenText), ...analysis.flags], hiddenText } : analysis, model };
     } catch (error) {
+      // The scheduled run's time ran out before any AI read the document (EXPL-12): its job goes back to the queue.
+      if (failures.length === 0 && isProcessingDeadlineError(error)) throw error;
       failures.push(`${model}: ${error instanceof Error ? error.message.slice(0, 160) : "erreur inconnue"}`);
     }
   }

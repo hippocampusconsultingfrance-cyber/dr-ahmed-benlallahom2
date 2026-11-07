@@ -1,11 +1,14 @@
 import { and, asc, eq, inArray, isNull, lt, lte, ne } from "drizzle-orm";
 import { candidateDocumentAuditLogs, candidateDocumentProcessingJobs, candidateDocuments } from "../drizzle/schema";
 import { getDb } from "./db";
+import { mutationRowCount } from "./dbMutation";
+import { isProcessingDeadlineError } from "./processingDeadline";
 import { analyzeCandidateDocument, CandidateDocumentTextSetAsideError } from "./candidateDocumentAnalysis";
 import { hiddenTextFlags } from "../shared/candidateDocumentHiddenText";
 import { storageGetSignedUrl } from "./storage";
 import { decryptCandidateDocument } from "./candidateDocumentEncryption";
 import { CANDIDATE_HUMAN_REVIEW_ONLY_FLAG, CANDIDATE_HUMAN_REVIEW_ONLY_SUMMARY, candidateDocumentAllowsAiAnalysis } from "../shared/candidateDocumentCategories";
+import { CANDIDATE_DOCUMENT_ACTIVE_JOB_STATUSES } from "../shared/candidateDocumentReanalysis";
 
 const MAX_DOCUMENT_ANALYSIS_ATTEMPTS = 3;
 
@@ -39,16 +42,21 @@ export const CANDIDATE_DOCUMENT_MISSING_JOB_AFTER_MS = 15 * 60_000;
 
 /**
  * DATA-02: the upload stores the document, then its analysis job. A request
- * stopped between the two leaves a document waiting for an analysis no job
- * would ever run: the scheduled run gives it the missing job. The job also
- * settles a document reserved for human review (LEGAL-12) without any AI.
+ * stopped between the two, or a job refused after the document was stored
+ * (DATA-06), leaves a document waiting for an analysis no job would ever run:
+ * the scheduled run gives a document waiting with no active job its missing
+ * job. The job also settles a document reserved for human review (LEGAL-12)
+ * without any AI.
  */
 export async function recreateMissingCandidateDocumentAnalysisJobs(limit = 25, now = new Date()) {
   const db = await getDb();
   if (!db) throw new Error("candidate_document_database_unavailable");
   const documents = await db.select({ id: candidateDocuments.id, candidateId: candidateDocuments.candidateId })
     .from(candidateDocuments)
-    .leftJoin(candidateDocumentProcessingJobs, eq(candidateDocumentProcessingJobs.documentId, candidateDocuments.id))
+    .leftJoin(candidateDocumentProcessingJobs, and(
+      eq(candidateDocumentProcessingJobs.documentId, candidateDocuments.id),
+      inArray(candidateDocumentProcessingJobs.status, [...CANDIDATE_DOCUMENT_ACTIVE_JOB_STATUSES]),
+    ))
     .where(and(
       eq(candidateDocuments.analysisStatus, "queued"),
       inArray(candidateDocuments.status, ["uploaded", "validating"]),
@@ -92,17 +100,83 @@ function humanReviewFallback(error: unknown) {
   };
 }
 
+/** A job "running" for longer was left by a run that stopped: an analysis ends within the cron's 60 s (EXPL-12). */
+export const CANDIDATE_DOCUMENT_JOB_STALE_AFTER_MS = 15 * 60_000;
+
+const ANALYSIS_IN_PROGRESS_STATUSES = ["queued", "extracting", "analyzing"] as const;
+
+/**
+ * EXPL-12: a job left "running" by a run that stopped (function limit, frozen
+ * instance) goes back to the queue, due at once, its interrupted attempt
+ * counted, and its document leaves « analyse en cours »; once its attempts
+ * are spent, the document goes to a human review, as after a last failed
+ * attempt. Each job is taken back on its exact state, so two runs never both
+ * take it back; a document whose analysis has ended keeps it.
+ */
+export async function recoverStaleCandidateDocumentJobs(staleAfterMs = CANDIDATE_DOCUMENT_JOB_STALE_AFTER_MS, now = new Date()) {
+  const db = await getDb();
+  if (!db) throw new Error("candidate_document_database_unavailable");
+  const staleBefore = new Date(now.getTime() - staleAfterMs);
+  const stale = await db.select().from(candidateDocumentProcessingJobs)
+    .where(and(eq(candidateDocumentProcessingJobs.status, "running"), lte(candidateDocumentProcessingJobs.startedAt, staleBefore)))
+    .orderBy(asc(candidateDocumentProcessingJobs.id))
+    .limit(25);
+  let recovered = 0;
+  let exhausted = 0;
+  for (const job of stale) {
+    const terminal = job.attempts >= job.maxAttempts;
+    const lastError = terminal ? "worker_interrupted_attempts_exhausted" : "worker_interrupted";
+    const taken = await db.update(candidateDocumentProcessingJobs)
+      .set(terminal ? { status: "completed", finishedAt: now, lastError } : { status: "retry", scheduledFor: now, startedAt: null, lastError })
+      .where(and(
+        eq(candidateDocumentProcessingJobs.id, job.id),
+        eq(candidateDocumentProcessingJobs.status, "running"),
+        eq(candidateDocumentProcessingJobs.attempts, job.attempts),
+        lte(candidateDocumentProcessingJobs.startedAt, staleBefore),
+      ));
+    if (mutationRowCount(taken) !== 1) continue;
+    const analysing = and(
+      eq(candidateDocuments.id, job.documentId),
+      inArray(candidateDocuments.analysisStatus, [...ANALYSIS_IN_PROGRESS_STATUSES]),
+      ne(candidateDocuments.validationStatus, "rejected"),
+    );
+    if (!terminal) {
+      recovered += 1;
+      await db.update(candidateDocuments).set({ status: "uploaded", analysisStatus: "queued", analysisAttempts: job.attempts, analysisLastError: lastError }).where(analysing);
+      continue;
+    }
+    exhausted += 1;
+    const [settled] = await db.update(candidateDocuments)
+      .set({ validationStatus: "accepted", status: "needs_review", analysisStatus: "needs_review", analysisAttempts: job.attempts, analysisLastError: lastError, analyzedAt: now, ...humanReviewFallback(new Error(lastError)) })
+      .where(analysing)
+      .returning({ candidateId: candidateDocuments.candidateId });
+    if (settled) await db.insert(candidateDocumentAuditLogs).values({ candidateId: settled.candidateId, documentId: job.documentId, actorType: "system", action: "analysis_completed", metadata: JSON.stringify({ outcome: "human_review_fallback", error: lastError }) });
+  }
+  return { recovered, exhausted };
+}
+
 export async function processDueCandidateDocumentAnalysisJobs(limit = 1) {
   const db = await getDb();
   if (!db) throw new Error("candidate_document_database_unavailable");
   const jobs = await db.select().from(candidateDocumentProcessingJobs).where(and(inArray(candidateDocumentProcessingJobs.status, ["queued", "retry"]), lte(candidateDocumentProcessingJobs.scheduledFor, new Date()))).orderBy(asc(candidateDocumentProcessingJobs.scheduledFor)).limit(limit);
+  let processed = 0;
   let completed = 0;
   let retried = 0;
   let needsReview = 0;
+  let released = 0;
   for (const job of jobs) {
     const now = new Date();
     const attempts = job.attempts + 1;
-    await db.update(candidateDocumentProcessingJobs).set({ status: "running", attempts, startedAt: now, lastError: null }).where(eq(candidateDocumentProcessingJobs.id, job.id));
+    // EXPL-12: taken only in the state it was read in; a concurrent run that
+    // took it first matches no row, and the document is analysed once.
+    const claim = await db.update(candidateDocumentProcessingJobs).set({ status: "running", attempts, startedAt: now, lastError: null }).where(and(
+      eq(candidateDocumentProcessingJobs.id, job.id),
+      inArray(candidateDocumentProcessingJobs.status, ["queued", "retry"]),
+      eq(candidateDocumentProcessingJobs.attempts, job.attempts),
+      lte(candidateDocumentProcessingJobs.scheduledFor, now),
+    ));
+    if (mutationRowCount(claim) !== 1) continue;
+    processed += 1;
     const document = (await db.select().from(candidateDocuments).where(eq(candidateDocuments.id, job.documentId)).limit(1))[0];
     if (!document || document.validationStatus === "rejected") {
       await db.update(candidateDocumentProcessingJobs).set({ status: "completed", finishedAt: new Date(), lastError: "document_unavailable_or_rejected" }).where(eq(candidateDocumentProcessingJobs.id, job.id));
@@ -137,6 +211,16 @@ export async function processDueCandidateDocumentAnalysisJobs(limit = 1) {
       completed += 1;
     } catch (error) {
       const message = error instanceof Error ? error.message : "candidate_document_analysis_failed";
+      if (isProcessingDeadlineError(error)) {
+        // Neither the file's nor the AI's fault: the cron invocation is about
+        // to end (EXPL-12). The job goes back to the queue at the same place,
+        // for the next run, without counting this attempt, and this run
+        // starts no other analysis.
+        await db.update(candidateDocumentProcessingJobs).set({ status: job.status, attempts: job.attempts, startedAt: null, lastError: message }).where(eq(candidateDocumentProcessingJobs.id, job.id));
+        await db.update(candidateDocuments).set({ status: "uploaded", analysisStatus: "queued", analysisAttempts: job.attempts }).where(eq(candidateDocuments.id, document.id));
+        released += 1;
+        break;
+      }
       // Another attempt would read the same text: only what may fail once (download, AI) is tried again.
       if (attempts < job.maxAttempts && !(error instanceof CandidateDocumentTextSetAsideError)) {
         await db.update(candidateDocumentProcessingJobs).set({ status: "retry", scheduledFor: retryTime(attempts), lastError: message }).where(eq(candidateDocumentProcessingJobs.id, job.id));
@@ -151,5 +235,5 @@ export async function processDueCandidateDocumentAnalysisJobs(limit = 1) {
       }
     }
   }
-  return { processed: jobs.length, completed, retried, needsReview };
+  return { processed, completed, retried, needsReview, released };
 }

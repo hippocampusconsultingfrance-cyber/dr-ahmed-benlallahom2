@@ -4,6 +4,7 @@ import { getDb } from "./db";
 import { mutationRowCount } from "./dbMutation";
 import { emailLanguageFor } from "./emailLanguage";
 import { notifyOwner } from "./_core/notification";
+import { runWithProcessingDeadline } from "./processingDeadline";
 import { PUBLIC_FORM_DAILY_VOLUME_THRESHOLDS, PUBLIC_FORM_VOLUME_LABELS, type PublicFormVolumeKind } from "./publicFormRateLimit";
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -161,21 +162,40 @@ export async function runAppointmentFulfillmentWorker(options: { batchSize: numb
   return { recovery, processed, results: batches.flatMap(batch => batch.results), reminderRecovery };
 }
 
+/**
+ * End of the vault documents' analyses, from the start of their cron (EXPL-12):
+ * the 60 s function limit, less the last writes and the monitor's ping (3 s).
+ * Each slow step, the AI requests included, is cut to the time left.
+ */
+export const CANDIDATE_DOCUMENT_PROCESSING_DEADLINE_MS = 50_000;
+
 export async function runCandidateDocumentProcessingWorker(options: { batchSize: number; maxBatches: number; budgetMs: number }) {
-  const { processDueCandidateDocumentAnalysisJobs, recreateMissingCandidateDocumentAnalysisJobs } = await import("./candidateDocumentProcessing");
-  // DATA-02: a document whose upload stopped before its job gets it first;
+  const startedAt = Date.now();
+  const { processDueCandidateDocumentAnalysisJobs, recoverStaleCandidateDocumentJobs, recreateMissingCandidateDocumentAnalysisJobs } = await import("./candidateDocumentProcessing");
+  // EXPL-12: a job a stopped run left "running" goes back to the queue first;
   // a failure here leaves the documents already queued to their analysis.
+  const recovery = await recoverStaleCandidateDocumentJobs().catch(error => {
+    console.error("[CandidateDocumentProcessing] Interrupted job recovery failed:", safeErrorName(error));
+    return { recovered: 0, exhausted: 0 };
+  });
+  // DATA-02: a document whose upload stopped before its job gets it first.
   const { recreated } = await recreateMissingCandidateDocumentAnalysisJobs().catch(error => {
     console.error("[CandidateDocumentProcessing] Missing job recovery failed:", safeErrorName(error));
     return { recreated: 0 };
   });
-  const { processed, batches } = await drainInBatches(() => processDueCandidateDocumentAnalysisJobs(options.batchSize), options);
+  const { processed, batches } = await runWithProcessingDeadline(
+    startedAt + CANDIDATE_DOCUMENT_PROCESSING_DEADLINE_MS,
+    () => drainInBatches(() => processDueCandidateDocumentAnalysisJobs(options.batchSize), options),
+  );
   return {
+    jobsRecovered: recovery.recovered,
+    jobsExhausted: recovery.exhausted,
     jobsRecreated: recreated,
     processed,
     completed: batches.reduce((total, batch) => total + batch.completed, 0),
     retried: batches.reduce((total, batch) => total + batch.retried, 0),
     needsReview: batches.reduce((total, batch) => total + batch.needsReview, 0),
+    released: batches.reduce((total, batch) => total + batch.released, 0),
   };
 }
 
