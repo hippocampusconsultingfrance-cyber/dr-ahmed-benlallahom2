@@ -214,6 +214,11 @@ describe("Candidatures — profil de matching et filtres de la liste (IA-02)", (
       ["wolof", ["Wolofcourant"]], ["germany", ["Germanyonly"]], ["lived", []], ["Wolof (natif)", ["Wolofcourant"]], ["wolof courant", ["Wolofcourant"]],
       // A choice: any one of its languages.
       ["anglais ou arabe", ["Anglaisseul", "Cvarabisch", "Enarboth", "Polished"]], ["Allemand et/ou wolof", ["Deutschdecl", "Wolofcourant"]],
+      // What follows a dash qualifies the language before it, unless it names a language, of the table or not.
+      ["Anglais – obligatoire", ["Anglaisseul", "Cvarabisch", "Enarboth", "Polished"]], ["English – required", ["Anglaisseul", "Cvarabisch", "Enarboth", "Polished"]],
+      ["英语 – 必须", ["Anglaisseul", "Cvarabisch", "Enarboth", "Polished"]], ["Deutsch – erforderlich", ["Deutschdecl"]],
+      ["Arabe – Golfe", ["Cvarabisch", "Enarboth"]], ["Anglais – obligatoire, Arabe – souhaité", ["Cvarabisch", "Enarboth"]],
+      ["Wolof – Anglais", []], ["Serbo-croate – Anglais", []], ["Wolof – Français", ["Wolofcourant"]],
     ];
     for (const [language, names] of expected) {
       expect(await filtered(language), `filtre ${language}`).toEqual(names);

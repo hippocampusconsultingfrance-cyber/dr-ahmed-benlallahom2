@@ -195,8 +195,7 @@ export type RecruitmentLanguageRequirement = { text: string; codes: readonly Rec
  */
 const REQUIREMENT_SEPARATOR = new RegExp("[,;/+&|\\n、，；／＋＆]|\\s(?:et|and|und|y|e)\\s", "giu");
 /** A conjunction between two Chinese names (« 英语和阿拉伯语 »), that may also be a character of one (埃及, Egypt, in « 埃及阿拉伯语 »). */
-const CHINESE_CONJUNCTION_CHARACTERS = "和及与與";
-const CHINESE_CONJUNCTION = new RegExp(`[${CHINESE_CONJUNCTION_CHARACTERS}]`, "gu");
+const CHINESE_CONJUNCTION = new RegExp("[和及与與]", "gu");
 /**
  * A dash between two names (« Anglais - Arabe », « Anglais – Arabe »), that
  * may also introduce a level (« Anglais - courant »): a hyphen or minus sign
@@ -218,72 +217,93 @@ const OPTION_CONNECTOR = new RegExp("^(?:et|and|und|y|e|ou|or|oder|o)\\s+|\\s+(?
 const READ_REQUIREMENTS = new Map<string, readonly RecruitmentLanguageRequirement[]>();
 
 /**
- * Words that say a level, not a language (IA-02): « courant », « langue
- * maternelle », « notions », « fluent », « fließend », « 流利 »…, the names of
- * language tests (IELTS, TOEFL, OET…), the small words between them, and any
- * word with a digit (« C1 », « 7,5 »).
+ * IA-02: the languages the table does not know, by their ISO 639-1 code, and
+ * Kabyle, Moroccan and Central Atlas Tamazight, Tachelhit and Filipino:
+ * their names make a part beside a dash a language of its own (« Wolof –
+ * Anglais »), where any other part qualifies the language beside it
+ * (« Anglais – obligatoire », « Arabe – Golfe », « Portugais – Brésil »).
+ * Not the table's, nor the constructed or ancient languages, whose names
+ * also qualify a language or a place (« Amérique latine », « 世界语言 »):
+ * Latin, Sanskrit, Pali, Avestan, Church Slavic, Esperanto, Ido, Interlingua,
+ * Interlingue, Volapük.
  */
-const LEVEL_WORDS = new Set([
-  "courant", "courante", "couramment", "natif", "native", "langue", "maternelle", "maternel", "bilingue", "notion", "notions", "debutant", "debutante",
-  "intermediaire", "avance", "avancee", "scolaire", "professionnel", "professionnelle", "lu", "ecrit", "ecrite", "parle", "parlee", "bon", "bonne", "tres",
-  "excellent", "excellente", "niveau", "base", "bases", "maitrise", "operationnel", "operationnelle", "conversationnel", "technique", "medical", "medicale",
-  "oral", "orale", "de", "d", "du", "des", "la", "le", "les", "en", "a", "au",
-  "fluent", "fluently", "fluency", "mother", "tongue", "bilingual", "basic", "basics", "beginner", "elementary", "intermediate", "advanced", "proficient",
-  "proficiency", "working", "professional", "business", "conversational", "good", "very", "level", "limited", "full", "written", "spoken", "reading", "the", "of", "an",
-  "fliessend", "muttersprache", "muttersprachlich", "grundkenntnisse", "kenntnisse", "gut", "gute", "sehr", "verhandlungssicher", "fortgeschritten",
-  "anfanger", "mittel", "mittelstufe", "fachsprache", "nativo", "nativa", "fluido", "fluida", "materna",
-  "ielts", "toefl", "toeic", "oet", "delf", "dalf", "tcf", "tef", "goethe", "telc", "testdaf", "hsk", "cambridge", "cefr", "cecrl",
-].map(foldLanguageText));
-const UNSPACED_LEVEL_WORDS = ["流利", "母语", "母語", "熟练", "熟練", "精通", "基础", "基礎", "一般", "良好", "初级", "初級", "中级", "中級", "高级", "高級", "口语", "口語", "书面", "書面", "日常", "水平"];
-const NOT_A_WORD = new RegExp("[^\\p{L}\\p{N}]+", "u");
-const DIGIT = new RegExp("\\p{N}", "u");
+const OTHER_LANGUAGE_CODES = [
+  "aa ab af ak am an as av ay az ba be bg bi bm bn bo br bs ca ce ch co cr cs cv cy da dv dz ee et eu ff fi fj fo fy ga gd gl gn gu gv ha ho hr ht hu hy hz",
+  "id ig ii ik is iu jv ka kg ki kj kk kl km kn kr ks ku kv kw ky lb lg li ln lo lt lu lv mg mh mi mk ml mn mr ms mt my na nb nd ne ng nn no nr nv ny oc oj om",
+  "or os pa ps qu rm rn rw sc sd se sg si sk sl sm sn so sq sr ss st su sv sw ta te tg th ti tk tl tn to ts tt tw ty ug uk uz ve vi wa wo xh yi yo za zu",
+  "kab zgh tzm shi fil",
+].join(" ").split(" ");
+/** The languages their names are read in, from Intl.DisplayNames: the table's four. */
+const OTHER_LANGUAGE_LOCALES = ["fr", "en", "de", "zh"];
+/** The names it gives none of, or other names than its: serbo-croate (« serbe (latin) »), berbère, amazigh, tagalog (« filipino »)… */
+const OTHER_LANGUAGE_NAMES = [
+  "Serbo-croate", "Serbo-Croatian", "Serbokroatisch", "塞尔维亚-克罗地亚语", "Berbère", "Berber", "Berberisch", "柏柏尔语", "Amazigh", "Amazighe", "Tamazight",
+  "Tagalog", "他加禄语", "Kiswahili", "Sinhalese",
+];
 
-/** Words that start a variety of the language before them (« Arabe – dialecte du Golfe »), not another language. */
-const VARIETY_WORDS = new Set(["dialecte", "dialect", "dialekt", "accent", "variante", "variant"]);
+let otherLanguageNames: readonly string[] | undefined;
 
 /**
- * Whether a part names a level and nothing else: each of its words, or what
- * it writes without spaces, a level word above; or a variety of the language
- * before it.
+ * The names of the languages above, folded, what they say between brackets
+ * aside (« luba-katanga (kiluba) », « Norwegisch (Bokmål) »), from two
+ * letters in Chinese and three in the other scripts. Only the list above
+ * where Intl.DisplayNames is missing (a browser or a Node.js built without
+ * its data).
  */
-function namesOnlyLevel(text: string) {
-  const folded = UNSPACED_LEVEL_WORDS.reduce((current, word) => current.replaceAll(word, " "), foldLanguageText(text));
-  const words = folded.split(NOT_A_WORD).filter(Boolean);
-  return VARIETY_WORDS.has(words[0] ?? "") || words.every(word => DIGIT.test(word) || LEVEL_WORDS.has(word));
+function readOtherLanguageNames() {
+  const names = new Set<string>();
+  const add = (name: string | undefined) => {
+    const folded = foldLanguageText(name?.replace(/[(（][^)）]*[)）]/g, " ") ?? "").replace(/\s+/g, " ").trim();
+    const letters = Array.from(folded).filter(character => LETTER_OR_DIGIT.test(character)).length;
+    if (letters >= (SPACED_SCRIPT.test(folded) ? 3 : 2)) names.add(folded);
+  };
+  if (typeof Intl.DisplayNames === "function") {
+    for (const locale of OTHER_LANGUAGE_LOCALES) {
+      try {
+        const display = new Intl.DisplayNames([locale], { type: "language", fallback: "none" });
+        for (const code of OTHER_LANGUAGE_CODES) add(display.of(code));
+      } catch {
+        // A locale or a code this host cannot name: the others and the list below.
+      }
+    }
+  }
+  OTHER_LANGUAGE_NAMES.forEach(add);
+  return Array.from(names);
+}
+
+/**
+ * Whether a part names a language the table does not know: one of the names
+ * above, whole (« Wolof », « Wolof courant », « Serbo-croate »; not « Brésil »,
+ * « Golfe », « obligatoire »).
+ */
+function namesOtherLanguage(text: string) {
+  otherLanguageNames ??= readOtherLanguageNames();
+  const folded = foldLanguageText(text);
+  return otherLanguageNames.some(name => containsWords(folded, name));
 }
 
 /**
  * The parts of a text at a Chinese conjunction or a dash, each that names a
- * language with the parts after it that name a level (« Anglais - C1 -
- * Arabe » is « Anglais - C1 » and « Arabe »), and the parts before the first
- * one that names one with it (埃 in 埃及阿拉伯语, Egyptian Arabic). Between
- * dashes, a part that names neither a language of the table nor a level is a
- * language of its own, required by its words as with « / »: « Wolof –
- * Anglais » and « Serbo-croate – Anglais » are two, not English at a level.
+ * language with the parts after it that name none, which qualify it: a level
+ * (« Anglais - C1 - Arabe » is « Anglais - C1 » and « Arabe »), a requirement
+ * (« Anglais – obligatoire »), a variety or a region (« Arabe – Golfe »,
+ * « Portugais – Brésil »). And the parts before the first one that names one
+ * with it (埃 in 埃及阿拉伯语, Egyptian Arabic). A language the table does not
+ * know is named by its name (« Wolof – Anglais » and « Serbo-croate –
+ * Anglais » are two, as with « / »).
  */
 function partsBetweenNames(text: string) {
-  const outside = blankBrackets(text);
-  const parts: Array<{ start: number; end: number; dashes: boolean }> = [];
-  let start = 0;
-  let dashBefore = true;
-  BETWEEN_NAMES.lastIndex = 0;
-  for (let found = BETWEEN_NAMES.exec(outside); ; found = BETWEEN_NAMES.exec(outside)) {
-    const dashAfter = !found || !CHINESE_CONJUNCTION_CHARACTERS.includes(found[0]);
-    parts.push({ start, end: found ? found.index : text.length, dashes: dashBefore && dashAfter });
-    if (!found) break;
-    start = found.index + found[0].length;
-    dashBefore = dashAfter;
-  }
   const groups: Array<{ start: number; end: number; names: boolean }> = [];
-  for (const part of parts) {
-    const written = text.slice(part.start, part.end);
-    if (!LETTER_OR_DIGIT.test(written)) continue;
-    const names = recruitmentLanguageCodes(written).length > 0 || (part.dashes && !namesOnlyLevel(written));
+  let cursor = 0;
+  for (const part of partsOutsideBrackets(text, BETWEEN_NAMES)) {
+    const start = text.indexOf(part, cursor);
+    cursor = start + part.length;
+    const names = recruitmentLanguageCodes(part).length > 0 || namesOtherLanguage(part);
     const last = groups.at(-1);
-    if (last && (!names || !last.names)) Object.assign(last, { end: part.end, names: names || last.names });
-    else groups.push({ start: part.start, end: part.end, names });
+    if (last && (!names || !last.names)) Object.assign(last, { end: cursor, names: names || last.names });
+    else groups.push({ start, end: cursor, names });
   }
-  return groups.map(({ start, end }) => text.slice(start, end).trim());
+  return groups.map(({ start, end }) => text.slice(start, end));
 }
 
 /** The parts of a text between the separators found outside its brackets, each trimmed, those with a letter or a digit. */

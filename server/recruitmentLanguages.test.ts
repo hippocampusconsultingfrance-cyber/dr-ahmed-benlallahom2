@@ -129,6 +129,13 @@ describe("langues du recrutement comparées par code (IA-02)", () => {
       ["Anglais – Wolof", ["Anglais", "Wolof"]],
       ["Anglais - Wolof courant", ["Anglais", "Wolof courant"]],
       ["Berbère - Arabe - courant", ["Berbère", "Arabe - courant"]],
+      // Named in French, English, German or Chinese, by its ISO 639 code, or among the few names it gives none of.
+      ["Arabe – Kabyle", ["Arabe", "Kabyle"]],
+      ["Anglais – Tagalog", ["Anglais", "Tagalog"]],
+      ["English – Swahili", ["English", "Swahili"]],
+      ["Englisch – Suaheli", ["Englisch", "Suaheli"]],
+      ["英语和沃洛夫语", ["英语", "沃洛夫语"]],
+      ["Arabe – Tamazight", ["Arabe", "Tamazight"]],
       // Levels, a language test or a level with its digits stay with their language.
       ["Anglais - IELTS 7.5", ["Anglais - IELTS 7.5"]],
       ["Anglais – très bon niveau", ["Anglais – très bon niveau"]],
@@ -154,6 +161,41 @@ describe("langues du recrutement comparées par code (IA-02)", () => {
     const [wolof] = recruitmentLanguageRequirements("Wolof – Anglais");
     expect(wolof).toEqual({ text: "Wolof", codes: [], anyOf: [] });
     expect(meetsRequiredLanguage(["Wolof (courant)"], wolof!)).toBe(true);
+  });
+
+  it("garde avec sa langue ce qui la qualifie après un tiret : une exigence, une préférence, une variété ou une région, en français, anglais, allemand et chinois (IA-02)", () => {
+    // Before: « Anglais – obligatoire » was two requirements, English and « obligatoire », met by nobody.
+    const qualified: Array<[string, string]> = [
+      ["Anglais – obligatoire", "en"], ["Anglais – exigé", "en"], ["Anglais – requis", "en"], ["Anglais – indispensable", "en"], ["Anglais – impératif", "en"],
+      ["Anglais – minimum B2", "en"], ["Anglais – courant exigé", "en"], ["Anglais – niveau C1 exigé", "en"], ["Anglais – IELTS 7 requis", "en"],
+      ["Anglais – courant (obligatoire)", "en"], ["Anglais – atout", "en"], ["Arabe – souhaité", "ar"], ["Arabe – un plus", "ar"], ["Arabe – apprécié", "ar"],
+      ["English – required", "en"], ["English – mandatory", "en"], ["English – essential", "en"], ["English – desirable", "en"], ["Arabic – preferred", "ar"],
+      ["Deutsch – erforderlich", "de"], ["Englisch – wünschenswert", "en"], ["英语 – 必须", "en"], ["英语 – 优先", "en"],
+      ["Arabe – Golfe", "ar"], ["Arabic – Gulf", "ar"], ["Arabe – égyptien", "ar"], ["Arabe – levantin", "ar"], ["Arabe – maghrébin", "ar"], ["Arabe – MSA", "ar"],
+      ["Portugais – Brésil", "pt"], ["Anglais – UK", "en"], ["Anglais – US", "en"], ["Espagnol – Amérique latine", "es"], ["Spanish – Latin American", "es"],
+    ];
+    const speaker: Record<string, string> = { en: "English", ar: "Arabic", de: "German", pt: "Portuguese", es: "Spanish" };
+    for (const [required, code] of qualified) {
+      expect(recruitmentLanguageRequirements(required), required).toEqual([{ text: required, codes: [code], anyOf: [] }]);
+      expect(meetsRequiredLanguage([speaker[code]!], recruitmentLanguageRequirements(required)[0]!), required).toBe(true);
+    }
+    expect(recruitmentLanguageRequirements("Anglais – obligatoire, Arabe – souhaité").map(requirement => requirement.codes)).toEqual([["en"], ["ar"]]);
+  });
+
+  it("sans Intl.DisplayNames (un navigateur ou un Node.js sans ses données), garde les noms de sa propre liste et ce qui qualifie une langue (IA-02)", async () => {
+    vi.stubGlobal("Intl", { ...Intl, DisplayNames: undefined });
+    vi.resetModules();
+    try {
+      const languages = await import("../shared/recruitmentLanguages");
+      expect(languages.recruitmentLanguageRequirements("Serbo-croate – Anglais").map(requirement => requirement.text)).toEqual(["Serbo-croate", "Anglais"]);
+      expect(languages.recruitmentLanguageRequirements("Berbère – Arabe").map(requirement => requirement.text)).toEqual(["Berbère", "Arabe"]);
+      expect(languages.recruitmentLanguageRequirements("Anglais – obligatoire").map(requirement => requirement.text)).toEqual(["Anglais – obligatoire"]);
+      // Kabyle is only named by Intl.DisplayNames: without it, the part qualifies Arabic, as before.
+      expect(languages.recruitmentLanguageRequirements("Arabe – Kabyle").map(requirement => requirement.text)).toEqual(["Arabe – Kabyle"]);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.resetModules();
+    }
   });
 
   it("lit une exigence qui laisse le choix comme une seule, tenue par l’une de ses langues (IA-02)", () => {
