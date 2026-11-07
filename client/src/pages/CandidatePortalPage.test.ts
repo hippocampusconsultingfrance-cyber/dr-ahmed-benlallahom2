@@ -203,6 +203,14 @@ describe("CAND-21, ADM-16, PUB-12 — boutons flottants et bandeau cookies", () 
     }
   });
 
+  it("reconnaît l’espace candidat et l’administration quelle que soit la casse de l’adresse, comme wouter les affiche", async () => {
+    for (const path of ["/ADMIN", "/Admin", "/Admin/", "/aDmIn?tab=gdpr", "/Candidate/access", "/CANDIDATE/PORTAL", "/candidate/Verify"]) {
+      expect(isPrivateAreaPath(path), path).toBe(true);
+      await expect(floatingWidgets(path), path).resolves.toEqual({ whatsApp: false, cookieConsent: false });
+    }
+    for (const path of ["/Candidates", "/ADMINISTRATION"]) expect(isPrivateAreaPath(path), path).toBe(false);
+  });
+
   it("garde le bandeau cookies sur les pages publiques, et WhatsApp hors des formulaires (PUB-12)", async () => {
     for (const path of ["/", "/faq", "/booking/confirmation", "/legal"]) {
       await expect(floatingWidgets(path), path).resolves.toEqual({ whatsApp: true, cookieConsent: true });

@@ -1,8 +1,10 @@
 import { X } from "lucide-react";
 import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { isPrivateAreaPath } from "@/lib/privateAreaRoutes";
 import { COOKIE_CONSENT_STORAGE_KEY, createCookieConsent, readValidCookieConsent, type CookieConsentValue } from "./cookieConsentState";
 import { COOKIE_CONSENT_CHANGE_EVENT } from "./analyticsConsentLogic";
 
@@ -59,11 +61,15 @@ export const cookieCopy = {
 /**
  * « Gérer les cookies », en bas de chaque page publique : dans le pied de page, et sous le contenu des
  * pages qui n'en ont pas (404, désinscription du recrutement, maintenance et erreur), à la place de la
- * pastille flottante qui couvrait le bas des pages sur téléphone (PUB-12).
+ * pastille flottante qui couvrait le bas des pages sur téléphone (PUB-12). Aucun dans les espaces privés
+ * (une 404 sous /admin ou /candidate), où ni le bandeau ni la mesure d'audience ne sont montés (ADM-16) :
+ * le bouton n'y ouvrirait rien.
  */
 export function ManageCookiesButton({ className }: { className?: string }) {
   const { language } = useLanguage();
+  const [location] = useLocation();
   const copy = cookieCopy[language as keyof typeof cookieCopy] || cookieCopy.fr;
+  if (isPrivateAreaPath(location)) return null;
   return (
     <button type="button" onClick={(event) => openCookiePreferences(event.currentTarget)} className={className}>
       {copy.manage}

@@ -14,7 +14,7 @@ describe("WhatsAppButton translations", () => {
 // The floating widgets App mounts for each route: pages/CandidatePortalPage.test.ts.
 describe("pages sans bouton WhatsApp flottant (PUB-12)", () => {
   it("le retire des formulaires et du recrutement, quelle que soit la forme de l'adresse", () => {
-    for (const path of ["/booking", "/booking/", "/booking?lang=en", "/recruitment", "/recruitment/standard", "/recruitment/vvip-offshore#form", "/vvip-offshore", "/employers", "/questions-anesthesie", "/gdpr"]) {
+    for (const path of ["/booking", "/booking/", "/booking?lang=en", "/recruitment", "/recruitment/standard", "/recruitment/vvip-offshore#form", "/vvip-offshore", "/employers", "/questions-anesthesie", "/gdpr", "/Booking", "/BOOKING/", "/Recruitment/Standard", "/GDPR"]) {
       expect(showsWhatsAppButton(path), path).toBe(false);
     }
   });
