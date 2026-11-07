@@ -12,6 +12,23 @@ vi.mock("./notification", () => ({
 
 import { sendCvApplicationConfirmationEmail } from "./notifications";
 
+describe("aperçu et titre de « Candidature reçue » (MAIL-12, A11Y-21)", () => {
+  beforeEach(() => {
+    vi.stubEnv("RESEND_API_KEY", "re_test_cv_confirmation");
+    sendEmail.mockReset();
+    sendEmail.mockResolvedValue({ data: { id: "email-confirmation" }, error: null });
+  });
+
+  it("donne en aperçu le numéro de suivi, jamais le prénom saisi, et titre le document de son sujet", async () => {
+    await sendCvApplicationConfirmationEmail("candidate@example.com", "Camille", "CVRGPD0003", undefined, "key-preview");
+    const { html, subject } = sendEmail.mock.calls[0][0] as { html: string; subject: string };
+    const preview = /<body[^>]*>\s*<div style="display:none;[^"]*">([^&<]*)/.exec(html)?.[1];
+    expect(preview).toBe("Candidature enregistrée sous le numéro de suivi CVRGPD0003");
+    expect(html).toContain(`<title>${subject}</title>`);
+    expect(html).toContain('<html lang="fr">');
+  });
+});
+
 describe("sendCvApplicationConfirmationEmail", () => {
   beforeEach(() => {
     vi.stubEnv("RESEND_API_KEY", "re_test_cv_confirmation");

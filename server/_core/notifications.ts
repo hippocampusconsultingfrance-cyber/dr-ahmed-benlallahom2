@@ -1,6 +1,8 @@
 import { Resend } from "resend";
+import { siteConfig } from "../../client/src/data/site-config";
 import { buildOwnerNotificationEmail } from "./notification";
 import { adminLink } from "../adminLinks";
+import { DEFAULT_PUBLIC_ORIGIN } from "../routers/publicOrigin";
 import { CANDIDATE_INVITATION_MAX_AGE_MS, CANDIDATE_TOKEN_MAX_AGE_MS, formatCandidateLinkValidity } from "../candidateAuth";
 import { PATIENT_CANCELLATION_POLICY, PATIENT_CANCELLATION_POLICY_EN, resolveConsultationContact, type ConsultationContact } from "../consultationContact";
 import { appointmentCalendarFilename, buildAppointmentCalendarEvent } from "../appointmentCalendar";
@@ -159,29 +161,128 @@ export function postPaymentEmailRefused(error: unknown): boolean {
   return cause instanceof PostPaymentEmailError && cause.providerError !== null && resendRefusedThisMessage(cause.providerError);
 }
 
-export function buildHippocampusEmailShell(content: string, language: EmailLanguage = "fr") {
-  return `
-    <div style="margin:0;padding:24px 12px;background:#f1f5f9;font-family:Arial,sans-serif;color:#0f172a;">
-      <div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #dbe4ee;border-radius:14px;overflow:hidden;">
-        <div style="padding:18px 28px;background:#071827;border-bottom:3px solid #0891b2;">
-          <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+/**
+ * Who an email comes from (MAIL-09): the doctor for the bookings and the
+ * health questions, Hippocampus Consulting for recruitment and the admin.
+ * The name heads the email and signs it; written « Dr », without a dot.
+ */
+export type EmailBrand = "doctor" | "hippocampus";
+
+const EMAIL_BRANDS: Record<EmailBrand, { eyebrow: string; name: string }> = {
+  doctor: { eyebrow: siteConfig.credentials, name: "Dr Ahmed Ben Lallahom" },
+  hippocampus: { eyebrow: "ABL / HIPPOCAMPUS", name: "Hippocampus Consulting" },
+};
+
+/** The brand's name, as it signs the plain-text part of an email. */
+export function emailSignature(brand: EmailBrand): string {
+  return EMAIL_BRANDS[brand].name;
+}
+
+const EMAIL_FOOTER_COPY = {
+  fr: { confidential: "Communication professionnelle et confidentielle", site: "Site", privacy: "Politique de confidentialité" },
+  en: { confidential: "Professional and confidential communication", site: "Website", privacy: "Privacy policy" },
+} as const;
+
+/**
+ * A page of the site on its public address (PUBLIC_APP_ORIGIN, never a host
+ * taken from a request), opened in the language of the email (?lang=).
+ */
+export function emailSiteLink(path: string, language: EmailLanguage): string {
+  const url = new URL(path, DEFAULT_PUBLIC_ORIGIN);
+  url.searchParams.set("lang", language);
+  return url.toString();
+}
+
+/** MAIL-10: line breaks of a typed text kept as <br />, which every mail client reads, Outlook included. */
+export function textToSafeHtml(value: string) {
+  return escapeHtml(value).replace(/\r?\n/g, "<br />");
+}
+
+/**
+ * MAIL-10, MAIL-11: a button Outlook draws as well, its colour on a table
+ * cell rather than a gradient or a padded inline-block link; white on #0e7490
+ * reaches 5.4:1.
+ */
+const EMAIL_BUTTON_BACKGROUND = "#0e7490";
+
+function emailButton(url: string, label: string, margin = "24px 0") {
+  return `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:${margin};border-collapse:separate;"><tr><td bgcolor="${EMAIL_BUTTON_BACKGROUND}" style="padding:12px 18px;border-radius:7px;background:${EMAIL_BUTTON_BACKGROUND};"><a href="${escapeHtml(url)}" style="color:#ffffff;text-decoration:none;font-family:Arial,sans-serif;font-size:16px;font-weight:700;">${escapeHtml(label)}</a></td></tr></table>`;
+}
+
+// After the preview text, so that the inbox does not go on with the header's words.
+const PREHEADER_FILLER = "&#847;&zwnj;&nbsp;".repeat(60);
+
+export type EmailShellOptions = {
+  /** Header and signature (MAIL-09); Hippocampus Consulting by default. */
+  brand?: EmailBrand;
+  /** The <title> of the document (A11Y-21): the subject; the brand's name by default. */
+  title?: string;
+  /**
+   * The inbox preview (MAIL-12), hidden at the top of the body: a date and a
+   * reference, a link's validity. Never a visitor's free text nor any health
+   * content: the address may be someone else's (MAIL-01).
+   */
+  preheader?: string;
+};
+
+/**
+ * Common frame of the emails: a document in the email's language with its
+ * title (A11Y-21), the content in a centred table 600 px wide, narrower on a
+ * phone (max-width), held at 600 px in Outlook for Windows, which ignores
+ * max-width (MAIL-10), and a footer in the email's language with the site and
+ * its privacy policy (MAIL-07). The logo keeps its address (OPS-11); the name
+ * written beside it is its text (alt="").
+ */
+export function buildHippocampusEmailShell(content: string, language: EmailLanguage = "fr", options: EmailShellOptions = {}) {
+  const brand = EMAIL_BRANDS[options.brand ?? "hippocampus"];
+  const footer = EMAIL_FOOTER_COPY[language];
+  const preheader = options.preheader?.trim()
+    ? `<div style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;color:#f1f5f9;mso-hide:all;">${escapeHtml(options.preheader.trim())}${PREHEADER_FILLER}</div>`
+    : "";
+  return `<!DOCTYPE html>
+<html lang="${language}">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${escapeHtml(options.title?.trim() || brand.name)}</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f1f5f9;">
+    ${preheader}
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;background:#f1f5f9;">
+      <tr>
+        <td align="center" style="padding:24px 12px;">
+          <!--[if mso]><table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" align="center"><tr><td><![endif]-->
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;margin:0 auto;border-collapse:separate;background:#ffffff;border:1px solid #dbe4ee;border-radius:14px;overflow:hidden;font-family:Arial,sans-serif;color:#0f172a;">
             <tr>
-              <td style="padding:0 14px 0 0;vertical-align:middle;"><img src="${HIPPOCAMPUS_LOGO_URL}" width="64" alt="Hippocampus Consulting" style="display:block;width:64px;height:64px;border:0;border-radius:8px;background:#ffffff;" /></td>
-              <td style="vertical-align:middle;"><div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#38bdf8;">ABL / HIPPOCAMPUS</div><div style="margin-top:5px;font-size:19px;font-weight:700;color:#ffffff;">Hippocampus Consulting</div></td>
+              <td bgcolor="#071827" style="padding:18px 28px;background:#071827;border-bottom:3px solid #0891b2;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+                  <tr>
+                    <td style="padding:0 14px 0 0;vertical-align:middle;"><img src="${HIPPOCAMPUS_LOGO_URL}" width="64" height="64" alt="" style="display:block;width:64px;height:64px;border:0;border-radius:8px;background:#ffffff;" /></td>
+                    <td style="vertical-align:middle;font-family:Arial,sans-serif;"><div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#38bdf8;">${escapeHtml(brand.eyebrow)}</div><div style="margin-top:5px;font-size:19px;font-weight:700;color:#ffffff;">${escapeHtml(brand.name)}</div></td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px;font-family:Arial,sans-serif;color:#0f172a;">${content}</td>
+            </tr>
+            <tr>
+              <td style="padding:18px 28px;border-top:1px solid #e2e8f0;background:#f8fafc;font-family:Arial,sans-serif;font-size:12px;line-height:1.5;color:#64748b;">${escapeHtml(brand.name)}<br />${footer.confidential}<br /><a href="${escapeHtml(emailSiteLink("/", language))}" style="color:#0e7490;">${footer.site}</a> · <a href="${escapeHtml(emailSiteLink("/legal?tab=privacy", language))}" style="color:#0e7490;">${footer.privacy}</a></td>
             </tr>
           </table>
-        </div>
-        <div style="padding:28px;">${content}</div>
-        <div style="padding:18px 28px;border-top:1px solid #e2e8f0;background:#f8fafc;font-size:12px;line-height:1.5;color:#64748b;">Dr. Ahmed Ben Lallahom · Hippocampus Consulting<br />${language === "en" ? "Professional and confidential communication" : "Communication professionnelle et confidentielle"}</div>
-      </div>
-    </div>
-  `;
+          <!--[if mso]></td></tr></table><![endif]-->
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
 }
 
 export async function sendAdminMfaCodeEmail(email: string, code: string) {
-  const html = buildHippocampusEmailShell(`<h2 style="color:#0891b2">Validation de sécurité administrateur</h2><p>Un accès au tableau de bord Hippocampus Consulting vient d’être demandé.</p><p style="margin:24px 0;padding:18px;text-align:center;border-radius:10px;background:#f1f5f9;font-size:28px;letter-spacing:7px;font-weight:700;color:#0f172a">${escapeHtml(code)}</p><p>Ce code expire dans 10 minutes et ne doit être communiqué à personne. Si vous n’êtes pas à l’origine de cette demande, ignorez cet email.</p>`);
+  const subject = "Code de sécurité — Hippocampus Consulting";
+  const html = buildHippocampusEmailShell(`<h2 style="color:#0891b2">Validation de sécurité administrateur</h2><p>Un accès au tableau de bord Hippocampus Consulting vient d’être demandé.</p><p style="margin:24px 0;padding:18px;text-align:center;border-radius:10px;background:#f1f5f9;font-size:28px;letter-spacing:7px;font-weight:700;color:#0f172a">${escapeHtml(code)}</p><p>Ce code expire dans 10 minutes et ne doit être communiqué à personne. Si vous n’êtes pas à l’origine de cette demande, ignorez cet email.</p>`, "fr", { title: subject, preheader: "Ce code expire dans 10 minutes." });
   const text = `Validation de sécurité administrateur\n\nCode : ${code}\n\nCe code expire dans 10 minutes. Ne le communiquez à personne.`;
-  const { error } = await sendThroughResend({ from: FROM_EMAIL, to: [email], replyTo: RECRUITMENT_REPLY_TO, subject: "Code de sécurité — Hippocampus Consulting", html, text }, undefined, "admin_mfa");
+  const { error } = await sendThroughResend({ from: FROM_EMAIL, to: [email], replyTo: RECRUITMENT_REPLY_TO, subject, html, text }, undefined, "admin_mfa");
   if (error) throw new Error(`admin_mfa_email_failed:${error.message}`);
 }
 
@@ -236,8 +337,12 @@ type PatientEmailContent = {
   details: Array<[label: string, value: string]>;
   link?: { label: string; url: string };
   closing?: string[];
+  /** A button after the closing paragraphs, its address also in the plain-text part (MAIL-07). */
+  action?: { label: string; url: string };
   cancellationPolicy?: boolean;
   language?: EmailLanguage;
+  /** Inbox preview (MAIL-12): the date and the reference, nothing the patient typed. */
+  preheader?: string;
 };
 
 export type PatientEmail = { subject: string; html: string; text: string };
@@ -268,21 +373,23 @@ function telHref(phone: string) {
 export function buildPatientEmail(content: PatientEmailContent, contact: ConsultationContact = resolveConsultationContact()): PatientEmail {
   const copy = PATIENT_EMAIL_COPY[content.language ?? "fr"];
   const contactSentence = `${copy.contactBefore}${contact.email}${copy.contactMiddle}${contact.phone}${copy.contactAfter}`;
-  const paragraph = (value: string) => `<p style="line-height:1.6;">${escapeHtml(value)}</p>`;
+  // A reason typed by the practitioner may span several lines (MAIL-10).
+  const paragraph = (value: string) => `<p style="line-height:1.6;">${textToSafeHtml(value)}</p>`;
   const html = buildHippocampusEmailShell(`
       <h2 style="color: #0891b2;">${escapeHtml(content.title)}</h2>
       <p>${copy.greeting} ${escapeHtml(content.customerName)},</p>
       ${content.paragraphs.map(paragraph).join("\n      ")}
       <div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;">
         <ul style="list-style: none; padding: 0; margin: 0;">
-          ${content.details.map(([label, value]) => `<li style="padding: 4px 0;"><strong>${escapeHtml(label)}${copy.labelSeparator}</strong> ${escapeHtml(value)}</li>`).join("\n          ")}
+          ${content.details.map(([label, value]) => `<li style="padding: 4px 0;"><strong>${escapeHtml(label)}${copy.labelSeparator}</strong> ${textToSafeHtml(value)}</li>`).join("\n          ")}
           ${content.link ? `<li style="padding: 4px 0;"><strong>${escapeHtml(content.link.label)}${copy.labelSeparator}</strong> <a href="${escapeHtml(content.link.url)}">${escapeHtml(content.link.url)}</a></li>` : ""}
         </ul>
       </div>
       ${(content.closing ?? []).map(paragraph).join("\n      ")}
+      ${content.action ? emailButton(content.action.url, content.action.label, "8px 0 20px") : ""}
       ${content.cancellationPolicy ? `<p style="font-size:13px;line-height:1.55;color:#475569;">${escapeHtml(copy.cancellationPolicy)}</p>` : ""}
       <p style="font-size:13px;line-height:1.55;color:#475569;">${escapeHtml(copy.contactBefore)}<a href="mailto:${escapeHtml(contact.email)}">${escapeHtml(contact.email)}</a>${escapeHtml(copy.contactMiddle)}<a href="${escapeHtml(telHref(contact.phone))}">${escapeHtml(contact.phone)}</a>${escapeHtml(copy.contactAfter)}</p>
-    `, content.language);
+    `, content.language, { brand: "doctor", title: content.subject, preheader: content.preheader });
   const text = [
     content.title,
     "",
@@ -293,12 +400,20 @@ export function buildPatientEmail(content: PatientEmailContent, contact: Consult
     ...(content.link ? [`${content.link.label}${copy.labelSeparator} ${content.link.url}`] : []),
     "",
     ...(content.closing ?? []).flatMap(value => [value, ""]),
+    ...(content.action ? [`${content.action.label}${copy.labelSeparator} ${content.action.url}`, ""] : []),
     ...(content.cancellationPolicy ? [copy.cancellationPolicy, ""] : []),
     contactSentence,
     "",
-    "Dr Ahmed Ben Lallahom · Hippocampus Consulting",
+    emailSignature("doctor"),
   ].join("\n");
   return { subject: content.subject, html, text };
+}
+
+/** « Rendez-vous le … (heure de Paris) – réf. APT… »: the inbox preview of a confirmation and a reminder (MAIL-12). */
+function appointmentPreheader(appointmentDate: Date, trackingId: string, language: EmailLanguage) {
+  return language === "en"
+    ? `Appointment on ${formatPatientDateTime(appointmentDate, "en")} – ref. ${trackingId}`
+    : `Rendez-vous le ${formatPatientDateTime(appointmentDate)} – réf. ${trackingId}`;
 }
 
 type PatientEmailAttachment = { filename: string; content: string; contentType?: string };
@@ -363,6 +478,7 @@ export function buildBookingConfirmationEmail(
         ],
         cancellationPolicy: true,
         language,
+        preheader: appointmentPreheader(input.appointmentDate, input.trackingId, language),
       }, contact)
     : buildPatientEmail({
         subject: `Confirmation de réservation - ${input.trackingId}`,
@@ -382,6 +498,7 @@ export function buildBookingConfirmationEmail(
           "Conservez votre référence : elle vous sera demandée pour toute question. Cette consultation programmée ne remplace pas une prise en charge d’urgence : en cas d’urgence, appelez les secours.",
         ],
         cancellationPolicy: true,
+        preheader: appointmentPreheader(input.appointmentDate, input.trackingId, language),
       }, contact);
   return { ...email, attachments };
 }
@@ -401,6 +518,7 @@ export function buildBookingReminderEmail(input: { customerName: string; trackin
       closing: ["If you need to cancel or reschedule your appointment, please let us know as soon as possible using the details below."],
       cancellationPolicy: true,
       language: "en",
+      preheader: appointmentPreheader(input.appointmentDate, input.trackingId, "en"),
     }, contact);
   }
   return buildPatientEmail({
@@ -415,6 +533,7 @@ export function buildBookingReminderEmail(input: { customerName: string; trackin
     ],
     closing: ["Si vous devez annuler ou reporter votre rendez-vous, prévenez-nous dès que possible aux coordonnées ci-dessous."],
     cancellationPolicy: true,
+    preheader: appointmentPreheader(input.appointmentDate, input.trackingId, "fr"),
   }, contact);
 }
 
@@ -434,6 +553,7 @@ export function buildInvoiceEmail(input: { customerName: string; trackingId: str
       ],
       closing: ["Thank you for your trust."],
       language: "en",
+      preheader: [input.invoiceNumber ? `Invoice ${input.invoiceNumber}` : "Invoice", formatPatientAmount(input.finalPrice, "en"), `ref. ${input.trackingId}`].join(" – "),
     }, contact);
   }
   return buildPatientEmail({
@@ -448,6 +568,7 @@ export function buildInvoiceEmail(input: { customerName: string; trackingId: str
       ["Statut", "Payée"],
     ],
     closing: ["Merci de votre confiance."],
+    preheader: [input.invoiceNumber ? `Facture ${input.invoiceNumber}` : "Facture", formatPatientAmount(input.finalPrice), `réf. ${input.trackingId}`].join(" – "),
   }, contact);
 }
 
@@ -625,6 +746,8 @@ export function buildRefundEmail(input: {
         refunded: "Amount refunded",
         delay: "The time it takes for the refund to appear on your account depends on your bank.",
         rebook: "You can book a new slot at any time on the website. We apologise for the inconvenience.",
+        rebookAction: "Choose a new slot",
+        preheader: `${context === "practitioner_cancellation" ? "Consultation cancelled – refund" : "Refund"} of ${formatPatientAmount(input.refundAmount, language)} – ref. ${input.trackingId}`,
       }
     : {
         reference: "Référence",
@@ -632,6 +755,8 @@ export function buildRefundEmail(input: {
         refunded: "Montant remboursé",
         delay: "Le délai d’apparition du remboursement sur votre compte dépend de votre établissement bancaire.",
         rebook: "Vous pouvez réserver un nouveau créneau à tout moment sur le site. Nous vous prions de nous excuser pour ce contretemps.",
+        rebookAction: "Choisir un nouveau créneau",
+        preheader: `${context === "practitioner_cancellation" ? "Consultation annulée – remboursement" : "Remboursement"} de ${formatPatientAmount(input.refundAmount, language)} – réf. ${input.trackingId}`,
       };
   // The reason is the practitioner's own text, sent as typed whatever the language.
   const reason = input.reason?.trim();
@@ -650,7 +775,10 @@ export function buildRefundEmail(input: {
       copy.delay,
       ...(context === "practitioner_cancellation" ? [copy.rebook] : []),
     ],
+    // MAIL-07: the booking page itself, in the language of the email.
+    action: context === "practitioner_cancellation" ? { label: copy.rebookAction, url: emailSiteLink("/booking", language) } : undefined,
     language,
+    preheader: copy.preheader,
   }, contact);
 }
 
@@ -700,6 +828,7 @@ export function buildUnconfirmablePaymentEmail(input: { customerName: string; tr
         ...(input.amountCents === null ? [] : [["Amount received", formatPatientAmount(input.amountCents / 100, "en")] as [string, string]]),
       ],
       language: "en",
+      preheader: `Your payment has been received, we will sort out your booking – ref. ${input.trackingId}`,
     }, contact);
   }
   return buildPatientEmail({
@@ -715,6 +844,7 @@ export function buildUnconfirmablePaymentEmail(input: { customerName: string; tr
       ["Créneau demandé", formatPatientDateTime(input.appointmentDate)],
       ...(input.amountCents === null ? [] : [["Montant reçu", formatPatientAmount(input.amountCents / 100)] as [string, string]]),
     ],
+    preheader: `Votre paiement a été reçu, réservation à régulariser – réf. ${input.trackingId}`,
   }, contact);
 }
 
@@ -773,6 +903,7 @@ export async function sendCvApplicationConfirmationEmail(
         portalAction: "Create my candidate portal",
         noPatientData: "Do not send patient data, medical records or clinical documents with your application.",
         spam: "If you cannot find this email, check your Spam or Junk folder, then add recrutement@drahmedbenlallahom.com to your contacts.",
+        preheader: `Application recorded under tracking number ${trackingId}`,
       }
     : {
         subject: `Candidature reçue - ${trackingId}`,
@@ -785,10 +916,11 @@ export async function sendCvApplicationConfirmationEmail(
         portalAction: "Créer mon espace candidat",
         noPatientData: "Ne transmettez pas de données de patients, de dossiers médicaux ou de documents cliniques dans votre candidature.",
         spam: "Si vous ne retrouvez pas cet email, vérifiez votre dossier Spam ou Courriers indésirables, puis ajoutez recrutement@drahmedbenlallahom.com à vos contacts.",
+        preheader: `Candidature enregistrée sous le numéro de suivi ${trackingId}`,
       };
   const inviteUrl = candidatePortalInviteUrl ? withEmailLanguage(candidatePortalInviteUrl, language) : undefined;
   const candidatePortalInvitation = inviteUrl
-      ? `<div style="margin:24px 0;padding:18px;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;"><h3 style="margin:0 0 8px;color:#0e7490;">${copy.portalTitle}</h3><p style="margin:0 0 14px;">${copy.portalText}</p><p style="margin:0;"><a href="${escapeHtml(inviteUrl)}" style="display:inline-block;background:#0891b2;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:7px;font-weight:700;">${copy.portalAction}</a></p><p style="margin:12px 0 0;color:#475569;font-size:13px;">${escapeHtml(candidateInvitationValidityNote(language))}</p></div>`
+      ? `<div style="margin:24px 0;padding:18px;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;"><h3 style="margin:0 0 8px;color:#0e7490;">${copy.portalTitle}</h3><p style="margin:0 0 14px;">${copy.portalText}</p>${emailButton(inviteUrl, copy.portalAction, "0")}<p style="margin:12px 0 0;color:#475569;font-size:13px;">${escapeHtml(candidateInvitationValidityNote(language))}</p></div>`
       : "";
   const emailContent = buildHippocampusEmailShell(`
       <h2 style="color: #0891b2;">${copy.title}</h2>
@@ -801,7 +933,7 @@ export async function sendCvApplicationConfirmationEmail(
       ${candidatePortalInvitation}
       <p>${copy.noPatientData}</p>
       <p style="color:#64748b;font-size:13px;">${copy.spam}</p>
-    `, language);
+    `, language, { brand: "hippocampus", title: copy.subject, preheader: copy.preheader });
 
   const message = {
     from: FROM_EMAIL,
@@ -841,10 +973,6 @@ type RecruitmentTemplateOptions = {
   customRequest?: string;
 };
 
-function textToSafeHtml(value: string) {
-  return escapeHtml(value).replace(/\r?\n/g, "<br />");
-}
-
 export function buildRecruitmentTemplateEmail(
   candidateFirstName: string,
   trackingId: string,
@@ -857,7 +985,8 @@ export function buildRecruitmentTemplateEmail(
     ? {
         heading: "Hippocampus Consulting",
         reference: "Reference",
-        privacy: "This message concerns your professional application only. You may request access, rectification or deletion of your data through our GDPR form.",
+        privacy: "This message concerns your professional application only. You may request access, rectification or deletion of your data through our ",
+        privacyLink: "GDPR form",
         interestSubject: `Your profile has caught our attention — ${trackingId}`,
         complementSubject: `Additional information requested for your application — ${trackingId}`,
         interestBody: "Following an initial human review of your application, we would like to speak with you about international opportunities that may fit your profile. Please reply with your availability and an updated telephone number if applicable.",
@@ -867,7 +996,8 @@ export function buildRecruitmentTemplateEmail(
     : {
         heading: "Hippocampus Consulting",
         reference: "Référence",
-        privacy: "Cette communication concerne uniquement votre candidature professionnelle. Vous pouvez demander l’accès, la rectification ou la suppression de vos données via notre formulaire RGPD.",
+        privacy: "Cette communication concerne uniquement votre candidature professionnelle. Vous pouvez demander l’accès, la rectification ou la suppression de vos données via notre ",
+        privacyLink: "formulaire RGPD",
         interestSubject: `Votre profil nous intéresse — ${trackingId}`,
         complementSubject: `Complément d’information concernant votre candidature — ${trackingId}`,
         interestBody: "Après une première revue humaine de votre candidature, nous souhaiterions échanger avec vous au sujet des opportunités internationales susceptibles de correspondre à votre profil. Merci de nous répondre avec vos disponibilités et votre numéro de téléphone si celui-ci a changé.",
@@ -881,14 +1011,15 @@ export function buildRecruitmentTemplateEmail(
     : "";
   return {
     subject,
+    // The preview is the template's own sentence, never the admin's free request.
     html: buildHippocampusEmailShell(`
         <h2 style="color: #0891b2;">${copy.heading}</h2>
         <p>${escapeHtml(unverifiedRecipientGreeting(candidateFirstName, language))}</p>
         <p>${escapeHtml(body)}</p>
         ${customRequest}
         <p><strong>${copy.reference}:</strong> ${escapeHtml(trackingId)}</p>
-        <p>${copy.privacy}</p>
-    `, language),
+        <p>${copy.privacy}<a href="${escapeHtml(emailSiteLink("/gdpr", language))}" style="color:#0e7490;">${copy.privacyLink}</a>.</p>
+    `, language, { brand: "hippocampus", title: subject, preheader: body }),
   };
 }
 
@@ -937,7 +1068,7 @@ export async function sendRecruitmentCampaignEmail(input: {
         <p>${textToSafeHtml(input.body)}</p>
         <p style="color: #64748b;">${copy.footer}</p>
         <p style="font-size: 12px;"><a href="${escapeHtml(input.unsubscribeUrl)}" style="color: #0e7490;">${copy.unsubscribe}</a></p>
-    `, input.language),
+    `, input.language, { brand: "hippocampus", title: input.subject }),
   }, input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : undefined, "recruitment_campaign");
   if (error) throw new Error(`Resend campaign email failed: ${error.message}`);
   return { id: id ?? undefined };
@@ -1025,6 +1156,7 @@ const CANDIDATE_ACCESS_EMAIL_COPY_EN = {
     instruction: "You are receiving this email because a candidate portal has just been created with this address. To activate it, click the button below: you will confirm your email address and choose your password on the page that opens.",
     action: "Confirm my email address and choose my password",
     securityNote: `This personal link is valid for ${formatCandidateLinkValidity(CANDIDATE_TOKEN_MAX_AGE_MS, "en")} and can only be used once. If you did not request this candidate portal, ignore this email: no access will be activated and no password will be created.`,
+    preheader: `Personal link valid for ${formatCandidateLinkValidity(CANDIDATE_TOKEN_MAX_AGE_MS, "en")}, single use.`,
   },
   reset: {
     subject: "Reset your password — Hippocampus Consulting",
@@ -1032,6 +1164,7 @@ const CANDIDATE_ACCESS_EMAIL_COPY_EN = {
     instruction: "A password reset request has been received. Choose a new password by clicking the button below.",
     action: "Reset my password",
     securityNote: `This personal link is valid for ${formatCandidateLinkValidity(CANDIDATE_TOKEN_MAX_AGE_MS, "en")}. If you did not make this request, you can ignore this email.`,
+    preheader: `Personal link valid for ${formatCandidateLinkValidity(CANDIDATE_TOKEN_MAX_AGE_MS, "en")}.`,
   },
   invite: {
     subject: "Create your candidate portal — Hippocampus Consulting",
@@ -1039,6 +1172,7 @@ const CANDIDATE_ACCESS_EMAIL_COPY_EN = {
     instruction: "Our team invites you to create your secure candidate portal to upload and track your administrative documents. After confirming your details, you will receive a link to activate your email address and choose your password.",
     action: "Create my candidate portal",
     securityNote: `This secure, personal link gives no access until your email address is activated and your password chosen. ${candidateInvitationValidityNote("en")}`,
+    preheader: `Invitation link valid for ${formatCandidateLinkValidity(CANDIDATE_INVITATION_MAX_AGE_MS, "en")}.`,
   },
   footer: "This email is sent by Hippocampus Consulting from recrutement@drahmedbenlallahom.com. If you cannot find this email, check your Spam or Junk folder, then add this address to your contacts.",
 } as const;
@@ -1058,6 +1192,7 @@ export function buildCandidatePortalAccessEmail(input: CandidatePortalAccessEmai
         instruction: "Vous recevez cet email parce qu’un espace candidat vient d’être créé avec cette adresse. Pour l’activer, cliquez sur le bouton ci-dessous : vous confirmerez votre adresse email et choisirez votre mot de passe sur la page qui s’ouvre.",
         action: "Confirmer mon adresse email et choisir mon mot de passe",
         securityNote: `Ce lien personnel est valable ${formatCandidateLinkValidity(CANDIDATE_TOKEN_MAX_AGE_MS)} et ne peut servir qu’une fois. Si vous n’avez pas demandé cet espace candidat, ignorez cet email : aucun accès ne sera activé et aucun mot de passe ne sera créé.`,
+        preheader: `Lien personnel valable ${formatCandidateLinkValidity(CANDIDATE_TOKEN_MAX_AGE_MS)}, à usage unique.`,
       }
     : input.kind === "reset"
       ? {
@@ -1066,6 +1201,7 @@ export function buildCandidatePortalAccessEmail(input: CandidatePortalAccessEmai
           instruction: "Une demande de réinitialisation a été reçue. Choisissez un nouveau mot de passe en cliquant sur le bouton ci-dessous.",
           action: "Réinitialiser mon mot de passe",
           securityNote: `Ce lien personnel est valable ${formatCandidateLinkValidity(CANDIDATE_TOKEN_MAX_AGE_MS)}. Si vous n’êtes pas à l’origine de cette demande, vous pouvez ignorer cet email.`,
+          preheader: `Lien personnel valable ${formatCandidateLinkValidity(CANDIDATE_TOKEN_MAX_AGE_MS)}.`,
         }
       : {
           subject: "Créez votre espace candidat — Hippocampus Consulting",
@@ -1073,6 +1209,7 @@ export function buildCandidatePortalAccessEmail(input: CandidatePortalAccessEmai
           instruction: "Notre équipe vous invite à créer votre espace candidat sécurisé pour déposer et suivre vos documents administratifs. Après avoir confirmé vos informations, vous recevrez un lien pour activer votre adresse email et choisir votre mot de passe.",
           action: "Créer mon espace candidat",
           securityNote: `Ce lien sécurisé et personnel ne donne aucun accès tant que votre adresse email n’est pas activée et votre mot de passe choisi. ${candidateInvitationValidityNote()}`,
+          preheader: `Lien d’invitation valable ${formatCandidateLinkValidity(CANDIDATE_INVITATION_MAX_AGE_MS)}.`,
         };
   return {
     subject: copy.subject,
@@ -1080,10 +1217,10 @@ export function buildCandidatePortalAccessEmail(input: CandidatePortalAccessEmai
         <h2 style="color:#0891b2;">${copy.title}</h2>
         <p>${escapeHtml(greeting)}</p>
         <p>${copy.instruction}</p>
-        <p style="margin:24px 0;"><a href="${escapeHtml(actionUrl)}" style="display:inline-block;background:#0891b2;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:7px;font-weight:700;">${copy.action}</a></p>
+        ${emailButton(actionUrl, copy.action)}
         <p style="color:#64748b;font-size:13px;">${copy.securityNote}</p>
         <p style="color:#64748b;font-size:13px;">${footer}</p>
-    `, language),
+    `, language, { brand: "hippocampus", title: copy.subject, preheader: copy.preheader }),
     text: `${copy.title}\n\n${greeting}\n\n${copy.instruction}\n\n${actionUrl}\n\n${copy.securityNote}\n\n${footer}`,
   };
 }
