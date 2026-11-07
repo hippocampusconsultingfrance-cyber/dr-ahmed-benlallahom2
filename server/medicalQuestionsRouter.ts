@@ -16,13 +16,13 @@ import { notifyOwner } from "./_core/notification";
 import { buildMedicalQuestionOwnerNotification, sendMedicalQuestionAcknowledgementEmail, sendMedicalQuestionResponseEmail } from "./medicalQuestionEmails";
 import { adminSearchCondition, adminSearchInput } from "./adminSearch";
 import { adminLink } from "./adminLinks";
-import { multiLineText, singleLineText } from "../shared/textInput";
+import { emailText, multiLineText, singleLineText } from "../shared/textInput";
 
 const privateQuestionInput = z.object({
   // INTL-05: no control character nor reversal of the text's direction.
   firstName: singleLineText(z.string().min(1).max(120)),
   lastName: singleLineText(z.string().min(1).max(120)),
-  email: z.string().trim().email().max(320),
+  email: emailText(z.string().email().max(320)),
   phone: singleLineText(z.string().min(5).max(50)),
   question: multiLineText(z.string().min(30).max(3000)),
   language: z.enum(["fr", "en", "de", "zh"]).default("fr"),

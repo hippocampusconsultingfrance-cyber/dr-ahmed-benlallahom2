@@ -1,5 +1,6 @@
 import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { isAcceptedRecruitmentCvFile, RECRUITMENT_CV_ACCEPT_ATTRIBUTE, RECRUITMENT_CV_MAX_BYTES } from "@shared/recruitmentCvLimits";
+import { cleanTextInput } from "@shared/textInputCleaning";
 import { CheckCircle2, Clock3, FileUp, Globe2, Loader2, Search, ShieldCheck, UserCheck, UsersRound, X } from "lucide-react";
 import { Link } from "wouter";
 import { SEOHead } from "@/components/SEOHead";
@@ -530,7 +531,7 @@ export default function RecruitmentPage() {
                     {[{ key: "firstName" as const, label: t.firstName }, { key: "lastName" as const, label: t.lastName }].map(field => <label key={field.key} className="recruitment-field-group"><span>{field.label} *</span><input id={`recruitment-${field.key}`} required value={form[field.key]} aria-invalid={isInvalid(field.key)} onChange={event => update(field.key, event.target.value)} className={`recruitment-field ${isInvalid(field.key) ? "form-field-invalid" : ""}`} autoComplete={field.key === "firstName" ? "given-name" : "family-name"} /></label>)}
                   </div>
                   <div className="grid gap-5 sm:grid-cols-2">
-                    <label className="recruitment-field-group"><span>{lang === "fr" ? "Email" : t.email} *</span><input id="recruitment-email" type="email" required value={form.email} aria-invalid={isInvalid("email")} onChange={event => update("email", event.target.value)} className={`recruitment-field ${isInvalid("email") ? "form-field-invalid" : ""}`} autoComplete="email" /></label>
+                    <label className="recruitment-field-group"><span>{lang === "fr" ? "Email" : t.email} *</span><input id="recruitment-email" type="email" required value={form.email} aria-invalid={isInvalid("email")} onChange={event => update("email", cleanTextInput(event.target.value))} className={`recruitment-field ${isInvalid("email") ? "form-field-invalid" : ""}`} autoComplete="email" /></label>
                     <label className="recruitment-field-group"><span>{t.phone}</span><input id="recruitment-phone" type="tel" value={form.phone} onChange={event => update("phone", event.target.value)} className="recruitment-field" autoComplete="tel" /></label>
                   </div>
                   <div className="grid gap-5 sm:grid-cols-2">

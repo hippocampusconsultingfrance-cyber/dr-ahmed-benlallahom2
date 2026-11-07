@@ -288,6 +288,18 @@ describe("erreurs et repères du parcours de réservation (RES-10, A11Y-10, INTL
     await waitFor(() => expect(view.create).toHaveBeenCalledWith(expect.objectContaining({ customerEmail: "jean@gmail.com" })));
   });
 
+  it("accepte une adresse collée avec une marque de direction ou une espace insécable aux extrémités, et l’envoie sans elles (INTL-05)", async () => {
+    mount();
+    fillForm();
+    fireEvent.change(field("booking-email"), { target: { value: "‏jeanne@example.test‎ " } });
+    fireEvent.blur(field("booking-email"));
+    expect(field("booking-email").value).toBe("jeanne@example.test");
+    expect(document.getElementById("booking-email-error")).toBeNull();
+    pay();
+    await waitFor(() => expect(view.create).toHaveBeenCalledWith(expect.objectContaining({ customerEmail: "jeanne@example.test" })));
+    expect(document.getElementById("booking-email-error")).toBeNull();
+  });
+
   it("ne bloque pas une adresse complète même quand une correction est proposée, et la rappelle avant le paiement", async () => {
     mount();
     fillForm();

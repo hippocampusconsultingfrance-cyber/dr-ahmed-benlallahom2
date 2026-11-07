@@ -13,7 +13,7 @@ import { SITE_LANGUAGES } from "../emailLanguage";
 import { isSameRecruitmentSubmission } from "../recruitmentSubmissionDeduplication";
 import { sendTrackedCvApplicationConfirmationEmail } from "../recruitmentEmailTrace";
 import { CV_APPLICATION_SUBMISSION_UNIQUE_INDEX, isUniqueViolation } from "../databaseConstraints";
-import { multiLineText, refusesTextInputCharacters, singleLineText, TEXT_INPUT_INVALID_CHARACTERS, TEXT_INPUT_INVALID_CHARACTERS_MESSAGE } from "../../shared/textInput";
+import { emailText, multiLineText, refusesTextInputCharacters, singleLineText, TEXT_INPUT_INVALID_CHARACTERS, TEXT_INPUT_INVALID_CHARACTERS_MESSAGE } from "../../shared/textInput";
 import { adminLink } from "../adminLinks";
 import { PUBLIC_APP_ORIGIN, safeErrorName, safeFileName } from "./routeHelpers";
 
@@ -56,7 +56,7 @@ const recruitmentUpload = multer({
 const recruitmentApplicationSchema = z.object({
   firstName: singleLineText(z.string().min(1).max(120)),
   lastName: singleLineText(z.string().min(1).max(120)),
-  email: z.string().trim().email().max(320),
+  email: emailText(z.string().email().max(320)),
   phone: singleLineText(z.string().max(50)).optional().default(""),
   specialty: singleLineText(z.string().min(1).max(160)),
   diplomaCountry: singleLineText(z.string().min(1).max(100)),

@@ -3,6 +3,7 @@ import { siteConfig } from "@/data/site-config";
 import { getContactFormCopy, publicFormCopy, publicFormErrorMessage } from "@/lib/publicFormCopy";
 import { trpc } from "@/lib/trpc";
 import { CONTACT_CATEGORIES, type ContactCategory } from "@shared/contactCategories";
+import { cleanTextInput } from "@shared/textInputCleaning";
 import { Phone, Mail, Linkedin, Send, CheckCircle, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -249,7 +250,8 @@ export default function ContactSection() {
                     required
                     placeholder={content.contact.form.emailPlaceholder}
                     value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    // Pasted address: without the spaces and direction marks left at either end, as the server reads it (INTL-05).
+                    onChange={(e) => setFormData({ ...formData, email: cleanTextInput(e.target.value) })}
                     className="w-full px-4 py-3 rounded-lg bg-input/50 border border-border/50 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 transition-all"
                   />
                 </div>

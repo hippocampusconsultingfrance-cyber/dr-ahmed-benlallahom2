@@ -5,7 +5,7 @@ import { notifyOwner } from "../_core/notification";
 import { sql } from "drizzle-orm";
 import { countPublicFormDailyVolume, releasePublicEmailIpRateLimit } from "../publicFormRateLimit";
 import { enforcePublicFormRateLimit, verifyPublicFormTurnstile, enforcePublicFormIpLimit, createPublicTrackingId } from "./publicForms";
-import { multiLineText, singleLineText } from "../../shared/textInput";
+import { emailText, multiLineText, singleLineText } from "../../shared/textInput";
 import { adminLink } from "../adminLinks";
 
 export const gdprRouter = router({
@@ -14,7 +14,7 @@ export const gdprRouter = router({
       z.object({
         // INTL-05 : sans caractère de contrôle ni inversion du sens du texte.
         name: singleLineText(z.string().min(1, "Le nom est requis").max(255)),
-        email: z.string().email("Email invalide").max(320),
+        email: emailText(z.string().email("Email invalide").max(320)),
         phone: singleLineText(z.string().max(50)).optional(),
         requestType: z.enum(["access", "rectification", "deletion", "portability", "objection"]),
         // Facultative : une description faite d’espaces seuls est gardée vide, la demande n’est pas refusée.

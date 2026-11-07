@@ -10,6 +10,7 @@ import { resolveCountryForSubmission } from "@/lib/countrySubmission";
 import { reportFieldsToCorrect, type FieldToCorrect } from "@/lib/formFieldsToCorrect";
 import { getInvalidCharactersCopy } from "@/lib/publicFormCopy";
 import { INVALID_CHARACTERS_REASON } from "@shared/publicFormRefusalReasons";
+import { cleanTextInput } from "@shared/textInputCleaning";
 
 export const employerCopy = {
   fr: {
@@ -420,7 +421,7 @@ export default function EmployersPage() {
                   <div className="grid gap-4 @xl:grid-cols-2">
                     <label className="block w-full space-y-2 text-sm text-foreground">
                       <span className="block mb-1 font-medium">{t.email} *</span>
-                      <input id={employerFieldId("email")} type="email" required value={form.email} aria-invalid={isInvalid("email")} onChange={(e) => update("email", e.target.value)} className={`form-control block w-full ${isInvalid("email") ? "form-field-invalid" : ""}`} autoComplete="email" />
+                      <input id={employerFieldId("email")} type="email" required value={form.email} aria-invalid={isInvalid("email")} onChange={(e) => update("email", cleanTextInput(e.target.value))} className={`form-control block w-full ${isInvalid("email") ? "form-field-invalid" : ""}`} autoComplete="email" />
                     </label>
                     <label className="block w-full space-y-2 text-sm text-foreground">
                       <span className="block mb-1 font-medium">{t.phone}</span>

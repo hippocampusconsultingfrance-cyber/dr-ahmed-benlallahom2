@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { multiLineText, refusesTextInputCharacters, singleLineText, TEXT_INPUT_INVALID_CHARACTERS, TEXT_INPUT_INVALID_CHARACTERS_MESSAGE } from "../shared/textInput";
+import { emailText, multiLineText, refusesTextInputCharacters, singleLineText, TEXT_INPUT_INVALID_CHARACTERS, TEXT_INPUT_INVALID_CHARACTERS_MESSAGE } from "../shared/textInput";
+import { bookingCustomerEmail } from "./routers/appointments";
 import { PUBLIC_FORM_REFUSAL_REASONS } from "../shared/publicFormRefusalReasons";
 import { BOOKING_REFUSAL_REASONS } from "../shared/bookingPolicy";
 import { publicFormCopy } from "../client/src/lib/publicFormCopy";
@@ -106,6 +107,33 @@ describe("multiLineText — messages et notes", () => {
     for (const forged of [`Bonjour${NUL}`, `Montant : ${RLO}001${PDF} €`, `Bonjour${character(0x1b)}[31m`, `a${character(0x9b)}b`]) {
       expect(refusesTextInputCharacters(refusal(message, forged)), JSON.stringify(forged)).toBe(true);
     }
+  });
+});
+
+describe("emailText — adresses email collées", () => {
+  const email = emailText(z.string().email().max(320));
+  const NBSP = character(0xa0);
+
+  it("retire ce qu'un copier-coller laisse aux extrémités, comme pour les noms, avant de vérifier le format", () => {
+    for (const pasted of [`${LRM}exemple@example.test`, `exemple@example.test${RLM}`, "exemple@example.test ", ` exemple@example.test${NBSP}`, `${BOM}${ZWSP}exemple@example.test${PDI}`]) {
+      expect(email.parse(pasted), JSON.stringify(pasted)).toBe("exemple@example.test");
+    }
+    // The booking's own rule (RES-10), on the address as the server reads it.
+    expect(bookingCustomerEmail.parse(`${RLM}jeanne@example.test `)).toBe("jeanne@example.test");
+  });
+
+  it("refuse avec le motif invalid_characters un caractère invisible laissé à l'intérieur de l'adresse", () => {
+    for (const forged of [`exem${ZWSP}ple@example.test`, `exemple${LRM}@example.test`, `exemple@exa${ZWJ}mple.test`, `exemple@example.test${NUL}x`, `a${character(0x2060)}b@example.test`]) {
+      expect(refusesTextInputCharacters(refusal(email, forged)), JSON.stringify(forged)).toBe(true);
+      expect(refusesTextInputCharacters(refusal(bookingCustomerEmail, forged)), JSON.stringify(forged)).toBe(true);
+    }
+  });
+
+  it("garde son format et sa longueur, avec leurs messages", () => {
+    expect(refusesTextInputCharacters(refusal(email, "exemple@example"))).toBe(false);
+    expect(email.safeParse("exemple@example").success).toBe(false);
+    expect(email.safeParse(`${"a".repeat(320)}@example.test`).success).toBe(false);
+    expect(bookingCustomerEmail.safeParse("patient@gmail").success).toBe(false);
   });
 });
 

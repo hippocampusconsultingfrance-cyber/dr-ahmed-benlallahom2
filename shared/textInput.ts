@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { INVALID_CHARACTERS_REASON } from "./publicFormRefusalReasons";
+import { cleanTextInput } from "./textInputCleaning";
 
 /**
  * INTL-05: the text a public form takes, on one line (names, phones,
@@ -17,7 +18,8 @@ import { INVALID_CHARACTERS_REASON } from "./publicFormRefusalReasons";
  *    « gnp.exe » shown « Ali exe.png »).
  * ZWJ and ZWNJ (U+200D, U+200C), which join emoji and Persian or Indic
  * letters, and the direction marks and isolates inside the text, which
- * mixed Arabic, Hebrew and Latin text uses, are kept.
+ * mixed Arabic, Hebrew and Latin text uses, are kept. An email address
+ * (emailText) is cleaned the same way, and keeps none of them inside.
  */
 export const TEXT_INPUT_INVALID_CHARACTERS = INVALID_CHARACTERS_REASON;
 
@@ -28,19 +30,15 @@ export const TEXT_INPUT_INVALID_CHARACTERS = INVALID_CHARACTERS_REASON;
  */
 export const TEXT_INPUT_INVALID_CHARACTERS_MESSAGE = "Un champ contient un saut de ligne ou un caractère invisible qui n’y est pas accepté, souvent laissé par un copier-coller : retapez ce texte au clavier, puis renvoyez le formulaire.";
 
+// Step 1, NFC without the spaces and invisible marks at either end, which the pages apply too.
+export { cleanTextInput };
+
 // Written as escapes: none of these characters appears as such in the source.
-const EDGE_MARKS = "\\s\\u200B\\u200E\\u200F\\u202A-\\u202E\\u2066-\\u2069\\uFEFF";
-const EDGES = new RegExp(`^[${EDGE_MARKS}]+|[${EDGE_MARKS}]+$`, "g");
 const SINGLE_LINE_REFUSED = new RegExp("[\\u0000-\\u001F\\u007F-\\u009F\\u2028\\u2029\\u202D\\u202E]");
 const MULTI_LINE_REFUSED = new RegExp("[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F-\\u009F\\u202D\\u202E]");
-
-/**
- * Step 1: NFC, without the spaces and invisible marks at either end. Also
- * compares a value stored cleaned with the one a page kept as typed.
- */
-export function cleanTextInput(value: string): string {
-  return value.normalize("NFC").replace(EDGES, "");
-}
+// An address holds no invisible character at all: the controls, the zero-width characters, the
+// direction marks, embeddings, overrides and isolates, the word joiner and the byte order mark.
+const EMAIL_REFUSED = new RegExp("[\\u0000-\\u001F\\u007F-\\u009F\\u200B-\\u200F\\u2028-\\u202E\\u2060-\\u2069\\uFEFF]");
 
 function textInput(refused: RegExp, schema: z.ZodString) {
   return z.string()
@@ -60,6 +58,17 @@ export function singleLineText(schema: z.ZodString = z.string()) {
 /** A field on several lines (message, notes): tabs and line breaks allowed. */
 export function multiLineText(schema: z.ZodString = z.string()) {
   return textInput(MULTI_LINE_REFUSED, schema);
+}
+
+/**
+ * An email address, cleaned as the other fields (a pasted address keeps no
+ * space nor direction mark at either end), then refused with the reason
+ * `invalid_characters` if an invisible character remains inside it, then
+ * checked by `schema` (its format and length): the page names the character
+ * to type again rather than an address said invalid that looks complete.
+ */
+export function emailText(schema: z.ZodString) {
+  return textInput(EMAIL_REFUSED, schema);
 }
 
 /** Whether a validation error (a ZodError) refuses a field for its characters. */

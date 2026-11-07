@@ -36,6 +36,7 @@ import {
   normalizePhoneInput,
   type BookingRefusalReason,
 } from "@shared/bookingPolicy";
+import { cleanTextInput } from "@shared/textInputCleaning";
 
 // Délai minimal et horizon : même texte pour la vérification de la page et pour
 // le refus du serveur (EN-06).
@@ -1516,8 +1517,10 @@ export default function BookingPage() {
                 required
                 value={formData.email}
                 onChange={(e) => {
-                  setFormData({ ...formData, email: e.target.value });
-                  if (emailError && isBookingEmailAddress(e.target.value.trim())) setEmailError(null);
+                  // Pasted address: without the spaces and direction marks left at either end, as the server reads it (INTL-05).
+                  const email = cleanTextInput(e.target.value);
+                  setFormData({ ...formData, email });
+                  if (emailError && isBookingEmailAddress(email)) setEmailError(null);
                   setEmailSuggestion(null);
                 }}
                 onBlur={() => {
