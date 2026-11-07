@@ -56,7 +56,7 @@ describe("bandeau admin de configuration", () => {
   });
 
   it("dit ce qu’il faut changer pour une clé de test en production, sans variable manquante", () => {
-    view.data = { ok: true, missing: [], enforced: true, warnings: ["stripe_test_key_in_production", "turnstile_test_secret"] };
+    view.data = { ok: true, missing: [], enforced: true, warnings: ["stripe_test_key_in_production", "turnstile_test_key"] };
     const html = render();
 
     expect(html).toMatch(/^<div role="alert"/);
@@ -65,6 +65,20 @@ describe("bandeau admin de configuration", () => {
     expect(html).toContain("aucun paiement réel n’est encaissé");
     expect(html).toContain("la vérification anti-robot des formulaires publics accepte tout");
     expect(html).not.toContain("préproduction (Preview)");
+  });
+
+  it("dit de changer avec les clés ce qui en dépend, pour ne pas couper l’accès ni les formulaires", () => {
+    const advice = (code: string) => {
+      view.data = { ok: true, missing: [], enforced: true, warnings: [code] };
+      return render();
+    };
+    // The owner's account has another id in Clerk's production instance: without it, no one is admin.
+    expect(advice("clerk_test_key_in_production")).toContain("l’identifiant de ce compte (user_…) dans CLERK_OWNER_USER_ID");
+    // A real secret with Cloudflare's test site key refuses the dummy token of every public form.
+    expect(advice("turnstile_test_key")).toContain("la clé de site et la clé secrète d’un même widget du site (Cloudflare → Turnstile) dans VITE_TURNSTILE_SITE_KEY et TURNSTILE_SECRET_KEY");
+    // Restricted Stripe keys are flagged too: the advice names their prefix.
+    expect(advice("stripe_test_key_in_production")).toContain("sk_test_ ou rk_test_");
+    expect(advice("live_key_in_preview")).toContain("Stripe (sk_live_, rk_live_)");
   });
 
   it("montre ensemble les variables manquantes et les incohérences", () => {

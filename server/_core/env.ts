@@ -64,8 +64,8 @@ export function assertCriticalProductionEnvironment(environment: NodeJS.ProcessE
 
 /**
  * Contrôles de cohérence (EXPL-20) selon VERCEL_ENV, en plus de la présence des
- * variables : en production, une clé Stripe ou Clerk de test, une clé secrète
- * Turnstile de test ou une PUBLIC_APP_ORIGIN qui n'est pas l'adresse du site ;
+ * variables : en production, une clé Stripe ou Clerk de test, une clé Turnstile
+ * de test (secrète ou de site) ou une PUBLIC_APP_ORIGIN qui n'est pas l'adresse du site ;
  * en préproduction (Preview), une clé live. Seuls ces CODES sont exposés (bandeau
  * admin, /api/health détaillé, journaux), jamais les valeurs. Sans VERCEL_ENV
  * (développement, serveur lancé hors de Vercel), rien ne distingue la production :
@@ -74,7 +74,7 @@ export function assertCriticalProductionEnvironment(environment: NodeJS.ProcessE
 export const CONFIGURATION_WARNINGS = [
   "stripe_test_key_in_production",
   "clerk_test_key_in_production",
-  "turnstile_test_secret",
+  "turnstile_test_key",
   "public_origin_mismatch",
   "live_key_in_preview",
 ] as const;
@@ -88,6 +88,19 @@ const TURNSTILE_TEST_SECRETS = new Set([
   "3x0000000000000000000000000000000AA",
 ]);
 
+/**
+ * Clés de site de test publiées par Cloudflare : le widget n'y produit qu'un
+ * jeton factice, que la clé secrète d'un vrai widget refuse. VITE_TURNSTILE_SITE_KEY
+ * est intégrée au site au build, et Vercel la donne aussi au serveur.
+ */
+const TURNSTILE_TEST_SITE_KEYS = new Set([
+  "1x00000000000000000000AA",
+  "2x00000000000000000000AB",
+  "1x00000000000000000000BB",
+  "2x00000000000000000000BB",
+  "3x00000000000000000000FF",
+]);
+
 const keyPrefixed = (value: string | undefined, prefixes: readonly string[]) => prefixes.some(prefix => value?.trim().startsWith(prefix));
 const clerkKeys = (environment: NodeJS.ProcessEnv) => [environment.CLERK_SECRET_KEY, environment.CLERK_PUBLISHABLE_KEY, environment.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY];
 
@@ -96,7 +109,9 @@ export function getConfigurationWarnings(environment: NodeJS.ProcessEnv = proces
   if (environment.VERCEL_ENV === "production") {
     if (keyPrefixed(environment.STRIPE_SECRET_KEY, ["sk_test_", "rk_test_"])) warnings.push("stripe_test_key_in_production");
     if (clerkKeys(environment).some(key => keyPrefixed(key, ["sk_test_", "pk_test_"]))) warnings.push("clerk_test_key_in_production");
-    if (TURNSTILE_TEST_SECRETS.has(environment.TURNSTILE_SECRET_KEY?.trim() ?? "")) warnings.push("turnstile_test_secret");
+    if (TURNSTILE_TEST_SECRETS.has(environment.TURNSTILE_SECRET_KEY?.trim() ?? "") || TURNSTILE_TEST_SITE_KEYS.has(environment.VITE_TURNSTILE_SITE_KEY?.trim() ?? "")) {
+      warnings.push("turnstile_test_key");
+    }
     // Lue telle quelle par les liens envoyés (`process.env.PUBLIC_APP_ORIGIN || …`) : vide, l'adresse du site s'applique.
     if (environment.PUBLIC_APP_ORIGIN && environment.PUBLIC_APP_ORIGIN !== SITE_ORIGIN) warnings.push("public_origin_mismatch");
   } else if (environment.VERCEL_ENV === "preview") {

@@ -24,15 +24,17 @@ const liveKeys = (): NodeJS.ProcessEnv => ({
   CLERK_SECRET_KEY: "sk_live_CLERK-LIVE-VALUE",
   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "pk_live_CLERK-PUBLIC-LIVE-VALUE",
   TURNSTILE_SECRET_KEY: "0x4AAAAAAA-TURNSTILE-LIVE-VALUE",
+  VITE_TURNSTILE_SITE_KEY: "0x4AAAAAAA-TURNSTILE-SITE-VALUE",
   PUBLIC_APP_ORIGIN: "https://drahmedbenlallahom.com",
 });
 
-/** The keys of a preproduction: test Stripe and Clerk, Cloudflare's always-pass Turnstile secret, the preview's own address. */
+/** The keys of a preproduction: test Stripe and Clerk, Cloudflare's always-pass Turnstile keys, the preview's own address. */
 const testKeys = (): NodeJS.ProcessEnv => ({
   STRIPE_SECRET_KEY: "sk_test_STRIPE-TEST-VALUE",
   CLERK_SECRET_KEY: "sk_test_CLERK-TEST-VALUE",
   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "pk_test_CLERK-PUBLIC-TEST-VALUE",
   TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA",
+  VITE_TURNSTILE_SITE_KEY: "1x00000000000000000000AA",
   PUBLIC_APP_ORIGIN: "https://site-git-main-equipe.vercel.app",
 });
 
@@ -42,7 +44,7 @@ const deployment = (vercelEnv: string | undefined, keys: NodeJS.ProcessEnv): Nod
   ...(vercelEnv === undefined ? {} : { VERCEL_ENV: vercelEnv }),
 });
 
-const ALL_PRODUCTION_WARNINGS = ["stripe_test_key_in_production", "clerk_test_key_in_production", "turnstile_test_secret", "public_origin_mismatch"];
+const ALL_PRODUCTION_WARNINGS = ["stripe_test_key_in_production", "clerk_test_key_in_production", "turnstile_test_key", "public_origin_mismatch"];
 
 const healthyDb = () => Promise.resolve({ execute: vi.fn().mockResolvedValue({ rows: [{ "?column?": 1 }] }) });
 
@@ -102,15 +104,20 @@ describe("incohérences de configuration selon VERCEL_ENV (EXPL-20)", () => {
     }
   });
 
-  it("reconnaît chaque clé : clé restreinte Stripe, clé publique Clerk du serveur ou du navigateur, les trois clés Turnstile de test", () => {
+  it("reconnaît chaque clé : clé restreinte Stripe, clé publique Clerk du serveur ou du navigateur, les clés Turnstile de test secrètes et de site", () => {
     const production = (keys: NodeJS.ProcessEnv) => getConfigurationWarnings(deployment("production", { ...liveKeys(), ...keys }));
     expect(production({ STRIPE_SECRET_KEY: "rk_test_RESTRICTED" })).toEqual(["stripe_test_key_in_production"]);
     expect(production({ CLERK_SECRET_KEY: " sk_test_CLERK " })).toEqual(["clerk_test_key_in_production"]);
     expect(production({ CLERK_PUBLISHABLE_KEY: "pk_test_SERVER" })).toEqual(["clerk_test_key_in_production"]);
     expect(production({ NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "pk_test_BROWSER" })).toEqual(["clerk_test_key_in_production"]);
     for (const secret of ["1x0000000000000000000000000000000AA", "2x0000000000000000000000000000000AA", "3x0000000000000000000000000000000AA"]) {
-      expect(production({ TURNSTILE_SECRET_KEY: secret })).toEqual(["turnstile_test_secret"]);
+      expect(production({ TURNSTILE_SECRET_KEY: secret })).toEqual(["turnstile_test_key"]);
     }
+    // A test site key with the site's real secret: its dummy token is refused, every public form with it.
+    for (const siteKey of ["1x00000000000000000000AA", "2x00000000000000000000AB", "1x00000000000000000000BB", "2x00000000000000000000BB", " 3x00000000000000000000FF "]) {
+      expect(production({ VITE_TURNSTILE_SITE_KEY: siteKey }), siteKey).toEqual(["turnstile_test_key"]);
+    }
+    expect(production({ TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA", VITE_TURNSTILE_SITE_KEY: "1x00000000000000000000AA" })).toEqual(["turnstile_test_key"]);
 
     const preview = (keys: NodeJS.ProcessEnv) => getConfigurationWarnings(deployment("preview", { ...testKeys(), ...keys }));
     expect(preview({ STRIPE_SECRET_KEY: "rk_live_RESTRICTED" })).toEqual(["live_key_in_preview"]);
@@ -136,7 +143,7 @@ describe("incohérences de configuration selon VERCEL_ENV (EXPL-20)", () => {
     expect(reportCriticalProductionEnvironment(environment, log).ok).toBe(true);
     expect(log).toHaveBeenCalledTimes(1);
     const message = String(log.mock.calls[0][0]);
-    expect(message).toBe("[Config] WARNING: configuration inconsistent with VERCEL_ENV=production: stripe_test_key_in_production, clerk_test_key_in_production, turnstile_test_secret, public_origin_mismatch. The /admin banner says what to change.");
+    expect(message).toBe("[Config] WARNING: configuration inconsistent with VERCEL_ENV=production: stripe_test_key_in_production, clerk_test_key_in_production, turnstile_test_key, public_origin_mismatch. The /admin banner says what to change.");
 
     const silent = vi.fn();
     reportCriticalProductionEnvironment(deployment("production", liveKeys()), silent);
