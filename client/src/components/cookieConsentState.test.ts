@@ -6,7 +6,6 @@ import {
   isCookieConsentExpired,
   normalizeCookieConsent,
   readValidCookieConsent,
-  shouldShowCookiePreferences,
 } from "./cookieConsentState";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -43,10 +42,5 @@ describe("préférences de cookies", () => {
     // Choix antérieur à l'horodatage : redemandé.
     expect(readValidCookieConsent(JSON.stringify({ essential: true, performance: true, preferences: true }), now)).toBeNull();
     expect(readValidCookieConsent(JSON.stringify(acceptance), now)).toEqual(acceptance);
-  });
-
-  it("garde l’accès aux préférences après fermeture du bandeau sans choix", () => {
-    expect(shouldShowCookiePreferences(true)).toBe(false);
-    expect(shouldShowCookiePreferences(false)).toBe(true);
   });
 });

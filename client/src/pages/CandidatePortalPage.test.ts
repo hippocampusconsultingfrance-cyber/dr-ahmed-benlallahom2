@@ -188,11 +188,9 @@ describe("CAND-21, ADM-16, PUB-12 — boutons flottants et bandeau cookies", () 
     view.location = location;
     const holder = elementsOf(App()).find(element => typeof element.type === "function" && (element.type as { name: string }).name === "FloatingWidgets")!;
     const widgets = elementsOf((holder.type as () => ReactElement)());
-    const cookieConsent = widgets.find(element => element.type === CookieConsent);
     return {
       whatsApp: widgets.some(element => element.type === WhatsAppButton),
-      cookieConsent: Boolean(cookieConsent),
-      cookiePreferencesShortcut: Boolean(cookieConsent?.props.showPreferencesShortcut),
+      cookieConsent: widgets.some(element => element.type === CookieConsent),
     };
   }
 
@@ -201,16 +199,16 @@ describe("CAND-21, ADM-16, PUB-12 — boutons flottants et bandeau cookies", () 
     for (const path of ["/", "/booking", "/recruitment/standard", "/candidates", "/administration"]) expect(isPrivateAreaPath(path), path).toBe(false);
 
     for (const path of ["/candidate/portal", "/candidate/access", "/admin"]) {
-      await expect(floatingWidgets(path), path).resolves.toEqual({ whatsApp: false, cookieConsent: false, cookiePreferencesShortcut: false });
+      await expect(floatingWidgets(path), path).resolves.toEqual({ whatsApp: false, cookieConsent: false });
     }
   });
 
-  it("garde le bandeau cookies sur les pages publiques, sans pastille flottante, et WhatsApp hors des formulaires (PUB-12)", async () => {
+  it("garde le bandeau cookies sur les pages publiques, et WhatsApp hors des formulaires (PUB-12)", async () => {
     for (const path of ["/", "/faq", "/booking/confirmation", "/legal"]) {
-      await expect(floatingWidgets(path), path).resolves.toEqual({ whatsApp: true, cookieConsent: true, cookiePreferencesShortcut: false });
+      await expect(floatingWidgets(path), path).resolves.toEqual({ whatsApp: true, cookieConsent: true });
     }
     for (const path of ["/booking", "/recruitment", "/recruitment/standard", "/recruitment/vvip-offshore", "/vvip-offshore", "/recruitment/unsubscribe", "/employers", "/questions-anesthesie", "/gdpr"]) {
-      await expect(floatingWidgets(path), path).resolves.toEqual({ whatsApp: false, cookieConsent: true, cookiePreferencesShortcut: false });
+      await expect(floatingWidgets(path), path).resolves.toEqual({ whatsApp: false, cookieConsent: true });
     }
   });
 });

@@ -17,7 +17,7 @@ const contents = { fr: contentFr, en: contentEn, de: contentDe, zh: contentZh } 
 
 function mount(language: keyof typeof contents, withCookieConsent = false) {
   localStorage.setItem("language", language);
-  return render(createElement(LanguageProvider, null, createElement(Footer), withCookieConsent ? createElement(CookieConsent, { showPreferencesShortcut: false }) : null));
+  return render(createElement(LanguageProvider, null, createElement(Footer), withCookieConsent ? createElement(CookieConsent) : null));
 }
 
 /** Column heading → the hrefs (or the button's text) listed under it. */
@@ -58,8 +58,9 @@ describe("pied de page dans les quatre langues", () => {
       Informations: ["/#experience", "/#services", "/#education", "/#contact", "/press"],
       Légal: ["/legal", "/legal?tab=privacy", "/legal?tab=terms", "/gdpr", cookieCopy.fr.manage],
     });
-    // « Leadership » garde son libellé (en attente d'une décision du propriétaire).
-    expect(screen.getByRole("link", { name: "Leadership" }).getAttribute("href")).toBe("/#experience");
+    // « Leadership » devient « Parcours » en français (PUB-08).
+    expect(screen.getByRole("link", { name: "Parcours" }).getAttribute("href")).toBe("/#experience");
+    expect(screen.queryByText("Leadership")).toBeNull();
     const contact = screen.getByRole("contentinfo").querySelector("address")!;
     expect(Array.from(contact.querySelectorAll("a")).map((link) => link.getAttribute("href")?.split(":")[0])).toEqual(["tel", "mailto", "https"]);
   });

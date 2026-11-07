@@ -51,7 +51,3 @@ export function readValidCookieConsent(stored: string | null, now: number = Date
     return null;
   }
 }
-
-export function shouldShowCookiePreferences(showBanner: boolean) {
-  return !showBanner;
-}

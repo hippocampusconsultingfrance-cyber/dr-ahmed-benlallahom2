@@ -15,9 +15,11 @@ type DisplayToggle = { key: string; label: string; icon: ReactNode; pressed?: bo
 
 const displayToggleClass = "flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-left text-sm font-medium text-foreground transition-colors hover:bg-primary/10 hover:text-primary aria-pressed:text-primary";
 
-/** Thème, lisibilité renforcée et noir OLED, regroupés derrière un seul bouton « Affichage » de l'en-tête (PUB-08). */
-function DisplayMenu({ label, toggles }: { label: string; toggles: DisplayToggle[] }) {
-  const [open, setOpen] = useState(false);
+/**
+ * Thème, lisibilité renforcée et noir OLED, regroupés derrière un seul bouton « Affichage » de l'en-tête (PUB-08).
+ * Son état ouvert est tenu par Navigation, qui efface l'offre d'anglais (EN-08) que la fenêtre couvrirait.
+ */
+function DisplayMenu({ label, toggles, open, setOpen }: { label: string; toggles: DisplayToggle[]; open: boolean; setOpen: (open: boolean) => void }) {
   const panelId = useId();
   const containerRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -77,6 +79,7 @@ export default function Navigation() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileDisplayOpen, setMobileDisplayOpen] = useState(false);
+  const [displayOpen, setDisplayOpen] = useState(false);
   const copyLanguage = (language in readabilityLabel ? language : "fr") as keyof typeof readabilityLabel;
   const accessibilityCopy = navigationAccessibilityCopy[language as keyof typeof navigationAccessibilityCopy] ?? navigationAccessibilityCopy.fr;
   const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
@@ -186,10 +189,13 @@ export default function Navigation() {
 
         {/* Actions */}
         <div className="flex min-w-0 items-center gap-1.5 justify-self-end sm:gap-2">
-          {/* Language Dropdown : l'offre d'anglais (EN-08) s'efface tant que le menu mobile est ouvert sous elle. */}
-          <LanguageMenu hideSuggestion={mobileOpen} />
+          {/*
+            Language Dropdown : l'offre d'anglais (EN-08) s'efface tant que le menu mobile ou le menu Affichage
+            s'ouvre à sa place, et dès que la page défile, pour ne pas rester au-dessus du contenu.
+          */}
+          <LanguageMenu hideSuggestion={mobileOpen || displayOpen || scrolled} />
 
-          <DisplayMenu label={accessibilityCopy.display} toggles={displayToggles} />
+          <DisplayMenu label={accessibilityCopy.display} toggles={displayToggles} open={displayOpen} setOpen={setDisplayOpen} />
 
           <a href="/search" className="nav-control inline-flex shrink-0 items-center justify-center rounded-full border border-border/50 p-2 text-muted-foreground transition-all duration-200 hover:border-primary/40 hover:text-foreground" aria-label={accessibilityCopy.search} title={accessibilityCopy.search}><Search className="h-4 w-4" /></a>
 

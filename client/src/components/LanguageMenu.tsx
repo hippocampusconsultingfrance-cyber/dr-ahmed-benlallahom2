@@ -49,7 +49,8 @@ const toneClasses = {
  * unsubscribe, 404, maintenance) so that a visitor arriving from a shared link can switch (EN-03).
  * The page changes language where it is, without reloading (EN-10). Under the button, English is
  * offered to a visitor the site would otherwise only show in French (EN-08), unless the page hides
- * the offer while something opens over it (Navigation's mobile menu).
+ * the offer while something opens in its place (Navigation's mobile and « Affichage » menus) or once
+ * it has scrolled, so that the fixed header does not keep it over the content.
  */
 export default function LanguageMenu({ className, tone = "site", hideSuggestion = false }: { className?: string; tone?: keyof typeof toneClasses; hideSuggestion?: boolean }) {
   const colors = toneClasses[tone];

@@ -3,9 +3,11 @@ import { COOKIE_BANNER_HEIGHT_PROPERTY, COOKIE_BANNER_OPEN_ATTRIBUTE, cookieCopy
 
 // Dialogue des préférences, retrait du consentement et section #cookies de la
 // politique : CookieConsent.behaviour.test.ts et pages/LegalPage.cookies.test.ts.
-// Bandeau et préférences absents de /admin et /candidate, sans pastille flottante
-// sur les pages publiques (ADM-16, PUB-12) : pages/CandidatePortalPage.test.ts
-// (FloatingWidgets d'App) ; « Gérer les cookies » du pied de page : Footer.dom.test.ts.
+// Bandeau et préférences absents de /admin et /candidate (ADM-16) :
+// pages/CandidatePortalPage.test.ts (FloatingWidgets d'App). Plus de pastille
+// flottante sur les pages publiques (PUB-12) : CookieConsent.behaviour.test.ts ;
+// « Gérer les cookies » du pied de page : Footer.dom.test.ts, et des pages sans
+// pied de page : pages/footerlessPages.cookies.dom.test.ts.
 
 describe("coordination des contrôles fixes", () => {
   it("marque le document lorsque le bandeau cookies est ouvert", () => {

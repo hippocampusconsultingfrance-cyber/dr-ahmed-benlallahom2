@@ -1,4 +1,5 @@
-import type { ReactElement } from "react";
+import { createElement, type ReactElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { elementsOf, renderStateful, resetStatefulHooks } from "@/testing/statefulRender";
 
@@ -31,7 +32,16 @@ let events: string[];
 let rootAttributes: Map<string, string>;
 let listeners: Map<string, Set<(event: Event) => void>>;
 
-const render = (props: { showPreferencesShortcut?: boolean } = {}) => elementsOf(renderStateful(() => CookieConsent(props) as ReactElement)) as Element[];
+const render = () => elementsOf(renderStateful(() => CookieConsent() as ReactElement)) as Element[];
+/**
+ * « Gérer les cookies » (ManageCookiesButton) pressed once the page is shown, i.e. after the render that
+ * follows reading the stored choice: the preferences open, `trigger` gets the focus back at closing.
+ */
+const openFrom = (trigger: { focus: () => void; isConnected: boolean }) => {
+  render();
+  openCookiePreferences(trigger as unknown as HTMLElement);
+  return render();
+};
 const button = (elements: Element[], label: string) => elements.find(element => typeof element.props.onClick === "function" && (textOf(element).trim() === label || element.props["aria-label"] === label))!;
 const dialog = (elements: Element[]) => elements.find(element => element.type === Dialog)!;
 const savedConsent = () => JSON.parse(stored.get(COOKIE_CONSENT_STORAGE_KEY) ?? "null");
@@ -77,9 +87,7 @@ describe("bandeau et préférences cookies (PUB-COOKIE-01 / PUB-COOKIE-04)", () 
   it("recharge la page quand la mesure d’audience est retirée, et seulement dans ce cas", () => {
     stored.set(COOKIE_CONSENT_STORAGE_KEY, JSON.stringify(createCookieConsent(true)));
     render();
-    const shortcut = button(render(), copy.settings);
-    shortcut.props.onClick({ currentTarget: { focus: vi.fn(), isConnected: true } });
-    const preferences = render();
+    const preferences = openFrom({ focus: vi.fn(), isConnected: true });
     expect(dialog(preferences).props.open).toBe(true);
 
     const performance = preferences.find(element => element.type === "input" && !element.props.disabled)!;
@@ -94,8 +102,7 @@ describe("bandeau et préférences cookies (PUB-COOKIE-01 / PUB-COOKIE-04)", () 
   it("ne recharge pas la page quand la mesure d’audience est acceptée", () => {
     stored.set(COOKIE_CONSENT_STORAGE_KEY, JSON.stringify(createCookieConsent(false)));
     render();
-    button(render(), copy.settings).props.onClick({ currentTarget: { focus: vi.fn(), isConnected: true } });
-    render().find(element => element.type === "input" && !element.props.disabled)!.props.onChange({ target: { checked: true } });
+    openFrom({ focus: vi.fn(), isConnected: true }).find(element => element.type === "input" && !element.props.disabled)!.props.onChange({ target: { checked: true } });
     button(render(), copy.save).props.onClick();
     expect(savedConsent()).toMatchObject({ performance: true });
     expect(reload).not.toHaveBeenCalled();
@@ -105,9 +112,7 @@ describe("bandeau et préférences cookies (PUB-COOKIE-01 / PUB-COOKIE-04)", () 
     stored.set(COOKIE_CONSENT_STORAGE_KEY, JSON.stringify(createCookieConsent(false)));
     render();
     const trigger = { focus: vi.fn(), isConnected: true };
-    button(render(), copy.settings).props.onClick({ currentTarget: trigger });
-
-    const opened = render();
+    const opened = openFrom(trigger);
     dialog(opened).props.onOpenChange(false);
     expect(dialog(render()).props.open).toBe(false);
     const closeAutoFocus = { preventDefault: vi.fn() };
@@ -119,8 +124,7 @@ describe("bandeau et préférences cookies (PUB-COOKIE-01 / PUB-COOKIE-04)", () 
   it("ne propose que les cookies essentiels et la mesure d’audience, et décrit le stockage fonctionnel", () => {
     stored.set(COOKIE_CONSENT_STORAGE_KEY, JSON.stringify(createCookieConsent(false)));
     render();
-    button(render(), copy.settings).props.onClick({ currentTarget: { focus: vi.fn(), isConnected: true } });
-    const preferences = render();
+    const preferences = openFrom({ focus: vi.fn(), isConnected: true });
     expect(preferences.filter(element => element.type === "input").map(element => Boolean(element.props.disabled))).toEqual([true, false]);
     expect(textOf(preferences.find(element => element.props["data-testid"] === "cookie-functional-storage"))).toContain(copy.functionalDescription);
     for (const language of Object.values(cookieCopy)) expect(language).not.toHaveProperty("preferences");
@@ -128,31 +132,38 @@ describe("bandeau et préférences cookies (PUB-COOKIE-01 / PUB-COOKIE-04)", () 
 
   it("ouvre les préférences sur l’évènement de « Gérer les cookies », avec le choix enregistré, et rend le focus à ce bouton (PUB-12)", () => {
     stored.set(COOKIE_CONSENT_STORAGE_KEY, JSON.stringify(createCookieConsent(true)));
-    render({ showPreferencesShortcut: false });
-    expect(dialog(render({ showPreferencesShortcut: false })).props.open).toBe(false);
+    render();
+    expect(dialog(render()).props.open).toBe(false);
 
     const trigger = { focus: vi.fn(), isConnected: true } as unknown as HTMLElement;
     openCookiePreferences(trigger);
-    const opened = render({ showPreferencesShortcut: false });
+    const opened = render();
     expect(dialog(opened).props.open).toBe(true);
     expect(opened.find(element => element.type === "input" && !element.props.disabled)!.props.checked).toBe(true);
 
     dialog(opened).props.onOpenChange(false);
     opened.find(element => element.type === DialogContent)!.props.onCloseAutoFocus({ preventDefault: vi.fn() });
     expect(trigger.focus).toHaveBeenCalledTimes(1);
-    expect(dialog(render({ showPreferencesShortcut: false })).props.open).toBe(false);
+    expect(dialog(render()).props.open).toBe(false);
   });
 
-  it("masque la pastille « Préférences cookies » quand la page le demande", () => {
-    stored.set(COOKIE_CONSENT_STORAGE_KEY, JSON.stringify(createCookieConsent(false)));
-    render({ showPreferencesShortcut: false });
-    expect(render({ showPreferencesShortcut: false }).find(element => element.props["aria-label"] === copy.settings && String(element.props.className).includes("cookie-preferences-shortcut"))).toBeUndefined();
+  it("ne fait flotter aucune pastille, et laisse rouvrir les préférences après la fermeture du bandeau sans choix (PUB-12)", () => {
+    render();
+    button(render(), copy.close).props.onClick();
+    const closed = render();
+    expect(rootAttributes.has(COOKIE_BANNER_OPEN_ATTRIBUTE)).toBe(false);
+    expect(closed.filter(element => /(?:^|\s)fixed(?:\s|$)/.test(String(element.props.className)))).toEqual([]);
+    expect(savedConsent()).toBeNull();
+
+    const opened = openFrom({ focus: vi.fn(), isConnected: true });
+    expect(dialog(opened).props.open).toBe(true);
+    expect(opened.find(element => element.type === "input" && !element.props.disabled)!.props.checked).toBe(false);
   });
 
   it("passe le bandeau devant le bouton WhatsApp, qui reste au-dessus de la zone sûre des petits écrans", () => {
     render();
     const banner = render().find(element => String(element.props.className).includes("cookie-consent-banner"))!;
-    const whatsapp = (WhatsAppButton() as unknown as Element).props.className as string;
+    const whatsapp = /class="([^"]*)"/.exec(renderToStaticMarkup(createElement(WhatsAppButton)))![1];
     const layer = (className: string) => Number(/(?:^|\s)z-(\d+)(?:\s|$)/.exec(className)?.[1]);
     expect(banner.props.className).toContain("fixed bottom-0 left-0 right-0");
     expect(layer(banner.props.className)).toBeGreaterThan(layer(whatsapp));

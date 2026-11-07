@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { SEOHead } from "@/components/SEOHead";
 import LanguageMenu from "@/components/LanguageMenu";
+import { ManageCookiesButton } from "@/components/CookieConsent";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { AlertTriangle, Home, RefreshCw, Wrench } from "lucide-react";
 import { useLocation } from "wouter";
@@ -14,7 +15,7 @@ export default function ServiceStatusPage({ kind }: { kind: ServiceStatusKind })
   const code = kind === "maintenance" ? "MAINTENANCE" : "500";
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-4 py-12 text-center">
+    <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-background px-4 py-12 text-center">
       <SEOHead title={`${copy.title} | Dr. Ahmed Ben Lallahom`} description={copy.description} noIndex />
       <div className="diagnostic-grid absolute inset-0 opacity-30" aria-hidden="true" />
       <LanguageMenu className="absolute right-4 top-4 z-10 sm:right-6 sm:top-6" />
@@ -29,6 +30,8 @@ export default function ServiceStatusPage({ kind }: { kind: ServiceStatusKind })
           <Button className="min-h-11" variant="outline" onClick={() => window.location.reload()}><RefreshCw className="mr-2 h-4 w-4" />{copy.retry}</Button>
         </div>
       </section>
+      {/* Page sans pied de page : « Gérer les cookies » sous la carte, hors de la zone annoncée (PUB-12). */}
+      <ManageCookiesButton className="relative mt-6 text-sm text-muted-foreground underline underline-offset-4 transition-colors hover:text-primary" />
     </main>
   );
 }

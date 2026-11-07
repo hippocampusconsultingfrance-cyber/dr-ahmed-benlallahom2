@@ -450,6 +450,18 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
       const box = (await offer.boundingBox())!;
       expect(box.x, `${width} px`).toBeGreaterThanOrEqual(0);
       expect(box.x + box.width, `${width} px`).toBeLessThanOrEqual(width);
+      if (width >= 640) {
+        // Le menu « Affichage » s'ouvre à la place de l'offre, qui revient à sa fermeture.
+        await page.locator("header").getByRole("button", { name: "Affichage" }).click();
+        expect(await offer.count(), `${width} px, menu Affichage ouvert`).toBe(0);
+        await page.keyboard.press("Escape");
+        await offer.waitFor();
+      }
+      // La page défile : l'offre ne reste pas au-dessus du contenu sous l'en-tête fixe.
+      await page.evaluate(() => window.scrollTo({ top: 600, behavior: "instant" }));
+      await offer.waitFor({ state: "detached" });
+      await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+      await offer.waitFor();
       // Passage à l'anglais sur place : la page n'est pas rechargée (EN-10).
       await page.evaluate(() => { (window as unknown as { before?: boolean }).before = true; });
       await offer.getByRole("button", { name: "Switch to English" }).click();

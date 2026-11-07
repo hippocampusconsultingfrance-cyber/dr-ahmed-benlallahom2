@@ -1,9 +1,9 @@
-import { Settings2, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { COOKIE_CONSENT_STORAGE_KEY, createCookieConsent, readValidCookieConsent, shouldShowCookiePreferences, type CookieConsentValue } from "./cookieConsentState";
+import { COOKIE_CONSENT_STORAGE_KEY, createCookieConsent, readValidCookieConsent, type CookieConsentValue } from "./cookieConsentState";
 import { COOKIE_CONSENT_CHANGE_EVENT } from "./analyticsConsentLogic";
 
 export const COOKIE_BANNER_OPEN_ATTRIBUTE = "data-cookie-banner-open";
@@ -39,7 +39,7 @@ export function trackCookieBannerHeight(root: CookieBannerHeightRoot, banner: HT
 /** Ancre de la section cookies de la politique de confidentialité (LegalPage, 4 langues). */
 export const COOKIE_POLICY_HREF = "/legal?tab=privacy#cookies";
 
-/** Évènement qui ouvre la fenêtre des préférences, envoyé par « Gérer les cookies » du pied de page (PUB-12). */
+/** Évènement qui ouvre la fenêtre des préférences, envoyé par « Gérer les cookies » (ManageCookiesButton, PUB-12). */
 export const OPEN_COOKIE_PREFERENCES_EVENT = "open-cookie-preferences";
 
 /** Ouvre la fenêtre des préférences cookies depuis n'importe quelle page publique ; le focus revient à `trigger` à la fermeture. */
@@ -56,7 +56,22 @@ export const cookieCopy = {
   zh: { title: "Cookie 设置", description: "经您同意，我们会统计网站访问量以改进网站。您可以接受、拒绝或自定义此选择，并可随时更改。", learnMore: "了解更多", essential: "仅必要 Cookie", customize: "自定义", acceptAll: "接受所有 Cookie", settings: "Cookie 偏好设置", manage: "管理 Cookie", settingsDescription: "您可随时通过页面底部的“管理 Cookie”更改选择。", essentialDescription: "始终启用：安全、表单防机器人保护以及记住您的选择。", performance: "访问量统计", performanceDescription: "用于改进网站的匿名访问统计，默认关闭。", functional: "显示偏好", functionalDescription: "您选择的语言、主题和可读性设置保存在您的设备上，用于提供您所请求的服务。此类功能性存储无需同意，且不用于任何跟踪。", save: "保存我的偏好", close: "关闭" },
 } as const;
 
-export default function CookieConsent({ showPreferencesShortcut = true }: { showPreferencesShortcut?: boolean } = {}) {
+/**
+ * « Gérer les cookies », en bas de chaque page publique : dans le pied de page, et sous le contenu des
+ * pages qui n'en ont pas (404, désinscription du recrutement, maintenance et erreur), à la place de la
+ * pastille flottante qui couvrait le bas des pages sur téléphone (PUB-12).
+ */
+export function ManageCookiesButton({ className }: { className?: string }) {
+  const { language } = useLanguage();
+  const copy = cookieCopy[language as keyof typeof cookieCopy] || cookieCopy.fr;
+  return (
+    <button type="button" onClick={(event) => openCookiePreferences(event.currentTarget)} className={className}>
+      {copy.manage}
+    </button>
+  );
+}
+
+export default function CookieConsent() {
   const { language } = useLanguage();
   const copy = cookieCopy[language as keyof typeof cookieCopy] || cookieCopy.fr;
   const [showBanner, setShowBanner] = useState(false);
@@ -114,7 +129,7 @@ export default function CookieConsent({ showPreferencesShortcut = true }: { show
 
   const handleCustomize = (event?: MouseEvent<HTMLElement>) => openPreferences(event?.currentTarget ?? document.activeElement as HTMLElement | null);
 
-  // « Gérer les cookies » du pied de page remplace la pastille flottante des pages publiques (PUB-12).
+  // « Gérer les cookies » (ManageCookiesButton) remplace la pastille flottante des pages publiques (PUB-12).
   useEffect(() => {
     const handleOpen = (event: Event) => openPreferences((event as CustomEvent<HTMLElement | null>).detail ?? null);
     window.addEventListener(OPEN_COOKIE_PREFERENCES_EVENT, handleOpen);
@@ -131,15 +146,13 @@ export default function CookieConsent({ showPreferencesShortcut = true }: { show
         <div className="container max-w-4xl px-4 py-6"><div className="flex items-start justify-between gap-4"><div className="flex-1"><h2 className="mb-2 text-base font-semibold text-foreground">{copy.title}</h2><p className="mb-4 text-sm text-muted-foreground">{copy.description}<a href={COOKIE_POLICY_HREF} className="ml-1 font-medium text-primary underline underline-offset-2 hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{copy.learnMore}</a></p><div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={handleAcceptEssential}>{copy.essential}</Button><Button size="sm" variant="outline" onClick={handleCustomize}>{copy.customize}</Button><Button size="sm" onClick={handleAcceptAll}>{copy.acceptAll}</Button></div></div><button onClick={() => setShowBanner(false)} className="rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label={copy.close}><X size={20} /></button></div></div>
       </div>}
 
-      {showPreferencesShortcut && shouldShowCookiePreferences(showBanner) && <button type="button" onClick={handleCustomize} className="cookie-preferences-shortcut fixed bottom-4 left-4 z-40 inline-flex items-center gap-2 rounded-full border border-border bg-background/95 px-3 py-2 text-xs font-medium text-foreground shadow-lg backdrop-blur transition-colors hover:border-primary/50 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label={copy.settings}><Settings2 className="h-4 w-4" aria-hidden="true" />{copy.settings}</button>}
-
       {/* Fenêtre modale Radix : focus initial dans la fenêtre, tabulation piégée, Échap pour fermer (PUB-A11Y-04). */}
       <Dialog open={showPreferences} onOpenChange={open => { if (!open) closePreferences(); }}>
         <DialogContent
           showCloseButton={false}
           className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl p-6 sm:max-w-lg"
           onCloseAutoFocus={event => {
-            // Rend le focus au bouton qui a ouvert la fenêtre (bandeau, pastille ou « Gérer les cookies »).
+            // Rend le focus au bouton qui a ouvert la fenêtre (bandeau ou « Gérer les cookies »).
             const trigger = preferencesTriggerRef.current;
             if (trigger?.isConnected) {
               event.preventDefault();

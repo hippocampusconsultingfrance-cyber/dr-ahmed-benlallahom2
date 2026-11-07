@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { siteConfig } from "@/data/site-config";
 import { Link } from "wouter";
-import { cookieCopy, openCookiePreferences } from "./CookieConsent";
+import { ManageCookiesButton } from "./CookieConsent";
 
 export const getHomeSectionHref = (sectionId: string) => `/#${sectionId}`;
 export const footerBrandLogoAltCopy = {
@@ -38,7 +38,6 @@ export default function Footer() {
   const resourcesLabel = footerResourcesCopy[language as keyof typeof footerResourcesCopy] ?? footerResourcesCopy.fr;
   const pressLabel = footerPressCopy[language as keyof typeof footerPressCopy] ?? footerPressCopy.fr;
   const gdprLabel = footerGdprCopy[language as keyof typeof footerGdprCopy] ?? footerGdprCopy.fr;
-  const manageCookiesLabel = (cookieCopy[language as keyof typeof cookieCopy] ?? cookieCopy.fr).manage;
   const landmarkLanguage = (language in footerLandmarkCopy.footer ? language : "fr") as keyof typeof footerLandmarkCopy.footer;
 
   return (
@@ -151,9 +150,7 @@ export default function Footer() {
                 {gdprLabel}
               </Link>
               {/* À la place de la pastille flottante, qui couvrait le bas des pages sur téléphone (PUB-12). */}
-              <button type="button" onClick={(event) => openCookiePreferences(event.currentTarget)} className={`${linkClass} text-left`}>
-                {manageCookiesLabel}
-              </button>
+              <ManageCookiesButton className={`${linkClass} text-left`} />
             </FooterColumn>
           </nav>
         </div>

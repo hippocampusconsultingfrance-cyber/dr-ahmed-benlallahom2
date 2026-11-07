@@ -1,20 +1,27 @@
 // @vitest-environment happy-dom
-import { createElement } from "react";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { createElement, useState } from "react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 // Barre de navigation montée par React dans un DOM, avec les vrais contextes
 // de thème et de langue.
 const { default: Navigation } = await import("./Navigation");
 const { ThemeProvider } = await import("@/contexts/ThemeContext");
-const { LanguageProvider } = await import("@/contexts/LanguageContext");
+const { LanguageProvider, useLanguage } = await import("@/contexts/LanguageContext");
+const { englishSuggestionCopy } = await import("./LanguageMenu");
 const { HIGH_READABILITY_STORAGE_KEY } = await import("@/contexts/readabilityPreference");
 const { navigationAccessibilityCopy } = await import("./navigationAccessibilityCopy");
 const { contentEn } = await import("@/data/content-en");
 const { contentFr } = await import("@/data/content-fr");
 
 const copy = navigationAccessibilityCopy.fr;
-const mount = () => render(createElement(ThemeProvider, { defaultTheme: "dark", switchable: true }, createElement(LanguageProvider, null, createElement(Navigation))));
+/** A form of the page, under the same language context as the bar, with the text typed in it. */
+function Form() {
+  const { content } = useLanguage();
+  const [name, setName] = useState("");
+  return createElement("label", null, content.nav.getInTouch, createElement("input", { value: name, onChange: (event: { target: { value: string } }) => setName(event.target.value) }));
+}
+const mount = ({ withForm = false } = {}) => render(createElement(ThemeProvider, { defaultTheme: "dark", switchable: true }, createElement(LanguageProvider, null, createElement(Navigation), withForm ? createElement(Form) : null)));
 const openMobileMenu = () => fireEvent.click(screen.getByRole("button", { name: copy.openMenu }));
 const mainNavigation = () => screen.getByRole("navigation", { name: copy.mainNavigation });
 const mobileNavigation = () => screen.getByRole("navigation", { name: copy.mobileNavigation });
@@ -33,6 +40,8 @@ afterEach(() => {
   cleanup();
   localStorage.clear();
   document.documentElement.className = "";
+  delete (navigator as { languages?: unknown }).languages;
+  delete (window as { scrollY?: unknown }).scrollY;
 });
 
 describe("menu Affichage (PUB-08)", () => {
@@ -105,7 +114,7 @@ describe("rubriques de navigation (PUB-08)", () => {
       ["A", "Employeurs", "/employers"],
       ["A", contentFr.nav.contact, "/#contact"],
     ]);
-    // « Leadership » et les autres sections de l'accueil quittent l'en-tête, pas le menu mobile.
+    // « Parcours » (ex-« Leadership ») et les autres sections de l'accueil quittent l'en-tête, pas le menu mobile.
     expect(within(mainNavigation()).queryByText(contentFr.nav.experience)).toBeNull();
 
     openMobileMenu();
@@ -113,7 +122,7 @@ describe("rubriques de navigation (PUB-08)", () => {
     expect(mobile.map((entry) => entry.getAttribute("href") ?? entry.textContent)).toEqual([
       "/booking", "/questions-anesthesie", "/recruitment", "/employers", "/#contact", "/#experience", "/#services", "/#education", "/search", copy.display,
     ]);
-    expect(mobile[5].textContent).toBe("Leadership");
+    expect(mobile[5].textContent).toBe("Parcours");
   });
 
   it("marque la page ouverte dans les deux navigations", () => {
@@ -163,10 +172,9 @@ describe("noms accessibles qui contiennent le texte visible (A11Y-18)", () => {
 
 describe("changement de langue sans rechargement (EN-10)", () => {
   it("passe la barre en anglais sur place et garde ce que le visiteur a saisi", () => {
-    const { container } = mount();
-    const field = document.createElement("input");
-    container.append(field);
-    field.value = "Ahmed";
+    mount({ withForm: true });
+    const field = screen.getByRole("textbox", { name: contentFr.nav.getInTouch });
+    fireEvent.change(field, { target: { value: "Ahmed" } });
 
     fireEvent.click(screen.getByRole("button", { name: `FR — ${copy.changeLanguage}` }));
     fireEvent.click(screen.getByRole("menuitem", { name: "English" }));
@@ -176,8 +184,50 @@ describe("changement de langue sans rechargement (EN-10)", () => {
     expect(screen.getByRole("link", { name: contentEn.nav.healthQuestions }).getAttribute("href")).toBe("/questions-anesthesie");
     expect(document.documentElement.lang).toBe("en");
     expect(localStorage.getItem("language")).toBe("en");
-    expect(field.isConnected && field.value).toBe("Ahmed");
+    // Le même champ, que React n'a pas recréé, traduit et avec sa saisie.
+    expect(screen.getByRole("textbox", { name: contentEn.nav.getInTouch })).toBe(field);
+    expect((field as HTMLInputElement).value).toBe("Ahmed");
     // Le focus revient au bouton de langue, nommé dans la nouvelle langue.
     expect(document.activeElement).toBe(screen.getByRole("button", { name: `EN — ${english.changeLanguage}` }));
+  });
+});
+
+describe("offre d'anglais sous le menu de langue (EN-08)", () => {
+  const offer = () => screen.queryByText(englishSuggestionCopy.message, { exact: false });
+  beforeEach(() => {
+    // Aucune langue choisie, navigateur sans français : l'offre est faite sous le menu de langue.
+    localStorage.removeItem("language");
+    Object.defineProperty(navigator, "languages", { configurable: true, get: () => ["en-US", "en"] });
+  });
+
+  it("s'efface pendant que le menu Affichage ou le menu mobile s'ouvre à sa place, puis revient", () => {
+    mount();
+    expect(offer()).toBeTruthy();
+
+    openDisplayMenu();
+    expect(offer()).toBeNull();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(offer()).toBeTruthy();
+
+    openMobileMenu();
+    expect(offer()).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: copy.closeMenu }));
+    expect(offer()).toBeTruthy();
+    // L'offre n'a pas été écartée : rien n'est choisi ni enregistré.
+    expect(localStorage.getItem("language")).toBeNull();
+  });
+
+  it("ne reste pas au-dessus du contenu quand la page défile", () => {
+    mount();
+    expect(offer()).toBeTruthy();
+    const scrollTo = (y: number) => act(() => {
+      Object.defineProperty(window, "scrollY", { configurable: true, value: y });
+      window.dispatchEvent(new Event("scroll"));
+    });
+
+    scrollTo(400);
+    expect(offer()).toBeNull();
+    scrollTo(0);
+    expect(offer()).toBeTruthy();
   });
 });

@@ -109,13 +109,14 @@ function Router() {
 
 /**
  * Nothing floats over the candidate space and the admin, not even the cookie banner (CAND-21, ADM-16).
- * On the public pages, the cookie choice is reopened from the footer instead of a floating pill, and
- * WhatsApp stays off the form and recruitment pages (PUB-12).
+ * On the public pages, the cookie choice is reopened from « Gérer les cookies » at the bottom of the
+ * page (footer, or ManageCookiesButton where there is none) instead of a floating pill, and WhatsApp
+ * stays off the form and recruitment pages (PUB-12).
  */
 function FloatingWidgets() {
   const [location] = useLocation();
   if (isPrivateAreaPath(location)) return null;
-  return <>{showsWhatsAppButton(location) && <WhatsAppButton />}<CookieConsent showPreferencesShortcut={false} /></>;
+  return <>{showsWhatsAppButton(location) && <WhatsAppButton />}<CookieConsent /></>;
 }
 
 /** Chaque nouvelle page s'ouvre en haut, Retour et Avance gardent leur position (PUB-01). */
