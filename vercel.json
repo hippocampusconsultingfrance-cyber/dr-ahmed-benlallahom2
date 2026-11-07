@@ -5,6 +5,7 @@
   "outputDirectory": "dist/public",
   "framework": "vite",
   "cleanUrls": true,
+  "trailingSlash": false,
   "functions": {
     "api/index.js": {
       "maxDuration": 60,
@@ -123,6 +124,13 @@
           "value": "noindex, nofollow"
         }
       ]
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/vvip-offshore",
+      "destination": "/recruitment/vvip-offshore",
+      "permanent": true
     }
   ],
   "rewrites": [

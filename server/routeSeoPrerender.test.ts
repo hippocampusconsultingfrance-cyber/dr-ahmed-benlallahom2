@@ -87,8 +87,13 @@ describe("pré-rendu SEO des routes publiques pour Vercel", () => {
     expect(new Set(files).size).toBe(files.length);
   });
 
-  it("garde le canonique d’un alias vers la page principale", () => {
-    expect(pageFor("/vvip-offshore").html).toContain(
+  it("ne pré-rend plus l’alias /vvip-offshore, redirigé vers la page principale (SEOP-11)", () => {
+    const files = buildPrerenderedPages(TEMPLATE).map(page => page.file);
+
+    expect(getPrerenderRoutes()).not.toContain("/vvip-offshore");
+    expect(files).not.toContain("vvip-offshore.html");
+    expect(files).toContain("recruitment/vvip-offshore.html");
+    expect(pageFor("/recruitment/vvip-offshore").html).toContain(
       '<link rel="canonical" href="https://drahmedbenlallahom.com/recruitment/vvip-offshore" />',
     );
   });
@@ -142,6 +147,56 @@ describe("page de repli SPA servie par Vercel", () => {
   it("est générée par le build juste après vite build", () => {
     const build: string = JSON.parse(readProjectFile("package.json")).scripts.build;
     expect(build).toMatch(/^NODE_ENV=production vite build && tsx scripts\/prerender-route-seo\.ts && esbuild /);
+  });
+});
+
+describe("une seule adresse par page sur Vercel (SEOP-11)", () => {
+  type VercelConfig = {
+    cleanUrls?: boolean;
+    trailingSlash?: boolean;
+    redirects?: { source: string; destination: string; permanent?: boolean }[];
+    crons: { path: string }[];
+  };
+  const config: VercelConfig = JSON.parse(readProjectFile("vercel.json"));
+
+  /**
+   * Ce que Vercel répond avant toute réécriture : 308 vers l'adresse sans barre
+   * finale (trailingSlash: false, sauf pour /), puis les redirections de
+   * vercel.json (sources sans paramètre, 308 si permanentes).
+   */
+  function vercelRedirect(path: string): { status: number; location: string } | null {
+    if (config.trailingSlash === false && path !== "/" && path.endsWith("/")) return { status: 308, location: path.replace(/\/+$/, "") };
+    const redirect = config.redirects?.find(rule => rule.source === path);
+    return redirect ? { status: redirect.permanent ? 308 : 307, location: redirect.destination } : null;
+  }
+
+  /** Les URL déclarées chez Stripe et Resend (à saisir telles quelles, sans barre finale). */
+  const WEBHOOK_PATHS = ["/api/stripe/webhook", "/api/webhooks/resend"];
+
+  it("redirige en 308 une adresse à barre finale et l’alias /vvip-offshore vers la page principale", () => {
+    expect(config.cleanUrls).toBe(true);
+    expect(config.trailingSlash).toBe(false);
+    expect(config.redirects).toEqual([{ source: "/vvip-offshore", destination: "/recruitment/vvip-offshore", permanent: true }]);
+
+    expect(vercelRedirect("/booking/")).toEqual({ status: 308, location: "/booking" });
+    expect(vercelRedirect("/recruitment/")).toEqual({ status: 308, location: "/recruitment" });
+    expect(vercelRedirect("/vvip-offshore")).toEqual({ status: 308, location: "/recruitment/vvip-offshore" });
+    expect(vercelRedirect("/vvip-offshore/")).toEqual({ status: 308, location: "/vvip-offshore" });
+    expect(vercelRedirect("/")).toBeNull();
+  });
+
+  it("ne redirige ni un cron, ni un webhook, ni l’API, ni une URL du sitemap ou une canonique", () => {
+    const crons = config.crons.map(cron => cron.path);
+    const sitemap = Array.from(renderSitemapXml("2026-10-16").matchAll(/<loc>([^<]+)<\/loc>/g), match => new URL(match[1]).pathname);
+    const canonicals = getPrerenderRoutes().map(route => new URL(`https://drahmedbenlallahom.com${getRouteSeo(route).canonicalPath}`).pathname);
+
+    expect(crons.length).toBeGreaterThan(5);
+    for (const path of crons) expect(path, path).toMatch(/^\/api\/scheduled\/[a-z-]+$/);
+    for (const path of [...crons, ...WEBHOOK_PATHS, "/api/trpc/auth.me", "/api/health", "/api/csp-report", "/api/google-drive/oauth/callback", ...sitemap, ...canonicals]) {
+      expect(vercelRedirect(path), path).toBeNull();
+    }
+    // La destination d'une redirection ne redirige pas à son tour.
+    for (const redirect of config.redirects ?? []) expect(vercelRedirect(redirect.destination), redirect.destination).toBeNull();
   });
 });
 

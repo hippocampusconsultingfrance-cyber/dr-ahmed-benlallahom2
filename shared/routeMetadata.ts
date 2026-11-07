@@ -37,7 +37,7 @@ export type RouteMetadata = {
   description: string;
   keywords?: string;
   noIndex?: boolean;
-  /** URL canonique d'un alias (ex. /vvip-offshore → /recruitment/vvip-offshore). */
+  /** URL canonique d'un alias pré-rendu sous une autre adresse que sa page principale. */
   canonicalPath?: string;
 };
 
@@ -77,12 +77,6 @@ export const STATIC_ROUTE_METADATA: Readonly<Record<string, RouteMetadata>> = {
     title: "Missions santé offshore et Moyen-Orient | Hippocampus",
     description: "Postulez pour des missions médicales spécialisées offshore, industrielles et au Moyen-Orient.",
     keywords: "mission médicale offshore, santé Moyen-Orient, plateforme pétrolière",
-  },
-  "/vvip-offshore": {
-    title: "Missions santé offshore et Moyen-Orient | Hippocampus",
-    description: "Postulez pour des missions médicales spécialisées offshore, industrielles et au Moyen-Orient.",
-    keywords: "mission médicale offshore, santé Moyen-Orient, plateforme pétrolière",
-    canonicalPath: "/recruitment/vvip-offshore",
   },
   "/employers": {
     title: "Recruter des soignants | Hippocampus Consulting",
