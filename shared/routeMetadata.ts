@@ -37,8 +37,6 @@ export type RouteMetadata = {
   title: string;
   description: string;
   noIndex?: boolean;
-  /** URL canonique d'un alias pré-rendu sous une autre adresse que sa page principale. */
-  canonicalPath?: string;
 };
 
 /** Routes publiques statiques. Les pages /venture/:slug sont ajoutées par server/routeSeo.ts depuis ventures-fr.ts. */
@@ -137,7 +135,7 @@ export function canonicalUrlFor(path: string): string {
 export function getStaticRouteMetadata(url: string): (RouteMetadata & { canonicalPath: string }) | null {
   const pathname = normalizePathname(url);
   const known = STATIC_ROUTE_METADATA[pathname];
-  return known ? { ...known, canonicalPath: known.canonicalPath ?? pathname } : null;
+  return known ? { ...known, canonicalPath: pathname } : null;
 }
 
 export type ClientSeoProps = {

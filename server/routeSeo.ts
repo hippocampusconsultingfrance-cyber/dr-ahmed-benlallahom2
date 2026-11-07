@@ -69,7 +69,7 @@ const escapeHtml = (value: string) =>
 export function getRouteSeo(url: string): RouteSeo {
   const pathname = normalizePathname(url);
   const known = PUBLIC_ROUTES[pathname];
-  if (known) return { ...known, canonicalPath: known.canonicalPath ?? pathname };
+  if (known) return { ...known, canonicalPath: pathname };
 
   if (pathname === "/booking/confirmation" || PRIVATE_PREFIXES.some(prefix => pathname === prefix.slice(0, -1) || pathname.startsWith(prefix))) {
     return {
@@ -99,13 +99,14 @@ export function getPrerenderRoutes(): string[] {
 }
 
 /**
- * Routes du sitemap.xml (SEO-03) : routes pré-rendues indexables, sans les alias
- * dont la canonique pointe vers une autre URL. Généré au build, jamais à la main.
+ * Routes du sitemap.xml (SEO-03) : routes pré-rendues indexables, chacune sa
+ * propre canonique (une ancienne adresse est redirigée, jamais pré-rendue).
+ * Généré au build, jamais à la main.
  */
 export function getSitemapRoutes(): string[] {
   return getPrerenderRoutes().filter(route => {
     const seo = getRouteSeo(route);
-    return !seo.noIndex && !seo.notFound && seo.canonicalPath === route;
+    return !seo.noIndex && !seo.notFound;
   });
 }
 

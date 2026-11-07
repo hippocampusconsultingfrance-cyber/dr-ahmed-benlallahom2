@@ -26,6 +26,25 @@ export async function readSpaTemplate(distPath: string): Promise<string> {
   );
 }
 
+/**
+ * Anciennes adresses de pages, redirigées en 308 vers leur page principale
+ * comme le font les "redirects" de vercel.json (SEOP-11). Sur Vercel, le CDN
+ * répond avant toute fonction ; Express fait de même hors Vercel et en
+ * développement, en gardant la chaîne de requête.
+ */
+export const PAGE_REDIRECTS: Readonly<Record<string, string>> = {
+  "/vvip-offshore": "/recruitment/vvip-offshore",
+};
+
+export function registerPageRedirects(app: Express) {
+  for (const [source, destination] of Object.entries(PAGE_REDIRECTS)) {
+    app.get(source, (req, res) => {
+      const queryStart = req.originalUrl.indexOf("?");
+      res.redirect(308, queryStart === -1 ? destination : destination + req.originalUrl.slice(queryStart));
+    });
+  }
+}
+
 export function serveStatic(
   app: Express,
   distPath = process.env.NODE_ENV === "development"
@@ -38,6 +57,7 @@ export function serveStatic(
     );
   }
 
+  registerPageRedirects(app);
   // Le pré-rendu crée aussi des dossiers (recruitment/, venture/) : sans
   // `redirect: false`, /recruitment serait redirigé en 301 vers /recruitment/.
   app.use(express.static(distPath, { index: false, redirect: false }));

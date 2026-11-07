@@ -161,7 +161,10 @@ describe("page de repli SPA servie par Vercel", () => {
   });
 });
 
-describe("une seule adresse par page sur Vercel (SEOP-11)", () => {
+// Seule la configuration est vérifiée ici, par une lecture simplifiée de ses règles
+// (ni la comparaison exacte des sources par Vercel ni la chaîne de requête) : le
+// comportement réel de Vercel se vérifie sur une préproduction (curl -sI).
+describe("vercel.json donne une seule adresse par page (SEOP-11)", () => {
   type VercelConfig = {
     cleanUrls?: boolean;
     trailingSlash?: boolean;

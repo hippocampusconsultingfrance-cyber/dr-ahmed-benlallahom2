@@ -4,6 +4,7 @@ import { type Server } from "http";
 import { nanoid } from "nanoid";
 import path from "path";
 import { getRouteSeo, renderRouteSeoHead } from "../routeSeo";
+import { registerPageRedirects } from "./static";
 
 export async function setupVite(app: Express, server: Server) {
   // Vite and Rollup are development-only dependencies. Loading them lazily
@@ -23,6 +24,7 @@ export async function setupVite(app: Express, server: Server) {
     appType: "custom",
   });
 
+  registerPageRedirects(app);
   app.use(vite.middlewares);
   app.use("*", async (req, res, next) => {
     const url = req.originalUrl;
