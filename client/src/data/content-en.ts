@@ -12,7 +12,11 @@ export const contentEn = {
     contact: "Contact",
     getInTouch: "Get in Touch",
     blog: "News",
-    switchLang: "FR",
+    // Short header labels, also used by the footer (PUB-08).
+    consultation: "Consultation",
+    healthQuestions: "Health questions",
+    recruitment: "Recruitment",
+    employers: "Employers",
   },
 
   // Hero Section
@@ -220,7 +224,12 @@ export const contentEn = {
   // Footer
   footer: {
     tagline: "Clinical excellence in service of global medical innovation.",
-    navigate: "Navigate",
+    // Patients / Recruitment (nav.recruitment) / Information / Legal columns (PUB-08).
+    patients: "Patients",
+    information: "Information",
+    legalHeading: "Legal",
+    apply: "Apply",
+    candidatePortal: "Candidate portal",
     legal: "Legal",
     privacy: "Privacy Policy",
     terms: "Terms & Conditions",

@@ -6,7 +6,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { LanguageProvider } from "./contexts/LanguageContext";
 import { useLanguage } from "./contexts/LanguageContext";
 import { isPublicTestimonialsEnabled } from "@shared/publicFeatures";
-import WhatsAppButton from "./components/WhatsAppButton";
+import WhatsAppButton, { showsWhatsAppButton } from "./components/WhatsAppButton";
 import CookieConsent from "./components/CookieConsent";
 import AnalyticsConsent from "./components/AnalyticsConsent";
 import ConnectionMotionPreference from "./components/ConnectionMotionPreference";
@@ -107,11 +107,15 @@ function Router() {
   );
 }
 
-/** WhatsApp and the cookie-preferences pill stay out of the candidate space and the admin (CAND-21). */
+/**
+ * Nothing floats over the candidate space and the admin, not even the cookie banner (CAND-21, ADM-16).
+ * On the public pages, the cookie choice is reopened from the footer instead of a floating pill, and
+ * WhatsApp stays off the form and recruitment pages (PUB-12).
+ */
 function FloatingWidgets() {
   const [location] = useLocation();
-  const privateArea = isPrivateAreaPath(location);
-  return <>{!privateArea && <WhatsAppButton />}<CookieConsent showPreferencesShortcut={!privateArea} /></>;
+  if (isPrivateAreaPath(location)) return null;
+  return <>{showsWhatsAppButton(location) && <WhatsAppButton />}<CookieConsent showPreferencesShortcut={false} /></>;
 }
 
 /** Chaque nouvelle page s'ouvre en haut, Retour et Avance gardent leur position (PUB-01). */

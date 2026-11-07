@@ -1,5 +1,6 @@
 import { MessageCircle } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { routePath } from "@/lib/privateAreaRoutes";
 
 export const whatsappCopy = {
   fr: { message: "Bonjour Dr. Ahmed Ben Lallahom, je souhaiterais vous contacter.", label: "Contact via WhatsApp", title: "Contactez-moi sur WhatsApp" },
@@ -7,6 +8,18 @@ export const whatsappCopy = {
   de: { message: "Guten Tag Dr. Ahmed Ben Lallahom, ich möchte Sie kontaktieren.", label: "Kontakt über WhatsApp", title: "Kontaktieren Sie mich über WhatsApp" },
   zh: { message: "您好，Ahmed Ben Lallahom 医生，我想与您联系。", label: "通过 WhatsApp 联系", title: "通过 WhatsApp 联系我" },
 } as const;
+
+/** Pages built around a form: the booking, the employer brief, the health questions, the GDPR request and the VVIP application's short address. */
+const FORM_PAGE_PATHS = ["/booking", "/employers", "/questions-anesthesie", "/gdpr", "/vvip-offshore"];
+
+/**
+ * The floating button stays off the form pages and every recruitment page (applications, VVIP missions,
+ * unsubscribe), where it covered the fields on a phone and the text of /employers on a computer (PUB-12).
+ */
+export function showsWhatsAppButton(pathname: string): boolean {
+  const path = routePath(pathname);
+  return !FORM_PAGE_PATHS.includes(path) && path !== "/recruitment" && !path.startsWith("/recruitment/");
+}
 
 export default function WhatsAppButton() {
   const { language } = useLanguage();

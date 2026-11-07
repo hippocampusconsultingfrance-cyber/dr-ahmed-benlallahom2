@@ -39,13 +39,21 @@ export function trackCookieBannerHeight(root: CookieBannerHeightRoot, banner: HT
 /** Ancre de la section cookies de la politique de confidentialité (LegalPage, 4 langues). */
 export const COOKIE_POLICY_HREF = "/legal?tab=privacy#cookies";
 
+/** Évènement qui ouvre la fenêtre des préférences, envoyé par « Gérer les cookies » du pied de page (PUB-12). */
+export const OPEN_COOKIE_PREFERENCES_EVENT = "open-cookie-preferences";
+
+/** Ouvre la fenêtre des préférences cookies depuis n'importe quelle page publique ; le focus revient à `trigger` à la fermeture. */
+export function openCookiePreferences(trigger: HTMLElement | null) {
+  window.dispatchEvent(new CustomEvent<HTMLElement | null>(OPEN_COOKIE_PREFERENCES_EVENT, { detail: trigger }));
+}
+
 // Seule la mesure d'audience est soumise à consentement : la langue, le thème et la lisibilité
 // sont un stockage fonctionnel exempté, décrit comme tel au lieu d'une case sans effet (PUB-COOKIE-04).
 export const cookieCopy = {
-  fr: { title: "Gestion des cookies", description: "Avec votre accord, nous mesurons l’audience du site afin de l’améliorer. Vous pouvez accepter, refuser ou personnaliser ce choix, puis le modifier à tout moment.", learnMore: "En savoir plus", essential: "Essentiels uniquement", customize: "Personnaliser", acceptAll: "Accepter tous les cookies", settings: "Préférences cookies", settingsDescription: "Vous pouvez modifier votre choix à tout moment depuis le bouton « Préférences cookies ».", essentialDescription: "Toujours actifs : sécurité, anti-robot des formulaires et mémorisation de votre choix.", performance: "Mesure d’audience", performanceDescription: "Statistiques de fréquentation anonymisées pour améliorer le site. Désactivée par défaut.", functional: "Préférences d’affichage", functionalDescription: "La langue, le thème et la lisibilité que vous choisissez sont enregistrés sur votre appareil pour fournir le service demandé. Ce stockage fonctionnel est exempté de consentement et ne sert à aucun suivi.", save: "Enregistrer mes préférences", close: "Fermer" },
-  en: { title: "Cookie settings", description: "With your consent, we measure site traffic to improve the site. You can accept, refuse or customise this choice and change it at any time.", learnMore: "Learn more", essential: "Essential only", customize: "Customise", acceptAll: "Accept all cookies", settings: "Cookie preferences", settingsDescription: "You can change your choice at any time with the “Cookie preferences” button.", essentialDescription: "Always on: security, form bot protection and remembering your choice.", performance: "Audience measurement", performanceDescription: "Anonymised traffic statistics used to improve the site. Off by default.", functional: "Display preferences", functionalDescription: "The language, theme and readability you choose are stored on your device to provide the service you asked for. This functional storage is exempt from consent and is never used for tracking.", save: "Save my preferences", close: "Close" },
-  de: { title: "Cookie-Einstellungen", description: "Mit Ihrer Zustimmung messen wir die Nutzung der Website, um sie zu verbessern. Sie können zustimmen, ablehnen oder die Auswahl anpassen und jederzeit ändern.", learnMore: "Mehr erfahren", essential: "Nur essenzielle", customize: "Anpassen", acceptAll: "Alle Cookies akzeptieren", settings: "Cookie-Präferenzen", settingsDescription: "Sie können Ihre Auswahl jederzeit über die Schaltfläche „Cookie-Präferenzen“ ändern.", essentialDescription: "Immer aktiv: Sicherheit, Bot-Schutz der Formulare und Speicherung Ihrer Auswahl.", performance: "Reichweitenmessung", performanceDescription: "Anonymisierte Besuchsstatistiken zur Verbesserung der Website. Standardmäßig deaktiviert.", functional: "Anzeigeeinstellungen", functionalDescription: "Die von Ihnen gewählte Sprache, das Design und die Lesbarkeit werden auf Ihrem Gerät gespeichert, um den gewünschten Dienst zu erbringen. Diese funktionale Speicherung ist einwilligungsfrei und dient keinem Tracking.", save: "Einstellungen speichern", close: "Schließen" },
-  zh: { title: "Cookie 设置", description: "经您同意，我们会统计网站访问量以改进网站。您可以接受、拒绝或自定义此选择，并可随时更改。", learnMore: "了解更多", essential: "仅必要 Cookie", customize: "自定义", acceptAll: "接受所有 Cookie", settings: "Cookie 偏好设置", settingsDescription: "您可随时通过“Cookie 偏好设置”按钮更改选择。", essentialDescription: "始终启用：安全、表单防机器人保护以及记住您的选择。", performance: "访问量统计", performanceDescription: "用于改进网站的匿名访问统计，默认关闭。", functional: "显示偏好", functionalDescription: "您选择的语言、主题和可读性设置保存在您的设备上，用于提供您所请求的服务。此类功能性存储无需同意，且不用于任何跟踪。", save: "保存我的偏好", close: "关闭" },
+  fr: { title: "Gestion des cookies", description: "Avec votre accord, nous mesurons l’audience du site afin de l’améliorer. Vous pouvez accepter, refuser ou personnaliser ce choix, puis le modifier à tout moment.", learnMore: "En savoir plus", essential: "Essentiels uniquement", customize: "Personnaliser", acceptAll: "Accepter tous les cookies", settings: "Préférences cookies", manage: "Gérer les cookies", settingsDescription: "Vous pouvez modifier votre choix à tout moment avec « Gérer les cookies », en bas de page.", essentialDescription: "Toujours actifs : sécurité, anti-robot des formulaires et mémorisation de votre choix.", performance: "Mesure d’audience", performanceDescription: "Statistiques de fréquentation anonymisées pour améliorer le site. Désactivée par défaut.", functional: "Préférences d’affichage", functionalDescription: "La langue, le thème et la lisibilité que vous choisissez sont enregistrés sur votre appareil pour fournir le service demandé. Ce stockage fonctionnel est exempté de consentement et ne sert à aucun suivi.", save: "Enregistrer mes préférences", close: "Fermer" },
+  en: { title: "Cookie settings", description: "With your consent, we measure site traffic to improve the site. You can accept, refuse or customise this choice and change it at any time.", learnMore: "Learn more", essential: "Essential only", customize: "Customise", acceptAll: "Accept all cookies", settings: "Cookie preferences", manage: "Manage cookies", settingsDescription: "You can change your choice at any time with “Manage cookies” at the bottom of the page.", essentialDescription: "Always on: security, form bot protection and remembering your choice.", performance: "Audience measurement", performanceDescription: "Anonymised traffic statistics used to improve the site. Off by default.", functional: "Display preferences", functionalDescription: "The language, theme and readability you choose are stored on your device to provide the service you asked for. This functional storage is exempt from consent and is never used for tracking.", save: "Save my preferences", close: "Close" },
+  de: { title: "Cookie-Einstellungen", description: "Mit Ihrer Zustimmung messen wir die Nutzung der Website, um sie zu verbessern. Sie können zustimmen, ablehnen oder die Auswahl anpassen und jederzeit ändern.", learnMore: "Mehr erfahren", essential: "Nur essenzielle", customize: "Anpassen", acceptAll: "Alle Cookies akzeptieren", settings: "Cookie-Präferenzen", manage: "Cookies verwalten", settingsDescription: "Sie können Ihre Auswahl jederzeit über „Cookies verwalten“ unten auf der Seite ändern.", essentialDescription: "Immer aktiv: Sicherheit, Bot-Schutz der Formulare und Speicherung Ihrer Auswahl.", performance: "Reichweitenmessung", performanceDescription: "Anonymisierte Besuchsstatistiken zur Verbesserung der Website. Standardmäßig deaktiviert.", functional: "Anzeigeeinstellungen", functionalDescription: "Die von Ihnen gewählte Sprache, das Design und die Lesbarkeit werden auf Ihrem Gerät gespeichert, um den gewünschten Dienst zu erbringen. Diese funktionale Speicherung ist einwilligungsfrei und dient keinem Tracking.", save: "Einstellungen speichern", close: "Schließen" },
+  zh: { title: "Cookie 设置", description: "经您同意，我们会统计网站访问量以改进网站。您可以接受、拒绝或自定义此选择，并可随时更改。", learnMore: "了解更多", essential: "仅必要 Cookie", customize: "自定义", acceptAll: "接受所有 Cookie", settings: "Cookie 偏好设置", manage: "管理 Cookie", settingsDescription: "您可随时通过页面底部的“管理 Cookie”更改选择。", essentialDescription: "始终启用：安全、表单防机器人保护以及记住您的选择。", performance: "访问量统计", performanceDescription: "用于改进网站的匿名访问统计，默认关闭。", functional: "显示偏好", functionalDescription: "您选择的语言、主题和可读性设置保存在您的设备上，用于提供您所请求的服务。此类功能性存储无需同意，且不用于任何跟踪。", save: "保存我的偏好", close: "关闭" },
 } as const;
 
 export default function CookieConsent({ showPreferencesShortcut = true }: { showPreferencesShortcut?: boolean } = {}) {
@@ -98,11 +106,20 @@ export default function CookieConsent({ showPreferencesShortcut = true }: { show
 
   const handleAcceptEssential = () => saveConsent(false);
 
-  const handleCustomize = (event?: MouseEvent<HTMLElement>) => {
-    preferencesTriggerRef.current = event?.currentTarget ?? document.activeElement as HTMLElement | null;
+  const openPreferences = (trigger: HTMLElement | null) => {
+    preferencesTriggerRef.current = trigger;
     setDraftPerformance(cookieConsent?.performance ?? false);
     setShowPreferences(true);
   };
+
+  const handleCustomize = (event?: MouseEvent<HTMLElement>) => openPreferences(event?.currentTarget ?? document.activeElement as HTMLElement | null);
+
+  // « Gérer les cookies » du pied de page remplace la pastille flottante des pages publiques (PUB-12).
+  useEffect(() => {
+    const handleOpen = (event: Event) => openPreferences((event as CustomEvent<HTMLElement | null>).detail ?? null);
+    window.addEventListener(OPEN_COOKIE_PREFERENCES_EVENT, handleOpen);
+    return () => window.removeEventListener(OPEN_COOKIE_PREFERENCES_EVENT, handleOpen);
+  }, [cookieConsent]);
 
   const closePreferences = () => {
     setShowPreferences(false);
@@ -122,7 +139,7 @@ export default function CookieConsent({ showPreferencesShortcut = true }: { show
           showCloseButton={false}
           className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl p-6 sm:max-w-lg"
           onCloseAutoFocus={event => {
-            // Rend le focus au bouton qui a ouvert la fenêtre (bandeau ou pastille).
+            // Rend le focus au bouton qui a ouvert la fenêtre (bandeau, pastille ou « Gérer les cookies »).
             const trigger = preferencesTriggerRef.current;
             if (trigger?.isConnected) {
               event.preventDefault();

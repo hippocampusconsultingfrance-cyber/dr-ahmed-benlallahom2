@@ -10,7 +10,7 @@ import { elementsOf, renderStateful, resetStatefulHooks } from "@/testing/statef
 vi.mock("react", async importOriginal => (await import("@/testing/statefulRender")).withStatefulHooks(await importOriginal()));
 vi.mock("@/contexts/LanguageContext", () => ({ useLanguage: () => ({ language: "fr" }) }));
 
-const { default: CookieConsent, COOKIE_BANNER_OPEN_ATTRIBUTE, COOKIE_POLICY_HREF, cookieCopy } = await import("./CookieConsent");
+const { default: CookieConsent, COOKIE_BANNER_OPEN_ATTRIBUTE, COOKIE_POLICY_HREF, cookieCopy, openCookiePreferences } = await import("./CookieConsent");
 const { COOKIE_CONSENT_STORAGE_KEY, createCookieConsent } = await import("./cookieConsentState");
 const { Dialog, DialogContent } = await import("@/components/ui/dialog");
 const { default: WhatsAppButton } = await import("./WhatsAppButton");
@@ -29,6 +29,7 @@ let stored: Map<string, string>;
 let reload: ReturnType<typeof vi.fn>;
 let events: string[];
 let rootAttributes: Map<string, string>;
+let listeners: Map<string, Set<(event: Event) => void>>;
 
 const render = (props: { showPreferencesShortcut?: boolean } = {}) => elementsOf(renderStateful(() => CookieConsent(props) as ReactElement)) as Element[];
 const button = (elements: Element[], label: string) => elements.find(element => typeof element.props.onClick === "function" && (textOf(element).trim() === label || element.props["aria-label"] === label))!;
@@ -40,8 +41,14 @@ beforeEach(() => {
   reload = vi.fn();
   events = [];
   rootAttributes = new Map();
+  listeners = new Map();
   vi.stubGlobal("localStorage", { getItem: (key: string) => stored.get(key) ?? null, setItem: (key: string, value: string) => { stored.set(key, value); }, removeItem: (key: string) => { stored.delete(key); } });
-  vi.stubGlobal("window", { location: { reload }, dispatchEvent: (event: Event) => { events.push(event.type); return true; } });
+  vi.stubGlobal("window", {
+    location: { reload },
+    dispatchEvent: (event: Event) => { events.push(event.type); listeners.get(event.type)?.forEach(listener => listener(event)); return true; },
+    addEventListener: (type: string, listener: (event: Event) => void) => { listeners.set(type, (listeners.get(type) ?? new Set()).add(listener)); },
+    removeEventListener: (type: string, listener: (event: Event) => void) => { listeners.get(type)?.delete(listener); },
+  });
   vi.stubGlobal("document", {
     activeElement: null,
     documentElement: { setAttribute: (name: string, value: string) => rootAttributes.set(name, value), removeAttribute: (name: string) => rootAttributes.delete(name), style: { setProperty: vi.fn(), removeProperty: vi.fn() } },
@@ -117,6 +124,23 @@ describe("bandeau et préférences cookies (PUB-COOKIE-01 / PUB-COOKIE-04)", () 
     expect(preferences.filter(element => element.type === "input").map(element => Boolean(element.props.disabled))).toEqual([true, false]);
     expect(textOf(preferences.find(element => element.props["data-testid"] === "cookie-functional-storage"))).toContain(copy.functionalDescription);
     for (const language of Object.values(cookieCopy)) expect(language).not.toHaveProperty("preferences");
+  });
+
+  it("ouvre les préférences sur l’évènement de « Gérer les cookies », avec le choix enregistré, et rend le focus à ce bouton (PUB-12)", () => {
+    stored.set(COOKIE_CONSENT_STORAGE_KEY, JSON.stringify(createCookieConsent(true)));
+    render({ showPreferencesShortcut: false });
+    expect(dialog(render({ showPreferencesShortcut: false })).props.open).toBe(false);
+
+    const trigger = { focus: vi.fn(), isConnected: true } as unknown as HTMLElement;
+    openCookiePreferences(trigger);
+    const opened = render({ showPreferencesShortcut: false });
+    expect(dialog(opened).props.open).toBe(true);
+    expect(opened.find(element => element.type === "input" && !element.props.disabled)!.props.checked).toBe(true);
+
+    dialog(opened).props.onOpenChange(false);
+    opened.find(element => element.type === DialogContent)!.props.onCloseAutoFocus({ preventDefault: vi.fn() });
+    expect(trigger.focus).toHaveBeenCalledTimes(1);
+    expect(dialog(render({ showPreferencesShortcut: false })).props.open).toBe(false);
   });
 
   it("masque la pastille « Préférences cookies » quand la page le demande", () => {

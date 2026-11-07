@@ -216,7 +216,7 @@ function LegalPageFr() {
                     <li><strong>Préférences d’affichage (sans consentement) :</strong> la langue, le thème et les réglages de lisibilité que vous choisissez sont enregistrés sur votre appareil pour fournir le service demandé. Ce stockage fonctionnel ne sert à aucun suivi.</li>
                     <li><strong>Mesure d’audience (avec votre consentement) :</strong> statistiques de fréquentation, désactivées par défaut et activées uniquement si vous les acceptez.</li>
                   </ul>
-                  <p className="mt-4">Votre choix est conservé 13 mois en cas d’accord et 6 mois en cas de refus, puis il vous est redemandé. Vous pouvez modifier votre choix à tout moment via le bouton « Préférences cookies » en bas de page.</p>
+                  <p className="mt-4">Votre choix est conservé 13 mois en cas d’accord et 6 mois en cas de refus, puis il vous est redemandé. Vous pouvez modifier votre choix à tout moment via « Gérer les cookies », en bas de page.</p>
 
                   <h3 className="font-semibold text-foreground mt-4">8. Responsable du traitement</h3>
                   <p><strong>Responsable :</strong> {HIPPOCAMPUS_LEGAL.name}<br /><strong>Siège social :</strong> {HIPPOCAMPUS_LEGAL.registeredOffice}<br /><strong>Gérant :</strong> {HIPPOCAMPUS_LEGAL.director}<br /><strong>Contact :</strong> <a href={`mailto:${siteConfig.email}`} className="text-primary underline-offset-2 hover:underline">{siteConfig.email}</a></p>
@@ -505,7 +505,7 @@ function LegalPageEn() {
                     <li><strong>Display preferences (no consent needed):</strong> the language, theme and readability settings you choose are stored on your device to provide the service you asked for. This functional storage is never used for tracking.</li>
                     <li><strong>Audience measurement (with your consent):</strong> traffic statistics, off by default and enabled only if you accept them.</li>
                   </ul>
-                  <p className="mt-4">Your choice is kept for 13 months if you accept and 6 months if you refuse, after which you are asked again. You can change your choice at any time with the “Cookie preferences” button at the bottom of the page.</p>
+                  <p className="mt-4">Your choice is kept for 13 months if you accept and 6 months if you refuse, after which you are asked again. You can change your choice at any time with “Manage cookies” at the bottom of the page.</p>
 
                   <h3 className="font-semibold text-foreground mt-4">8. Data controller</h3>
                   <p><strong>Controller:</strong> {HIPPOCAMPUS_LEGAL.name}<br /><strong>Registered office:</strong> {HIPPOCAMPUS_LEGAL.registeredOffice}<br /><strong>Manager:</strong> {HIPPOCAMPUS_LEGAL.director}<br /><strong>Contact:</strong> <a href={`mailto:${siteConfig.email}`} className="text-primary underline-offset-2 hover:underline">{siteConfig.email}</a></p>
@@ -788,7 +788,7 @@ function LegalPageDe() {
                     <li><strong>Anzeigeeinstellungen (ohne Einwilligung):</strong> Die von Ihnen gewählte Sprache, das Design und die Lesbarkeit werden auf Ihrem Gerät gespeichert, um den gewünschten Dienst zu erbringen. Diese funktionale Speicherung dient keinem Tracking.</li>
                     <li><strong>Reichweitenmessung (mit Ihrer Einwilligung):</strong> Besuchsstatistiken, standardmäßig deaktiviert und nur aktiv, wenn Sie zustimmen.</li>
                   </ul>
-                  <p className="mt-4">Ihre Auswahl wird bei Zustimmung 13 Monate und bei Ablehnung 6 Monate gespeichert und danach erneut abgefragt. Sie können Ihre Auswahl jederzeit über die Schaltfläche „Cookie-Präferenzen“ unten auf der Seite ändern.</p>
+                  <p className="mt-4">Ihre Auswahl wird bei Zustimmung 13 Monate und bei Ablehnung 6 Monate gespeichert und danach erneut abgefragt. Sie können Ihre Auswahl jederzeit über „Cookies verwalten“ unten auf der Seite ändern.</p>
 
                   <h3 className="font-semibold text-foreground mt-4">8. Datenverantwortlicher</h3>
                   <p><strong>Verantwortlicher:</strong> {HIPPOCAMPUS_LEGAL.name}<br /><strong>Sitz:</strong> {HIPPOCAMPUS_LEGAL.registeredOffice}<br /><strong>Geschäftsführer:</strong> {HIPPOCAMPUS_LEGAL.director}<br /><strong>Kontakt:</strong> <a href={`mailto:${siteConfig.email}`} className="text-primary underline-offset-2 hover:underline">{siteConfig.email}</a></p>
@@ -1050,7 +1050,7 @@ function LegalPageZh() {
                     <li><strong>显示偏好（无需同意）：</strong> 您选择的语言、主题和可读性设置保存在您的设备上，用于提供您所请求的服务。此类功能性存储不用于任何跟踪。</li>
                     <li><strong>访问量统计（需您同意）：</strong> 网站访问统计，默认关闭，仅在您接受后启用。</li>
                   </ul>
-                  <p className="mt-4">如您同意，您的选择保留 13 个月；如您拒绝，则保留 6 个月，之后会再次询问。您可随时通过页面底部的“Cookie 偏好设置”按钮更改选择。</p>
+                  <p className="mt-4">如您同意，您的选择保留 13 个月；如您拒绝，则保留 6 个月，之后会再次询问。您可随时通过页面底部的“管理 Cookie”更改选择。</p>
 
                   <h3 className="font-semibold text-foreground mt-4">8. 数据控制者</h3>
                   <p><strong>控制者：</strong>{HIPPOCAMPUS_LEGAL.name}<br /><strong>注册地址：</strong>{HIPPOCAMPUS_LEGAL.registeredOffice}<br /><strong>经理：</strong>{HIPPOCAMPUS_LEGAL.director}<br /><strong>联系：</strong><a href={`mailto:${siteConfig.email}`} className="text-primary underline-offset-2 hover:underline">{siteConfig.email}</a></p>

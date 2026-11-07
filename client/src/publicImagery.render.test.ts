@@ -13,7 +13,7 @@ const view = vi.hoisted(() => ({ language: "fr" as "fr" | "en", slug: "" }));
 vi.mock("@/contexts/LanguageContext", async () => {
   const { contentFr } = await import("@/data/content-fr");
   const { contentEn } = await import("@/data/content-en");
-  return { useLanguage: () => ({ language: view.language, content: view.language === "en" ? contentEn : contentFr, setLanguage: vi.fn(), toggleLanguage: vi.fn() }) };
+  return { useLanguage: () => ({ language: view.language, content: view.language === "en" ? contentEn : contentFr, setLanguage: vi.fn() }) };
 });
 vi.mock("@/contexts/ThemeContext", () => ({ useTheme: () => ({ theme: "dark", toggleTheme: vi.fn(), switchable: true, highReadability: false, toggleHighReadability: vi.fn(), reducedMotion: false }) }));
 vi.mock("@/components/LanguageMenu", () => ({ default: () => null }));
