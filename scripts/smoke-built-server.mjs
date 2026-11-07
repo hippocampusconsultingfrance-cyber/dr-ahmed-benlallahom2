@@ -81,7 +81,7 @@ const REAL_SERVICE_PREFIXES = Object.freeze([
   "BLOB_", // Vercel Blob : BLOB_STORE_ID, avec ce jeton
   "VERCEL_BLOB_", // Vercel Blob : hôte d'API
   "NEXT_PUBLIC_VERCEL_BLOB_",
-  "BUILT_IN_FORGE_", // ancien proxy Manus : LLM et /manus-storage
+  "BUILT_IN_FORGE_", // ancien proxy Manus : LLM
   "CLERK_", // CLERK_API_URL, CLERK_MACHINE_SECRET_KEY…
   "RESEND_", // RESEND_BASE_URL : les e-mails, dont les alertes au propriétaire
   "DOTENV_", // un autre fichier, son coffre .env.vault, ou l'écrasement des valeurs factices
