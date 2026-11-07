@@ -6,7 +6,9 @@ import { toast } from "sonner";
 import { AdminEmptyState, AdminErrorState } from "@/components/AdminStatePanel";
 import AdminLoadMore from "@/components/AdminLoadMore";
 import PersonalDataSearchPanel, { personalDataSearchKey, requestPersonalDataSearch } from "@/components/PersonalDataSearchPanel";
-import { formatGdprRequestDate, formatGdprRequestDateTime, GDPR_REQUEST_STATUS_LABELS, GDPR_REQUEST_TYPE_LABELS, gdprRequestDeadline, isGdprRequestOpen, isGdprRequestOverdue } from "@/components/gdprRequestAdmin";
+import AdminStatusBadge from "@/components/AdminStatusBadge";
+import { formatAdminDateTime } from "@/components/adminDateFormat";
+import { formatGdprRequestDate, GDPR_REQUEST_TYPE_LABELS, gdprRequestDeadline, isGdprRequestOpen, isGdprRequestOverdue } from "@/components/gdprRequestAdmin";
 import { adminListCount, adminPageOffsets, ADMIN_PAGE_SIZE, mergeAdminPages, useAdminPageCount } from "@/components/adminPagination";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 
@@ -44,13 +46,6 @@ export default function GdprTab({ reference = "" }: { reference?: string } = {})
     return <AdminErrorState description={error.message} onRetry={retry} retrying={retrying} />;
   }
 
-  const statusColors: Record<string, string> = {
-    pending: "bg-yellow-500/20 text-yellow-400",
-    in_progress: "bg-blue-500/20 text-blue-400",
-    completed: "bg-green-500/20 text-green-400",
-    rejected: "bg-red-500/20 text-red-400",
-  };
-
   if (isLoading) {
     return <PublicContentSkeleton label="Chargement des demandes RGPD" />;
   }
@@ -87,16 +82,14 @@ export default function GdprTab({ reference = "" }: { reference?: string } = {})
                       <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-700 text-slate-200">
                         {GDPR_REQUEST_TYPE_LABELS[req.requestType] || req.requestType}
                       </span>
-                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColors[req.status] || ""}`}>
-                        {GDPR_REQUEST_STATUS_LABELS[req.status] || req.status}
-                      </span>
+                      <AdminStatusBadge kind="gdprRequest" status={req.status} />
                       <span className="text-xs text-muted-foreground font-mono">{req.trackingId}</span>
                     </div>
                     <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
                       <span className="break-all">{req.email}</span>
-                      <span>Reçue le {formatGdprRequestDateTime(req.createdAt)}</span>
+                      <span>Reçue le {formatAdminDateTime(req.createdAt)}</span>
                       {open ? (
-                        <span className={overdue ? "font-semibold text-red-400" : undefined}>
+                        <span className={overdue ? "font-semibold text-red-700 dark:text-red-400" : undefined}>
                           {overdue ? "Échéance dépassée : " : "Échéance : "}{formatGdprRequestDate(gdprRequestDeadline(req.createdAt))}
                         </span>
                       ) : req.responseDate ? (

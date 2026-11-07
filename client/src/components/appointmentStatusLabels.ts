@@ -2,4 +2,4 @@
 
 export const APPOINTMENT_STATUS_LABELS: Record<string, string> = { held: "Créneau réservé", confirmed: "Confirmé", cancelled: "Annulé", completed: "Terminé", no_show: "Absent" };
 
-export const PAYMENT_STATUS_LABELS: Record<string, string> = { pending: "En attente", completed: "Payé", failed: "Échoué", refunded: "Remboursé" };
+export const PAYMENT_STATUS_LABELS: Record<string, string> = { pending: "En attente de paiement", completed: "Payé", failed: "Échoué", refunded: "Remboursé" };

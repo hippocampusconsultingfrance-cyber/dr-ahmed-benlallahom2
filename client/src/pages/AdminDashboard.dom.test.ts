@@ -130,11 +130,32 @@ describe("double authentification de l’administration (navigateur simulé)", (
     expect(navigation.querySelector('[aria-current="page"]')?.textContent?.trim()).toBe("Disponibilités");
   });
 
-  it("ouvre directement l’administration d’une session déjà vérifiée par le serveur", async () => {
+  it("met l’écran du code dans la zone principale, et le code dans un formulaire qu’Entrée envoie (A11Y-12)", async () => {
+    mount();
+    expect(await screen.findByRole("heading", { name: "Validation de sécurité" })).toBeTruthy();
+    // « Aller au contenu principal » reaches it.
+    expect(screen.getByRole("main").contains(codeField())).toBe(true);
+    const form = codeField().form!;
+    expect(form.contains(validateButton())).toBe(true);
+    expect(validateButton().getAttribute("type")).toBe("submit");
+
+    // Entrée in the field submits the form; an incomplete code is not sent.
+    fireEvent.change(codeField(), { target: { value: "123" } });
+    fireEvent.submit(form);
+    expect(server.verifyAttempts).toEqual([]);
+    fireEvent.change(codeField(), { target: { value: "123456" } });
+    fireEvent.submit(form);
+    expect(await screen.findByLabelText(NAVIGATION)).toBeTruthy();
+    expect(server.verifyAttempts).toEqual(["123456"]);
+  });
+
+  it("ouvre directement l’administration d’une session déjà vérifiée par le serveur, sa barre de sections nommée", async () => {
     server.verified = true;
     mount();
     expect(await screen.findByLabelText(NAVIGATION)).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Validation de sécurité" })).toBeNull();
+    // A11Y-12: the landmark of the tab bar has a name.
+    expect(screen.getByRole("navigation", { name: "Sections" }).contains(screen.getByLabelText(NAVIGATION))).toBe(true);
   });
 
   it("refuse un compte qui n’est pas administrateur sans même interroger la sécurité", async () => {

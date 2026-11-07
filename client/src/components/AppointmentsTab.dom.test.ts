@@ -22,6 +22,8 @@ const server = vi.hoisted(() => ({
   mutations: [] as Array<{ procedure: string; input: Record<string, unknown> }>,
 }));
 
+// The status badges are written in the admin's language (AdminStatusBadge, ADM-07): French here.
+vi.mock("@/contexts/LanguageContext", () => ({ useLanguage: () => ({ language: "fr" }) }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() } }));
 vi.mock("@/lib/trpc", async () => {
   const { useQueries, useQuery, useQueryClient } = await import("@tanstack/react-query");
@@ -133,11 +135,11 @@ describe("ADM-18 — onglet Réservations", () => {
     expect(server.listInputs.at(-1)).not.toHaveProperty("excludeAbandoned");
   });
 
-  it("dit le motif, le montant et la date du remboursement d’un rendez-vous annulé, et l’heure sans les secondes", async () => {
+  it("dit le motif, le montant et la date du remboursement d’un rendez-vous annulé, et l’heure sans les secondes, en heure de Paris (ADM-07)", async () => {
     mount();
     expect(await screen.findByText("Patient 2")).toBeTruthy();
-    expect(screen.getByText("Remboursé 150,00 € le 02/11/2026 15:05 · Annulé le 02/11/2026 15:05 · Motif : Annulation / remboursement par le praticien : Empêchement du praticien", { normalizer: text => text.replace(/\s+/g, " ").trim() })).toBeTruthy();
-    expect(screen.getAllByText("20/11/2026 10:00")).toHaveLength(3);
+    expect(screen.getByText("Remboursé 150,00 € le 02/11/2026 15:05 (heure de Paris) · Annulé le 02/11/2026 15:05 (heure de Paris) · Motif : Annulation / remboursement par le praticien : Empêchement du praticien", { normalizer: text => text.replace(/\s+/g, " ").trim() })).toBeTruthy();
+    expect(screen.getAllByText("20/11/2026 10:00 (heure de Paris)")).toHaveLength(3);
     expect(document.body.textContent).not.toContain("10:00:00");
   });
 

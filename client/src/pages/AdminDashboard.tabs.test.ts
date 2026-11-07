@@ -10,6 +10,8 @@ import { elementsOf, renderStateful, resetStatefulHooks } from "@/testing/statef
 // adresses longues qui passent à la ligne et des actions qui s’empilent.
 
 vi.mock("react", async importOriginal => (await import("@/testing/statefulRender")).withStatefulHooks(await importOriginal()));
+// The status badges are written in the admin's language (AdminStatusBadge, ADM-07): French here.
+vi.mock("@/contexts/LanguageContext", () => ({ useLanguage: () => ({ language: "fr" }) }));
 
 type MutationOptions = { onSuccess?: (result: never) => unknown; onError?: (error: unknown, variables: never) => unknown };
 const view = vi.hoisted(() => ({

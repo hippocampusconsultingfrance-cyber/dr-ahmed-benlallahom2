@@ -9,6 +9,8 @@ import { elementsOf, renderStateful, resetStatefulHooks } from "@/testing/statef
 // pour appeler leur action comme un clic.
 
 vi.mock("react", async importOriginal => (await import("@/testing/statefulRender")).withStatefulHooks(await importOriginal()));
+// The status badges are written in the admin's language (AdminStatusBadge, ADM-07): French here.
+vi.mock("@/contexts/LanguageContext", () => ({ useLanguage: () => ({ language: "fr" }) }));
 
 type MutationOptions = { onSuccess?: (result: never) => unknown; onError?: (error: Error) => unknown };
 type ButtonProps = { children?: ReactNode; onClick?: () => void; disabled?: boolean; type?: string; "aria-describedby"?: string };
@@ -188,7 +190,10 @@ describe("RGPD-12 — onglet RGPD", () => {
     state.gdprPage = { items: [gdprRequest(1), gdprRequest(2, { createdAt: new Date(Date.now() - 40 * DAY) }), gdprRequest(3, { status: "completed", responseDate: new Date(Date.now() - DAY), notes: "Données effacées le 25." })], total: 3 };
     const html = render(createElement(GdprTab));
     expect(html).toContain(`Échéance : ${formatGdprRequestDate(gdprRequestDeadline(gdprRequest(1).createdAt))}`);
-    expect(html).toMatch(/<span class="font-semibold text-red-400">Échéance dépassée : /);
+    // Dark red in the light theme too (A11Y-12).
+    expect(html).toMatch(/<span class="font-semibold text-red-700 dark:text-red-400">Échéance dépassée : /);
+    // Its receipt, on the Paris clock, the zone said (ADM-07).
+    expect(html).toMatch(/Reçue le \d{2}\/\d{2}\/\d{4} \d{2}:\d{2} \(heure de Paris\)/);
     expect(html).toContain("À traiter");
     expect(html).toContain("Traitée");
     expect(html).not.toMatch(/>pending</);

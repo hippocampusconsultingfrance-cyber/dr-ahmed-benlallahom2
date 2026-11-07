@@ -1,7 +1,7 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { SignInButton, UserButton } from "@clerk/react";
 import { trpc } from "@/lib/trpc";
-import { Suspense, useState } from "react";
+import { Suspense, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Calendar, MessageSquare, Shield, DollarSign, ArrowLeft, Star, CalendarDays, UserRound, BriefcaseBusiness, Send, UsersRound, LogOut } from "lucide-react";
@@ -45,6 +45,11 @@ export default function AdminDashboard() {
   const adminSecurity = trpc.adminSecurity.status.useQuery(undefined, { enabled: Boolean(user?.role === "admin") });
   const requestMfa = trpc.adminSecurity.begin.useMutation({ onSuccess: () => toast.success("Un code de sécurité a été envoyé à votre email administrateur."), onError: error => toast.error(error.message) });
   const verifyMfa = trpc.adminSecurity.verify.useMutation({ onSuccess: () => { void adminSecurity.refetch(); toast.success("Double authentification validée."); }, onError: error => toast.error(error.message) });
+  // A11Y-12: the code is a form's, which Entrée sends as « Valider le code » does.
+  const submitMfaCode = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (mfaCode.length === 6 && !verifyMfa.isPending) verifyMfa.mutate({ code: mfaCode });
+  };
 
   if (loading) {
     return (
@@ -96,7 +101,8 @@ export default function AdminDashboard() {
   }
 
   if (!adminSecurity.data?.verified) {
-    return <div className="min-h-screen bg-background flex items-center justify-center px-4"><div className="w-full max-w-md rounded-2xl border border-cyan-900/50 bg-card p-7 shadow-2xl"><div className="mb-5 flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-xl bg-cyan-400/10 text-cyan-300"><Shield className="h-6 w-6"/></span><div><h1 className="text-xl font-bold text-foreground">Validation de sécurité</h1><p className="text-sm text-muted-foreground">Une seconde vérification protège les documents et CV sensibles.</p></div></div><p className="mb-4 text-sm text-muted-foreground">Demandez un code à six chiffres sur votre email administrateur, puis saisissez-le ci-dessous.</p><Button className="mb-5 w-full" onClick={() => requestMfa.mutate()} disabled={requestMfa.isPending}>{requestMfa.isPending ? "Envoi en cours…" : "Envoyer un code de sécurité"}</Button><div className="space-y-2"><label htmlFor="admin-mfa-code" className="text-sm font-medium text-foreground">Code à 6 chiffres</label><Input id="admin-mfa-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={mfaCode} onChange={event => setMfaCode(event.target.value.replace(/\D/g, ""))} placeholder="123456"/><Button className="mt-2 w-full" variant="outline" disabled={mfaCode.length !== 6 || verifyMfa.isPending} onClick={() => verifyMfa.mutate({ code: mfaCode })}>{verifyMfa.isPending ? "Vérification…" : "Valider le code"}</Button></div><Button variant="ghost" className="mt-3 w-full" onClick={() => setLocation("/")}>Retour au site</Button><Button variant="ghost" className="mt-1 w-full" onClick={signOut} disabled={signingOut}><LogOut className="mr-2 h-4 w-4"/>{signingOut ? "Déconnexion…" : "Se déconnecter"}</Button></div></div>;
+    // The page's main region, which « Aller au contenu principal » reaches (A11Y-12).
+    return <main className="min-h-screen bg-background flex items-center justify-center px-4"><div className="w-full max-w-md rounded-2xl border border-cyan-900/50 bg-card p-7 shadow-2xl"><div className="mb-5 flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-xl bg-cyan-400/10 text-cyan-300"><Shield className="h-6 w-6"/></span><div><h1 className="text-xl font-bold text-foreground">Validation de sécurité</h1><p className="text-sm text-muted-foreground">Une seconde vérification protège les documents et CV sensibles.</p></div></div><p className="mb-4 text-sm text-muted-foreground">Demandez un code à six chiffres sur votre email administrateur, puis saisissez-le ci-dessous.</p><Button className="mb-5 w-full" onClick={() => requestMfa.mutate()} disabled={requestMfa.isPending}>{requestMfa.isPending ? "Envoi en cours…" : "Envoyer un code de sécurité"}</Button><form className="space-y-2" onSubmit={submitMfaCode}><label htmlFor="admin-mfa-code" className="text-sm font-medium text-foreground">Code à 6 chiffres</label><Input id="admin-mfa-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={mfaCode} onChange={event => setMfaCode(event.target.value.replace(/\D/g, ""))} placeholder="123456"/><Button type="submit" className="mt-2 w-full" variant="outline" disabled={mfaCode.length !== 6 || verifyMfa.isPending}>{verifyMfa.isPending ? "Vérification…" : "Valider le code"}</Button></form><Button variant="ghost" className="mt-3 w-full" onClick={() => setLocation("/")}>Retour au site</Button><Button variant="ghost" className="mt-1 w-full" onClick={signOut} disabled={signingOut}><LogOut className="mr-2 h-4 w-4"/>{signingOut ? "Déconnexion…" : "Se déconnecter"}</Button></div></main>;
   }
 
   const tabs = [
@@ -138,7 +144,7 @@ export default function AdminDashboard() {
       </header>
 
       {/* Tabs */}
-      <nav className="border-b border-border bg-card/30">
+      <nav aria-label="Sections" className="border-b border-border bg-card/30">
         <div className="max-w-7xl mx-auto px-4">
           <label className="sr-only" htmlFor="admin-active-tab">Section d’administration</label>
           <div className="py-2 sm:hidden">

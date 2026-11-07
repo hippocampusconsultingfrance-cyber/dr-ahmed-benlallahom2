@@ -76,8 +76,3 @@ export function isGdprRequestOverdue(request: { status: string; createdAt: Date 
 export function formatGdprRequestDate(date: Date | string) {
   return new Date(date).toLocaleDateString("fr-FR", { timeZone: GDPR_REQUEST_TIME_ZONE });
 }
-
-/** "26/10/2026 08:56:37": its receipt time in Paris. */
-export function formatGdprRequestDateTime(date: Date | string) {
-  return new Date(date).toLocaleString("fr-FR", { timeZone: GDPR_REQUEST_TIME_ZONE });
-}

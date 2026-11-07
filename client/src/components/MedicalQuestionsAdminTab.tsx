@@ -5,6 +5,8 @@ import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import AdminLoadMore from "@/components/AdminLoadMore";
 import AdminSearchField from "@/components/AdminSearchField";
 import { AdminErrorState } from "@/components/AdminStatePanel";
+import AdminStatusBadge from "@/components/AdminStatusBadge";
+import { formatAdminDateTime } from "@/components/adminDateFormat";
 import { adminListCount, adminPageOffsets, ADMIN_PAGE_SIZE, mergeAdminPages, useAdminPageCount } from "@/components/adminPagination";
 import { adminSearchStatus, useAdminSearch } from "@/components/adminSearch";
 import { toast } from "sonner";
@@ -25,14 +27,6 @@ export const MEDICAL_QUESTION_QUEUES = {
 } as const satisfies Record<string, { label: string; statuses: readonly MedicalQuestionStatus[] | undefined; order: "oldest" | "newest"; empty: string }>;
 
 type MedicalQuestionQueue = keyof typeof MEDICAL_QUESTION_QUEUES;
-
-const STATUS_LABELS: Record<MedicalQuestionStatus, string> = {
-  submitted: "Nouvelle",
-  drafting: "Brouillon",
-  answered: "Répondue",
-  published: "Publiée",
-  rejected: "Classée sans suite",
-};
 
 /** ADM-23: reason written in the question's journal when it is filed away, and shown on it; the patient is not emailed. */
 const REJECTION_REASONS = {
@@ -152,7 +146,7 @@ export default function MedicalQuestionsAdminTab({ initialSearch = "" }: { initi
       void utils.medicalQuestions.admin.list.invalidate();
       // DATA-02: an attempt stopped before its recording, too old to be tried again safely.
       if (result.unconfirmedSentAt) {
-        toast.warning(`Un envoi du ${new Date(result.unconfirmedSentAt).toLocaleString("fr-FR", { timeZone: "Europe/Paris" })} s’est interrompu avant d’être enregistré : la personne a peut-être déjà reçu la réponse. Il est enregistré à cette date avec le texte de cet envoi, sans nouvel email : une modification faite depuis n’a été ni envoyée ni conservée. « Renvoyer la réponse » permet un nouvel envoi volontaire.`, { duration: 12_000 });
+        toast.warning(`Un envoi du ${formatAdminDateTime(result.unconfirmedSentAt)} s’est interrompu avant d’être enregistré : la personne a peut-être déjà reçu la réponse. Il est enregistré à cette date avec le texte de cet envoi, sans nouvel email : une modification faite depuis n’a été ni envoyée ni conservée. « Renvoyer la réponse » permet un nouvel envoi volontaire.`, { duration: 12_000 });
         return;
       }
       toast.success(result.resent ? "Réponse renvoyée par email." : result.published ? "Réponse envoyée et version anonymisée publiée." : "Réponse envoyée par email.");
@@ -300,13 +294,13 @@ export default function MedicalQuestionsAdminTab({ initialSearch = "" }: { initi
                 >
                   <div className="flex items-center justify-between gap-3">
                     <span className="min-w-0 truncate font-semibold text-foreground">{question.firstName} {question.lastName}</span>
-                    <span className="rounded-full border border-border px-2 py-1 text-xs text-muted-foreground">{STATUS_LABELS[question.status] ?? question.status}</span>
+                    <AdminStatusBadge kind="medicalQuestion" status={question.status} className="shrink-0" />
                   </div>
                   <p className="mt-1 font-mono text-xs text-muted-foreground">{question.trackingId}</p>
                   <p className="mt-2 line-clamp-2 wrap-anywhere text-sm text-muted-foreground">{question.question}</p>
                   <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Clock3 className="h-3.5 w-3.5" />
-                    {new Date(question.createdAt).toLocaleString("fr-FR")}
+                    {formatAdminDateTime(question.createdAt)}
                   </p>
                 </button>
               ))}
@@ -340,7 +334,7 @@ export default function MedicalQuestionsAdminTab({ initialSearch = "" }: { initi
               <span className="text-xs font-semibold uppercase tracking-wider">Données privées — administration uniquement</span>
             </div>
             <h3 className="mt-4 font-display text-2xl">{selected.data.firstName} {selected.data.lastName}</h3>
-            <p className="mt-1 text-sm text-muted-foreground">Référence <span className="font-mono text-foreground">{selected.data.trackingId}</span> · {STATUS_LABELS[selected.data.status] ?? selected.data.status}{selected.data.rejectionReason ? ` (motif : ${REJECTION_REASONS[selected.data.rejectionReason]})` : ""}</p>
+            <p className="mt-1 text-sm text-muted-foreground">Référence <span className="font-mono text-foreground">{selected.data.trackingId}</span> · <AdminStatusBadge kind="medicalQuestion" status={selected.data.status} />{selected.data.rejectionReason ? ` (motif : ${REJECTION_REASONS[selected.data.rejectionReason]})` : ""}</p>
             <div className="mt-3 grid gap-2 text-sm text-muted-foreground">
               <span className="flex items-center gap-2"><Mail className="h-4 w-4" />{selected.data.email}</span>
               <span className="flex items-center gap-2"><Phone className="h-4 w-4" />{selected.data.phone}</span>
@@ -349,8 +343,8 @@ export default function MedicalQuestionsAdminTab({ initialSearch = "" }: { initi
               <p className="whitespace-pre-line leading-7 text-foreground">{selected.data.question}</p>
             </div>
             {selected.data.responseSentAt && (
-              <p className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-200" role="status">
-                Réponse envoyée le {new Date(selected.data.responseSentAt).toLocaleString("fr-FR", { timeZone: "Europe/Paris" })}. Un nouvel envoi n’est possible que par « Renvoyer la réponse par email ».
+              <p className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-200" role="status">
+                Réponse envoyée le {formatAdminDateTime(selected.data.responseSentAt)}. Un nouvel envoi n’est possible que par « Renvoyer la réponse par email ».
               </p>
             )}
 
@@ -367,7 +361,7 @@ export default function MedicalQuestionsAdminTab({ initialSearch = "" }: { initi
                   aria-describedby="medical-question-response-requirement"
                 />
               </label>
-              <p id="medical-question-response-requirement" className={`text-xs leading-5 ${responseReady ? "text-emerald-300" : "text-amber-300"}`} aria-live="polite">
+              <p id="medical-question-response-requirement" className={`text-xs leading-5 ${responseReady ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}`} aria-live="polite">
                 {responseLength}/{MIN_PRIVATE_RESPONSE_LENGTH} caractères minimum. {validationHint}
               </p>
               <button

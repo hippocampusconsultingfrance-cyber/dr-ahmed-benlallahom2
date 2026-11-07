@@ -103,3 +103,22 @@ describe("RGPD-12 — traces des actions sur les données d’une personne", () 
     expect(html).not.toMatch(/unexpected| : 9/);
   });
 });
+
+describe("ADM-07 / A11Y-12 — date et gravité", () => {
+  it("date chaque évènement à l’heure de Paris, son fuseau dit dans la langue de l’administration", () => {
+    view.events = [event(1, "admin_contact_message_deleted", { deleted: 1 })];
+    // 07:51 UTC on 26 October 2026, winter time: 08:51 in Paris.
+    expect(renderToStaticMarkup(createElement(SecurityOperationsTab))).toContain("Administrateur · 26/10/2026 08:51 (heure de Paris)");
+    view.language = "en";
+    expect(renderToStaticMarkup(createElement(SecurityOperationsTab))).toContain("Administrator · 26/10/2026, 08:51 (Paris time)");
+  });
+
+  it("donne aux gravités les teintes lisibles des badges de l’administration, dans les deux thèmes", () => {
+    view.events = [{ ...event(1, "candidate_login", null, "anonymous"), severity: "high", outcome: "blocked" }, { ...event(2, "candidate_login", null, "anonymous"), severity: "critical", outcome: "blocked" }];
+    const html = renderToStaticMarkup(createElement(SecurityOperationsTab));
+    expect(html).toMatch(/<span class="[^"]*text-orange-700 [^"]*dark:text-orange-300[^"]*">Élevé<\/span>/);
+    expect(html).toMatch(/<span class="[^"]*text-red-700 [^"]*dark:text-red-300[^"]*">Critique<\/span>/);
+    // The count of the events to review, in the same tones.
+    expect(html).toMatch(/<div class="[^"]*text-orange-700 [^"]*">2 événement\(s\) à examiner<\/div>/);
+  });
+});
