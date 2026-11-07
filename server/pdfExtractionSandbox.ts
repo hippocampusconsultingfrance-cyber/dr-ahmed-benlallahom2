@@ -88,6 +88,106 @@ export function textCellsAsLines<Content extends { items: readonly unknown[] }>(
   return { ...content, items: items.map((item, index) => (breaks.has(index) ? { ...item, str: "\n" } : item)) };
 }
 
+/**
+ * IA-04: the pages' text items with each row of text written on two pages or
+ * more (a header, a footer) whose pieces are drawn between those of other
+ * rows brought together, in their order along the row, where its first
+ * piece is drawn: it is then read as one line on each page, whatever the
+ * order its pieces are drawn in, as when it is drawn at once. pdf.js keeps
+ * the drawing order, and a footer drawn piece by piece between the body's
+ * lines would otherwise be as many lines, grouped differently from one page
+ * to the next. A row is the horizontal text of one baseline; it is the same
+ * on two pages when its text, read along the row, is, spacing aside. Only
+ * the order of the items changes: a space is put between two pieces apart
+ * on the row, as pdf.js writes it between two pieces drawn one after the
+ * other, an end of line before and after the row, and an empty end of line
+ * that would follow another is dropped. Self-contained: the isolated reader
+ * runs it as its source.
+ */
+export function repeatedRowsTogether<Content extends { items: readonly unknown[] }>(contents: readonly Content[]): Content[] {
+  const SPACE_EM = 0.15;
+  type Item = { str?: unknown; width?: unknown; height?: unknown; hasEOL?: unknown; transform?: unknown };
+  type Member = { item: Item; index: number; x: number; y: number };
+  const textOf = (item: Item) => (typeof item.str === "string" ? item.str : "");
+  const position = (item: Item) => {
+    const matrix = item.transform;
+    if (!Array.isArray(matrix) || matrix.length < 6 || matrix[1] !== 0 || matrix[2] !== 0) return null;
+    const [x, y] = [matrix[4], matrix[5]];
+    return typeof x === "number" && typeof y === "number" && Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+  };
+  const rowsOf = (items: readonly Item[]) => {
+    const placed: Member[] = [];
+    items.forEach((item, index) => {
+      const at = position(item);
+      if (at && textOf(item) !== "") placed.push({ item, index, ...at });
+    });
+    placed.sort((left, right) => left.y - right.y);
+    const rows: Array<{ y: number; tolerance: number; members: Member[] }> = [];
+    for (const member of placed) {
+      const row = rows[rows.length - 1];
+      if (row && Math.abs(member.y - row.y) <= row.tolerance) row.members.push(member);
+      else rows.push({ y: member.y, tolerance: Math.max(0.5, 0.2 * (Number(member.item.height) || 0)), members: [member] });
+    }
+    return rows
+      .map(row => {
+        const members = [...row.members].sort((left, right) => left.x - right.x || left.index - right.index);
+        return { members, key: members.map(member => textOf(member.item)).join("").replace(/\s+/g, "").toLowerCase() };
+      })
+      .filter(row => row.key !== "");
+  };
+  const pages = contents.map(content => rowsOf(content.items as readonly Item[]));
+  const pagesWith = new Map<string, number>();
+  for (const rows of pages) Array.from(new Set(rows.map(row => row.key)), key => pagesWith.set(key, (pagesWith.get(key) ?? 0) + 1));
+  return contents.map((content, page) => {
+    const items = content.items as readonly Item[];
+    const written = (item: Item) => textOf(item).trim() !== "";
+    // How many items with text come before each index: a row is scattered when another row's text lies between its first and last pieces.
+    const before = [0];
+    items.forEach((item, index) => before.push(before[index]! + (written(item) ? 1 : 0)));
+    const firstOf = (members: Member[]) => members.reduce((first, member) => Math.min(first, member.index), Infinity);
+    const scattered = pages[page]!.filter(row => {
+      if (row.members.length < 2 || (pagesWith.get(row.key) ?? 0) < 2) return false;
+      const first = firstOf(row.members);
+      const last = row.members.reduce((at, member) => Math.max(at, member.index), -Infinity);
+      const own = row.members.filter(member => member.index > first && member.index < last && written(member.item)).length;
+      return before[last]! - before[first + 1]! > own;
+    });
+    if (scattered.length === 0) return content;
+    const moved = new Set<number>();
+    const rowAt = new Map<number, Member[]>();
+    for (const row of scattered) {
+      row.members.forEach(member => moved.add(member.index));
+      rowAt.set(firstOf(row.members), row.members);
+    }
+    const result: Item[] = [];
+    const endsLine = () => result.length === 0 || result[result.length - 1]!.hasEOL === true;
+    items.forEach((item, index) => {
+      const members = rowAt.get(index);
+      if (members) {
+        if (!endsLine()) result.push({ str: "", width: 0, height: 0, transform: members[0]!.item.transform, hasEOL: true });
+        members.forEach((member, at) => {
+          const previous = members[at - 1];
+          if (previous) {
+            const end = previous.x + (Number(previous.item.width) || 0);
+            const gap = member.x - end;
+            const em = Math.max(Number(previous.item.height) || 0, Number(member.item.height) || 0);
+            if (gap > SPACE_EM * em && !/\s$/.test(textOf(previous.item)) && !/^\s/.test(textOf(member.item))) {
+              const matrix = member.item.transform as number[];
+              result.push({ str: " ", width: gap, height: 0, transform: [...matrix.slice(0, 4), end, matrix[5]], hasEOL: false });
+            }
+          }
+          result.push({ ...member.item, hasEOL: at === members.length - 1 });
+        });
+        return;
+      }
+      if (moved.has(index)) return;
+      if (textOf(item) === "" && item.hasEOL === true && endsLine()) return;
+      result.push(item);
+    });
+    return { ...content, items: result };
+  });
+}
+
 let standardFontDirectory: string | null | undefined;
 
 /**
@@ -128,6 +228,7 @@ const startedAt = Date.now();
 const __name = target => target;
 const visibleTextContent = ${visibleTextContent.toString()};
 const textCellsAsLines = ${textCellsAsLines.toString()};
+const repeatedRowsTogether = ${repeatedRowsTogether.toString()};
 
 (async () => {
   let parser = null;
@@ -150,10 +251,11 @@ const textCellsAsLines = ${textCellsAsLines.toString()};
     if (task.kind === "text") {
       // What parser.getText({ first }) does, page by page, with the visible text content only: its
       // own page text assembly (getPageText; it and load are private in pdf-parse's typings)
-      // keeps the text laid out as before, a wide gap within a line read as a line break.
+      // keeps the text laid out as before, a row repeated on two pages read as one line, a wide
+      // gap within a line as a line break.
       const doc = await parser.load();
       const total = doc.numPages;
-      const pages = [];
+      const read = [];
       const visibility = { invisibleText: [], uncheckedPages: [], unverifiableText: [] };
       const deadline = startedAt + task.visibilityBudgetMs;
       const budget = { units: task.visibilityUnits };
@@ -171,10 +273,15 @@ const textCellsAsLines = ${textCellsAsLines.toString()};
           visibility.unverifiableText.push({ page: num, reason: "unfinished", text: layer });
           content = { ...content, items: [] };
         }
-        content = textCellsAsLines(content);
-        const text = await parser.getPageText({ getViewport: options => page.getViewport(options), getTextContent: async () => content }, {}, total);
-        pages.push({ num, text });
+        read.push({ num, viewport: page.getViewport({ scale: 1 }), content });
         page.cleanup();
+      }
+      const contents = repeatedRowsTogether(read.map(page => page.content));
+      const pages = [];
+      for (const [index, { num, viewport }] of read.entries()) {
+        const content = textCellsAsLines(contents[index]);
+        const text = await parser.getPageText({ getViewport: () => viewport, getTextContent: async () => content }, {}, total);
+        pages.push({ num, text });
       }
       parentPort.postMessage({ type: "result", result: { total: Number.isInteger(total) ? total : null, pages, visibility } });
     } else {

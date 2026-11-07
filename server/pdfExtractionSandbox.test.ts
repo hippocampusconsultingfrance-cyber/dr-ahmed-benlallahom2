@@ -1,7 +1,7 @@
 import { deflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { DOCUMENT_DECOMPRESSION_LIMITS } from "./documentDecompressionLimits";
-import { readPdfIsolated, textCellsAsLines } from "./pdfExtractionSandbox";
+import { readPdfIsolated, repeatedRowsTogether, textCellsAsLines } from "./pdfExtractionSandbox";
 import { validateCvFile } from "./recruitmentFileValidation";
 
 /** A one-page PDF whose page content is the given stream (with a valid xref table). */
@@ -79,5 +79,49 @@ describe("cellules d’une rangée et colonnes côte à côte lues comme des lig
     expect(read([...line("Titre", 12, "court"), ...line("mot", 30, "mot", 30, "mot")])).toBe("Titre\ncourt\nmot\nmot\nmot\n");
     const unchanged = { items: line("Sans", 3, "écart") };
     expect(textCellsAsLines(unchanged)).toBe(unchanged);
+  });
+});
+
+describe("ligne répétée sur plusieurs pages, dessinée en morceaux entre les autres lignes, lue d’un tenant (IA-04)", () => {
+  /** A piece of text drawn at (x, y), 5 pt a character, 9 pt high; `eol`: pdf.js ends the line after it. */
+  const at = (str: string, x: number, y: number, eol = false) => ({ str, width: str.length * 5, height: 9, transform: [9, 0, 0, 9, x, y], hasEOL: eol });
+  /** The end of line pdf.js writes between two pieces drawn on different rows. */
+  const end = { str: "", width: 0, height: 0, transform: [1, 0, 0, 1, 0, 0], hasEOL: true };
+  /** The page text as pdf-parse writes it: each item, a line break at each end of line. */
+  const read = (content: { items: readonly unknown[] }) => (content.items as Array<{ str: string; hasEOL: boolean }>).map(item => item.str + (item.hasEOL ? "\n" : "")).join("");
+  const footer = ["Médecin", "Réanimateur", "Licence"];
+  // Each piece starts 10 pt after the end of the one before it on the footer's row.
+  const footerAt = [50, 95, 160];
+  const piece = (index: number, eol = false) => at(footer[index]!, footerAt[index]!, 40, eol);
+  const body = (text: string, y: number) => at(text, 50, y, true);
+
+  it("rassemble ses morceaux, dans leur ordre sur la ligne, là où est dessiné le premier, et ne change pas l’ordre du reste", () => {
+    const pages = [
+      // Each piece between two lines of the body.
+      { items: [piece(0), end, body("Soins 1", 780), piece(1), end, body("Soins 2", 760), piece(2), end, body("Soins 3", 740)] },
+      // Drawn from the last piece, two of them together.
+      { items: [body("Soins 4", 780), piece(2), end, body("Soins 5", 760), piece(1), piece(0, true), body("Soins 6", 740)] },
+      // Drawn at once: left as it is.
+      { items: [body("Soins 7", 780), piece(0), piece(1), piece(2, true), body("Soins 8", 760)] },
+    ];
+    const [first, second, third] = repeatedRowsTogether(pages);
+    // Before: « Médecin\nSoins 1\nRéanimateur\nSoins 2… », a line per piece, grouped differently on each page.
+    expect(read(first!)).toBe("Médecin Réanimateur Licence\nSoins 1\nSoins 2\nSoins 3\n");
+    expect(read(second!)).toBe("Soins 4\nMédecin Réanimateur Licence\nSoins 5\nSoins 6\n");
+    expect(third).toBe(pages[2]);
+    // The space put between two pieces is as wide as the gap between them, on their row.
+    expect(first!.items[1]).toEqual({ str: " ", width: 10, height: 0, transform: [9, 0, 0, 9, 85, 40], hasEOL: false });
+  });
+
+  it("laisse les lignes écrites sur une seule page, même dessinées en morceaux (deux colonnes), et les pages sans ligne répétée", () => {
+    // Two columns: the left one, then the right one, each row of the page drawn in two pieces.
+    const columns = { items: [at("Spécialité", 50, 780, true), at("Langues", 50, 760, true), at("Titre", 300, 780, true), at("Anglais", 300, 760, true)] };
+    const other = { items: [at("Expérience", 50, 780, true), at("CHU", 300, 780, true)] };
+    const result = repeatedRowsTogether([columns, other]);
+    expect(result[0]).toBe(columns);
+    expect(result[1]).toBe(other);
+    // Rotated text, or text without a position, is never moved.
+    const rotated = { items: [{ ...piece(0), transform: [0, 9, -9, 0, 50, 40] }, end, body("Soins", 780), { ...piece(1), transform: [0, 9, -9, 0, 95, 40] }] };
+    expect(repeatedRowsTogether([rotated, rotated])[0]).toBe(rotated);
   });
 });

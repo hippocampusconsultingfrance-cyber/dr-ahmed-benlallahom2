@@ -8,7 +8,7 @@ import { declaredCertificationNames, latestCertificationExpiry, sameRecruitmentF
 import { certificationDateIsCurrent, certificationExpiryInFrench } from "../shared/recruitmentFactOrigins";
 import { assertPdfDecompressionWithinLimits, DOCUMENT_DECOMPRESSION_LIMITS, truncateExtractedText } from "./documentDecompressionLimits";
 import { withoutInvisibleDocxText, type DocxUnverifiableReason } from "./docxVisibleText";
-import { pdfStandardFontDataUrl, PdfReaderUnavailableError, readPdfIsolated, textCellsAsLines, type PdfTextReading } from "./pdfExtractionSandbox";
+import { pdfStandardFontDataUrl, PdfReaderUnavailableError, readPdfIsolated, repeatedRowsTogether, textCellsAsLines, type PdfTextReading } from "./pdfExtractionSandbox";
 import type { PdfUnverifiableReason } from "./pdfVisibleText";
 import { CV_ANALYSIS_STEP_MINIMUM_MS, ProcessingDeadlineError, stepTimeoutMs } from "./processingDeadline";
 import {
@@ -258,6 +258,14 @@ const cleanText = (value: string): string =>
     .replace(/[ \t]+/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+
+/**
+ * IA-04: a tab between two texts of a line read as a line break, as the wide
+ * gap it leaves in the PDF of the same document (textCellsAsLines): two
+ * columns aligned with a tab stop are two lines of a DOCX, as of its PDF and
+ * as the cells of a table. Only whitespace changes.
+ */
+const tabsAsLineBreaks = (value: string): string => value.replace(/(\S)[ \t]*\t[ \t]*(?=\S)/g, "$1\n");
 
 /** Prevent document-controlled text from impersonating our trusted page boundaries. */
 export const escapeCvPageMarkers = (value: string): string =>
@@ -745,15 +753,21 @@ async function extractCvDocumentUnbounded(buffer: Buffer, mimeType: string): Pro
         return readPdfIsolated(buffer, { kind: "text", first }, step.limits).then(reading => step.checkVisibility(reading), step.rethrow);
       },
       async (parser): Promise<PdfTextReading> => {
-        // What the isolated reader does, without the visibility check: a wide gap within a line read as a line break (IA-04).
+        // What the isolated reader does, without the visibility check: a row repeated on two pages
+        // read as one line, a wide gap within a line as a line break (IA-04).
         const reader = parser as unknown as PdfParserPages;
         const doc = await reader.load();
-        const pages: PdfTextReading["pages"] = [];
+        const read: Array<{ num: number; viewport: unknown; content: { items: readonly unknown[] } }> = [];
         for (let num = 1; num <= Math.min(doc.numPages, first); num += 1) {
           const page = await doc.getPage(num);
-          const content = textCellsAsLines(await page.getTextContent());
-          pages.push({ num, text: await reader.getPageText({ getViewport: options => page.getViewport(options), getTextContent: async () => content }, {}, doc.numPages) });
+          read.push({ num, viewport: page.getViewport({ scale: 1 }), content: await page.getTextContent() });
           page.cleanup();
+        }
+        const contents = repeatedRowsTogether(read.map(page => page.content));
+        const pages: PdfTextReading["pages"] = [];
+        for (let index = 0; index < read.length; index += 1) {
+          const content = textCellsAsLines(contents[index]!);
+          pages.push({ num: read[index]!.num, text: await reader.getPageText({ getViewport: () => read[index]!.viewport, getTextContent: async () => content }, {}, doc.numPages) });
         }
         return { total: Number.isInteger(doc.numPages) ? doc.numPages : null, pages };
       },
@@ -835,7 +849,7 @@ async function extractCvDocumentUnbounded(buffer: Buffer, mimeType: string): Pro
     const visible = withoutInvisibleDocxText(buffer);
     const mammoth = (await import("mammoth")).default;
     const result = await mammoth.extractRawText({ buffer: visible.buffer });
-    const text = escapeCvPageMarkers(cleanText(result.value));
+    const text = escapeCvPageMarkers(cleanText(tabsAsLineBreaks(result.value)));
     const invisibleText = invisibleTextSummary(visible.invisibleText, visible.unverifiableText, text.length);
     return { text, method: "docx", totalPages: null, ocrConfidence: null, ocrModelVersion: null, warnings: [...result.messages.map(message => `${message.type}:${message.message}`), ...invisibleTextWarnings(invisibleText)], invisibleText };
   }
@@ -843,7 +857,7 @@ async function extractCvDocumentUnbounded(buffer: Buffer, mimeType: string): Pro
   if (mimeType === "application/msword") {
     const WordExtractor = (await import("word-extractor")).default;
     const document = await new WordExtractor().extract(buffer);
-    return { text: escapeCvPageMarkers(cleanText(document.getBody())), method: "doc", totalPages: null, ocrConfidence: null, ocrModelVersion: null, warnings: ["legacy_doc_format_limited_extraction"] };
+    return { text: escapeCvPageMarkers(cleanText(tabsAsLineBreaks(document.getBody()))), method: "doc", totalPages: null, ocrConfidence: null, ocrModelVersion: null, warnings: ["legacy_doc_format_limited_extraction"] };
   }
 
   throw new Error("Format de CV non pris en charge pour l’analyse automatique.");
@@ -1382,18 +1396,61 @@ const LINE_END = /\r\n|[\n\r\f\v\u0085\u2028\u2029]/;
 const PAGE_MARKER_LINE = /^\s*\[PAGE\s+(\d+)\]\s*$/i;
 
 /**
- * The CV's text normalized as quotes are, line by line (IA-04): `text` is
- * what normalizeEvidenceText makes of the whole text, so a quote is found in
- * it as verifyCvEvidence finds it; `starts` says where each line starts in
- * it, and `places` the place of the CV each line is, the same number for
- * the lines of one place. A line is a place, whatever its punctuation:
- * « Médecin anesthésiste. Réanimateur. » is one, as are its parts. A line
- * written on two pages or more (a header, a footer), with the lines next to
- * it that are too, is one place on all of them: a footer of two lines cited
- * page by page, whole or in parts, is still one place of the CV.
+ * How wide a line of a page is, in characters of the normalized text (IA-04):
+ * an A4 page in a font of 10 to 12 points holds 80 to 100 of them. A DOCX
+ * gives each paragraph on one line, which the PDF of the same CV wraps.
+ */
+const PASSAGE_WIDTH = 100;
+const characterWidth = (character: string) => (UNSPACED_SCRIPT.test(character) ? 2 : 1);
+
+/**
+ * Where a normalized line wraps on a page of PASSAGE_WIDTH characters: at
+ * the last space before the line is full, inside a word longer than a line
+ * (Chinese, written without spaces), an ideograph counting as two
+ * characters. The offset of each of its parts, the first at 0.
+ */
+function wrappedLineStarts(line: string) {
+  const starts = [0];
+  let width = 0;
+  for (const word of Array.from(line.matchAll(/\S+/g))) {
+    const wordWidth = Array.from(word[0], characterWidth).reduce((total, value) => total + value, 0);
+    if (width > 0 && width + 1 + wordWidth <= PASSAGE_WIDTH) {
+      width += 1 + wordWidth;
+      continue;
+    }
+    if (width > 0) starts.push(word.index);
+    width = 0;
+    let offset = word.index;
+    for (const character of word[0]) {
+      if (width > 0 && width + characterWidth(character) > PASSAGE_WIDTH) {
+        starts.push(offset);
+        width = 0;
+      }
+      width += characterWidth(character);
+      offset += character.length;
+    }
+  }
+  return starts;
+}
+
+/**
+ * The CV's text normalized as quotes are, as the lines of its pages (IA-04):
+ * `text` is what normalizeEvidenceText makes of the whole text, so a quote
+ * is found in it as verifyCvEvidence finds it; `starts` says where each
+ * passage starts in it, and `places` the place of the CV each passage is,
+ * the same number for the passages of one place. A passage is a line,
+ * whatever its punctuation (« Médecin anesthésiste. Réanimateur. » is one
+ * place, as are its parts), or, a line longer than a page holds, each line
+ * it wraps onto (wrappedLineStarts): the paragraph of a DOCX, given on one
+ * line, has as many places as the lines of its PDF. A line written on two
+ * pages or more (a header, a footer) is one place on all of them, with the
+ * other lines written on the same pages, and with those next to it that are
+ * repeated too: a footer cited page by page, whole or in parts, drawn in one
+ * line or in pieces between the body's lines, is still one place of the CV.
  */
 function normalizedSourcePassages(sourceText: string) {
   const starts: number[] = [];
+  const passageLines: number[] = [];
   const lines: Array<{ normalized: string; page: number | null }> = [];
   let text = "";
   let page: number | null = null;
@@ -1403,7 +1460,10 @@ function normalizedSourcePassages(sourceText: string) {
     const normalized = normalizeEvidenceText(line);
     if (!normalized) continue;
     if (text) text += " ";
-    starts.push(text.length);
+    for (const start of wrappedLineStarts(normalized)) {
+      starts.push(text.length + start);
+      passageLines.push(lines.length);
+    }
     text += normalized;
     lines.push({ normalized, page: marker ? null : page });
   }
@@ -1411,8 +1471,10 @@ function normalizedSourcePassages(sourceText: string) {
   for (const line of lines) {
     if (line.page !== null) pagesOf.set(line.normalized, (pagesOf.get(line.normalized) ?? new Set()).add(line.page));
   }
+  const pageSetOf = (line: (typeof lines)[number]) => Array.from(pagesOf.get(line.normalized) ?? []).sort((left, right) => left - right).join(",");
   const repeated = lines.map(line => (pagesOf.get(line.normalized)?.size ?? 0) >= 2);
-  // Each line is its own place, but a repeated one: the place of the first line with its text, or of the repeated line just before it on its page.
+  // Each line is its own place, but a repeated one: the place of the first line with its text,
+  // of the first repeated on the same pages, or of the repeated line just before it on its page.
   const places = lines.map((_, index) => index);
   const placeOf = (index: number) => {
     let root = index;
@@ -1425,19 +1487,25 @@ function normalizedSourcePassages(sourceText: string) {
     return root;
   };
   const join = (left: number, right: number) => { places[placeOf(right)] = placeOf(left); };
-  const firstWith = new Map<string, number>();
+  const firstOnPages = new Map<string, number>();
   lines.forEach((line, index) => {
     if (!repeated[index]) return;
-    const first = firstWith.get(line.normalized);
-    if (first === undefined) firstWith.set(line.normalized, index);
+    const pages = pageSetOf(line);
+    const first = firstOnPages.get(pages);
+    if (first === undefined) firstOnPages.set(pages, index);
     else join(first, index);
     if (index > 0 && repeated[index - 1] && lines[index - 1]!.page === line.page) join(index - 1, index);
   });
-  return { text, starts, places: lines.map((_, index) => placeOf(index)) };
+  // A passage of a repeated line is the place of its line; any other is a place of its own.
+  return {
+    text,
+    starts,
+    places: passageLines.map((line, passage) => (repeated[line] ? placeOf(line) : lines.length + passage)),
+  };
 }
 type NormalizedSourcePassages = ReturnType<typeof normalizedSourcePassages>;
 
-/** The line a position of the normalized text is in. */
+/** The passage a position of the normalized text is in. */
 function passageAt(starts: number[], position: number) {
   let low = 0;
   let high = starts.length - 1;

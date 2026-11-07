@@ -1332,6 +1332,126 @@ describe("dossier d’un CV qui cache du texte, de bout en bout (IA-01)", () => 
     expect(fromPdf.score).toBe(fromDocx.score);
   }, PDF_TEST_TIMEOUT_MS);
 
+  it("CV honnête au titre et à la spécialité dans deux phrases d’un paragraphe, ou de part et d’autre d’une tabulation : le même score en PDF et en DOCX, 30 points de spécialité (IA-04)", async () => {
+    const name = "Dr Nadia Mansour";
+    const profile = "Médecin anesthésiste-réanimateur depuis 2012, j’exerce au bloc opératoire et en réanimation polyvalente au CHU de Lyon. "
+      + "Spécialité : anesthésie-réanimation, avec une pratique de l’anesthésie locorégionale échoguidée.";
+    const [specialty, title, language, experience, licence] = ["Spécialité : anesthésie-réanimation", "Médecin anesthésiste-réanimateur", "Anglais courant (C1)", "2012-2024 : Praticien hospitalier, CHU de Lyon", "Licence DHA (2023)"] as const;
+    const reading = (location: string) => aiReading({
+      professionalTitle: title,
+      specialties: ["anesthésie-réanimation"],
+      normalizedLanguages: [{ language: "Anglais", proficiency: "fluent", ...quote(language, location) }],
+      certifications: [{ name: "Licence DHA", issuingBody: null, country: null, expiresAt: null, ...quote(licence, location) }],
+      normalizedExperiences: [{ role: "Praticien hospitalier", organization: "CHU de Lyon", startDate: "2012", endDate: "2024", employmentType: "permanent", specialty: "", country: null, durationMonths: null, ...quote(experience, location) }],
+      fieldEvidence: [
+        { field: "professionalTitle", value: title, ...quote(title, location) },
+        { field: "specialty", value: "anesthésie-réanimation", ...quote(specialty, location) },
+      ],
+    });
+    const tabbed = (left: string, right: string) =>
+      `<w:p><w:pPr><w:tabs><w:tab w:val="right" w:pos="9000"/></w:tabs></w:pPr><w:r><w:t xml:space="preserve">{{${left}}}</w:t><w:tab/><w:t xml:space="preserve">{{${right}}}</w:t></w:r></w:p>`;
+    const cvs = {
+      // The profile paragraph: one line of the DOCX, which the PDF wraps.
+      paragraph: {
+        pdf: () => pdf(document => {
+          document.fontSize(11).fillColor("black").text(name, 50, 60, { lineBreak: false });
+          document.text(profile, 50, 90, { width: 400 });
+          [experience, language, licence].forEach((line, index) => document.text(line, 50, 160 + index * 20, { lineBreak: false }));
+        }),
+        docx: () => docx([name, profile, experience, language, licence].map(line => paragraph(line)).join("")),
+      },
+      // Two columns aligned by a right tab stop, the specialty on the left of the title.
+      tab: {
+        pdf: () => pdf(document => {
+          document.fontSize(11).fillColor("black").text(name, 50, 60, { lineBreak: false });
+          [[specialty, title], [language, experience]].forEach(([left, right], index) => {
+            document.text(left!, 50, 90 + index * 20, { lineBreak: false });
+            document.text(right!, 545 - document.widthOfString(right!), 90 + index * 20, { lineBreak: false });
+          });
+          document.text(licence, 50, 130, { lineBreak: false });
+        }),
+        docx: () => docx(paragraph(name) + tabbed(specialty, title) + tabbed(language, experience) + paragraph(licence)),
+      },
+    };
+    for (const [cv, { pdf: pdfFile, docx: docxFile }] of Object.entries(cvs)) {
+      const read: Array<{ text: string; score: unknown; breakdown: Record<string, number> }> = [];
+      for (const [file, mimeType, location] of [[await pdfFile(), "application/pdf", "page 1"], [docxFile(), DOCX, "section Profil"]] as const) {
+        state.prompts = [];
+        state.reading = reading(location);
+        const id = seedDossier(file, mimeType);
+        await processDueCvAnalysisJobs(5);
+        read.push({ text: String(dossier(id).extracted_text), score: dossier(id).ai_score, breakdown: JSON.parse(String(dossier(id).ai_extracted_skills)).scoreBreakdown });
+      }
+      const [fromPdf, fromDocx] = read as [typeof read[number], typeof read[number]];
+      if (cv === "paragraph") {
+        // The DOCX gives the paragraph on one line, the PDF on the lines it wraps onto.
+        expect(fromDocx.text.split("\n")).toContain(profile);
+        expect(fromPdf.text).not.toContain(profile);
+      } else {
+        // The tab read as a line break, as the wide gap of the PDF; before, « Spécialité : anesthésie-réanimation Médecin anesthésiste-réanimateur ».
+        expect(fromDocx.text).toContain(`${specialty}\n${title}`);
+        expect(fromPdf.text).toContain(`${specialty}\n${title}`);
+        expect(fromDocx.text).not.toContain("\t");
+      }
+      // Before: 30 points of specialty in PDF, 15 in DOCX, and a score 15 lower.
+      expect(fromPdf.breakdown.specialtyMatch, cv).toBe(30);
+      expect(fromDocx.breakdown, cv).toEqual(fromPdf.breakdown);
+      expect(fromPdf.score, cv).not.toBeNull();
+      expect(fromDocx.score, cv).toBe(fromPdf.score);
+    }
+  }, PDF_TEST_TIMEOUT_MS);
+
+  it("CV d’infirmier au pied de page dessiné morceau par morceau entre les lignes du corps, groupé autrement sur chaque page : une ligne par page, rien d’ajouté ni de retiré, et pas de score (IA-04)", async () => {
+    const pieces = ["Médecin anesthésiste ·", "Réanimateur ·", "10 ans d’expérience ·", "Licence DHA ·", "Anglais courant"];
+    const footer = pieces.join(" ");
+    const bodyOf = (page: number) => [
+      ...(page === 0 ? ["Karim Benali", "Infirmier diplômé d’État", "2014-2024 : Infirmier, Clinique du Parc, Lyon"] : []),
+      ...["Soins infirmiers", "Surveillance post-opératoire", "Préparation des traitements", "Transmissions écrites", "Pansements complexes", "Accueil des patients"]
+        .map((task, index) => `${task} : service ${page * 6 + index + 1}, unité de chirurgie.`),
+    ];
+    // Page 1: each piece between two lines of the body; page 2: in two groups; page 3: one by one, from the last.
+    const groupings = [[[0], [1], [2], [3], [4]], [[0, 1], [2, 3, 4]], [[4], [3], [2], [1], [0]]];
+    const file = await pdf(document => groupings.forEach((groups, page) => {
+      if (page > 0) document.addPage();
+      document.fontSize(9);
+      const xs = pieces.reduce<number[]>((at, piece, index) => [...at, index === 0 ? 50 : at[index - 1]! + document.widthOfString(`${pieces[index - 1]!} `)], []);
+      const body = bodyOf(page);
+      body.forEach((line, index) => {
+        for (const piece of groups[index] ?? []) document.fontSize(9).fillColor("black").text(pieces[piece]!, xs[piece]!, 790, { lineBreak: false });
+        document.fontSize(11).fillColor("black").text(line, 50, 80 + index * 20, { lineBreak: false });
+      });
+    }));
+    const at = (page: number) => `page ${page}, pied de page`;
+    state.reading = aiReading({
+      professionalTitle: "Médecin anesthésiste",
+      specialties: ["Réanimateur"],
+      yearsExperience: 10,
+      normalizedLanguages: [{ language: "Anglais", proficiency: "fluent", ...quote("Anglais courant", at(3)) }],
+      certifications: [{ name: "Licence DHA", issuingBody: null, country: null, expiresAt: null, ...quote("Licence DHA", at(1)) }],
+      fieldEvidence: [
+        { field: "professionalTitle", value: "Médecin anesthésiste", ...quote("Médecin anesthésiste", at(1)) },
+        { field: "specialty", value: "Réanimateur", ...quote("Réanimateur", at(2)) },
+        { field: "yearsExperience", value: "10 ans", ...quote("10 ans d’expérience", at(3)) },
+      ],
+    });
+    const id = seedDossier(file);
+    await processDueCvAnalysisJobs(5);
+    const text = String(dossier(id).extracted_text);
+    const pages = text.split(/\[PAGE \d+\]\n/).slice(1);
+    expect(pages).toHaveLength(3);
+    pages.forEach((page, index) => {
+      // The footer one line on each page, whatever the order its pieces are drawn in.
+      expect(page.split("\n").map(line => line.trim()), `page ${index + 1}`).toContain(footer);
+      // Only the order of the pieces and the spaces between them change.
+      const characters = (value: string) => Array.from(value.replace(/\s+/g, "")).sort().join("");
+      expect(characters(page)).toBe(characters([...pieces, ...bodyOf(index)].join("")));
+    });
+    const skills = JSON.parse(String(dossier(id).ai_extracted_skills));
+    // Before: the pieces were as many lines, grouped differently on each page: 30 points of specialty and a score of 60.
+    expect(skills.scoreBreakdown.specialtyMatch).toBe(15);
+    expect(dossier(id).ai_score).toBeNull();
+  }, PDF_TEST_TIMEOUT_MS);
+
   it("CV lisible qui cache aussi une phrase : au-delà de 30 caractères, revue humaine sans score ni faits structurés", async () => {
     state.reading = honestReading;
     const id = seedDossier(await pdf(document => {

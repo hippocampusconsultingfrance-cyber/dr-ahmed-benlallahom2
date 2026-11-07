@@ -734,6 +734,50 @@ describe("une même citation ne compte qu’une fois (IA-04)", () => {
     expect(parts.relevanceScore).toBeNull();
   });
 
+  it("le paragraphe qu’un DOCX donne sur une ligne compte les lignes de son PDF : deux phrases loin l’une de l’autre sont deux endroits, une ligne de la page en est un", () => {
+    const profile = "Médecin anesthésiste-réanimateur depuis 2012, j’exerce au bloc opératoire et en réanimation polyvalente au CHU de Lyon. "
+      + "Spécialité : anesthésie-réanimation, avec une pratique de l’anesthésie locorégionale échoguidée.";
+    const lines = ["Dr Nadia Mansour", profile, "2012-2024 : Praticien hospitalier, CHU de Lyon", "Anglais courant (C1)"];
+    const honest = (location: string) => analysisFixture({
+      professionalTitle: "Médecin anesthésiste-réanimateur",
+      specialties: ["anesthésie-réanimation"],
+      normalizedExperiences: [{ role: "Praticien hospitalier", organization: "CHU de Lyon", startDate: "2012", endDate: "2024", employmentType: "permanent", specialty: "", country: null, durationMonths: null, evidence: lines[2]!, sourceLocation: location, confidence: 95 }],
+      normalizedLanguages: [{ language: "Anglais", proficiency: "fluent", evidence: lines[3]!, sourceLocation: location, confidence: 95 }],
+      fieldEvidence: [
+        { field: "professionalTitle", value: "Médecin anesthésiste-réanimateur", evidence: "Médecin anesthésiste-réanimateur", sourceLocation: location, confidence: 95 },
+        { field: "specialty", value: "anesthésie-réanimation", evidence: "Spécialité : anesthésie-réanimation", sourceLocation: location, confidence: 95 },
+      ],
+    });
+    // The DOCX, the paragraph on one line, and its PDF, on the three lines it wraps onto.
+    const fromDocx = normalizeRecruitmentAnalysis(honest("Profil"), lines.join("\n"), declared);
+    const wrapped = ["Médecin anesthésiste-réanimateur depuis 2012, j’exerce au bloc opératoire", "et en réanimation polyvalente au CHU de Lyon. Spécialité : anesthésie-",
+      "réanimation, avec une pratique de l’anesthésie locorégionale échoguidée."];
+    const fromPdf = normalizeRecruitmentAnalysis(honest("page 1"), ["[PAGE 1]", lines[0], ...wrapped, ...lines.slice(2)].join("\n"), declared);
+    // Before: 15 points in DOCX, 30 in PDF.
+    expect(fromDocx.scoreBreakdown.specialtyMatch).toBe(30);
+    expect(fromDocx.scoreBreakdown).toEqual(fromPdf.scoreBreakdown);
+    expect(fromDocx.relevanceScore).not.toBeNull();
+    expect(fromDocx.relevanceScore).toBe(fromPdf.relevanceScore);
+    // A paragraph no longer than a line of the page is one place, as that line of its PDF.
+    const short = ["Dr Nadia Mansour", "Médecin anesthésiste-réanimateur au CHU de Lyon. Spécialité : anesthésie-réanimation.", ...lines.slice(2)].join("\n");
+    expect(normalizeRecruitmentAnalysis(honest("Profil"), short, declared).scoreBreakdown.specialtyMatch).toBe(15);
+    // The footer of sentences as one paragraph of a DOCX: one place, no score.
+    const footer = "Médecin anesthésiste. Réanimateur. 10 ans d’expérience. Licence DHA. Anglais courant.";
+    const nurse = normalizeRecruitmentAnalysis(analysisFixture({
+      professionalTitle: "Médecin anesthésiste",
+      specialties: ["Réanimateur"],
+      normalizedLanguages: [{ language: "Anglais", proficiency: "fluent", evidence: "Anglais courant", sourceLocation: "Profil", confidence: 95 }],
+      certifications: [{ name: "Licence DHA", issuingBody: null, country: null, expiresAt: null, evidence: "Licence DHA", sourceLocation: "Profil", confidence: 95 }],
+      fieldEvidence: [
+        { field: "professionalTitle", value: "Médecin anesthésiste", evidence: "Médecin anesthésiste", sourceLocation: "Profil", confidence: 95 },
+        { field: "specialty", value: "Réanimateur", evidence: "Réanimateur", sourceLocation: "Profil", confidence: 95 },
+        { field: "yearsExperience", value: "10 ans", evidence: "10 ans d’expérience", sourceLocation: "Profil", confidence: 95 },
+      ],
+    }), ["Karim Benali", "Infirmier diplômé d’État", footer].join("\n"), declared);
+    expect(nurse.scoreBreakdown.specialtyMatch).toBe(15);
+    expect(nurse.relevanceScore).toBeNull();
+  });
+
   describe("un pied de page répété sur chaque page", () => {
     const footer = "Médecin anesthésiste-réanimateur – 10 ans d’expérience – Licence DHA – Anglais courant";
     /** A nurse's CV: only its footer, written on each of its `pages` pages, names a physician. */
@@ -826,6 +870,36 @@ describe("une même citation ne compte qu’une fois (IA-04)", () => {
       }
       // Written once, on three lines of a single page, they are three places of the CV: the lines of an ordinary CV.
       expect(inSentences(footers[2]!, 1, () => 1).scoreBreakdown.specialtyMatch).toBe(30);
+    });
+
+    it("dessiné en morceaux entre les lignes du corps, chaque morceau sur sa ligne, dans le même ordre ou non d’une page à l’autre : un seul endroit, pas de score", () => {
+      const pieces = ["Médecin anesthésiste ·", "Réanimateur ·", "10 ans d’expérience ·", "Licence DHA ·", "Anglais courant"];
+      const orders = [[0, 1, 2, 3, 4], [0, 1, 2, 3, 4], [0, 1, 2, 3, 4]];
+      const shuffled = [[0, 1, 2, 3, 4], [4, 3, 2, 1, 0], [2, 0, 4, 1, 3]];
+      for (const order of [orders, shuffled]) {
+        const source = order.map((pieceOrder, page) => [
+          `[PAGE ${page + 1}]`,
+          ...(page === 0 ? ["Karim Benali", "Infirmier diplômé d’État"] : []),
+          ...pieceOrder.flatMap((piece, index) => [pieces[piece]!, `Soins infirmiers : service ${page * 5 + index + 1}, unité de chirurgie.`]),
+        ].join("\n")).join("\n");
+        const analysis = analysisFixture({
+          professionalTitle: "Médecin anesthésiste",
+          specialties: ["Réanimateur"],
+          yearsExperience: 10,
+          normalizedLanguages: [{ language: "Anglais", proficiency: "fluent", evidence: "Anglais courant", sourceLocation: "page 3, pied de page", confidence: 95 }],
+          certifications: [{ name: "Licence DHA", issuingBody: null, country: null, expiresAt: null, evidence: "Licence DHA", sourceLocation: "page 1, pied de page", confidence: 95 }],
+          fieldEvidence: [
+            { field: "professionalTitle", value: "Médecin anesthésiste", evidence: "Médecin anesthésiste", sourceLocation: "page 1, pied de page", confidence: 95 },
+            { field: "specialty", value: "Réanimateur", evidence: "Réanimateur", sourceLocation: "page 2, pied de page", confidence: 95 },
+            { field: "yearsExperience", value: "10 ans", evidence: "10 ans d’expérience", sourceLocation: "page 3, pied de page", confidence: 95 },
+          ],
+        });
+        const result = normalizeRecruitmentAnalysis(analysis, source, declared);
+        expect(result.fieldEvidence.every(item => item.evidenceVerified)).toBe(true);
+        // Before: five lines repeated on the three pages, none next to another, five places: 30 points and a score of 60.
+        expect(result.scoreBreakdown.specialtyMatch).toBe(15);
+        expect(result.relevanceScore).toBeNull();
+      }
     });
 
     it("une ligne répétée sur plusieurs pages, et les lignes répétées qui la touchent, sont un seul endroit ; le reste du CV garde ses lignes", () => {
