@@ -846,7 +846,8 @@ async function runJob(id: number) {
       // Not asked again after the immediate budget: the job goes back to the queue.
       const delivered = await notifyOwner(alert.payload, { idempotencyKey: alert.idempotencyKey, stopAtDeadline: true }).catch(() => false);
       if (!delivered) throw new Error("owner_failure_alert_failed");
-      await forgetTriedAddress(db, appointment.id, patientJobType);
+      // Sent: a failure to forget the address must not have it sent again.
+      await forgetTriedAddress(db, appointment.id, patientJobType).catch(() => undefined);
     }
     await db.update(appointmentFulfillmentJobs).set({ status: "completed", finishedAt: new Date(), lastError: null }).where(eq(appointmentFulfillmentJobs.id, id));
     return { completed: true };
