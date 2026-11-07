@@ -3,7 +3,7 @@ import { and, eq, gt, gte, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { candidateSecurityRateLimits, securityEvents } from "../drizzle/schema";
 import { getDb } from "./db";
 import { notifyOwner } from "./_core/notification";
-import { alertSendSlot } from "./_core/resendDelivery";
+import { alertSendSlot, deferAlertToNextRun } from "./_core/resendDelivery";
 
 const HIBP_CACHE_TTL_MS = 10 * 60 * 1000;
 const pwnedSuffixCache = new Map<string, { expiresAt: number; suffixes: Set<string> }>();
@@ -70,47 +70,89 @@ function describeSecurityActor(input: { actorKind: string; actorReference?: stri
  * An email that could not leave is sent by the next event of the category
  * a few minutes later (sendOwnerAlertOncePerWindow).
  */
-async function notifyOwnerOfSecurityAlert(input: {
+async function notifyOwnerOfSecurityAlert(input: SecurityAlertInput) {
+  await sendOwnerAlertOncePerWindow(securityAlertWindow(input.category), async () => {
+    // Raised during a processing that spaces its sends (a used-up quota met by
+    // a post-payment email or alert, ABUS-03): the alert takes its send slot, a
+    // pause after the email Resend just refused, rather than reach Resend a few
+    // milliseconds after it. When that slot would come after the end of the
+    // immediate budget, it is not sent now: the event stays recorded and the
+    // processing queues the alert for its next run (sendQueuedSecurityAlert),
+    // so that it is not left to the next event of its category, which may not
+    // come once the quota is back; the next event may still send it first.
+    if (!(await alertSendSlot())) {
+      await deferAlertToNextRun(input.category);
+      return null;
+    }
+    return sendSecurityAlertEmail(input);
+  });
+}
+
+type SecurityAlertInput = {
   actorKind: string;
   actorReference?: string | null;
   category: string;
   outcome: string;
   severity?: string;
   ipHash?: string | null;
-}) {
-  await sendOwnerAlertOncePerWindow({
-    action: "security_alert_email",
-    subject: input.category,
-    windowMs: SECURITY_ALERT_EMAIL_WINDOW_MS,
-    blockMs: SECURITY_ALERT_EMAIL_WINDOW_MS,
-  }, async () => {
-    const db = await getDb();
-    if (!db) return false;
-    const since = new Date(Date.now() - 2 * SECURITY_ALERT_EMAIL_WINDOW_MS);
-    const recent = await db.select({ id: securityEvents.id }).from(securityEvents).where(and(
-      eq(securityEvents.category, input.category),
-      gte(securityEvents.createdAt, since),
-      inArray(securityEvents.severity, ["high", "critical"]),
-    )).limit(10_000);
-    const windowMinutes = Math.round(SECURITY_ALERT_EMAIL_WINDOW_MS / 60_000);
-    // Raised during a processing that spaces its sends (a used-up quota met by
-    // a post-payment email or alert, ABUS-03): the alert takes its send slot, a
-    // pause after the email Resend just refused, rather than reach Resend a few
-    // milliseconds after it. When that slot would come after the end of the
-    // immediate budget, it is not sent now: the event stays recorded, the next
-    // one of its category sends the alert, and the daily security review
-    // names a used-up quota (runSecurityPostureReview).
-    if (!(await alertSendSlot())) return null;
-    return notifyOwner({
-      title: `Alerte sécurité — ${input.category} — Hippocampus Consulting`,
-      content: [
-        `Catégorie : ${input.category} · ${input.outcome} (gravité ${input.severity ?? "high"}).`,
-        `Événements de ce type sur la dernière heure : ${recent.length}.`,
-        `Dernier acteur : ${describeSecurityActor(input)}${input.ipHash ? ` · réseau ${input.ipHash.slice(0, 12)}…` : ""}.`,
-        `Les événements suivants de cette catégorie sont enregistrés sans nouvel email pendant au moins ${windowMinutes} minutes ; consultez le journal de sécurité de l’administration.`,
-      ].join("\n"),
-    });
+};
+
+/** One alert email per category and window, whether it leaves at once or from the queue. */
+function securityAlertWindow(category: string) {
+  return { action: "security_alert_email", subject: category, windowMs: SECURITY_ALERT_EMAIL_WINDOW_MS, blockMs: SECURITY_ALERT_EMAIL_WINDOW_MS };
+}
+
+/**
+ * The owner's alert email of a security event, with the number of similar
+ * events: of the last hour, or of the last day for an alert that waited in
+ * the queue, sent by the scheduled run up to a day later.
+ */
+async function sendSecurityAlertEmail(input: SecurityAlertInput, options: { queued?: boolean } = {}) {
+  const db = await getDb();
+  if (!db) return false;
+  const since = new Date(Date.now() - (options.queued ? 24 * 60 * 60 * 1000 : 2 * SECURITY_ALERT_EMAIL_WINDOW_MS));
+  const recent = await db.select({ id: securityEvents.id }).from(securityEvents).where(and(
+    eq(securityEvents.category, input.category),
+    gte(securityEvents.createdAt, since),
+    inArray(securityEvents.severity, ["high", "critical"]),
+  )).limit(10_000);
+  const windowMinutes = Math.round(SECURITY_ALERT_EMAIL_WINDOW_MS / 60_000);
+  return notifyOwner({
+    title: `Alerte sécurité — ${input.category} — Hippocampus Consulting`,
+    content: [
+      ...options.queued ? ["Alerte reportée : levée pendant les envois qui suivent un paiement, elle ne pouvait pas partir avant leur réponse ; elle part au passage suivant, que l’incident dure encore ou non."] : [],
+      `Catégorie : ${input.category} · ${input.outcome} (gravité ${input.severity ?? "high"}).`,
+      `Événements de ce type sur ${options.queued ? "les dernières 24 heures" : "la dernière heure"} : ${recent.length}.`,
+      `Dernier acteur : ${describeSecurityActor(input)}${input.ipHash ? ` · réseau ${input.ipHash.slice(0, 12)}…` : ""}.`,
+      `Les événements suivants de cette catégorie sont enregistrés sans nouvel email pendant au moins ${windowMinutes} minutes ; consultez le journal de sécurité de l’administration.`,
+    ].join("\n"),
   });
+}
+
+/**
+ * The owner's security alert of a category that its send slot kept from
+ * leaving during a processing (ABUS-03), queued then by that processing
+ * (deferAlertToNextRun) and sent by its next run, in the same window as the
+ * alerts sent at once: one alert per window, whichever sends it. "covered":
+ * an alert of the category was delivered since and its window still runs,
+ * so it was told. False when it did not leave now (Resend did not take it, or
+ * the window is held by an alert being sent or refused a few minutes ago): it
+ * is tried again later.
+ */
+export async function sendQueuedSecurityAlert(category: string): Promise<"sent" | "covered" | false> {
+  let tried = false;
+  const delivered = await sendOwnerAlertOncePerWindow(securityAlertWindow(category), () => {
+    tried = true;
+    return sendSecurityAlertEmail({ actorKind: "system", category, outcome: "failed", severity: "high" }, { queued: true });
+  });
+  if (delivered) return "sent";
+  if (tried) return false;
+  // Held: only a delivered alert holds the window longer than the new try after a failure.
+  const db = await getDb();
+  const [slot] = db ? await db.select({ blockedUntil: candidateSecurityRateLimits.blockedUntil }).from(candidateSecurityRateLimits)
+    .where(and(eq(candidateSecurityRateLimits.action, "security_alert_email"), eq(candidateSecurityRateLimits.subjectHash, hashSecurityValue(category)))).limit(1) : [];
+  const blockedUntil = asDate(slot?.blockedUntil);
+  return blockedUntil && blockedUntil.getTime() - Date.now() > OWNER_ALERT_RETRY_AFTER_FAILURE_MS ? "covered" : false;
 }
 
 /**

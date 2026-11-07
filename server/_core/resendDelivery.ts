@@ -77,9 +77,11 @@ export function resendRetryAfterMs(headers: Record<string, string> | null | unde
  * The send slot of the processing the current send runs in (see
  * runWithSendSlot). `wait` waits for it: false, the slot left to the next
  * send, when `mayStart` says the send no longer starts. `longestWaitMs`: the
- * longest that wait may last if it starts now.
+ * longest that wait may last if it starts now. `deferAlert`: queues for that
+ * processing's next run an owner security alert of this category whose slot
+ * came too late (deferAlertToNextRun); true once queued.
  */
-type SendSlot = { wait: (mayStart: () => boolean) => Promise<boolean>; longestWaitMs: () => number };
+type SendSlot = { wait: (mayStart: () => boolean) => Promise<boolean>; longestWaitMs: () => number; deferAlert?: (category: string) => Promise<boolean> };
 const sendSlotStorage = new AsyncLocalStorage<SendSlot>();
 
 /**
@@ -135,6 +137,21 @@ export async function alertSendSlot(): Promise<boolean> {
 }
 
 /**
+ * An owner security alert that alertSendSlot kept from leaving (ABUS-03), a
+ * used-up quota met by a post-payment email or alert among them: queued
+ * durably by the processing it was raised in, for its next run, rather than
+ * left to the next event of its category. False when that processing queues
+ * nothing for this category, or could not.
+ */
+export async function deferAlertToNextRun(category: string): Promise<boolean> {
+  const deferAlert = sendSlotStorage.getStore()?.deferAlert;
+  return deferAlert ? deferAlert(category).catch(() => false) : false;
+}
+
+/** Category of the security event, and of the owner's alert, of a used-up Resend quota (reportResendQuotaError). */
+export const RESEND_QUOTA_SECURITY_CATEGORY = "resend_quota_exceeded";
+
+/**
  * One Resend send, made once more after the retry-after delay when Resend
  * answers with its rate limit and that delay is short enough for a request.
  * A network error is thrown as before.
@@ -157,7 +174,7 @@ export async function reportResendQuotaError(error: ResendError, emailKind: stri
   if (typeof error.name !== "string" || !RESEND_QUOTA_ERRORS.has(error.name)) return;
   try {
     const { logSecurityEvent } = await import("../candidateSecurity");
-    await logSecurityEvent({ actorKind: "system", category: "resend_quota_exceeded", outcome: "failed", severity: "high", metadata: { quota: error.name === "monthly_quota_exceeded" ? "monthly" : "daily", emailKind } });
+    await logSecurityEvent({ actorKind: "system", category: RESEND_QUOTA_SECURITY_CATEGORY, outcome: "failed", severity: "high", metadata: { quota: error.name === "monthly_quota_exceeded" ? "monthly" : "daily", emailKind } });
   } catch (logError) {
     console.error("resend_quota_report_failed", logError instanceof Error ? logError.name : "UnknownError");
   }

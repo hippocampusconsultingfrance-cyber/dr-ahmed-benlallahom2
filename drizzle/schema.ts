@@ -206,10 +206,12 @@ export const appointmentFulfillmentJobs = mysqlTable("appointment_fulfillment_jo
   // email queued when it could not go out at once ("…_failure_alert") and the
   // owner's alert that the patient's address bounced an email Resend had
   // accepted ("bounce_alert:" then the fingerprint of that address, one per
-  // appointment and address, EXPL-13) need no migration: no CHECK on
-  // job_type, 32 characters at most.
+  // appointment and address, EXPL-13) and the owner's security alert of a
+  // used-up Resend quota queued when its send slot came too late
+  // ("quota_alert", ABUS-03) need no migration: no CHECK on job_type, 32
+  // characters at most.
   jobType: varchar("job_type", { length: 32 })
-    .$type<"owner" | "confirmation" | "invoice" | "refund" | "refund_owner" | "confirmation_failure_alert" | "invoice_failure_alert" | "refund_failure_alert" | `bounce_alert:${string}`>().notNull(),
+    .$type<"owner" | "confirmation" | "invoice" | "refund" | "refund_owner" | "confirmation_failure_alert" | "invoice_failure_alert" | "refund_failure_alert" | `bounce_alert:${string}` | "quota_alert">().notNull(),
   status: mysqlEnum("status", ["queued", "running", "retry", "completed", "failed"]).default("queued").notNull(),
   attempts: int("attempts").default(0).notNull(),
   maxAttempts: int("max_attempts").default(3).notNull(),

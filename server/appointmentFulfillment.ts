@@ -13,7 +13,8 @@ import {
   sendRefundConfirmationEmail,
 } from "./_core/notifications";
 import { notifyOwner } from "./_core/notification";
-import { alertSendSlot, runWithSendSlot } from "./_core/resendDelivery";
+import { alertSendSlot, RESEND_QUOTA_SECURITY_CATEGORY, runWithSendSlot } from "./_core/resendDelivery";
+import { sendQueuedSecurityAlert } from "./candidateSecurity";
 import { emailLanguageFor } from "./emailLanguage";
 import { archiveInvoicePDF, generateInvoicePDF, renderInvoicePDF, type InvoiceData } from "./invoice";
 import { allocateAppointmentInvoice, findAppointmentInvoices, type AppointmentInvoiceRecord } from "./invoiceNumbering";
@@ -254,6 +255,38 @@ function isBounceAlertJob(jobType: string): jobType is BounceAlertJobType {
 }
 
 /**
+ * The owner's security alert of a used-up Resend quota (ABUS-03), queued as a
+ * job of the appointment whose email or alert met the quota, when its send
+ * slot came after the end of the immediate budget (deferAlertToNextRun): sent
+ * by the next processing, the scheduled run among them, so that a quota back
+ * in the meantime is told too, not by the daily security review alone. One
+ * waits at a time, whatever the appointment; the window of its category keeps
+ * it to one alert per period with those sent at once (sendQueuedSecurityAlert).
+ * It gives no patient's details: sent whatever the appointment's payment or
+ * data became, and not shown on the dashboard.
+ */
+const QUOTA_ALERT_JOB_TYPE = "quota_alert";
+
+async function queueQuotaAlert(db: Database, appointmentId: number) {
+  const [waiting] = await db.select({ id: appointmentFulfillmentJobs.id }).from(appointmentFulfillmentJobs)
+    .where(and(eq(appointmentFulfillmentJobs.jobType, QUOTA_ALERT_JOB_TYPE), inArray(appointmentFulfillmentJobs.status, ["queued", "retry", "running"]))).limit(1);
+  if (waiting) return;
+  const now = new Date();
+  await db.insert(appointmentFulfillmentJobs).values({
+    appointmentId,
+    jobType: QUOTA_ALERT_JOB_TYPE,
+    status: "queued",
+    attempts: 0,
+    maxAttempts: APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS,
+    scheduledFor: now,
+  }).onConflictDoUpdate({
+    target: [appointmentFulfillmentJobs.appointmentId, appointmentFulfillmentJobs.jobType],
+    set: { status: "queued", attempts: 0, maxAttempts: APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS, scheduledFor: now, startedAt: null, finishedAt: null, lastError: null, updatedAt: now },
+    setWhere: inArray(appointmentFulfillmentJobs.status, ["completed", "failed"]),
+  });
+}
+
+/**
  * The patient emails, and the owner's alerts that one did not go out, which
  * give the patient's details: closed unsent once those details are erased
  * (RGPD-12), as are the bounce alerts.
@@ -277,8 +310,9 @@ function jobPaymentStatus(jobType: string) {
   return isRefundNoticeJob(alertedPatientJob(jobType) ?? jobType) ? "refunded" : "completed";
 }
 
-/** Whether a job is sent for an appointment with this payment status: a bounce alert, for a paid or refunded one. */
+/** Whether a job is sent for an appointment with this payment status: a bounce alert, for a paid or refunded one; the quota alert, whatever it is. */
 function jobSentFor(jobType: string, paymentStatus: string) {
+  if (jobType === QUOTA_ALERT_JOB_TYPE) return true;
   return isBounceAlertJob(jobType) ? paymentStatus === "completed" || paymentStatus === "refunded" : paymentStatus === jobPaymentStatus(jobType);
 }
 
@@ -675,7 +709,7 @@ async function runJob(id: number) {
   if (!db) throw new Error("Database connection failed");
   const [job] = await db.select().from(appointmentFulfillmentJobs).where(eq(appointmentFulfillmentJobs.id, id)).limit(1);
   if (!job || job.status !== "running") return { skipped: true };
-  const jobType = job.jobType as FulfillmentJobType | FailureAlertJobType | BounceAlertJobType;
+  const jobType = job.jobType as FulfillmentJobType | FailureAlertJobType | BounceAlertJobType | typeof QUOTA_ALERT_JOB_TYPE;
   const [appointment] = await db.select().from(appointments).where(eq(appointments.id, job.appointmentId)).limit(1);
   const refundNotice = isRefundNoticeJob(jobType) && appointment ? await refundNoticeOf(appointment) : null;
   // A refund closes the post-payment jobs still waiting; the patient refund
@@ -765,6 +799,15 @@ async function runJob(id: number) {
       await waitForJobSendSlot();
       // The PDF stays in French whatever the language of the email (EN-01).
       await sendInvoiceEmail(appointment.customerEmail, appointment.customerName, appointment.trackingId, finalPrice, invoice.buffer, invoiceRecord.invoiceNumber, { idempotencyKey: patientEmailIdempotencyKey(`appointment-invoice-${invoiceRecord.invoiceNumber}`, appointment.customerEmail), language });
+    } else if (jobType === QUOTA_ALERT_JOB_TYPE) {
+      await waitForJobSendSlot();
+      const sent = await sendQueuedSecurityAlert(RESEND_QUOTA_SECURITY_CATEGORY);
+      if (!sent) throw new Error("quota_alert_not_sent");
+      if (sent === "covered") {
+        // Told by an alert of the same window, sent at once since it was queued.
+        await db.update(appointmentFulfillmentJobs).set({ status: "completed", finishedAt: new Date(), lastError: "quota_alert_covered" }).where(eq(appointmentFulfillmentJobs.id, id));
+        return { skipped: true };
+      }
     } else if (isBounceAlertJob(jobType)) {
       // The owner's alert that the patient's address bounced an email Resend
       // had accepted (EXPL-13). Once that address is corrected on the
@@ -898,8 +941,14 @@ export async function processDueAppointmentFulfillmentJobs(limit = MAX_BATCH, op
       endTurn(claimed);
     }
     if (!claimed) continue;
-    // A send made again within the job (retry-after, short backoff) and its owner alerts take their slot as well.
-    const run = () => runWithSendSlot(SEND_SLOT, () => runJob(job.id));
+    // A send made again within the job (retry-after, short backoff) and its owner alerts take their slot as well;
+    // a used-up quota's security alert that misses it is queued for the next run (QUOTA_ALERT_JOB_TYPE).
+    const deferAlert = async (category: string) => {
+      if (category !== RESEND_QUOTA_SECURITY_CATEGORY) return false;
+      await queueQuotaAlert(db, job.appointmentId);
+      return true;
+    };
+    const run = () => runWithSendSlot({ ...SEND_SLOT, deferAlert }, () => runJob(job.id));
     try {
       results.push(await (deadlineAt === undefined
         ? run()
@@ -977,7 +1026,7 @@ export async function recoverStaleAppointmentFulfillmentJobs(staleAfterMs = APPO
   if (exhausted > 0) {
     await notifyOwner({
       title: "Envois post-paiement interrompus",
-      content: `${exhausted} envoi(s) après paiement ou remboursement (notification de réservation, confirmation, facture, email ou alerte de remboursement, alerte d’échec d’envoi ou d’email non reçu par le patient) ont été interrompus après le nombre maximal de tentatives. Vérifiez dans le tableau de bord les rendez-vous concernés (encart « À traiter ») et effectuez un envoi manuel si nécessaire.`,
+      content: `${exhausted} envoi(s) après paiement ou remboursement (notification de réservation, confirmation, facture, email ou alerte de remboursement, alerte d’échec d’envoi, d’email non reçu par le patient ou de quota d’envoi épuisé) ont été interrompus après le nombre maximal de tentatives. Vérifiez dans le tableau de bord les rendez-vous concernés (encart « À traiter ») et effectuez un envoi manuel si nécessaire.`,
     }).catch(() => false);
   }
   return { recovered, exhausted };

@@ -7,25 +7,28 @@ import { TEST_PEPPER } from "./testSupport/candidatePortal";
 // l’email « Alerte sécurité — resend_quota_exceeded » prend le créneau d’envoi
 // du traitement, une pause après l’alerte refusée, au lieu de partir quelques
 // millisecondes après elle ; quand ce créneau tomberait après la fin du budget
-// d’un traitement immédiat, il ne part pas alors, et l’événement suivant de la
-// même catégorie l’envoie. Vraies procédures, vraie file, vraies alertes ;
-// seul Resend (transport) est simulé.
+// d’un traitement immédiat, il ne part pas alors : il est mis en file et le
+// passage suivant l’envoie, même si le quota est revenu entre-temps, une seule
+// fois par période. Vraies procédures, vraie file, vraies alertes ; seul
+// Resend (transport) est simulé.
 
 process.env.CANDIDATE_AUTH_PEPPER ||= TEST_PEPPER;
 
 const resend = vi.hoisted(() => ({
-  calls: [] as Array<{ subject: string; to: string; at: number }>,
+  calls: [] as Array<{ subject: string; to: string; at: number; text?: string }>,
   // Adresses refusées par Resend (422).
   rejected: new Set<string>(),
+  // Quota quotidien épuisé pour les alertes « Échec d’envoi » au médecin.
+  quotaUsedUp: true,
 }));
 vi.mock("resend", () => ({
   Resend: vi.fn().mockImplementation(() => ({
     emails: {
-      send: vi.fn(async (message: { subject: string; to: string[] }) => {
-        resend.calls.push({ subject: message.subject, to: message.to[0]!, at: Date.now() });
+      send: vi.fn(async (message: { subject: string; to: string[]; text?: string }) => {
+        resend.calls.push({ subject: message.subject, to: message.to[0]!, at: Date.now(), text: message.text });
         if (resend.rejected.has(message.to[0]!)) return { data: null, error: { name: "validation_error", statusCode: 422, message: "Invalid `to` field." } };
         // The owner's « Échec d’envoi » alerts meet the used-up daily quota.
-        if (message.subject.startsWith("Échec d’envoi")) return { data: null, error: { name: "daily_quota_exceeded", statusCode: 429, message: "You have reached your daily quota." } };
+        if (resend.quotaUsedUp && message.subject.startsWith("Échec d’envoi")) return { data: null, error: { name: "daily_quota_exceeded", statusCode: 429, message: "You have reached your daily quota." } };
         return { data: { id: `email_${resend.calls.length}` }, error: null };
       }),
     },
@@ -36,6 +39,7 @@ vi.mock("./db", () => ({ getDb: async () => state.memory?.db ?? null }));
 
 import { postPaymentDeliveryRetry } from "./_core/notifications";
 import { appointmentFulfillmentPacing, processAppointmentFulfillmentNow, processDueAppointmentFulfillmentJobs } from "./appointmentFulfillment";
+import { logSecurityEvent } from "./candidateSecurity";
 
 const PAUSE_MS = 300;
 const SECURITY_ALERT = "Alerte sécurité — resend_quota_exceeded — Hippocampus Consulting";
@@ -63,12 +67,16 @@ function seedRefusedConfirmation(trackingId: string) {
 
 const sent = (subject: string) => resend.calls.filter(call => call.subject.startsWith(subject));
 const quotaEvents = () => memory.rows(securityEvents).filter(event => event.category === "resend_quota_exceeded");
+const quotaAlertJobs = () => memory.rows(appointmentFulfillmentJobs).filter(row => row.job_type === "quota_alert");
+/** Room for the confirmation and its failure alert, a pause later, not for one more pause: the security alert misses its slot. */
+const tightBudget = () => ({ deadlineAt: Date.now() + PAUSE_MS * 1.5 });
 
 beforeEach(async () => {
   memory = createMemoryPg([appointments, appointmentFulfillmentJobs, securityEvents, candidateSecurityRateLimits]);
   state.memory = memory;
   resend.calls.length = 0;
   resend.rejected.clear();
+  resend.quotaUsedUp = true;
   postPaymentDeliveryRetry.delaysMs = [0, 0];
   appointmentFulfillmentPacing.delayMs = PAUSE_MS;
   vi.stubEnv("RESEND_API_KEY", "re_test_quota_alert");
@@ -101,22 +109,76 @@ describe("ABUS-03 — l’alerte « quota Resend épuisé » levée pendant les 
     expect(quotaEvents()).toHaveLength(1);
   }, 10_000);
 
-  it("ne part pas après la fin du budget d’un traitement immédiat, sans être perdue : l’événement suivant l’envoie", async () => {
+  it("ne part pas après la fin du budget d’un traitement immédiat, sans être perdue : mise en file, le passage suivant l’envoie dans son créneau, une seule fois", async () => {
     const id = seedRefusedConfirmation("APTQUOTA0002");
 
-    // Room for the confirmation and its failure alert, a pause later, not for one more pause.
-    await processAppointmentFulfillmentNow(id, { deadlineAt: Date.now() + PAUSE_MS * 1.5 });
+    await processAppointmentFulfillmentNow(id, tightBudget());
 
     expect(resend.calls.map(call => call.subject)).toEqual([expect.stringContaining("APTQUOTA0002"), "Échec d’envoi après paiement (APTQUOTA0002)"]);
     expect(sent(SECURITY_ALERT)).toEqual([]);
     expect(quotaEvents()).toHaveLength(1);
+    expect(quotaAlertJobs()).toEqual([expect.objectContaining({ appointment_id: id, status: "queued", attempts: 0 })]);
 
-    // The failure alert, queued, meets the quota again at the next run: that event sends the security alert.
+    // The next run sends the queued security alert; the failure alert, queued too, meets the quota again
+    // within that alert's window: no second security alert.
     await processDueAppointmentFulfillmentJobs();
 
-    expect(sent("Échec d’envoi")).toHaveLength(2);
     expect(sent(SECURITY_ALERT)).toHaveLength(1);
-    expect(sent(SECURITY_ALERT)[0].at - sent("Échec d’envoi")[1].at).toBeGreaterThanOrEqual(PAUSE_MS - 5);
+    expect(sent("Échec d’envoi")).toHaveLength(2);
+    expect(Math.abs(sent("Échec d’envoi")[1].at - sent(SECURITY_ALERT)[0].at)).toBeGreaterThanOrEqual(PAUSE_MS - 5);
     expect(quotaEvents()).toHaveLength(2);
+    expect(quotaAlertJobs()).toEqual([expect.objectContaining({ status: "completed", last_error: null })]);
+  }, 10_000);
+
+  it("part au passage suivant même si le quota est revenu entre-temps, sans nouvel événement de quota pour la relancer", async () => {
+    const id = seedRefusedConfirmation("APTQUOTA0003");
+    await processAppointmentFulfillmentNow(id, tightBudget());
+    expect(sent(SECURITY_ALERT)).toEqual([]);
+
+    // The quota resets before the scheduled run: nothing meets it any more.
+    resend.quotaUsedUp = false;
+    await processDueAppointmentFulfillmentJobs();
+
+    expect(quotaEvents()).toHaveLength(1);
+    expect(sent("Échec d’envoi")).toHaveLength(2);
+    const [alert] = sent(SECURITY_ALERT);
+    // Said to have waited, with the quota events of the day, not only of the last hour.
+    expect(alert.text).toContain("Alerte reportée : levée pendant les envois qui suivent un paiement");
+    expect(alert.text).toContain("Événements de ce type sur les dernières 24 heures : 1.");
+    expect(quotaAlertJobs()).toEqual([expect.objectContaining({ status: "completed", attempts: 1, last_error: null })]);
+
+    // Nothing is left for the run after.
+    await processDueAppointmentFulfillmentJobs();
+    expect(sent(SECURITY_ALERT)).toHaveLength(1);
+  }, 10_000);
+
+  it("une seule en file par période, quel que soit le rendez-vous dont l’email a rencontré le quota", async () => {
+    const first = seedRefusedConfirmation("APTQUOTA0004");
+    const second = seedRefusedConfirmation("APTQUOTA0005");
+    await processAppointmentFulfillmentNow(first, tightBudget());
+    await new Promise(resolve => setTimeout(resolve, PAUSE_MS));
+    await processAppointmentFulfillmentNow(second, tightBudget());
+
+    expect(quotaEvents()).toHaveLength(2);
+    expect(quotaAlertJobs()).toEqual([expect.objectContaining({ appointment_id: first, status: "queued" })]);
+
+    resend.quotaUsedUp = false;
+    await processDueAppointmentFulfillmentJobs();
+    expect(sent(SECURITY_ALERT)).toHaveLength(1);
+  }, 10_000);
+
+  it("n’envoie rien de plus quand une alerte de la même période est partie aussitôt entre-temps", async () => {
+    const id = seedRefusedConfirmation("APTQUOTA0006");
+    await processAppointmentFulfillmentNow(id, tightBudget());
+
+    // Another email meets the quota outside a processing that spaces its sends: its alert leaves at once.
+    await logSecurityEvent({ actorKind: "system", category: "resend_quota_exceeded", outcome: "failed", severity: "high", metadata: { quota: "daily", emailKind: "cv_confirmation" } });
+    expect(sent(SECURITY_ALERT)).toHaveLength(1);
+
+    resend.quotaUsedUp = false;
+    await processDueAppointmentFulfillmentJobs();
+
+    expect(sent(SECURITY_ALERT)).toHaveLength(1);
+    expect(quotaAlertJobs()).toEqual([expect.objectContaining({ status: "completed", last_error: "quota_alert_covered" })]);
   }, 10_000);
 });
