@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, realpathSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import os from "node:os";
@@ -303,8 +303,13 @@ function simpleCommands(command: string) {
   return commands;
 }
 
-/** The step that runs this check alone, so that a vitest configuration leaving it out of the suite fails the job. */
-const GUARD_COMMAND = "pnpm vitest run server/ciWorkflow.test.ts --passWithNoTests=false";
+/**
+ * The step that runs this check alone, with a configuration of its own
+ * (scripts/ci-workflow.vitest.config.mjs): a vitest.config.ts leaving it out of the suite,
+ * or running code before the tests (a globalSetup ending the run with success), neither
+ * keeps it from running nor runs before it, and it then refuses that vitest.config.ts.
+ */
+const GUARD_COMMAND = "pnpm vitest run server/ciWorkflow.test.ts --config scripts/ci-workflow.vitest.config.mjs --passWithNoTests=false";
 
 /**
  * The commands the quality job must run, each a simple command one of its steps runs
@@ -606,9 +611,12 @@ function readJsonWithComments(file: string, text: string) {
  * under any name: not `exclude: ['**']`, `include: []`, nor a `testNamePattern`, as
  * `vitest run -t` is refused above. The files are those vitest itself finds with it, and
  * `passWithNoTests` is refused too. One that leaves out this file never runs this check in
- * the suite: the step « Check this workflow » then fails (guardStepRun below).
+ * the suite: the step « Check this workflow » runs it all the same (guardStepRun below). The
+ * project's configuration is compared with its listed text before vitest loads it here, so
+ * that code added to it never runs in this check.
  */
 async function expectVitestRunsEveryTest(config?: string) {
+  if (config === undefined) expectVitestConfigAsListed(readFileSync(path.join(root, "vitest.config.ts"), "utf8"), readdirSync(root));
   const vitest = await createVitest("test", { root, config, watch: false }, { server: { watch: null } });
   try {
     const run = new Set((await vitest.globTestSpecifications()).map(specification => fromRoot(specification.moduleId)));
@@ -621,26 +629,182 @@ async function expectVitestRunsEveryTest(config?: string) {
 }
 
 /**
- * The test files vitest finds for the command of the step « Check this workflow », with the
- * project's configuration (`config`, a file of its own in a test), and whether it then passes
- * with none: when it finds none and does not, vitest exits 1 and the job fails.
+ * What the command of the step « Check this workflow » runs: the configuration file it reads,
+ * its projects (the one of its own, which leaves a workspace file unread), the test files it
+ * finds, and whether it then passes with none: when it finds none and does not, vitest exits
+ * 1 and the job fails.
  */
-async function guardStepRun(config?: string) {
+async function guardStepRun() {
   const { filter, options } = parseCLI(GUARD_COMMAND.replace(/^pnpm /, ""));
-  const vitest = await createVitest("test", { ...options, root, config, watch: false }, { server: { watch: null } });
+  const vitest = await createVitest("test", { ...options, root, watch: false }, { server: { watch: null } });
   try {
     const files = (await vitest.globTestSpecifications(filter)).map(specification => fromRoot(specification.moduleId));
-    return { files, passWithNoTests: vitest.config.passWithNoTests ?? false };
+    const configFile = vitest.vite.config.configFile ? fromRoot(vitest.vite.config.configFile) : null;
+    return { configFile, projects: vitest.projects.map(project => project.name), files, passWithNoTests: vitest.config.passWithNoTests ?? false };
   } finally {
     await vitest.close();
   }
 }
 
 /**
+ * vitest.config.ts as it is. A vitest configuration is code, which runs before any test and
+ * which no step's command shows: one line of `setupFiles` making every assertion pass, or of
+ * `globalSetup` exiting with 0, outside this check alone, leaves the suite and this step
+ * green; so would an alias of `vitest`, an `environment`, a reporter or an exit listener of
+ * its own. As for the quality job, a list of what it may not hold is got round: any change
+ * of it is a change of this text, read in review (CODE-14). Nor may a workspace file, which
+ * vitest reads beside it (vitest.workspace.*, vitest.projects.*), add projects of their own.
+ */
+const VITEST_CONFIG = `import { defineConfig } from "vitest/config";
+import path from "path";
+
+const templateRoot = path.resolve(import.meta.dirname);
+
+export default defineConfig({
+  root: templateRoot,
+  // Même runtime JSX que l'application (@vitejs/plugin-react) pour les tests qui rendent des composants.
+  esbuild: { jsx: "automatic" },
+  resolve: {
+    alias: {
+      "@": path.resolve(templateRoot, "client", "src"),
+      "@shared": path.resolve(templateRoot, "shared"),
+      "@assets": path.resolve(templateRoot, "attached_assets"),
+    },
+  },
+  test: {
+    environment: "node",
+    // Critical screens mounted by React with Testing Library declare \`// @vitest-environment happy-dom\`.
+    // Their DOM loads no script, style sheet or frame and never navigates, so no test reaches the network.
+    environmentOptions: {
+      happyDOM: {
+        url: "https://drahmedbenlallahom.com/",
+        settings: {
+          disableJavaScriptFileLoading: true,
+          disableCSSFileLoading: true,
+          disableIframePageLoading: true,
+          navigation: { disableMainFrameNavigation: true, disableChildFrameNavigation: true, disableChildPageNavigation: true },
+        },
+      },
+    },
+    include: ["server/**/*.test.ts", "server/**/*.spec.ts", "client/**/*.test.ts", "client/**/*.spec.ts"],
+  },
+});
+`;
+
+const VITEST_WORKSPACE_FILE = /^vitest\.(?:workspace|projects)\./;
+
+function expectVitestConfigAsListed(config: string, rootFiles: readonly string[]) {
+  expect(config, "vitest.config.ts").toBe(VITEST_CONFIG);
+  expect(rootFiles.filter(file => VITEST_WORKSPACE_FILE.test(file)), "vitest: workspace files").toEqual([]);
+}
+
+/**
+ * A version range of the registry (« 3.3.7 », « ^6.29.1 », « >=1 <2 »), whose package the
+ * lockfile pins by its integrity: not another package under the name (`npm:`), a directory
+ * of the repository (`file:`, `link:`), a git repository or an address, whose code would run
+ * in place of tsc, vitest or knip once installed.
+ */
+const REGISTRY_VERSION = /^(?=.*\d)[\w.^~<>=|* -]+$/;
+
+/** The settings of pnpm-workspace.yaml, and of package.json's `pnpm` field: any other is a change of these lists. */
+const PNPM_WORKSPACE_KEYS = ["packages", "overrides", "allowBuilds"];
+const PACKAGE_PNPM_KEYS = ["overrides"];
+
+/**
+ * What runs code of the repository during the install or changes a package's code, in any
+ * of pnpm's configuration files, any case: a pnpmfile (`pnpmfile`, `global-pnpmfile`), a
+ * patch of a package (`patchedDependencies`), a package's manifest extended.
+ */
+const PNPM_CODE_SETTINGS = /pnpmfile|patched[-_]?dependencies|package[-_]?extensions/i;
+
+/**
+ * The top-level keys of pnpm-workspace.yaml, each with its lines (no YAML library among
+ * the dependencies): a line not indented opens a key, the indented ones that follow are its
+ * own. A value written on the key's line, in flow style (`overrides: { … }`), is kept there.
+ */
+function pnpmWorkspaceSettings(workspace: string) {
+  const settings: Record<string, { value: string; lines: string[] }> = {};
+  let key = "";
+  for (const line of workspace.split("\n")) {
+    if (!line.trim() || line.trim().startsWith("#")) continue;
+    const entry = /^([\w-]+):\s*(.*)$/.exec(line);
+    if (entry) settings[(key = entry[1]!)] = { value: entry[2]!.replace(/\s+#.*$/, ""), lines: [] };
+    else if (key && /^\s/.test(line)) settings[key]!.lines.push(line.trim());
+    else throw new Error(`pnpm-workspace.yaml: unexpected line: ${line}`);
+  }
+  return settings;
+}
+
+/**
+ * pnpm installs what the lockfile pins, as published, and runs no code of the repository
+ * while installing (CODE-14): no .pnpmfile at the root, which pnpm loads by itself, nor any
+ * setting naming one; no patch of a package nor manifest extended; pnpm-workspace.yaml and
+ * package.json's `pnpm` field set only what is listed above; each override (their
+ * `overrides`, package.json's `resolutions`) and each dependency a registry version range.
+ * A pnpmfile replacing node_modules/typescript/bin/tsc ran during the install, before the
+ * frozen lockfile refused its checksum, and `pnpm check` then passed with a type error.
+ */
+function expectPnpmInstallsTheLockedPackages({ packageJson, workspace, npmrc, rootFiles }: { packageJson: string; workspace?: string; npmrc?: string; rootFiles: readonly string[] }) {
+  expect(rootFiles.filter(file => /^\.?pnpmfile\b/i.test(file)), "pnpm: pnpmfile").toEqual([]);
+  const manifest = JSON.parse(packageJson) as Record<string, unknown>;
+  const pnpmField = (manifest.pnpm ?? {}) as Record<string, unknown>;
+  for (const [file, text] of [[".npmrc", npmrc], ["pnpm-workspace.yaml", workspace], ["package.json: pnpm", JSON.stringify(pnpmField)]] as const) {
+    if (text !== undefined) expect(text, file).not.toMatch(PNPM_CODE_SETTINGS);
+  }
+  expect(Object.keys(pnpmField).filter(key => !PACKAGE_PNPM_KEYS.includes(key)), "package.json: pnpm settings").toEqual([]);
+  const versions: Array<[string, unknown]> = [];
+  const entries = (where: string, map: unknown) => {
+    for (const [name, spec] of Object.entries((map ?? {}) as Record<string, unknown>)) versions.push([`${where} ${name}`, spec]);
+  };
+  entries("pnpm.overrides", pnpmField.overrides);
+  entries("resolutions", manifest.resolutions);
+  for (const field of ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"]) entries(field, manifest[field]);
+  if (workspace !== undefined) {
+    const settings = pnpmWorkspaceSettings(workspace);
+    expect(Object.keys(settings).filter(key => !PNPM_WORKSPACE_KEYS.includes(key)), "pnpm-workspace.yaml: settings").toEqual([]);
+    if (settings.packages) expect(settings.packages.lines.map(line => yamlValue(line.replace(/^-\s*/, ""))), "pnpm-workspace.yaml: packages").toEqual(["."]);
+    if (settings.overrides) {
+      expect(settings.overrides.value, "pnpm-workspace.yaml: overrides, one a line").toBe("");
+      for (const line of settings.overrides.lines) {
+        const override = /^('[^']*'|"[^"]*"|[^\s'"][^:]*):\s+(.+)$/.exec(line);
+        if (!override) throw new Error(`pnpm-workspace.yaml: unreadable override: ${line}`);
+        versions.push([`overrides ${yamlValue(override[1]!)}`, yamlValue(override[2]!.replace(/\s+#.*$/, ""))]);
+      }
+    }
+  }
+  expect(versions.filter(([, spec]) => typeof spec !== "string" || !REGISTRY_VERSION.test(spec)), "pnpm: versions other than the registry's").toEqual([]);
+}
+
+/**
+ * What makes a script the quality job runs by its file (`node scripts/….mjs`) pass whatever
+ * it checks, or change what the next steps run: an exit with 0 forced (`process.exit(0)`,
+ * `process.exit()`, `process.exitCode = 0`, `process.reallyExit`), a line written to
+ * $GITHUB_ENV or $GITHUB_PATH, a NODE_OPTIONS. These scripts are code: this list catches
+ * the plain forms, another way to exit or a module they import is read in review.
+ */
+const FORCED_SUCCESS = /\bprocess\s*\.\s*(?:exit\s*\(\s*(?:0\s*)?\)|exitCode\s*=\s*0\b|reallyExit\b)/;
+const SCRIPT_ENVIRONMENT_CHANGES = /\bGITHUB_(?:ENV|PATH)\b|::(?:set-env|add-path)\b/;
+
+/** The scripts the steps of the quality job run by their file. */
+const SCRIPTS_RUN_BY_FILE = QUALITY_STEPS.flatMap(step => (step.run ?? "").split("\n").flatMap(command => /^node (scripts\/\S+\.mjs)$/.exec(command)?.[1] ?? []));
+
+function expectScriptsRunByFileFinish(scripts: Readonly<Record<string, string>>) {
+  for (const [file, script] of Object.entries(scripts)) {
+    expect(script, `${file}: forced success`).not.toMatch(FORCED_SUCCESS);
+    expect(script, `${file}: environment changes`).not.toMatch(SCRIPT_ENVIRONMENT_CHANGES);
+    expect(script, `${file}: NODE_OPTIONS`).not.toMatch(NODE_OPTIONS);
+  }
+}
+
+/** The type checks `strict` turns on, none of which may be turned off one by one. */
+const STRICT_CHECKS = ["noImplicitAny", "noImplicitThis", "strictNullChecks", "strictFunctionTypes", "strictBindCallApply", "strictPropertyInitialization", "strictBuiltinIteratorReturn", "useUnknownInCatchVariables", "alwaysStrict"] as const;
+
+/**
  * tsconfig.json, which no step's command shows either, read as TypeScript reads it (its
  * `extends`, `files`, `include` and `exclude`): `tsc --noEmit` checks the types of every
- * source file of client/src, server and shared. Not `include: []`, nor `noCheck`, as
- * `tsc --noCheck` is refused above.
+ * source file of client/src, server and shared, in strict mode. Not `include: []`, nor
+ * `noCheck`, as `tsc --noCheck` is refused above, nor `strict: false` or one of its checks
+ * turned off.
  */
 function expectTypeScriptChecksEverySource(tsconfig: string) {
   const file = path.join(root, "tsconfig.json");
@@ -648,6 +812,8 @@ function expectTypeScriptChecksEverySource(tsconfig: string) {
   const checked = new Set(parsed.fileNames.map(fromRoot));
   expect(repositorySources().filter(source => !checked.has(source)), "tsconfig.json: source files left out").toEqual([]);
   expect(parsed.options.noCheck ?? false, "tsconfig.json: noCheck").toBe(false);
+  expect(parsed.options.strict ?? false, "tsconfig.json: strict").toBe(true);
+  expect(STRICT_CHECKS.filter(option => parsed.options[option] === false), "tsconfig.json: strict checks turned off").toEqual([]);
 }
 
 /** The matcher knip compares its file patterns with (picomatch), taken from knip's own dependencies. */
@@ -1216,9 +1382,93 @@ describe("intégration continue GitHub", () => {
     expect(repositoryTests()).toEqual(expect.arrayContaining(["server/ciWorkflow.test.ts", "server/recruitmentLanguages.test.ts", "client/src/components/RecruitmentTab.actions.test.ts"]));
     expect(repositorySources()).toEqual(expect.arrayContaining(["client/src/main.tsx", "server/_core/index.ts", "server/routers/admin/recruitment.ts", "shared/recruitmentLanguages.ts"]));
     await expectVitestRunsEveryTest();
-    await expect(guardStepRun(), "Check this workflow").resolves.toEqual({ files: ["server/ciWorkflow.test.ts"], passWithNoTests: false });
+    // Its own step reads neither vitest.config.ts nor a workspace file: only its configuration and its project.
+    await expect(guardStepRun(), "Check this workflow").resolves.toEqual({ configFile: "scripts/ci-workflow.vitest.config.mjs", projects: ["ci-workflow"], files: ["server/ciWorkflow.test.ts"], passWithNoTests: false });
     expectTypeScriptChecksEverySource(tsconfig);
     expectKnipReadsEverySource(knip, (JSON.parse(packageJson) as { knip?: Record<string, unknown> }).knip);
+  }, 30_000);
+
+  it("ne laisse vitest exécuter que sa configuration listée, pnpm installer que les paquets du lockfile, ni un script lancé par son fichier réussir d'office (CODE-14)", async () => {
+    const rootFiles = readdirSync(root);
+    expectVitestConfigAsListed(await read("vitest.config.ts"), rootFiles);
+    const optional = async (file: string) => (existsSync(path.join(root, file)) ? read(file) : undefined);
+    expectPnpmInstallsTheLockedPackages({ packageJson: await read("package.json"), workspace: await optional("pnpm-workspace.yaml"), npmrc: await optional(".npmrc"), rootFiles });
+    expect(SCRIPTS_RUN_BY_FILE).toEqual(["scripts/check-performance-budgets.mjs", "scripts/smoke-built-server.mjs", "scripts/check-migrations-in-sync.mjs"]);
+    expectScriptsRunByFileFinish(Object.fromEntries(await Promise.all(SCRIPTS_RUN_BY_FILE.map(async file => [file, await read(file)] as const))));
+  });
+
+  it("refuse setupFiles, globalSetup ou tout autre ajout à vitest.config.ts, un pnpmfile, un correctif ou une version hors du registre, un script qui réussit d'office et strict: false (CODE-14)", async () => {
+    // vitest: the lines that neutralised `pnpm test:ci` while this check alone kept passing.
+    const config = await read("vitest.config.ts");
+    const include = '    include: ["server/**/*.test.ts", "server/**/*.spec.ts", "client/**/*.test.ts", "client/**/*.spec.ts"],\n';
+    expect(config).toContain(include);
+    expect(() => expectVitestConfigAsListed(config, ["package.json", "vitest.config.ts"])).not.toThrow();
+    for (const line of ['    setupFiles: ["server/testing/ciSetup.ts"],\n', '    globalSetup: ["server/testing/ciGlobalSetup.ts"],\n', '    environment: "./ci-environment.ts",\n', '    alias: { vitest: "./ci-vitest.ts" },\n']) {
+      expect(() => expectVitestConfigAsListed(config.replace(include, `${include}${line}`), []), line).toThrow(/^vitest\.config\.ts: /);
+    }
+    expect(() => expectVitestConfigAsListed(`${config}process.on("exit", () => { process.exitCode = 0; });\n`, [])).toThrow(/^vitest\.config\.ts: /);
+    for (const file of ["vitest.workspace.ts", "vitest.projects.json"]) {
+      expect(() => expectVitestConfigAsListed(config, [file]), file).toThrow(/^vitest: workspace files/);
+    }
+
+    // pnpm: the project's files, then one of them changed.
+    const [packageJson, workspace] = await Promise.all([read("package.json"), read("pnpm-workspace.yaml")]);
+    const manifest = JSON.parse(packageJson) as Record<string, Record<string, unknown>>;
+    const pnpmWith = (changes: { packageJson?: Record<string, unknown>; workspace?: string; npmrc?: string; rootFiles?: string[] }) => () =>
+      expectPnpmInstallsTheLockedPackages({ packageJson: JSON.stringify({ ...manifest, ...changes.packageJson }), workspace: changes.workspace ?? workspace, npmrc: changes.npmrc, rootFiles: changes.rootFiles ?? ["package.json", "pnpm-workspace.yaml"] });
+    expect(pnpmWith({})).not.toThrow();
+    expect(pnpmWith({ npmrc: "engine-strict=true\nauto-install-peers=true\n" })).not.toThrow();
+    for (const file of [".pnpmfile.cjs", ".pnpmfile.mjs"]) expect(pnpmWith({ rootFiles: ["package.json", file] }), file).toThrow(/^pnpm: pnpmfile/);
+    for (const npmrc of ["pnpmfile=./ci/hooks.cjs\n", "global-pnpmfile=./ci/hooks.cjs\n"]) expect(pnpmWith({ npmrc }), npmrc).toThrow(/^\.npmrc: /);
+    for (const setting of ["pnpmfile: ./ci/hooks.cjs", "patchedDependencies:\n  typescript: patches/typescript.patch", "packageExtensions:\n  knip:\n    dependencies:\n      ci-shim: 1.0.0"]) {
+      expect(pnpmWith({ workspace: `${workspace}\n${setting}\n` }), setting).toThrow(/^pnpm-workspace\.yaml: /);
+    }
+    expect(pnpmWith({ workspace: `${workspace}\ncatalog:\n  vitest: 3.2.4\n` })).toThrow(/^pnpm-workspace\.yaml: settings/);
+    expect(pnpmWith({ workspace: workspace.replace('  - "."\n', '  - "."\n  - "tools/*"\n') })).toThrow(/^pnpm-workspace\.yaml: packages/);
+    for (const override of ["typescript: npm:ci-typescript@5.9.3", "vitest: file:./ci/vitest", "knip: link:./ci/knip", "'@vitejs/plugin-react': github:someone/plugin-react", "tsx: https://example.test/tsx.tgz", "typescript: -"]) {
+      expect(pnpmWith({ workspace: workspace.replace("\noverrides:\n", `\noverrides:\n  ${override}\n`) }), override).toThrow(/^pnpm: versions other than the registry's/);
+    }
+    expect(pnpmWith({ workspace: workspace.replace(/\noverrides:\n(?: {2}.*\n)+/, '\noverrides: { typescript: "npm:ci-typescript@5.9.3" }\n') })).toThrow(/^pnpm-workspace\.yaml: overrides, one a line/);
+    const pnpmField = manifest.pnpm as Record<string, Record<string, string>>;
+    for (const field of [
+      { pnpm: { ...pnpmField, patchedDependencies: { typescript: "patches/typescript.patch" } } },
+      { pnpm: { ...pnpmField, packageExtensions: { knip: { dependencies: { "ci-shim": "1.0.0" } } } } },
+    ]) {
+      expect(pnpmWith({ packageJson: field }), JSON.stringify(field)).toThrow(/^package\.json: pnpm: /);
+    }
+    expect(pnpmWith({ packageJson: { pnpm: { ...pnpmField, neverBuiltDependencies: [] } } })).toThrow(/^package\.json: pnpm settings/);
+    for (const field of [
+      { pnpm: { overrides: { ...pnpmField.overrides, typescript: "npm:ci-typescript@5.9.3" } } },
+      { resolutions: { vitest: "file:./ci/vitest" } },
+      { devDependencies: { ...manifest.devDependencies, typescript: "file:./ci/typescript" } },
+      { dependencies: { ...manifest.dependencies, zod: "git+https://example.test/zod.git" } },
+    ]) {
+      expect(pnpmWith({ packageJson: field }), JSON.stringify(field).slice(0, 80)).toThrow(/^pnpm: versions other than the registry's/);
+    }
+
+    // The scripts run by their file: an exit with 0 forced, the next steps' PATH changed.
+    const budgets = await read("scripts/check-performance-budgets.mjs");
+    expect(() => expectScriptsRunByFileFinish({ "scripts/check-performance-budgets.mjs": budgets })).not.toThrow();
+    for (const [line, reason] of [
+      ["process.exit(0);", "forced success"],
+      ["process.exit();", "forced success"],
+      ["process.on(\"exit\", () => { process.exitCode = 0; });", "forced success"],
+      ["process.reallyExit(0);", "forced success"],
+      ['appendFileSync(process.env.GITHUB_PATH, "ci-bin\\n");', "environment changes"],
+      ['console.log("::add-path::ci-bin");', "environment changes"],
+      ['process.env.NODE_OPTIONS = "--require ./ci.cjs";', "NODE_OPTIONS"],
+    ]) {
+      expect(() => expectScriptsRunByFileFinish({ "scripts/check-performance-budgets.mjs": `${line}\n${budgets}` }), line).toThrow(new RegExp(`^scripts/check-performance-budgets\\.mjs: ${reason}`));
+    }
+
+    // TypeScript: strict mode, and each of its checks, kept.
+    const tsconfig = readJsonWithComments("tsconfig.json", await read("tsconfig.json"));
+    const strictWith = (compilerOptions: Record<string, unknown>) => () => expectTypeScriptChecksEverySource(JSON.stringify({ ...tsconfig, compilerOptions: { ...(tsconfig.compilerOptions as object), ...compilerOptions } }));
+    expect(strictWith({})).not.toThrow();
+    expect(strictWith({ strict: false })).toThrow(/^tsconfig\.json: strict/);
+    for (const option of ["strictNullChecks", "noImplicitAny", "useUnknownInCatchVariables"]) {
+      expect(strictWith({ [option]: false }), option).toThrow(/^tsconfig\.json: strict checks turned off/);
+    }
   }, 30_000);
 
   it("refuse une configuration de vitest, de TypeScript ou de knip qui écarte des tests ou des sources : exclude '**', include vide, ce contrôle écarté, ignore '**', entrées élargies, ignoreIssues (CODE-14)", async () => {
@@ -1242,12 +1492,10 @@ describe("intégration continue GitHub", () => {
       ] as const) {
         await expect(expectVitestRunsEveryTest(await vitestConfig(name, test)), name).rejects.toThrow(/^vitest: /);
       }
-      // This check alone left out, told to pass with none: never run in the suite, its own step finds
-      // no test file and fails, as the step does not let vitest pass with none.
+      // This check alone left out, told to pass with none: never run in the suite, refused here; its own
+      // step, which reads a configuration of its own, runs it all the same (see guardStepRun).
       const withoutGuard = await vitestConfig("without-guard", { include, exclude: ["**/node_modules/**", "server/ciWorkflow.test.ts"], passWithNoTests: true });
       await expect(expectVitestRunsEveryTest(withoutGuard)).rejects.toThrow(/^vitest: test files left out/);
-      await expect(guardStepRun(withoutGuard)).resolves.toEqual({ files: [], passWithNoTests: false });
-      await expect(guardStepRun(await vitestConfig("project-with-guard", { include }))).resolves.toEqual({ files: ["server/ciWorkflow.test.ts"], passWithNoTests: false });
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

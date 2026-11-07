@@ -47,10 +47,11 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Verify TypeScript
         run: pnpm check
-      # The check of this workflow, run alone as well: a vitest configuration that leaves it out
-      # of the suite finds no test file here, which fails even with passWithNoTests.
+      # The check of this workflow, run alone as well, with a configuration of its own: neither a
+      # vitest.config.ts that leaves it out of the suite nor one that runs code before the tests
+      # (setupFiles, globalSetup) keeps it from running, and it then refuses that vitest.config.ts.
       - name: Check this workflow
-        run: pnpm vitest run server/ciWorkflow.test.ts --passWithNoTests=false
+        run: pnpm vitest run server/ciWorkflow.test.ts --config scripts/ci-workflow.vitest.config.mjs --passWithNoTests=false
       - name: Run test suite
         run: pnpm test:ci
       - name: Verify production build
