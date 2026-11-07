@@ -1005,14 +1005,21 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       expect(result).toMatchObject({ hidden: "", unverifiable: "" });
     });
 
-    // A sign the run's font lacks (☎ in Arial), which Word may draw in a symbol font of no metrics (Segoe UI Symbol), or a character no
-    // font measured holds (an emoji, an Arabic letter, which Word shapes): of no bound, what follows it on the line is set aside; a sign
-    // the font holds (•) leaves room for the claims' first words.
-    it.each([["☎, que la police n’a pas", "☎"], ["une émoticône", "🙂"], ["une lettre arabe", "ب"]])("« Disponible » suivi de %s en Arial : les affirmations qui suivent sont écartées ; suivi de « • », leurs premiers mots sont lus", async (_, sign) => {
-      const result = await check(filled(`Disponible ${sign}`, font("Arial")));
+    // A sign the run's font lacks (☎ in Arial), which Word draws in a font of signs (Segoe UI Symbol), an emoji (Segoe UI Emoji), an
+    // Arabic letter in the run's complex script font (Times New Roman, Word's): each as wide as its bound (round 12), what follows it on
+    // the line is read as after a sign the font holds (•). A character no font measured holds (of the private use area, a Devanagari
+    // letter), or an Arabic letter in a complex script font of no bound (Andalus): what follows it on the line is set aside.
+    it.each([["☎, que la police n’a pas", "☎", ""], ["une émoticône", "🙂", ""], ["une lettre arabe", "ب", ""], ["•, qu’elle a", "•", ""]])("« Disponible » suivi de %s en Arial, borné : les premiers mots des affirmations qui suivent sont lus", async (_, sign, more) => {
+      const result = await check(filled(`Disponible ${sign}${more}`, font("Arial")));
+      expect(result.text).toContain(`Disponible ${sign}`);
+      expect(result.text).toContain("Titre : Médecin");
+      expectSetAside(result, FAKE[0]!);
+    });
+
+    it.each([["un caractère d’usage privé", "", ""], ["une lettre devanagari", "क", ""], ["une lettre arabe d’une police complexe sans borne (Andalus)", "ب", '<w:rFonts w:cs="Andalus"/>']])("« Disponible » suivi de %s en Arial, sans borne : les affirmations qui suivent sont écartées", async (_, sign, properties) => {
+      const result = await check(filled(`Disponible ${sign}`, `${font("Arial")}${properties}`));
       expect(result.text).toContain("Disponible");
       expectSetAside(result);
-      expect((await check(filled("Disponible •", font("Arial")))).text).toContain("Titre : Médecin");
     });
 
     // `start` is 364.6 pt wide in Calibri, 359.7 in its italic (Carlito Italic): a cell of 7456 twips leaves it 362 pt.
@@ -1629,5 +1636,225 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       const malformed = timedGrowth(scale => docx(honestLines() + "<".repeat(scaled(50_000, scale)) + "<!--x>".repeat(scaled(50_000, scale)) + `<w:p><w:r><w:t>${"<!--x".repeat(scaled(50_000, scale))}</w:t></w:r></w:p>`));
       expect(malformed.ms).toBeLessThan(malformed.bound);
     }, 60_000);
+  });
+});
+
+// Round 12 (IA-01): right-to-left scripts, signs and emoji bounded, so that what fits its frame with room to spare is read, and the
+// constructions Word draws otherwise than the check lays text out (fitted text, document grid, equations, imported documents, data
+// bound content, ruby, emphasis marks, combined or turned characters) of no extent known where room is scarce.
+describe("DOCX : écritures de droite à gauche, signes et émoticônes, constructions que Word dessine autrement (IA-01, 12e tour)", () => {
+  const ARABIC = "ممرضة عناية مركزة، خبرة خمس سنوات في مستشفى الملك فهد بالرياض.";
+  const PERSIAN = "پرستار مراقبت‌های ویژه، پنج سال سابقه در بیمارستان امام.";
+  const HEBREW = "אחות טיפול נמרץ, חמש שנות ניסיון בבית החולים שיבא.";
+  /** A paragraph of right-to-left text (w:bidi, w:rtl) in a complex script font, at 11 pt (w:szCs), of these paragraph properties. */
+  const rightToLeft = (text: string, properties = "", complexFont = "Arial", runProperties = "") =>
+    `<w:p><w:pPr><w:bidi/>${NO_SPACING}${properties}</w:pPr><w:r><w:rPr><w:rFonts w:cs="${complexFont}"/><w:rtl/><w:szCs w:val="22"/>${runProperties}</w:rPr><w:t xml:space="preserve">${escaped(text)}</w:t></w:r></w:p>`;
+  /** A DrawingML text box and its VML copy, of this size in points, Word's insets. */
+  const box = (content: string, width: number, height: number) => alternate(drawingBox(content, width * 12_700, height * 12_700), vmlBox(content, height, width));
+  /** `before` (runs) then the claims, in a row of one line of exact height (15 pt) and 439 pt, of these paragraph properties. */
+  const before = (inRuns: string, properties = "") => table(9000, [[exact(300), `<w:p><w:pPr>${NO_SPACING}${properties}</w:pPr>${inRuns}<w:r><w:t xml:space="preserve"> ${escaped(FAKE_ONE)}</w:t></w:r></w:p>`]]);
+  const run = (text: string, properties = "") => `<w:r><w:rPr>${properties}</w:rPr><w:t xml:space="preserve">${escaped(text)}</w:t></w:r>`;
+  const fontTable = (entries: string) => ({ name: "word/fontTable.xml", relationship: "fontTable", content: `<?xml version="1.0" encoding="UTF-8"?><w:fonts xmlns:w="${W_NAMESPACE}">${entries}</w:fonts>` });
+  const read = (result: Awaited<ReturnType<typeof check>>, lines: string[]) => {
+    for (const line of [...HONEST, ...lines]) expect(result.text, line).toContain(line);
+    expect(result).toMatchObject({ hidden: "", unverifiable: "", reasons: [] });
+  };
+
+  describe("arabe, persan et hébreu : chaque lettre de sa forme la plus large dans les polices mesurées, un quart de plus, dans la police complexe du passage", () => {
+    // Bounded, an Arabic, Persian or Hebrew line of a CV holds with room to spare in a text box of 425 pt by 120 pt, or a row of exact
+    // height, in Word's complex script fonts: read whole (set aside whole before, of no bound).
+    it.each([["Arial"], ["Times New Roman"], ["Tahoma"], ["Segoe UI"], ["Simplified Arabic"], ["Traditional Arabic"], ["Sakkal Majalla"], ["Arabic Typesetting"]])("bloc arabe et persan honnête en %s dans une zone de texte qui le tient largement : lu entier, rien n’est écarté", async complexFont => {
+      read(await check(box(rightToLeft(ARABIC, "", complexFont!) + rightToLeft(PERSIAN, "", complexFont!), 425, 120)), [ARABIC, PERSIAN]);
+    });
+
+    it("ligne arabe, ligne hébraïque, chacune dans une ligne de tableau exacte qu’elle tient largement, et une police complexe que Word n’a pas (Amiri, dessinée en Arial ou Times New Roman) : lues entières", async () => {
+      const rows = [rightToLeft("ممرضة عناية مركزة."), rightToLeft(HEBREW), rightToLeft("خبرة خمس سنوات.", "", "Amiri")].map((content): [string, string] => [exact(400), content]);
+      read(await check(table(9000, rows)), ["ممرضة عناية مركزة.", HEBREW, "خبرة خمس سنوات."]);
+    });
+
+    // Arabic that fills the row's line pushes the claims onto lines the row does not show, in Word as in the bound.
+    it.each([["arabe", `${ARABIC} ${ARABIC}`], ["hébreu", `${HEBREW} ${HEBREW}`]])("piège : du texte %s qui remplit la ligne de tableau exacte d’une ligne repousse les affirmations dessous : écartées", async (_, filler) => {
+      const result = await check(before(`<w:r><w:rPr><w:rFonts w:cs="Arial"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">${escaped(filler)}</w:t></w:r>`));
+      expectSetAside(result);
+    });
+
+    it("piège : de l’arabe dans une police complexe sans borne (Andalus, Urdu Typesetting, une police embarquée) : la suite de la ligne exacte est écartée", async () => {
+      for (const complexFont of ["Andalus", "Urdu Typesetting", "Dubai"]) {
+        expectSetAside(await check(before(run("ممرضة", `<w:rFonts w:cs="${complexFont}"/>`))));
+        expect((await check(before(run("ممرضة", '<w:rFonts w:cs="Arial"/>')))).text).toContain("Titre : Médecin");
+      }
+      const embedded = fontTable('<w:font w:name="Zorglub"><w:embedRegular r:id="rId9" w:fontKey="{0F0E0D0C-0B0A-0908-0706-050403020100}"/></w:font>');
+      expectSetAside(await check(before(run("ممرضة", '<w:rFonts w:cs="Zorglub"/>')), { parts: [embedded] }));
+    });
+
+    // Justified (w:jc both, distribute, a kashida justification), Word may stretch Arabic with kashidas: what follows it on its line is
+    // of no place known, set aside; Latin text justified, or Arabic not, leaves the claims' first words read.
+    it.each([["both"], ["distribute"], ["mediumKashida"], ["highKashida"], ["lowKashida"]])("kashida : un mot arabe dans une ligne exacte justifiée (w:jc %s) rend la suite de la ligne non vérifiable", async alignment => {
+      const arabic = run("ممرضة", '<w:rFonts w:cs="Arial"/>');
+      expectSetAside(await check(before(arabic, `<w:jc w:val="${alignment}"/>`)));
+      expect((await check(before(arabic))).text).toContain("Titre : Médecin");
+      expect((await check(before(run("Disponible"), `<w:jc w:val="${alignment}"/>`))).text).toContain("Titre : Médecin");
+    });
+
+    it("marques de direction (U+200F, U+061C) et paragraphe de droite à gauche (w:bidi, w:rtl) : sans largeur propre, la ligne arabe est lue", async () => {
+      const line = "‏ممرضة؜ عناية مركزة‏";
+      read(await check(table(9000, [[exact(400), rightToLeft(line)]])), ["ممرضة"]);
+    });
+  });
+
+  describe("signes de contact et émoticônes : dessinés dans une police de signes, bornés", () => {
+    const CONTACT = "✉ claire@example.com ☎ +971 50 123 4567 ★";
+    const MORE = "✔ Permis B ► ❖ Anglais ✦ Arabe ✧ ✗ Tabac";
+    it.each([["Calibri"], ["Arial"], ["Lato"]])("ligne de contact de signes en %s dans une ligne exacte, et émoticônes dans une zone de texte qui les tient : lues", async name => {
+      const properties = `<w:rFonts w:ascii="${name}" w:hAnsi="${name}"/>`;
+      read(await check(table(9000, [[exact(400), paragraph(CONTACT, "", properties)], [exact(400), paragraph(MORE, "", properties)]]) + box(paragraph("Bienvenue 🙂 👩‍⚕️ 🇦🇪 👍🏽 1️⃣", "", properties), 300, 60)), [CONTACT, MORE, "Bienvenue 🙂 👩‍⚕️ 🇦🇪 👍🏽 1️⃣"]);
+    });
+
+    it("piège : quarante émoticônes, ou quatre-vingts ☎, qui remplissent la ligne exacte repoussent les affirmations dessous : écartées", async () => {
+      expectSetAside(await check(before(run("🙂".repeat(40)))));
+      expectSetAside(await check(before(run("☎".repeat(80), '<w:rFonts w:ascii="Arial" w:hAnsi="Arial"/>'))));
+    });
+
+    it("piège : une émoticône dans une police sans borne (Segoe UI Emoji, une police embarquée) : la suite de la ligne exacte est écartée", async () => {
+      expectSetAside(await check(before(run("🙂", '<w:rFonts w:ascii="Segoe UI Emoji" w:hAnsi="Segoe UI Emoji"/>'))));
+    });
+  });
+
+  describe("constructions que le contrôle ne mettait pas en page : bornées, ou rendues non vérifiables là où la place manque", () => {
+    it("texte ajusté (w:fitText) plus large que la ligne : les affirmations qu’il repousse sont écartées ; plus étroit que son texte, il est lu ; écrasé à moins d’un point par lettre, il est écarté sans être lu", async () => {
+      // Spread over 435 pt of the line's 439, « Disponible. » leaves no room for « Titre ».
+      expectSetAside(await check(before(run("Disponible.", '<w:fitText w:val="8700" w:id="1"/>'))));
+      read(await check(table(9000, [[exact(300), runs("", ["Nom :", '<w:fitText w:val="1440" w:id="2"/>'], [" Claire Exemple", ""])]])), ["Nom : Claire Exemple"]);
+      const squeezed = await check(paragraph(FAKE[0]!, "", '<w:fitText w:val="100" w:id="3"/>'));
+      expect(squeezed.text).not.toContain("DESAR");
+      expect(squeezed.unverifiable).toContain("DESAR");
+    });
+
+    // A document grid of lines (w:docGrid lines) sets each line on a whole number of its pitch: a line of 11 pt on a pitch of 36 pt
+    // takes 36. Word's default grid (no type, linePitch 360) changes nothing; a grid of characters, not followed, leaves the text
+    // where room is scarce unverifiable.
+    const grid = (attributes: string) => `<w:p><w:pPr><w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:left="1417" w:right="1417" w:top="1417" w:bottom="1417"/><w:docGrid ${attributes}/></w:sectPr></w:pPr></w:p>`;
+    const threeLines = box(["Ligne 1 : soins.", "Ligne 2 : gardes.", FAKE[0]!].map(line => paragraph(line)).join(""), 425, 60);
+    it("grille de lignes du document (w:docGrid lines, pas de 36 pt) : les lignes qu’elle repousse sous la zone de texte sont écartées ; la grille par défaut de Word ne change rien", async () => {
+      const gridded = await check(threeLines + grid('w:type="lines" w:linePitch="720"'));
+      expect(gridded.text).toContain("Ligne 1 : soins.");
+      expect(gridded.text).not.toContain("DESAR");
+      expect(gridded).toMatchObject({ reasons: ["layout"] });
+      read(await check(threeLines + grid('w:linePitch="360"')), ["Ligne 1 : soins.", "Ligne 2 : gardes.", FAKE[0]!]);
+      const characters = await check(threeLines + grid('w:type="linesAndChars" w:linePitch="360" w:charSpace="4096"'));
+      expect(characters.text).not.toContain("Ligne 1 : soins.");
+      expect(characters).toMatchObject({ hidden: "", reasons: ["layout"] });
+    });
+
+    it("équation (m:oMath, m:oMathPara), que mammoth ne lit pas : la suite de la ligne exacte est écartée ; hors d’une place qui peut couper, le texte qui l’entoure est lu", async () => {
+      const equation = '<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:r><m:t>x2+y2</m:t></m:r></m:oMath>';
+      expectSetAside(await check(before(run("Disponible.") + equation)));
+      const free = await check(`<w:p><w:r><w:t xml:space="preserve">Score de Glasgow </w:t></w:r>${equation}<w:r><w:t xml:space="preserve"> sur 15.</w:t></w:r></w:p>`);
+      expect(free.text).toContain("Score de Glasgow sur 15.");
+      expect(free.text).not.toContain("x2+y2");
+      expect(free).toMatchObject({ hidden: "", unverifiable: "" });
+    });
+
+    it("document importé (w:altChunk) et sous-document (w:subDoc), que mammoth ne lit pas : ce qui les suit dans une ligne exacte est écarté ; dans le corps, lu", async () => {
+      const chunk = { name: "word/chunk.html", relationship: "aFChunk", content: "<html><body><p>Contenu importé.</p></body></html>" };
+      const rows = (inner: string) => table(9000, [[exact(900), paragraph("Disponible.") + inner + FAKE.map(line => paragraph(line)).join("")]]);
+      const imported = await check(rows('<w:altChunk r:id="rId2" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/>'), { parts: [chunk] });
+      expect(imported.text).toContain("Disponible.");
+      expectSetAside(imported);
+      expect(imported.text).not.toContain("Contenu importé.");
+      expectSetAside(await check(rows('<w:p><w:subDoc r:id="rId2" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/></w:p>')));
+      read(await check('<w:altChunk r:id="rId2" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/>' + paragraph("Disponible."), { parts: [chunk] }), ["Disponible."]);
+    });
+
+    // Word replaces what a content control bound to data stores (w:dataBinding) by the data, as it opens the document: what it stores
+    // is set aside, read nowhere, and what follows it where room is scarce. Of a date picker, a list or a check box, Word draws what is
+    // stored: read, and laid out as any text.
+    it("contrôle de contenu lié à des données (w:dataBinding) : son contenu stocké est écarté sans être lu, la suite de la ligne exacte aussi ; date, liste et case à cocher : lues", async () => {
+      const bound = (content: string) => `<w:sdt><w:sdtPr><w:dataBinding w:xpath="/root/titre" w:storeItemID="{11111111-2222-3333-4444-555555555555}"/></w:sdtPr><w:sdtContent>${content}</w:sdtContent></w:sdt>`;
+      const stored = await check(bound(paragraph(FAKE[0]!)));
+      expect(stored.text).not.toContain("DESAR");
+      expect(stored).toMatchObject({ hidden: "", reasons: ["layout"] });
+      expectSetAside(await check(table(9000, [[exact(300), `<w:p><w:pPr>${NO_SPACING}</w:pPr>${bound(run("Disponible."))}${run(` ${FAKE_ONE}`)}</w:p>`]])));
+      // Bound to the document's title (its core properties, as Word's templates bind the name), Word draws the title: the content
+      // that says it is read, another is not.
+      const core = { name: "docProps/core.xml", content: '<?xml version="1.0" encoding="UTF-8"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Claire Exemple, infirmière</dc:title></cp:coreProperties>' };
+      const titled = (content: string) => `<w:sdt><w:sdtPr><w:dataBinding w:prefixMappings="xmlns:ns0='http://purl.org/dc/elements/1.1/' xmlns:ns1='http://schemas.openxmlformats.org/package/2006/metadata/core-properties'" w:xpath="/ns1:coreProperties[1]/ns0:title[1]" w:storeItemID="{6C3C8BC8-F283-45AE-878A-BAB7291924A1}"/></w:sdtPr><w:sdtContent>${content}</w:sdtContent></w:sdt>`;
+      read(await check(titled(paragraph("Claire Exemple, infirmière")), { parts: [core] }), ["Claire Exemple, infirmière"]);
+      const other = await check(titled(paragraph(FAKE[0]!)), { parts: [core] });
+      expect(other.text).not.toContain("DESAR");
+      expect(other).toMatchObject({ hidden: "", reasons: ["layout"] });
+      const controls = [
+        '<w:sdt><w:sdtPr><w:date w:fullDate="2024-09-01T00:00:00Z"><w:dateFormat w:val="dd/MM/yyyy"/></w:date></w:sdtPr><w:sdtContent>' + run("01/09/2024") + "</w:sdtContent></w:sdt>",
+        '<w:sdt><w:sdtPr><w:dropDownList><w:listItem w:displayText="Temps plein" w:value="1"/></w:dropDownList></w:sdtPr><w:sdtContent>' + run(" Temps plein") + "</w:sdtContent></w:sdt>",
+        '<w:sdt><w:sdtPr><w14:checkbox xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"><w14:checked w14:val="1"/></w14:checkbox></w:sdtPr><w:sdtContent>' + run(" ☒", '<w:rFonts w:ascii="MS Gothic" w:hAnsi="MS Gothic"/>') + "</w:sdtContent></w:sdt>",
+      ].join("");
+      // (mammoth reads a check box as a box, not its character.)
+      read(await check(table(9000, [[exact(300), `<w:p><w:pPr>${NO_SPACING}</w:pPr>${controls}</w:p>`]])), ["01/09/2024 Temps plein"]);
+    });
+
+    it.each([
+      ["un texte ruby (w:ruby), que mammoth ne lit pas", `<w:r><w:ruby><w:rubyPr><w:hps w:val="10"/><w:hpsRaise w:val="18"/><w:hpsBaseText w:val="22"/><w:lid w:val="ja-JP"/></w:rubyPr><w:rt>${run("とうきょう")}</w:rt><w:rubyBase>${run("東京")}</w:rubyBase></w:ruby></w:r>`],
+      ["des accents d’emphase (w:em)", run("Disponible.", '<w:em w:val="dot"/>')],
+      ["des caractères combinés sur deux lignes (w:eastAsianLayout w:combine)", run("Disponible.", '<w:eastAsianLayout w:id="1" w:combine="1"/>')],
+      ["des caractères tournés (w:eastAsianLayout w:vert)", run("Disponible.", '<w:eastAsianLayout w:id="2" w:vert="1"/>')],
+    ])("%s, qui changent la hauteur de la ligne : la suite de la ligne exacte est écartée", async (_, inRuns) => {
+      expectSetAside(await check(before(inRuns)));
+    });
+
+    // Kerned (w:kern), Word moves each pair of letters by the font's kerning pairs, some of which widen it (a tenth of an em and more in
+    // Liberation Sans, Carlito, Inter, Montserrat): `start`, 365 pt in Calibri, holds whole in a cell of 380 pt unkerned; kerned from
+    // 1 pt on, its end may go under the row. Not kerned (w:kern 0), or kerned only from a size above the text's, as before.
+    it("crénage (w:kern) dès 1 pt : la fin d’une ligne exacte que Calibri tient sans crénage est écartée ; crénage nul ou à partir d’une taille plus grande que le texte : lue", async () => {
+      const kerned = (value: string) => table(7816, [[exact(300), paragraph(`${start} ${FAKE_ONE}`, "", `<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/>${value}`)]]);
+      const result = await check(kerned('<w:kern w:val="2"/>'));
+      expect(result.text).not.toContain("sur demande.");
+      expectSetAside(result, "Titre : ");
+      for (const value of ['<w:kern w:val="0"/>', '<w:kern w:val="48"/>', ""]) expect((await check(kerned(value))).text).toContain(start);
+    });
+
+    it("accents d’emphase et texte surélevé hors d’une place qui peut couper : lus", async () => {
+      read(await check(paragraph("Disponible immédiatement.", "", '<w:em w:val="dot"/>') + runs("", ["1", ""], ["er", "<w:vertAlign w:val=\"superscript\"/>"], [" prix", ""])), ["Disponible immédiatement.", "1er prix"]);
+    });
+
+    // Raised (w:position) or set as a superscript (w:vertAlign), letters make their line taller in Word: in a text box of two lines,
+    // the second goes under its bottom.
+    it("texte surélevé de 12 pt (w:position) ou en exposant dans une zone de texte de deux lignes : la seconde, que la première repousse, est écartée ; sans, lue", async () => {
+      const lines = (properties: string) => box(runs("", ["Ligne 1 : soins", ""], [" (réf.)", properties]) + paragraph("Ligne 2 : gardes de nuit."), 425, 34);
+      read(await check(lines("")), ["Ligne 1 : soins (réf.)", "Ligne 2 : gardes de nuit."]);
+      for (const properties of ['<w:position w:val="24"/>', '<w:vertAlign w:val="superscript"/><w:sz w:val="44"/>']) {
+        const raised = await check(lines(properties));
+        expect(raised.text).toContain("Ligne 1 : soins");
+        expect(raised.text).not.toContain("Ligne 2");
+        expect(raised).toMatchObject({ hidden: "", unverifiable: "Ligne 2 : gardes de nuit.", reasons: ["layout"] });
+      }
+    });
+  });
+
+  describe("noms de police : une famille connue suivie d’un mot qui l’élargit ne prend jamais la borne de la famille", () => {
+    const row = (name: string) => table(9000, [[exact(300), paragraph(`${start} ${FAKE_ONE}`, "", `<w:rFonts w:ascii="${name}" w:hAnsi="${name}"/>`)]]);
+    // Of no bound: none of the line read.
+    it.each([
+      ["Arial Black"], ["Segoe UI Black"], ["Franklin Gothic Heavy"], ["Verdana Pro Black"], ["Gill Sans Ultra Bold"], ["Tw Cen MT Condensed Extra Bold"], ["Rockwell Extra Bold"],
+      ["Calibri Extra-Bold"], ["Calibri Extra_Bold"], ["Segoe UI Black Italic"], ["Arial SemiExpanded"], ["ArialBlack"], ["Times New Roman Extended"], ["Calibri UltraBold"], ["Calibri Bold Expanded"],
+      ["Bodoni MT Poster"], ["Lato Heavy"], ["Montserrat Extra Bold"],
+    ])("« %s » : de largeurs sans borne, rien de sa ligne exacte n’est lu", async name => {
+      const result = await check(row(name!));
+      expect(result.text).not.toContain("Références");
+      expectSetAside(result);
+    });
+
+    // Of a word that widens it less (Display, Rounded): as a font of the reader of no metrics (listed), never its family's.
+    it.each([["Calibri Display"], ["Calibri Rounded"], ["Arial Rounded"], ["Bahnschrift SemiBold SemiCondensed"]])("« %s » : bornée comme une police du lecteur non mesurée, jamais comme sa famille : la fin de la ligne exacte est écartée", async name => {
+      const result = await check(table(7816, [[exact(300), paragraph(`${start} ${FAKE_ONE}`, "", `<w:rFonts w:ascii="${name}" w:hAnsi="${name}"/>`)]]));
+      expect(result.text).not.toContain("sur demande.");
+      expectSetAside(result, "Titre : ");
+      // Calibri itself holds the line whole in the same cell.
+      expect((await check(table(7816, [[exact(300), paragraph(`${start} ${FAKE_ONE}`, "", '<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/>')]]))).text).toContain(start);
+    });
+
+    it.each([["Calibri Light"], ["Calibri Bold Italic"], ["Segoe UI Semilight"], ["Arial Narrow Bold"]])("« %s », variante qui n’élargit pas : comme sa famille au moins, lue quand elle tient", async name => {
+      const result = await check(table(9000, [[exact(300), paragraph("Disponible immédiatement.", "", `<w:rFonts w:ascii="${name}" w:hAnsi="${name}"/>`)]]));
+      expect(result.text).toContain("Disponible immédiatement.");
+    });
   });
 });
