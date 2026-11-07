@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { isAcceptedRecruitmentCvFile, RECRUITMENT_CV_ACCEPT_ATTRIBUTE, RECRUITMENT_CV_MAX_BYTES } from "@shared/recruitmentCvLimits";
 import { CheckCircle2, Clock3, FileUp, Globe2, Loader2, Search, ShieldCheck, UserCheck, UsersRound, X } from "lucide-react";
 import { Link } from "wouter";
@@ -12,7 +12,7 @@ import { fieldsToCorrectMessage, reportFieldsToCorrect, type FieldToCorrect } fr
 import { getTurnstileWidgetCopy } from "@/lib/publicFormCopy";
 import { TurnstileWidget } from "@/components/TurnstileWidget";
 import FileNameLabel from "@/components/FileNameLabel";
-import { filterRecruitmentSpecialties, recruitmentSpecialtyLabel } from "./recruitmentSpecialties";
+import { filterRecruitmentSpecialties, recruitmentSpecialtyCategories, recruitmentSpecialtyLabel } from "./recruitmentSpecialties";
 
 export const countryOptions = [
   { value: "France", labels: { fr: "France", en: "France", de: "Frankreich", zh: "法国" } },
@@ -111,10 +111,10 @@ const publicTrustCopy = {
 } as const;
 
 const diplomaCountryCopy = {
-  fr: { label: "Pays d’obtention du diplôme", search: "Rechercher un pays dans le monde…", clear: "Effacer la recherche de pays" },
-  en: { label: "Country where the diploma was obtained", search: "Search any country…", clear: "Clear the country search" },
-  de: { label: "Land des Diplomerwerbs", search: "Land weltweit suchen…", clear: "Ländersuche löschen" },
-  zh: { label: "获得文凭的国家", search: "搜索世界各地的国家…", clear: "清除国家搜索" },
+  fr: { label: "Pays d’obtention du diplôme", search: "Rechercher un pays dans le monde…", clear: "Effacer la recherche de pays", noMatch: "Aucun pays ne correspond à votre recherche." },
+  en: { label: "Country where the diploma was obtained", search: "Search any country…", clear: "Clear the country search", noMatch: "No country matches your search." },
+  de: { label: "Land des Diplomerwerbs", search: "Land weltweit suchen…", clear: "Ländersuche löschen", noMatch: "Kein Land entspricht Ihrer Suche." },
+  zh: { label: "获得文凭的国家", search: "搜索世界各地的国家…", clear: "清除国家搜索", noMatch: "未找到符合条件的国家。" },
 } as const;
 const otherTargetCountryLabel = { fr: "Autre pays à préciser", en: "Specify the other country", de: "Anderes Land bitte angeben", zh: "请注明其他国家" } as const;
 
@@ -274,13 +274,80 @@ export function filterWorldwideCountries(countries: ReturnType<typeof getWorldwi
   });
 }
 
+const diplomaCountryOptionId = (code: string) => `recruitment-diploma-country-option-${code}`;
+
+/** Option the arrow keys move to in the diploma country list, wrapping at both ends (-1: none). */
+function nextListboxIndex(key: "ArrowDown" | "ArrowUp", current: number, count: number) {
+  if (count === 0) return -1;
+  if (key === "ArrowDown") return current < 0 || current >= count - 1 ? 0 : current + 1;
+  return current <= 0 || current >= count ? count - 1 : current - 1;
+}
+
+/*
+ * Brouillon de la candidature (REC-22), propre à l’onglet comme celui de la réservation
+ * (lib/pendingBooking.ts) : la saisie survit à un rechargement et disparaît à la fermeture
+ * de l’onglet ou après un envoi réussi. Jamais le CV, ni les consentements (RGPD et
+ * communications), ni le champ piège. Stockage bloqué (navigation privée) : pas de brouillon.
+ */
+const RECRUITMENT_DRAFT_KEY = "recruitment:draft:v1";
+const DRAFT_TEXT_FIELDS = ["firstName", "lastName", "email", "phone", "specialty", "specialtyCustom", "diplomaCountry", "otherTargetCountry", "otherLanguage", "yearsExperience", "message"] as const;
+type RecruitmentDraft = Pick<FormState, (typeof DRAFT_TEXT_FIELDS)[number] | "targetCountries" | "languages">;
+
+function draftStorage(): Storage | null {
+  try {
+    return typeof window === "undefined" ? null : window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
+/** The draft of this tab, restricted to known fields and choices; empty when none or unreadable. */
+function loadRecruitmentDraft(): Partial<RecruitmentDraft> {
+  try {
+    const stored: unknown = JSON.parse(draftStorage()?.getItem(RECRUITMENT_DRAFT_KEY) || "null");
+    if (!stored || typeof stored !== "object") return {};
+    const value = stored as Record<string, unknown>;
+    const draft: Partial<RecruitmentDraft> = {};
+    for (const field of DRAFT_TEXT_FIELDS) {
+      if (typeof value[field] === "string") draft[field] = (value[field] as string).slice(0, 5000);
+    }
+    if (draft.specialty && !recruitmentSpecialtyCategories.some(group => group.items.some(item => item.value === draft.specialty))) delete draft.specialty;
+    const list = (items: unknown): unknown[] => (Array.isArray(items) ? items : []);
+    draft.targetCountries = countryOptions.map(country => country.value).filter(country => list(value.targetCountries).includes(country));
+    draft.languages = professionalLanguageOptions.map(option => option.value).filter(option => list(value.languages).includes(option));
+    return draft;
+  } catch {
+    return {};
+  }
+}
+
+function saveRecruitmentDraft(form: FormState) {
+  const draft = { targetCountries: form.targetCountries, languages: form.languages } as RecruitmentDraft;
+  for (const field of DRAFT_TEXT_FIELDS) draft[field] = form[field];
+  const empty = DRAFT_TEXT_FIELDS.every(field => !draft[field].trim()) && !draft.targetCountries.length && !draft.languages.length;
+  try {
+    if (empty) draftStorage()?.removeItem(RECRUITMENT_DRAFT_KEY);
+    else draftStorage()?.setItem(RECRUITMENT_DRAFT_KEY, JSON.stringify(draft));
+  } catch {
+    // Storage unavailable or full: the form still works without a draft.
+  }
+}
+
+function clearRecruitmentDraft() {
+  try {
+    draftStorage()?.removeItem(RECRUITMENT_DRAFT_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 export default function RecruitmentPage() {
   const { language } = useLanguage();
   const lang = (language in copy ? language : "fr") as Language;
   const t = copy[lang];
   const trust = publicTrustCopy[lang];
   const diplomaCopy = diplomaCountryCopy[lang];
-  const [form, setForm] = useState<FormState>(initialForm);
+  const [form, setForm] = useState<FormState>(() => ({ ...initialForm, ...loadRecruitmentDraft() }));
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<"idle" | "sending" | "success" | "error">("idle");
   const [validationAttempted, setValidationAttempted] = useState(false);
@@ -288,16 +355,24 @@ export default function RecruitmentPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [trackingId, setTrackingId] = useState("");
   const [specialtyQuery, setSpecialtyQuery] = useState("");
-  const [diplomaCountryQuery, setDiplomaCountryQuery] = useState("");
+  const [diplomaCountryQuery, setDiplomaCountryQuery] = useState(form.diplomaCountry);
   const [diplomaCountryOpen, setDiplomaCountryOpen] = useState(false);
+  const [diplomaCountryActiveIndex, setDiplomaCountryActiveIndex] = useState(-1);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [turnstileAttempt, setTurnstileAttempt] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const diplomaCountryPickerRef = useRef<HTMLDivElement>(null);
+  const diplomaCountryInputRef = useRef<HTMLInputElement>(null);
 
   const selectedCountryLabels = useMemo(() => countryOptions.filter(country => form.targetCountries.includes(country.value)).map(country => country.labels[lang]).join(", "), [form.targetCountries, lang]);
   const worldwideCountries = useMemo(() => getWorldwideCountries(lang), [lang]);
   const filteredDiplomaCountries = useMemo(() => filterWorldwideCountries(worldwideCountries, diplomaCountryQuery, lang).slice(0, 30), [worldwideCountries, diplomaCountryQuery, lang]);
+  // Liste rendue seulement quand elle a des options : aria-expanded ne désigne jamais une liste absente (A11Y-11).
+  const diplomaCountryListShown = diplomaCountryOpen && filteredDiplomaCountries.length > 0;
+  const diplomaCountryNoMatch = diplomaCountryOpen && filteredDiplomaCountries.length === 0;
+  // Option active de la liste des pays (A11Y-11) : le focus reste dans le champ, qui l’annonce par aria-activedescendant.
+  const activeDiplomaCountry = diplomaCountryOpen ? filteredDiplomaCountries[diplomaCountryActiveIndex] : undefined;
+  const activeDiplomaCountryOptionId = activeDiplomaCountry ? diplomaCountryOptionId(activeDiplomaCountry.code) : undefined;
 
   const filteredSpecialtyCategories = useMemo(() => filterRecruitmentSpecialties(specialtyQuery, lang), [specialtyQuery, lang]);
 
@@ -314,6 +389,41 @@ export default function RecruitmentPage() {
     document.addEventListener("mousedown", closePicker);
     return () => document.removeEventListener("mousedown", closePicker);
   }, []);
+
+  useEffect(() => {
+    if (activeDiplomaCountryOptionId) document.getElementById(activeDiplomaCountryOptionId)?.scrollIntoView({ block: "nearest" });
+  }, [activeDiplomaCountryOptionId]);
+
+  useEffect(() => {
+    // Once sent, the draft is cleared and must not come back with the confirmation still shown.
+    if (status !== "success") saveRecruitmentDraft(form);
+  }, [form, status]);
+
+  const closeDiplomaCountryList = () => {
+    setDiplomaCountryOpen(false);
+    setDiplomaCountryActiveIndex(-1);
+  };
+
+  const chooseDiplomaCountry = (country: { label: string }) => {
+    update("diplomaCountry", country.label);
+    setDiplomaCountryQuery(country.label);
+    closeDiplomaCountryList();
+  };
+
+  /** Up/Down move the active option (opening the list), Enter picks it, Escape closes the list (A11Y-11). */
+  const handleDiplomaCountryKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      setDiplomaCountryActiveIndex(nextListboxIndex(event.key, diplomaCountryOpen ? diplomaCountryActiveIndex : -1, filteredDiplomaCountries.length));
+      setDiplomaCountryOpen(true);
+    } else if (event.key === "Enter" && activeDiplomaCountry) {
+      event.preventDefault();
+      chooseDiplomaCountry(activeDiplomaCountry);
+    } else if (event.key === "Escape" && diplomaCountryOpen) {
+      event.preventDefault();
+      closeDiplomaCountryList();
+    }
+  };
 
   const toggleCountry = (country: string) => {
     const targetCountries = form.targetCountries.includes(country) ? form.targetCountries.filter(item => item !== country) : [...form.targetCountries, country];
@@ -365,6 +475,7 @@ export default function RecruitmentPage() {
     setStatus("sending");
     const result = await sendStandardApplication(body, lang);
     if ("trackingId" in result) {
+      clearRecruitmentDraft();
       setTrackingId(result.trackingId);
       setTurnstileToken(null);
       setValidationAttempted(false);
@@ -382,8 +493,9 @@ export default function RecruitmentPage() {
       <Navigation />
       <main className="recruitment-page pt-28 md:pt-36">
         <section className="container grid gap-12 pb-16 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
-          <div className="relative isolate overflow-hidden rounded-3xl lg:sticky lg:top-32">
-            <img src="/assets/medical-hero.svg" alt="" aria-hidden="true" className="hero-globe pointer-events-none absolute -right-28 top-4 h-[30rem] w-[23rem] rounded-full object-cover opacity-35 mix-blend-screen [mask-image:radial-gradient(ellipse_at_center,black_36%,transparent_72%)]" />
+          {/* Sans coins arrondis : ce bloc sans fond rognait la première lettre du sur-titre (PUB-17) ; overflow-hidden contient le globe, discret derrière le texte (PUB-18). */}
+          <div className="relative isolate overflow-hidden lg:sticky lg:top-32">
+            <img src="/assets/medical-hero.svg" alt="" aria-hidden="true" className="hero-globe pointer-events-none absolute -right-28 top-4 h-[30rem] w-[23rem] rounded-full object-cover opacity-20 mix-blend-screen [mask-image:radial-gradient(ellipse_at_center,black_36%,transparent_72%)]" />
             <p className="section-kicker">{t.eyebrow}</p>
             <h1 className="mt-5 max-w-2xl font-display text-4xl leading-tight text-foreground md:text-6xl">{t.title}</h1>
             <p className="mt-6 max-w-xl text-lg leading-8 text-muted-foreground">{t.intro}</p>
@@ -399,10 +511,10 @@ export default function RecruitmentPage() {
                 <li className="flex gap-3"><Clock3 className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" /><span>{trust.timeline}</span></li>
               </ul>
             </section>
-            <p className="mt-8 text-sm text-muted-foreground">{t.privacyNote}</p>
           </div>
 
-          <div className="editorial-card p-5 md:p-8">
+          {/* Sous lg, le formulaire passe avant la présentation (REC-22). */}
+          <div className="editorial-card order-first p-5 md:p-8 lg:order-none">
             {status === "success" ? (
               <div className="py-10 text-center" role="status">
                 <CheckCircle2 className="mx-auto h-14 w-14 text-primary" />
@@ -415,6 +527,8 @@ export default function RecruitmentPage() {
               <>
                 <h2 className="font-display text-3xl text-foreground">{t.formTitle}</h2>
                 <p className="mt-3 text-sm leading-6 text-muted-foreground">{t.formIntro}</p>
+                {/* Avertissement avant les champs, sur téléphone comme sur grand écran. */}
+                <p className="mt-3 text-sm leading-6 text-muted-foreground">{t.privacyNote}</p>
                 <form onSubmit={handleSubmit} className="mt-8 space-y-6" noValidate>
                   <div className="grid gap-5 sm:grid-cols-2">
                     {[{ key: "firstName" as const, label: t.firstName }, { key: "lastName" as const, label: t.lastName }].map(field => <label key={field.key} className="recruitment-field-group"><span>{field.label} *</span><input id={`recruitment-${field.key}`} required value={form[field.key]} aria-invalid={isInvalid(field.key)} onChange={event => update(field.key, event.target.value)} className={`recruitment-field ${isInvalid(field.key) ? "form-field-invalid" : ""}`} autoComplete={field.key === "firstName" ? "given-name" : "family-name"} /></label>)}
@@ -479,54 +593,62 @@ export default function RecruitmentPage() {
                       )}
                     </div>
                     
-                    <label className="recruitment-field-group">
+                    {/* content-start : le champ suit son libellé au lieu de s’étirer sur la hauteur de la spécialité (PUB-17). */}
+                    <label className="recruitment-field-group content-start">
                       <span>{t.experience}</span>
                       <input id="recruitment-experience" type="number" min="0" max="70" value={form.yearsExperience} onChange={event => update("yearsExperience", event.target.value)} className="recruitment-field" />
                     </label>
                   </div>
 
-                  <div ref={diplomaCountryPickerRef} className="recruitment-field-group relative">
+                  {/* Liste fermée dès que le focus quitte le champ et son bouton d’effacement (A11Y-11). */}
+                  <div ref={diplomaCountryPickerRef} className="recruitment-field-group relative" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) closeDiplomaCountryList(); }}>
                     <span id="recruitment-diploma-country-label">{diplomaCopy.label} *</span>
                     <div className="site-search-shell">
                       <Search className="site-search-icon" aria-hidden="true" />
                       <input
+                        ref={diplomaCountryInputRef}
                         id="recruitment-diploma-country-search"
                         name="diplomaCountry"
                         type="search"
                         value={diplomaCountryQuery}
                         onFocus={() => setDiplomaCountryOpen(true)}
                         onInput={event => { const visibleCountry = event.currentTarget.value; const matchingCountry = worldwideCountries.find(country => country.label === visibleCountry); if (matchingCountry) update("diplomaCountry", matchingCountry.label); }}
-                        onChange={event => { setDiplomaCountryQuery(event.target.value); setDiplomaCountryOpen(true); }}
-                        onKeyDown={event => { if (event.key === "Escape") setDiplomaCountryOpen(false); }}
+                        onChange={event => { setDiplomaCountryQuery(event.target.value); setDiplomaCountryOpen(true); setDiplomaCountryActiveIndex(-1); }}
+                        onKeyDown={handleDiplomaCountryKeyDown}
                         placeholder={diplomaCopy.search}
                         aria-labelledby="recruitment-diploma-country-label"
                         aria-invalid={isInvalid("diplomaCountry")}
                         className={`recruitment-field site-search-input ${diplomaCountryQuery ? "site-search-input-with-clear" : ""} ${isInvalid("diplomaCountry") ? "form-field-invalid" : ""}`}
                         role="combobox"
-                        aria-expanded={diplomaCountryOpen}
+                        aria-expanded={diplomaCountryListShown}
                         aria-controls="recruitment-diploma-country-options"
                         aria-autocomplete="list"
+                        aria-activedescendant={activeDiplomaCountryOptionId}
                       />
-                      {diplomaCountryQuery && <button type="button" onClick={() => { setDiplomaCountryQuery(""); setDiplomaCountryOpen(true); }} className="site-search-clear" aria-label={diplomaCopy.clear}><X className="h-4 w-4" /></button>}
+                      {diplomaCountryQuery && <button type="button" onClick={() => { setDiplomaCountryQuery(""); setDiplomaCountryActiveIndex(-1); setDiplomaCountryOpen(true); diplomaCountryInputRef.current?.focus(); }} className="site-search-clear" aria-label={diplomaCopy.clear}><X className="h-4 w-4" /></button>}
                     </div>
                     {form.diplomaCountry && <p className="text-xs font-medium text-primary">{diplomaCopy.label} : {form.diplomaCountry}</p>}
-                    {diplomaCountryOpen && (
-                      <div id="recruitment-diploma-country-options" role="listbox" aria-label={diplomaCopy.label} className="recruitment-country-options">
-                        {filteredDiplomaCountries.length > 0 ? filteredDiplomaCountries.map(country => (
-                          <button key={country.code} type="button" role="option" aria-selected={form.diplomaCountry === country.label} className="recruitment-country-option" onClick={() => { update("diplomaCountry", country.label); setDiplomaCountryQuery(country.label); setDiplomaCountryOpen(false); }}>
+                    {diplomaCountryListShown && (
+                      // Options hors de l’ordre de tabulation ; mousedown annulé pour garder le focus dans le champ.
+                      <ul id="recruitment-diploma-country-options" role="listbox" aria-label={diplomaCopy.label} className="recruitment-country-options" onMouseDown={event => event.preventDefault()}>
+                        {filteredDiplomaCountries.map((country, index) => (
+                          <li key={country.code} id={diplomaCountryOptionId(country.code)} role="option" aria-selected={index === diplomaCountryActiveIndex} className="recruitment-country-option cursor-pointer" onClick={() => chooseDiplomaCountry(country)}>
                             <span>{country.label}</span><span className="text-xs text-muted-foreground">{country.code}</span>
-                          </button>
-                        )) : <p className="px-4 py-3 text-sm text-muted-foreground">{t.noMatch}</p>}
-                      </div>
+                          </li>
+                        ))}
+                      </ul>
                     )}
+                    {/* Présent dès le premier rendu (vide sinon) pour que « aucun pays » soit annoncé ; le champ ne se dit alors pas ouvert (A11Y-11). */}
+                    <p role="status" className={diplomaCountryNoMatch ? "recruitment-country-options px-4 py-3 text-sm text-muted-foreground" : "sr-only"}>{diplomaCountryNoMatch ? diplomaCopy.noMatch : ""}</p>
                   </div>
 
-                  <fieldset className={isInvalid("targetCountries") ? "form-consent-group-invalid" : ""}><legend className="mb-3 text-sm font-medium text-foreground">{t.countries} *</legend><div className="grid gap-2 sm:grid-cols-2">{countryOptions.map((country, index) => <label key={country.value} className="form-consent-item flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-foreground"><input id={`recruitment-target-country-${index}`} type="checkbox" checked={form.targetCountries.includes(country.value)} onChange={() => toggleCountry(country.value)} className="form-consent-checkbox" />{country.labels[lang]}</label>)}</div>{form.targetCountries.includes(OTHER_TARGET_COUNTRY) && <label className="recruitment-field-group mt-4 animate-in fade-in duration-200"><span>{otherTargetCountryLabel[lang]} *</span><input id="recruitment-other-target-country" required value={form.otherTargetCountry} aria-invalid={isInvalid("otherTargetCountry")} onChange={event => update("otherTargetCountry", event.target.value)} className={`recruitment-field ${isInvalid("otherTargetCountry") ? "form-field-invalid" : ""}`} /></label>}<p className="sr-only">{selectedCountryLabels}</p></fieldset>
+                  {/* Pays et langues sur deux colonnes dès 360 px pour raccourcir le formulaire (REC-22) ; une seule en dessous, où les mots longs se couperaient. */}
+                  <fieldset className={isInvalid("targetCountries") ? "form-consent-group-invalid" : ""}><legend className="mb-3 text-sm font-medium text-foreground">{t.countries} *</legend><div className="grid gap-2 min-[360px]:grid-cols-2">{countryOptions.map((country, index) => <label key={country.value} className="form-consent-item flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-foreground [overflow-wrap:anywhere] sm:gap-3 sm:px-3"><input id={`recruitment-target-country-${index}`} type="checkbox" checked={form.targetCountries.includes(country.value)} onChange={() => toggleCountry(country.value)} className="form-consent-checkbox" />{country.labels[lang]}</label>)}</div>{form.targetCountries.includes(OTHER_TARGET_COUNTRY) && <label className="recruitment-field-group mt-4 animate-in fade-in duration-200"><span>{otherTargetCountryLabel[lang]} *</span><input id="recruitment-other-target-country" required value={form.otherTargetCountry} aria-invalid={isInvalid("otherTargetCountry")} onChange={event => update("otherTargetCountry", event.target.value)} className={`recruitment-field ${isInvalid("otherTargetCountry") ? "form-field-invalid" : ""}`} /></label>}<p className="sr-only">{selectedCountryLabels}</p></fieldset>
                   
                   <fieldset>
                     <legend className="mb-3 text-sm font-medium text-foreground">{t.languages}</legend>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      {professionalLanguageOptions.map(option => <label key={option.value} className="form-consent-item flex min-h-11 items-center gap-3 rounded-lg px-3 py-2 text-sm text-foreground transition-colors hover:border-primary/45">
+                    <div className="grid gap-2 min-[360px]:grid-cols-2">
+                      {professionalLanguageOptions.map(option => <label key={option.value} className="form-consent-item flex min-h-11 items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-foreground transition-colors [overflow-wrap:anywhere] hover:border-primary/45 sm:gap-3 sm:px-3">
                         <input type="checkbox" checked={form.languages.includes(option.value)} onChange={() => toggleProfessionalLanguage(option.value)} className="form-consent-checkbox" />
                         {option.labels[lang]}
                       </label>)}

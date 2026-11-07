@@ -183,6 +183,10 @@ html.high-readability textarea {
   input[type="radio"]:not(:disabled) {
     @apply cursor-pointer;
   }
+  /* Adresse email longue (PUB-19) : coupure n'importe où plutôt qu'un défilement horizontal à 320 px. */
+  a[href^="mailto:"] {
+    overflow-wrap: anywhere;
+  }
 }
 
 html[lang="zh"],
@@ -262,7 +266,7 @@ html[lang="zh"] .font-display,
   .form-control:focus { border-color: var(--primary); background: color-mix(in oklch, var(--card) 84%, var(--background)); box-shadow: 0 0 0 4px color-mix(in oklch, var(--primary) 13%, transparent); }
   .form-control::placeholder { color: var(--muted-foreground); opacity: 0.82; }
   .form-field-invalid, .recruitment-field.form-field-invalid, .form-control.form-field-invalid, .form-field-premium.form-field-invalid, [aria-invalid="true"].form-control, [aria-invalid="true"].recruitment-field { border-color: #fb7185 !important; background-color: rgb(69 10 10 / 52%) !important; box-shadow: 0 0 0 3px rgb(251 113 133 / 18%) !important; }
-  .form-field-invalid:focus, [aria-invalid="true"].form-control:focus, [aria-invalid="true"].recruitment-field:focus { border-color: #fb7185 !important; outline: none; }
+  .form-field-invalid:focus, [aria-invalid="true"].form-control:focus, [aria-invalid="true"].recruitment-field:focus { border-color: #fb7185 !important; outline: 2px solid transparent; outline-offset: 2px; }
   .form-file-invalid { border-color: #fb7185 !important; background: linear-gradient(135deg, rgb(127 29 29 / 38%), rgb(69 10 10 / 52%)) !important; box-shadow: 0 0 0 3px rgb(251 113 133 / 14%); }
   input[required]:user-invalid, select[required]:user-invalid, textarea[required]:user-invalid { border-color: #fb7185 !important; background-color: rgb(69 10 10 / 52%) !important; box-shadow: 0 0 0 3px rgb(251 113 133 / 18%) !important; }
 
@@ -513,6 +517,12 @@ html[lang="zh"] .font-display,
     background: linear-gradient(90deg, var(--primary), transparent);
   }
 
+  /* Sur-titre de l'accueil, sur deux lignes au téléphone : un interligne normal les sépare (PUB-18).
+     Hors couche comme .eyebrow-label, qu'un utilitaire leading-* ne surclasserait pas. */
+  .hero-panel .eyebrow-label {
+    line-height: 1.5;
+  }
+
   .hero-panel {
     position: relative;
     overflow: hidden;
@@ -613,11 +623,14 @@ html[lang="zh"] .font-display,
     transition: border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
   }
 
+  /* Contour transparent plutôt que outline: none (A11Y-08) : invisible d'ordinaire, il reste
+     dessiné en couleurs forcées (contraste élevé de Windows), qui suppriment l'ombre de focus. */
   .form-field-premium:focus {
     border-color: var(--primary);
     background: color-mix(in oklch, var(--card) 76%, transparent);
     box-shadow: 0 0 0 4px color-mix(in oklch, var(--primary) 13%, transparent);
-    outline: none;
+    outline: 2px solid transparent;
+    outline-offset: 2px;
   }
 
   .summary-card-premium {
@@ -945,7 +958,9 @@ body {
 
 .recruitment-field:focus {
   border-color: var(--primary);
-  outline: none;
+  /* Visible en couleurs forcées seulement (A11Y-08), comme .form-field-premium:focus. */
+  outline: 2px solid transparent;
+  outline-offset: 2px;
   background: color-mix(in oklch, var(--card) 84%, var(--background));
   box-shadow: 0 0 0 4px color-mix(in oklch, var(--primary) 13%, transparent);
 }
@@ -1042,6 +1057,15 @@ body {
 .recruitment-country-option[aria-selected="true"] {
   background: color-mix(in oklch, var(--primary) 14%, transparent);
   color: var(--primary);
+}
+
+/* L'option active ne prend pas le focus (aria-activedescendant) et les couleurs forcées effacent
+   son fond et sa couleur : un contour système la désigne (A11Y-11). */
+@media (forced-colors: active) {
+  .recruitment-country-option[aria-selected="true"] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
 }
 
 .mobile-navigation {

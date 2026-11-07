@@ -266,10 +266,10 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
       .then(() => page.evaluate(() => Promise.all(document.getAnimations().filter((animation) => (animation as CSSAnimation).animationName === "page-transition-enter").map((animation) => animation.finished))))
       .then(() => page.evaluate(scrollSettled));
     const state = (page: Page) => page.evaluate(() => {
-      const tabs = document.querySelector('[role="tablist"]')?.getBoundingClientRect();
+      const tabs = document.querySelector('[role="group"][aria-label="Sections juridiques"]')?.getBoundingClientRect();
       return {
         scrollY: Math.round(window.scrollY),
-        tab: document.querySelector('[role="tab"][aria-selected="true"]')?.textContent?.trim() ?? null,
+        tab: document.querySelector('[aria-label="Sections juridiques"] [aria-current="page"]')?.textContent?.trim() ?? null,
         // The tabs are seen when they sit between the bottom of the fixed header and the bottom of the screen.
         tabsSeen: tabs ? tabs.top >= document.querySelector("header.site-nav")!.getBoundingClientRect().bottom - 1 && tabs.bottom <= innerHeight : false,
         entries: history.length,
@@ -291,10 +291,10 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
 
       // A tab chosen on the page replaces the address and leaves the page where it is (the tabs well
       // below the header, so that the focus the click gives them moves nothing either).
-      const tabsAt = await page.evaluate(() => Math.round(document.querySelector('[role="tablist"]')!.getBoundingClientRect().top + window.scrollY - document.querySelector("header.site-nav")!.getBoundingClientRect().bottom - 120));
+      const tabsAt = await page.evaluate(() => Math.round(document.querySelector('[role="group"][aria-label="Sections juridiques"]')!.getBoundingClientRect().top + window.scrollY - document.querySelector("header.site-nav")!.getBoundingClientRect().bottom - 120));
       await page.evaluate((top) => window.scrollTo({ top, behavior: "instant" }), tabsAt);
       const before = await state(page);
-      await page.getByRole("tab", { name: "Conditions Générales" }).click();
+      await page.getByRole("button", { name: "Conditions Générales" }).click();
       await settled(page, "/legal?tab=terms");
       expect(await state(page), where).toMatchObject({ scrollY: before.scrollY, tab: "Conditions Générales", entries: before.entries });
       expect(before.scrollY, where).toBeGreaterThan(0);
@@ -351,6 +351,92 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
       await page.context().close();
     }
   }, 120_000);
+
+  it("garde « MAINTENANCE », le sur-titre de l'accueil et les adresses email dans leur cadre (PUB-17, PUB-18, PUB-19)", async () => {
+    // /maintenance: the status code fits in its card from 320 px, the page does not scroll sideways.
+    for (const width of [320, 390]) {
+      const page = await open("/maintenance", { width, height: 844, consent: true });
+      const code = await page.evaluate(() => {
+        const element = [...document.querySelectorAll("main p")].find((paragraph) => paragraph.textContent === "MAINTENANCE")!;
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        const text = range.getBoundingClientRect();
+        const card = element.closest("section")!.getBoundingClientRect();
+        return { inside: text.left >= card.left && text.right <= card.right, pageWidth: document.documentElement.scrollWidth };
+      });
+      expect(code, `/maintenance à ${width} px`).toEqual({ inside: true, pageWidth: width });
+      await page.context().close();
+    }
+    // /error: « 500 » fits as it is and keeps its size on a phone.
+    const error = await open("/error", { width: 390, height: 844, consent: true });
+    expect(await error.locator("main p", { hasText: /^500$/ }).evaluate((code) => getComputedStyle(code).fontSize)).toBe("48px");
+    await error.context().close();
+
+    // Home: the kicker sits on its own line above the credentials badge, never touching it; on a
+    // phone its two lines are balanced, not « HIPPOCAMPUS CONSULTING · » over « FRANCE ».
+    for (const width of [1024, 1280, 1440, 390]) {
+      const page = await open("/", { width, height: 900, consent: true });
+      const hero = await page.evaluate(() => {
+        const kicker = document.querySelector("#hero .eyebrow-label")!;
+        const badge = kicker.nextElementSibling!.getBoundingClientRect();
+        const range = document.createRange();
+        range.selectNodeContents(kicker);
+        const lines = new Map<number, number>();
+        for (const rect of range.getClientRects()) lines.set(Math.round(rect.top), (lines.get(Math.round(rect.top)) ?? 0) + rect.width);
+        const widths = [...lines.values()];
+        const rects = [...range.getClientRects()].filter((rect) => rect.width > 0).sort((a, b) => a.top - b.top);
+        const style = getComputedStyle(kicker);
+        return {
+          gap: badge.top - kicker.getBoundingClientRect().bottom,
+          lines: widths.length,
+          balance: Math.min(...widths) / Math.max(...widths),
+          lineHeight: parseFloat(style.lineHeight) / parseFloat(style.fontSize),
+          // Room between the glyphs of one line and those of the next (negative: they overlap).
+          lineGap: rects.at(-1)!.top - rects[0].bottom,
+        };
+      });
+      expect(hero.gap, `${width} px`).toBeGreaterThanOrEqual(16);
+      expect(hero.lines, `${width} px`).toBeLessThanOrEqual(2);
+      // A normal line height, not the 1 of .eyebrow-label, so that two lines do not touch.
+      expect(hero.lineHeight, `${width} px`).toBeGreaterThanOrEqual(1.4);
+      if (hero.lines === 2) {
+        expect(hero.balance, `${width} px`).toBeGreaterThan(0.4);
+        expect(hero.lineGap, `${width} px`).toBeGreaterThanOrEqual(0);
+      }
+      await page.context().close();
+    }
+
+    // The 39-character contact address breaks inside its line rather than widening a 320 px page.
+    for (const route of ["/legal", "/legal?tab=privacy", "/booking/confirmation?status=success&trackingId=VISUAL-TEST-2026"]) {
+      const page = await open(route, { width: 320, height: 700, consent: true });
+      const layout = await page.evaluate(() => ({
+        emails: document.querySelectorAll('main a[href^="mailto:"]').length,
+        outside: [...document.querySelectorAll('a[href^="mailto:"]')].filter((link) => link.getBoundingClientRect().right > innerWidth + 0.5).map((link) => link.textContent),
+        pageWidth: document.documentElement.scrollWidth,
+      }));
+      expect(layout.emails, route).toBeGreaterThan(0);
+      expect({ outside: layout.outside, pageWidth: layout.pageWidth }, route).toEqual({ outside: [], pageWidth: 320 });
+      await page.context().close();
+    }
+  }, 120_000);
+
+  it("garde un contour aux champs de réservation et de contact qui ont le focus en couleurs forcées, invisible sinon (A11Y-08)", async () => {
+    for (const [route, field] of [["/booking", "#booking-name"], ["/", "#contact-name"]] as const) {
+      const page = await open(route, { width: 1366, consent: true });
+      const outline = async (forcedColors: "active" | "none") => {
+        await page.emulateMedia({ forcedColors });
+        await page.focus(field);
+        return page.locator(field).evaluate((element) => { const style = getComputedStyle(element); return { style: style.outlineStyle, width: parseFloat(style.outlineWidth), color: style.outlineColor }; });
+      };
+      // Forced colors (Windows high contrast) drop the focus shadow: only an outline can show the focus.
+      const forced = await outline("active");
+      expect(forced.style, route).toBe("solid");
+      expect(forced.width, route).toBeGreaterThanOrEqual(2);
+      expect(forced.color, route).not.toBe("rgba(0, 0, 0, 0)");
+      expect(await outline("none"), route).toMatchObject({ style: "solid", color: "rgba(0, 0, 0, 0)" });
+      await page.context().close();
+    }
+  }, 60_000);
 
   it("met la réservation en tête du menu mobile et dans l'en-tête dès 1024 px (PUB-02)", async () => {
     const mobile = await open("/faq", { width: 390, height: 844 });
