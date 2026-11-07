@@ -70,8 +70,12 @@ export const adminCandidateDocumentsRouter = router({
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Le coffre documentaire est temporairement indisponible." });
       const document = (await db.select().from(candidateDocuments).where(eq(candidateDocuments.id, input.id)).limit(1))[0];
       if (!document) throw new TRPCError({ code: "NOT_FOUND", message: "Document introuvable." });
-      await db.update(candidateDocuments).set({ status: input.status, reviewedByOpenId: ctx.user.openId, reviewedAt: new Date(), reviewNotes: input.notes }).where(eq(candidateDocuments.id, input.id));
-      await db.insert(candidateDocumentAuditLogs).values({ candidateId: document.candidateId, documentId: document.id, actorType: "admin", actorReference: ctx.user.openId, action: "reviewed", metadata: JSON.stringify({ status: input.status }) });
+      // The decision and its audit line in one batch, both or neither (DATA-01):
+      // a refused line leaves the document as it was, as the screen then says.
+      await db.batch([
+        db.update(candidateDocuments).set({ status: input.status, reviewedByOpenId: ctx.user.openId, reviewedAt: new Date(), reviewNotes: input.notes }).where(eq(candidateDocuments.id, input.id)),
+        db.insert(candidateDocumentAuditLogs).values({ candidateId: document.candidateId, documentId: document.id, actorType: "admin", actorReference: ctx.user.openId, action: "reviewed", metadata: JSON.stringify({ status: input.status }) }),
+      ]);
       return { success: true };
     }),
   reanalyze: adminProcedure
@@ -84,21 +88,26 @@ export const adminCandidateDocumentsRouter = router({
       if (!candidateDocumentAllowsAiAnalysis(document.category)) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Ce type de document est réservé à la revue humaine : il n’est jamais transmis à l’IA." });
       }
-      // EXPL-12: the job a stopped run left "running" is closed here rather
-      // than at the next daily run, which would otherwise queue it again.
-      await db.update(candidateDocumentProcessingJobs).set({ status: "completed", finishedAt: new Date(), lastError: "worker_interrupted_reanalysis_requested" }).where(and(
-        eq(candidateDocumentProcessingJobs.documentId, document.id),
-        eq(candidateDocumentProcessingJobs.status, "running"),
-        lte(candidateDocumentProcessingJobs.startedAt, staleRunningSince()),
-      ));
-      // A document left waiting or « en cours » with no job queued, retried or running can be analysed again (DATA-06).
+      // A document left waiting or « en cours » with no job queued, retried or
+      // running (a job "running" for 15 min no longer counts) can be analysed again (DATA-06).
       const hasActiveAnalysisJob = (await documentsWithActiveAnalysisJob(db, [document.id])).has(document.id);
       if (!canRequestCandidateDocumentReanalysis({ ...document, hasActiveAnalysisJob })) {
         throw new TRPCError({ code: document.status === "rejected" ? "BAD_REQUEST" : "CONFLICT", message: document.status === "rejected" ? "Un document refusé ne peut pas être relancé." : "Une analyse de ce document est déjà en cours." });
       }
-      const { enqueueCandidateDocumentAnalysis } = await import("../../candidateDocumentProcessing");
-      await enqueueCandidateDocumentAnalysis(document.id);
-      await db.insert(candidateDocumentAuditLogs).values({ candidateId: document.candidateId, documentId: document.id, actorType: "admin", actorReference: ctx.user.openId, action: "analysis_requested", metadata: JSON.stringify({ source: "admin_reanalysis" }) });
+      const { candidateDocumentAnalysisQueueing } = await import("../../candidateDocumentProcessing");
+      // In one batch with the admin's audit line, all or none (DATA-01): the
+      // job a stopped run left "running" closed here rather than at the next
+      // daily run, which would otherwise queue it again (EXPL-12), the new job,
+      // the document « en file » and their lines.
+      await db.batch([
+        db.update(candidateDocumentProcessingJobs).set({ status: "completed", finishedAt: new Date(), lastError: "worker_interrupted_reanalysis_requested" }).where(and(
+          eq(candidateDocumentProcessingJobs.documentId, document.id),
+          eq(candidateDocumentProcessingJobs.status, "running"),
+          lte(candidateDocumentProcessingJobs.startedAt, staleRunningSince()),
+        )),
+        ...candidateDocumentAnalysisQueueing(db, document),
+        db.insert(candidateDocumentAuditLogs).values({ candidateId: document.candidateId, documentId: document.id, actorType: "admin", actorReference: ctx.user.openId, action: "analysis_requested", metadata: JSON.stringify({ source: "admin_reanalysis" }) }),
+      ]);
       return { success: true, queued: true };
     }),
   download: adminProcedure

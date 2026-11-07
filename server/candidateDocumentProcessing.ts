@@ -1,4 +1,5 @@
 import { and, asc, eq, inArray, isNull, lt, lte, ne } from "drizzle-orm";
+import type { BatchItem } from "drizzle-orm/batch";
 import { candidateDocumentAuditLogs, candidateDocumentProcessingJobs, candidateDocuments, type CandidateDocument } from "../drizzle/schema";
 import { getDb } from "./db";
 import { mutationRowCount } from "./dbMutation";
@@ -27,14 +28,27 @@ export function candidateHumanReviewOnlyFields() {
   };
 }
 
+type Database = NonNullable<Awaited<ReturnType<typeof getDb>>>;
+
+/**
+ * The writes that queue a document's analysis, not yet sent: its job, its
+ * state « en file » and its audit line, for a db.batch that writes them with
+ * the admin's own line, all or none (DATA-01).
+ */
+export function candidateDocumentAnalysisQueueing(db: Database, document: { id: number; candidateId: number | null }): [BatchItem<"pg">, ...BatchItem<"pg">[]] {
+  return [
+    db.insert(candidateDocumentProcessingJobs).values({ documentId: document.id, status: "queued", maxAttempts: MAX_DOCUMENT_ANALYSIS_ATTEMPTS, scheduledFor: new Date() }),
+    db.update(candidateDocuments).set({ status: "validating", analysisStatus: "queued" }).where(eq(candidateDocuments.id, document.id)),
+    db.insert(candidateDocumentAuditLogs).values({ candidateId: document.candidateId, documentId: document.id, actorType: "system", action: "analysis_requested" }),
+  ];
+}
+
 export async function enqueueCandidateDocumentAnalysis(documentId: number) {
   const db = await getDb();
   if (!db) throw new Error("candidate_document_database_unavailable");
-  const category = (await db.select({ category: candidateDocuments.category }).from(candidateDocuments).where(eq(candidateDocuments.id, documentId)).limit(1))[0]?.category;
-  if (!candidateDocumentAllowsAiAnalysis(category)) throw new Error("candidate_document_human_review_only");
-  await db.insert(candidateDocumentProcessingJobs).values({ documentId, status: "queued", maxAttempts: MAX_DOCUMENT_ANALYSIS_ATTEMPTS, scheduledFor: new Date() });
-  await db.update(candidateDocuments).set({ status: "validating", analysisStatus: "queued" }).where(eq(candidateDocuments.id, documentId));
-  await db.insert(candidateDocumentAuditLogs).values({ candidateId: (await db.select({ candidateId: candidateDocuments.candidateId }).from(candidateDocuments).where(eq(candidateDocuments.id, documentId)).limit(1))[0]?.candidateId ?? null, documentId, actorType: "system", action: "analysis_requested" });
+  const [document] = await db.select({ category: candidateDocuments.category, candidateId: candidateDocuments.candidateId }).from(candidateDocuments).where(eq(candidateDocuments.id, documentId)).limit(1);
+  if (!candidateDocumentAllowsAiAnalysis(document?.category)) throw new Error("candidate_document_human_review_only");
+  await db.batch(candidateDocumentAnalysisQueueing(db, { id: documentId, candidateId: document?.candidateId ?? null }));
 }
 
 /** A document uploaded longer ago than this without its analysis job was left by an interrupted upload. */
