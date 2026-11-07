@@ -193,10 +193,11 @@ describe.skipIf(!executablePath)("Textes saisis par des tiers dans l’admin, su
     expect(folded.scrollWidth).toBeLessThanOrEqual(folded.clientWidth);
     expect(folded.right).toBeLessThanOrEqual(WIDTH);
 
-    const more = page.getByRole("button", { name: "Voir tout" });
+    // Each button is named after the booking it unfolds, for a screen reader.
+    const more = page.getByRole("button", { name: `Voir tout — demande de ${LONG_NAME}`, exact: true });
     expect(await more.getAttribute("aria-expanded")).toBe("false");
     await more.click();
-    const less = page.getByRole("button", { name: "Réduire" });
+    const less = page.getByRole("button", { name: `Réduire — demande de ${LONG_NAME}`, exact: true });
     expect(await less.getAttribute("aria-expanded")).toBe("true");
     const unfolded = await details.evaluate((element) => ({ cut: element.scrollHeight > element.clientHeight + 1, text: element.textContent }));
     expect(unfolded).toEqual({ cut: false, text: expect.stringContaining(LONG_LINK) });
@@ -222,7 +223,7 @@ describe.skipIf(!executablePath)("Textes saisis par des tiers dans l’admin, su
 
   it("Témoignages : « Voir tout » montre en entier un témoignage plus long que ses deux lignes", async () => {
     const page = await openTab("testimonials", "Merci");
-    await page.getByRole("button", { name: "Voir tout" }).click();
+    await page.getByRole("button", { name: `Voir tout — témoignage de ${LONG_NAME}`, exact: true }).click();
     const content = await page.locator("p", { hasText: "Très bonne consultation" }).evaluate((element) => ({ cut: element.scrollHeight > element.clientHeight + 1, right: element.getBoundingClientRect().right }));
     expect(content.cut).toBe(false);
     expect(content.right).toBeLessThanOrEqual(WIDTH);

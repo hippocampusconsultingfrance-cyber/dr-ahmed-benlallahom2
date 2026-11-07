@@ -61,7 +61,7 @@ export default function TestimonialsTab() {
                   {t.featured === 1 && <span className="px-2 py-0.5 rounded text-xs font-medium bg-cyan-500/20 text-cyan-400">Featured</span>}
                 </div>
                 <p className="break-words text-sm font-medium text-foreground">{t.title}</p>
-                <AdminClampedText text={t.content} className="text-sm text-muted-foreground mt-1" />
+                <AdminClampedText text={t.content} about={`témoignage de ${t.authorName}`} className="text-sm text-muted-foreground mt-1" />
               </div>
               <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:flex-nowrap">
                 {t.status !== "approved" && (

@@ -350,7 +350,7 @@ export default function AppointmentsTab() {
             </div>
             {/* A long link wraps; « Voir tout » shows the whole request (EXPL-02). */}
             {apt.requestDetails && (
-              <AdminClampedText text={apt.requestDetails} className="text-sm text-muted-foreground mt-2" />
+              <AdminClampedText text={apt.requestDetails} about={`demande de ${apt.customerName}`} className="text-sm text-muted-foreground mt-2" />
             )}
             {cancellationDetails(apt).length > 0 && (
               <p className="mt-2 text-sm text-muted-foreground wrap-anywhere">{cancellationDetails(apt).join(" · ")}</p>

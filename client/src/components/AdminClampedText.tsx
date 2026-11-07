@@ -13,9 +13,11 @@ const clampedTextCopy = {
  * A text typed by a patient or a visitor, shown on two lines in an admin list
  * (EXPL-02): a long word or link wraps instead of being cut at the card's
  * edge, and « Voir tout » shows the whole text, with its line breaks, once it
- * is longer than those two lines, then « Réduire » folds it again.
+ * is longer than those two lines, then « Réduire » folds it again. `about`
+ * tells a screen reader whose text it is (« Voir tout — demande de Jean
+ * Dupont »), so that the buttons of a list are told apart.
  */
-export default function AdminClampedText({ text, className = "", language = "fr" }: { text: string; className?: string; language?: UserLanguage }) {
+export default function AdminClampedText({ text, about, className = "", language = "fr" }: { text: string; about?: string; className?: string; language?: UserLanguage }) {
   const copy = clampedTextCopy[language] ?? clampedTextCopy.fr;
   const id = useId();
   const textRef = useRef<HTMLParagraphElement>(null);
@@ -39,6 +41,7 @@ export default function AdminClampedText({ text, className = "", language = "fr"
       {(cut || expanded) && (
         <button type="button" aria-expanded={expanded} aria-controls={id} onClick={() => setExpanded(current => !current)} className="mt-1 text-xs font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
           {expanded ? copy.less : copy.more}
+          {about && <span className="sr-only"> — {about}</span>}
         </button>
       )}
     </div>
