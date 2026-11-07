@@ -1,11 +1,14 @@
+import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import { createVitest, parseCLI } from "vitest/node";
+import { LOCKED_PACKAGES_MESSAGE, lockedPackagesProblems } from "../scripts/check-locked-packages.mjs";
 
 const root = process.cwd();
 const read = (relative: string) => readFile(path.join(root, relative), "utf8");
@@ -304,12 +307,36 @@ function simpleCommands(command: string) {
 }
 
 /**
- * The step that runs this check alone, with a configuration of its own
+ * The command that runs this check alone, with a configuration of its own
  * (scripts/ci-workflow.vitest.config.mjs): a vitest.config.ts leaving it out of the suite,
  * or running code before the tests (a globalSetup ending the run with success), neither
  * keeps it from running nor runs before it, and it then refuses that vitest.config.ts.
+ * vitest runs by its file: `pnpm vitest` would run a script « vitest » of package.json
+ * instead, and `pnpm exec` loads into node the node-options of .npmrc or
+ * pnpm-workspace.yaml (`--require ./ci.cjs` exiting with 0), before this check.
  */
-const GUARD_COMMAND = "pnpm vitest run server/ciWorkflow.test.ts --config scripts/ci-workflow.vitest.config.mjs --passWithNoTests=false";
+const GUARD_COMMAND = "node node_modules/vitest/vitest.mjs run server/ciWorkflow.test.ts --config scripts/ci-workflow.vitest.config.mjs --passWithNoTests=false";
+
+/**
+ * The install, which runs no code of the repository: neither the project's install
+ * scripts (`postinstall`) nor a pnpmfile, which would run before the step « Check this
+ * workflow » refuses them and could change what it runs (node_modules/.bin/vitest, a
+ * BASH_ENV written to $GITHUB_ENV that every next step's bash reads first).
+ */
+const INSTALL_COMMAND = "pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile";
+
+/** What the step « Check this workflow » runs before vitest, and whose text ci.yml pins by its digest: changing it means changing ci.yml. */
+const GUARD_PINNED_FILES = ["scripts/check-locked-packages.mjs", "scripts/ci-workflow.vitest.config.mjs"];
+
+/** A line of that step: sha256sum compares the file with the digest ci.yml writes, and fails the step when they differ. */
+const pinnedDigestCheck = (file: string, text = readFileSync(path.join(root, file))) =>
+  `sha256sum --check --strict <<< "${createHash("sha256").update(text).digest("hex")}  ${file}"`;
+
+/**
+ * The step « Check this workflow », right after the install: the digests of what it runs
+ * before vitest, the packages installed checked as the registry's (CODE-14), then this check.
+ */
+const GUARD_STEP_RUN = [...GUARD_PINNED_FILES.map(file => pinnedDigestCheck(file)), "node scripts/check-locked-packages.mjs", GUARD_COMMAND].join("\n");
 
 /**
  * The commands the quality job must run, each a simple command one of its steps runs
@@ -318,9 +345,10 @@ const GUARD_COMMAND = "pnpm vitest run server/ciWorkflow.test.ts --config script
  * within an `if`, a loop or a function.
  */
 const REQUIRED_STEP_COMMANDS = [
-  "pnpm install --frozen-lockfile",
-  "pnpm check",
+  INSTALL_COMMAND,
+  "node scripts/check-locked-packages.mjs",
   GUARD_COMMAND,
+  "pnpm check",
   "pnpm test:ci",
   "pnpm build",
   "node scripts/check-performance-budgets.mjs",
@@ -437,7 +465,8 @@ function expectNoNeutralizedStep(workflow: string, packageJson: string, exceptio
   // Nor a condition on the whole job, nor code loaded into each node process (--require, --import).
   expect(quality).not.toMatch(/^ {4}if:/m);
   expect(workflow, "NODE_OPTIONS").not.toMatch(NODE_OPTIONS);
-  expect(workflow, "script settings").not.toMatch(SCRIPT_SETTINGS);
+  // The install's own --ignore-scripts, which runs no script of the repository before this check (INSTALL_COMMAND), is the one allowed.
+  expect(workflow.split("\n").filter(line => line.trim() !== `run: ${INSTALL_COMMAND}`).join("\n"), "script settings").not.toMatch(SCRIPT_SETTINGS);
   expect(workflow, "environment changes").not.toMatch(ENVIRONMENT_CHANGES);
   for (const [file, config] of Object.entries(configs)) {
     expect(config, file).not.toMatch(NODE_OPTIONS);
@@ -505,9 +534,9 @@ const QUALITY_STEPS: readonly Readonly<Record<string, string>>[] = [
   { name: "Check out source", uses: "actions/checkout@v4" },
   { name: "Set up pnpm", uses: "pnpm/action-setup@v4" },
   { name: "Set up Node.js", uses: "actions/setup-node@v4", "with.node-version-file": ".nvmrc", "with.cache": "pnpm" },
-  { name: "Install dependencies", run: "pnpm install --frozen-lockfile" },
+  { name: "Install dependencies", run: INSTALL_COMMAND },
+  { name: "Check this workflow", run: GUARD_STEP_RUN },
   { name: "Verify TypeScript", run: "pnpm check" },
-  { name: "Check this workflow", run: GUARD_COMMAND },
   { name: "Run test suite", run: "pnpm test:ci" },
   { name: "Verify production build", id: "build", run: "pnpm build" },
   { name: "Check performance budgets", run: "node scripts/check-performance-budgets.mjs" },
@@ -635,7 +664,7 @@ async function expectVitestRunsEveryTest(config?: string) {
  * 1 and the job fails.
  */
 async function guardStepRun() {
-  const { filter, options } = parseCLI(GUARD_COMMAND.replace(/^pnpm /, ""));
+  const { filter, options } = parseCLI(GUARD_COMMAND.replace(/^node node_modules\/vitest\/vitest\.mjs /, "vitest "));
   const vitest = await createVitest("test", { ...options, root, watch: false }, { server: { watch: null } });
   try {
     const files = (await vitest.globTestSpecifications(filter)).map(specification => fromRoot(specification.moduleId));
@@ -922,11 +951,13 @@ jobs:
         with:
           node-version-file: .nvmrc
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: ${INSTALL_COMMAND}
+      - name: Check this workflow
+        run: |
+          node scripts/check-locked-packages.mjs
+          ${GUARD_COMMAND}
       - name: Verify TypeScript
         run: pnpm check
-      - name: Check this workflow
-        run: ${GUARD_COMMAND}
       - name: Run test suite
         run: pnpm test:ci
       - name: Verify production build
@@ -1347,7 +1378,22 @@ describe("intégration continue GitHub", () => {
       edit(check, `${check}        env:\n          FORCE_COLOR: "0"\n`),
       edit("        uses: actions/checkout@v4\n", "        uses: actions/checkout@v4\n        with:\n          ref: main\n"),
       edit(check, `${check}      - name: Prepare\n        run: ln -sf /bin/true node_modules/.bin/knip\n`),
-      edit(`        run: ${GUARD_COMMAND}\n`, "        run: pnpm vitest run server/ciWorkflow.test.ts\n"),
+    ]) {
+      expect(verify(changedWorkflow)).toThrow(/^ci\.yml: steps of the quality job: /);
+    }
+    // This check's step weakened: vitest through pnpm (a script « vitest », pnpm's node-options), a digest
+    // left out, the step after `pnpm check`, an install that runs the project's scripts or a pnpmfile.
+    const guard = `          ${GUARD_COMMAND}\n`;
+    const [lockfileDigest] = GUARD_STEP_RUN.split("\n");
+    const install = `        run: ${INSTALL_COMMAND}\n`;
+    const guardStep = `      - name: Check this workflow\n        run: |\n${GUARD_STEP_RUN.split("\n").map(line => `          ${line}\n`).join("")}`;
+    for (const changedWorkflow of [
+      edit(guard, `          ${GUARD_COMMAND.replace("node node_modules/vitest/vitest.mjs", "pnpm vitest")}\n`),
+      edit(guard, `          ${GUARD_COMMAND.replace("node node_modules/vitest/vitest.mjs", "pnpm exec vitest")}\n`),
+      edit(`          ${lockfileDigest}\n`, ""),
+      edit(guardStep, "").replace(`${check}`, `${check}${guardStep}`),
+      edit(install, "        run: pnpm install --frozen-lockfile\n"),
+      edit(install, "        run: pnpm install --frozen-lockfile --ignore-pnpmfile\n"),
     ]) {
       expect(verify(changedWorkflow)).toThrow(/^ci\.yml: steps of the quality job: /);
     }
@@ -1365,10 +1411,12 @@ describe("intégration continue GitHub", () => {
     for (const changedWorkflow of [edit("\njobs:\n", "\nenv:\n  npm_config_script_shell: /bin/true\n\njobs:\n"), edit("\njobs:\n", "\ndefaults:\n  run:\n    shell: bash {0}\n\njobs:\n")]) {
       expect(verify(changedWorkflow)).toThrow(/^ci\.yml: keys of the workflow: /);
     }
-    // A script the steps run changed, one `pnpm vitest` would run instead of vitest, or one pnpm runs by itself.
-    for (const scripts of [{ check: "ln -sf /bin/true node_modules/.bin/tsc && tsc --noEmit" }, { build: "vite build" }, { vitest: "true" }]) {
+    // A script the steps run changed, or one pnpm runs by itself. A script « vitest » runs in no step:
+    // this check runs vitest by its file.
+    for (const scripts of [{ check: "ln -sf /bin/true node_modules/.bin/tsc && tsc --noEmit" }, { build: "vite build" }]) {
       expect(verify(workflow, scripts), JSON.stringify(scripts)).toThrow(/^package\.json: scripts the quality job runs: /);
     }
+    expect(verify(workflow, { vitest: "node -e 0" })).not.toThrow();
     for (const hook of ["pnpm:devPreinstall", "postinstall", "prepare", "precheck", "posttest:ci"]) {
       expect(verify(workflow, { [hook]: "ln -sf /bin/true node_modules/.bin/tsc" }), hook).toThrow(/^package\.json: scripts pnpm runs by itself: /);
     }
@@ -1393,8 +1441,72 @@ describe("intégration continue GitHub", () => {
     expectVitestConfigAsListed(await read("vitest.config.ts"), rootFiles);
     const optional = async (file: string) => (existsSync(path.join(root, file)) ? read(file) : undefined);
     expectPnpmInstallsTheLockedPackages({ packageJson: await read("package.json"), workspace: await optional("pnpm-workspace.yaml"), npmrc: await optional(".npmrc"), rootFiles });
-    expect(SCRIPTS_RUN_BY_FILE).toEqual(["scripts/check-performance-budgets.mjs", "scripts/smoke-built-server.mjs", "scripts/check-migrations-in-sync.mjs"]);
+    expect(SCRIPTS_RUN_BY_FILE).toEqual(["scripts/check-locked-packages.mjs", "scripts/check-performance-budgets.mjs", "scripts/smoke-built-server.mjs", "scripts/check-migrations-in-sync.mjs"]);
     expectScriptsRunByFileFinish(Object.fromEntries(await Promise.all(SCRIPTS_RUN_BY_FILE.map(async file => [file, await read(file)] as const))));
+  });
+
+  it.skipIf(spawnSync("sha256sum", ["--version"]).status !== 0)("vérifie, avant vitest, l'empreinte de ce qu'il lance : une configuration de ce contrôle ou un contrôle des paquets changés sans ci.yml fait échouer l'étape (CODE-14)", async () => {
+    // The digest lines of the step, run by bash -e as GitHub runs a step, in a directory holding the files they pin.
+    const digests = GUARD_STEP_RUN.split("\n").filter(line => line.startsWith("sha256sum "));
+    expect(digests.map(line => line.split(" ").at(-1)!.replace(/"$/, ""))).toEqual(GUARD_PINNED_FILES);
+    const directory = await mkdtemp(path.join(os.tmpdir(), "ci-guard-digests-"));
+    try {
+      const runDigests = async (changes: Record<string, string> = {}) => {
+        for (const file of GUARD_PINNED_FILES) {
+          await mkdir(path.dirname(path.join(directory, file)), { recursive: true });
+          await writeFile(path.join(directory, file), changes[file] ?? await read(file));
+        }
+        return spawnSync("bash", ["-e", "-c", digests.join("\n")], { cwd: directory, encoding: "utf8" }).status;
+      };
+      await expect(runDigests()).resolves.toBe(0);
+      // A globalSetup exiting with 0 in this check's configuration, a lockfile check that refuses nothing.
+      const config = await read("scripts/ci-workflow.vitest.config.mjs");
+      await expect(runDigests({ "scripts/ci-workflow.vitest.config.mjs": config.replace("  test: {\n", '  test: {\n    globalSetup: ["./scripts/ci-guard-setup.mjs"],\n') })).resolves.toBe(1);
+      const lockfileCheck = await read("scripts/check-locked-packages.mjs");
+      await expect(runDigests({ "scripts/check-locked-packages.mjs": lockfileCheck.replace("  return problems;\n}", "  return [];\n}") })).resolves.toBe(1);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("n'installe que des paquets du registre fixés par leur empreinte : refuse dans pnpm-lock.yaml un tarball, un dossier, un dépôt git, link: ou file:, un correctif ou un pnpmfile enregistré, un échappement, et un autre registre (CODE-14)", async () => {
+    const [lockfile, workspace] = await Promise.all([read("pnpm-lock.yaml"), read("pnpm-workspace.yaml")]);
+    const optional = async (file: string) => (existsSync(path.join(root, file)) ? read(file) : undefined);
+    const configs = Object.fromEntries(Object.entries({ ".npmrc": await optional(".npmrc"), "pnpm-workspace.yaml": workspace }).filter((entry): entry is [string, string] => entry[1] !== undefined));
+    expect(lockedPackagesProblems(lockfile, configs)).toEqual([]);
+    // The step's command itself, as it runs before vitest.
+    const run = spawnSync(process.execPath, ["scripts/check-locked-packages.mjs"], { cwd: root, encoding: "utf8" });
+    expect({ status: run.status, stdout: run.stdout.trim() }).toEqual({ status: 0, stdout: LOCKED_PACKAGES_MESSAGE });
+
+    // typescript@5.9.3 and its resolution, then one line of the lockfile changed.
+    const header = "\n  typescript@5.9.3:\n";
+    const resolution = lockfile.slice(lockfile.indexOf(header) + header.length).split("\n")[0]!;
+    expect(resolution).toMatch(/^ {4}resolution: \{integrity: sha512-[A-Za-z0-9+/]+={0,2}\}$/);
+    const lockfileWith = (from: string, to: string) => {
+      expect(lockfile).toContain(from);
+      return lockfile.replace(from, to);
+    };
+    const tarball = "https://ci-mirror.example.test/typescript-5.9.3.tgz";
+    for (const [what, changed, problem] of [
+      ["a tarball beside the integrity", lockfileWith(resolution, `    resolution: {integrity: sha512-FAKEFAKEFAKE==, tarball: ${tarball}}`), /: a resolution other than/],
+      ["a tarball alone", lockfileWith(resolution, `    resolution: {tarball: ${tarball}}`), /: a resolution other than/],
+      ["a directory", lockfileWith(resolution, "    resolution: {directory: ci/typescript, type: directory}"), /: a resolution other than/],
+      ["a git commit", lockfileWith(resolution, "    resolution: {commit: 0123456789abcdef, repo: https://example.test/typescript.git, type: git}"), /: a resolution other than/],
+      ["a resolution in block style", lockfileWith(resolution, `    resolution:\n      tarball: ${tarball}`), /: a resolution other than/],
+      ["a key spelt with an escape", lockfileWith(resolution, `    "r\\x65solution": {tarball: ${tarball}}`), /: a double quote or a backslash/],
+      ["a link to the repository", lockfileWith("      typescript:\n        specifier: 5.9.3\n        version: 5.9.3\n", "      typescript:\n        specifier: 5.9.3\n        version: link:ci/typescript\n"), /: a package of the repository/],
+      ["a file of the repository", lockfileWith(header, "\n  typescript@file:ci/typescript.tgz:\n"), /: a package of the repository/],
+      ["a patch recorded", lockfileWith("\nimporters:\n", "\npatchedDependencies:\n  vitest:\n    hash: 0123\n    path: patches/vitest.patch\n\nimporters:\n"), /: a key other than/],
+      ["a pnpmfile recorded", lockfileWith("\nimporters:\n", "\npnpmfileChecksum: sha256-0123\n\nimporters:\n"), /: a key other than/],
+      ["a second document", `${lockfile}\n---\nimporters: {}\n`, /: a key other than/],
+    ] as const) {
+      expect(lockedPackagesProblems(changed, configs), what).toEqual([expect.stringMatching(new RegExp(`^pnpm-lock\\.yaml:\\d+${problem.source}`))]);
+    }
+    // A registry that would serve a package of a rewritten integrity: in .npmrc, any scope, or pnpm-workspace.yaml.
+    for (const [file, text] of [[".npmrc", "registry=https://ci-mirror.example.test/\n"], [".npmrc", "@vitest:registry=https://ci-mirror.example.test/\n"], ["pnpm-workspace.yaml", `${workspace}\nregistry: https://ci-mirror.example.test/\n`]] as const) {
+      expect(lockedPackagesProblems(lockfile, { ...configs, [file]: text }), text).toEqual([expect.stringMatching(new RegExp(`^${file.replace(".", "\\.")}:\\d+: a registry setting`))]);
+    }
+    expect(lockedPackagesProblems(lockfile, { ...configs, ".npmrc": "engine-strict=true\n# registry=https://ci-mirror.example.test/\n" })).toEqual([]);
   });
 
   it("refuse setupFiles, globalSetup ou tout autre ajout à vitest.config.ts, un pnpmfile, un correctif ou une version hors du registre, un script qui réussit d'office et strict: false (CODE-14)", async () => {
