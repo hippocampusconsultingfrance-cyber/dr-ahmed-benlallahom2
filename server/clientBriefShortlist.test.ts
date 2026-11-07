@@ -897,7 +897,8 @@ describe("missions employeurs : classement, certifications et accord du candidat
   });
 
   it("n’exporte que les présélectionnés ayant donné leur accord, en clair, avec l’origine de leurs certifications et langues, et dit combien sont exclus (RGPD-03, IA-02)", async () => {
-    const agreed = seedCandidate({ languages: '["Anglais"]', certifications: "BLS", target_countries: '["Émirats arabes unis","Qatar"]', years_experience: 8, availability: "Immédiate", mobility: "Golfe", status: "reviewing" });
+    // Analysed under the current prompt: the language read in its CV counts (V8).
+    const agreed = seedCandidate({ languages: '["Anglais"]', certifications: "BLS", target_countries: '["Émirats arabes unis","Qatar"]', years_experience: 8, availability: "Immédiate", mobility: "Golfe", status: "reviewing", analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION });
     const waiting = seedCandidate();
     const brief = seedBrief();
     const briefId = brief.id as number;
@@ -930,5 +931,69 @@ describe("missions employeurs : classement, certifications et accord du candidat
     memory.rows(clientBriefCandidates)[0]!.candidate_consent_at = null;
     await expect(admin().admin.recruitment.exportCsv({ type: "shortlist", briefId })).rejects.toThrow("Aucun des 2 candidat(s) de la shortlist n’a d’accord noté pour cette mission. Obtenez l’accord de chaque candidat et notez-en la date (« Accord du candidat reçu ») avant d’exporter.");
     expect(memory.rows(recruitmentAuditLogs).filter(row => row.action === "export")).toHaveLength(1);
+  });
+
+  it("ne compte dans une mission, ni n’exporte, les langues qu’une analyse sous une version antérieure du prompt a lues dans le CV, comme le filtre « Langue » (V8)", async () => {
+    // Both declare English; the CV of each was read with Arabic, one under the older prompt.
+    const outdated = seedCandidate({ languages: '["English"]', ai_score: 91, analysis_prompt_version: "recruitment-v7-verified-score" });
+    const current = seedCandidate({ languages: '["English"]', ...scored(70) });
+    memory.seed(cvCandidateLanguages, [
+      { application_id: outdated.id, language: "Arabic", source: "extracted" },
+      { application_id: current.id, language: "Arabic", source: "extracted" },
+    ]);
+    const brief = seedBrief({ required_languages: "Anglais - Arabe" });
+    const briefId = brief.id as number;
+    const { candidates } = await admin().admin.clientBriefs.candidates({ briefId });
+    const matchOf = (id: unknown) => candidates.find(candidate => candidate.id === id)!.match;
+    expect(matchOf(current.id)).toMatchObject({ breakdown: { languages: 15 }, languages: [{ name: "English", origins: ["declared"] }, { name: "Arabic", origins: ["extracted"] }] });
+    // Before: 15 points with « Arabic (extraite du CV par l’IA) ».
+    expect(matchOf(outdated.id)).toMatchObject({ breakdown: { languages: 8 }, languages: [{ name: "English", origins: ["declared"] }] });
+    expect((await admin().admin.recruitment.list({ language: "arabe" })).items.map(item => item.id)).toEqual([current.id]);
+
+    // Nor does the employer's file give it.
+    memory.seed(clientBriefCandidates, [{ brief_id: briefId, application_id: outdated.id, association_status: "shortlisted", candidate_consent_at: "2026-10-20 12:00:00.000" }]);
+    const exported = await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId });
+    expect(exported.csv).toContain('"English (déclarée par le candidat)"');
+    expect(exported.csv).not.toContain("Arabic");
+  });
+
+  it("dit dans la mission, la liste des candidatures et l’export qu’une licence ou une langue a été lue dans la transcription d’un scan (IA-07)", async () => {
+    const scanned = seedCandidate({ specialty: "Anesthésie-réanimation", target_countries: '["Émirats arabes unis"]', languages: '["Français"]', certifications: "BLS" });
+    const transcribed = { sourceLocation: "page 1", confidence: 90, evidenceVerified: true, fromTranscription: true as const };
+    // The vision transcribed the scan: the licence and English were read there, ACLS in the file's text.
+    await saveCvAnalysis(scanned.id as number, cvAnalysis({
+      certifications: [
+        { name: "Licence DHA", issuingBody: null, country: null, expiresAt: null, evidence: "Licence DHA", ...transcribed },
+        { name: "ACLS", issuingBody: null, country: null, expiresAt: null, evidence: "ACLS", ...verified },
+      ],
+      normalizedLanguages: [{ language: "Anglais", proficiency: "fluent", evidence: "Anglais courant", ...transcribed }],
+    }));
+    const brief = seedBrief({ required_certifications: "Licence DHA, ACLS, BLS", required_languages: "Anglais" });
+    const briefId = brief.id as number;
+    const [candidate] = (await admin().admin.clientBriefs.candidates({ briefId })).candidates;
+    expect(candidate!.match).toMatchObject({
+      certifications: [
+        { name: "Licence DHA", origins: ["extracted"], fromTranscription: true, status: "to_confirm" },
+        { name: "ACLS", origins: ["extracted"], status: "to_confirm" },
+        { name: "BLS", origins: ["declared"], status: "to_confirm" },
+      ],
+      languages: [{ name: "Anglais", origins: ["extracted"], fromTranscription: true }],
+    });
+    expect(candidate!.match.certifications[1]).not.toHaveProperty("fromTranscription");
+    // The Candidatures sheet confirms certifications from the same facts.
+    const listed = (await admin().admin.recruitment.list({})).items.find(item => item.id === scanned.id)!;
+    expect(listed.certificationFacts).toEqual([
+      { name: "BLS", origins: ["declared"], expiresAt: null },
+      { name: "Licence DHA", origins: ["extracted"], fromTranscription: true, expiresAt: null },
+      { name: "ACLS", origins: ["extracted"], expiresAt: null },
+    ]);
+
+    // Confirmed, the licence keeps where it was read.
+    await admin().admin.recruitment.candidate.confirmCertification({ id: scanned.id as number, name: "Licence DHA", confirmed: true });
+    memory.seed(clientBriefCandidates, [{ brief_id: briefId, application_id: scanned.id, association_status: "shortlisted", candidate_consent_at: "2026-10-20 12:00:00.000" }]);
+    const exported = await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId });
+    const scan = "extraite par l’IA de la transcription automatique du scan, à contrôler sur le scan";
+    expect(exported.csv).toContain(`"Français (déclarée par le candidat) ; Anglais (${scan})"`);
+    expect(exported.csv).toContain(`"BLS (déclarée par le candidat) ; Licence DHA (${scan}, confirmée par l’admin) ; ACLS (extraite du CV par l’IA)"`);
   });
 });

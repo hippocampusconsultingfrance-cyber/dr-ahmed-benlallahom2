@@ -223,6 +223,14 @@ describe("écran d’une mission employeur", () => {
       { name: "BLS", origins: ["declared"], expiresAt: null, status: "to_confirm" },
     ] })] });
     expect(renderToStaticMarkup(render())).toContain("certifications à confirmer : Licence DHA (extraite du CV par l’IA) ; BLS (déclarée par le candidat) — aucun point tant que l’admin ne les a pas confirmées");
+    // Read in the vision's transcription of a scan, the licence and the language say to check them on the scan (IA-07).
+    state.data = missionData({ candidates: [candidate(11, "Amal", "Haddad", null, {
+      certifications: [{ name: "Licence DHA", origins: ["extracted"], fromTranscription: true, expiresAt: null, status: "to_confirm" }],
+      languages: [{ name: "Anglais", origins: ["extracted"], fromTranscription: true }],
+    })] });
+    const scanned = renderToStaticMarkup(render());
+    expect(scanned).toContain("certification à confirmer : Licence DHA (extraite par l’IA de la transcription automatique du scan, à contrôler sur le scan) — aucun point");
+    expect(scanned).toContain("langues correspondantes : Anglais (extraite par l’IA de la transcription automatique du scan, à contrôler sur le scan)");
   });
 
   it.each([

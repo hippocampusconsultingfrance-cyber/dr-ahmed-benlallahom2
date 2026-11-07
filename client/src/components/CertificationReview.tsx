@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import type { UserLanguage } from "@/contexts/userPreferences";
 import { localeDay, todayInParis } from "@/lib/parisDay";
 import { trpc } from "@/lib/trpc";
-import { CERTIFICATION_RENEWAL_MAX_YEARS, certificationDateIsCurrent, certificationExpiryDate, latestCertificationRenewalDay, RECRUITMENT_FACT_ORIGIN_LABELS, RECRUITMENT_FACT_ORIGINS, type CertificationExpiryDate, type RecruitmentFact } from "@shared/recruitmentFactOrigins";
+import { CERTIFICATION_RENEWAL_MAX_YEARS, certificationDateIsCurrent, certificationExpiryDate, latestCertificationRenewalDay, RECRUITMENT_FACT_ORIGIN_LABELS, RECRUITMENT_FACT_ORIGINS, recruitmentFactOriginLabel, type CertificationExpiryDate, type RecruitmentFact } from "@shared/recruitmentFactOrigins";
 import { isDatabaseRefusalReason } from "@shared/databaseRefusalReasons";
 import { isCertificationRenewalRefusalReason } from "@shared/recruitmentMissionRefusalReasons";
 
@@ -63,7 +63,7 @@ const reviewCopy = {
     locale: "en-GB",
     none: "No certification declared or read in the CV.",
     intro: "A certification only counts in the missions’ matching once confirmed by the admin, after checking the certificate, whether declared by the candidate or read from the CV by the AI.",
-    origins: { declared: "declared by the candidate", extracted: "read from the CV by the AI", confirmed: "confirmed by the admin" },
+    origins: { declared: "declared by the candidate", extracted: "read from the CV by the AI", confirmed: "confirmed by the admin", transcribed: "read by the AI from the automatic transcription of the scan, to be checked on the scan" },
     expiry: (expired: boolean, expiry: CertificationExpiryDate) => `${expired ? "expired" : "expires"} ${expiry.precision === "day" ? "on" : "in"} ${expiry.date}`,
     expiryPerCv: (expiry: string) => `${expiry} according to the CV, to be checked`,
     confirm: "Confirm",
@@ -93,7 +93,7 @@ const reviewCopy = {
     locale: "de-DE",
     none: "Kein Zertifikat angegeben oder im Lebenslauf gelesen.",
     intro: "Ein Zertifikat zählt im Matching der Missionen erst, wenn der Admin es nach Prüfung des Nachweises bestätigt hat, ob vom Kandidaten angegeben oder von der KI aus dem Lebenslauf gelesen.",
-    origins: { declared: "vom Kandidaten angegeben", extracted: "von der KI aus dem Lebenslauf gelesen", confirmed: "vom Admin bestätigt" },
+    origins: { declared: "vom Kandidaten angegeben", extracted: "von der KI aus dem Lebenslauf gelesen", confirmed: "vom Admin bestätigt", transcribed: "von der KI aus der automatischen Transkription des Scans gelesen, am Scan zu prüfen" },
     expiry: (expired: boolean, expiry: CertificationExpiryDate) => expired ? `abgelaufen ${expiry.precision === "day" ? "am" : expiry.precision === "month" ? "im" : "im Jahr"} ${expiry.date}` : `gültig bis ${expiry.date}`,
     expiryPerCv: (expiry: string) => `${expiry} laut Lebenslauf, zu prüfen`,
     confirm: "Bestätigen",
@@ -123,7 +123,7 @@ const reviewCopy = {
     locale: "zh-CN",
     none: "未申报证书，简历中也未读到证书。",
     intro: "无论是候选人申报的证书还是 AI 从简历中提取的证书，都须经管理员核实证明文件并确认后才计入任务匹配。",
-    origins: { declared: "候选人自行申报", extracted: "AI 从简历中提取", confirmed: "管理员已确认" },
+    origins: { declared: "候选人自行申报", extracted: "AI 从简历中提取", confirmed: "管理员已确认", transcribed: "AI 从扫描件的自动转录中提取，需对照扫描件核实" },
     expiry: (expired: boolean, expiry: CertificationExpiryDate) => expired ? `已于 ${expiry.date} 过期` : `有效期至 ${expiry.date}`,
     expiryPerCv: (expiry: string) => `${expiry}（据简历，待核实）`,
     confirm: "确认",
@@ -233,7 +233,7 @@ export default function CertificationReview({ applicationId, certifications, lan
                 <div className="min-w-0">
                   <p className="font-medium text-foreground">{certification.name}{expiry ? <span className={`font-normal ${expired ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}> · {certification.expiryUnverified ? copy.expiryPerCv(expiry) : expiry}</span> : null}</p>
                   <p className="mt-1 flex flex-wrap gap-1.5">
-                    {RECRUITMENT_FACT_ORIGINS.filter(origin => certification.origins.includes(origin)).map(origin => <span key={origin} className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${originTone(origin)}`}>{copy.origins[origin]}</span>)}
+                    {RECRUITMENT_FACT_ORIGINS.filter(origin => certification.origins.includes(origin)).map(origin => <span key={origin} className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${originTone(origin)}`}>{recruitmentFactOriginLabel(certification, origin, copy.origins)}</span>)}
                   </p>
                 </div>
                 {(confirmed || !expired) && (

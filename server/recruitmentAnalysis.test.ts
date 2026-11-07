@@ -938,6 +938,51 @@ describe("citations lues dans la transcription de la vision (IA-07)", () => {
     expect(marks({ extractionMethod: "pdf_text" })).toEqual([[true, false], [true, false]]);
   });
 
+  it("marque aussi l’expérience, la langue et la certification lues dans la transcription, et les points forts le disent", () => {
+    const facts = analysisFixture({
+      ...reading,
+      normalizedExperiences: [{ role: "Praticien hospitalier", organization: "CHU de Lyon", startDate: null, endDate: null, employmentType: "permanent", specialty: "", country: null, durationMonths: null, evidence: "Praticien hospitalier, CHU de Lyon", sourceLocation: "page 2", confidence: 95 }],
+      normalizedLanguages: [{ language: "Anglais", proficiency: "fluent", evidence: "Anglais courant", sourceLocation: "page 2", confidence: 95 }],
+      certifications: [
+        { name: "Licence DHA", issuingBody: null, country: null, expiresAt: null, evidence: "Licence DHA", sourceLocation: "page 2", confidence: 95 },
+        { name: "ACLS", issuingBody: null, country: null, expiresAt: null, evidence: "Certification ACLS", sourceLocation: "page 1", confidence: 95 },
+      ],
+    });
+    const text = [
+      "[PAGE 1]", "Médecin anesthésiste-réanimateur", "Spécialité : Anesthésie-réanimation", "Certification ACLS",
+      "[PAGE 2]", "Compétence : réanimation polyvalente", "Praticien hospitalier, CHU de Lyon", "Anglais courant", "Licence DHA",
+    ].join("\n");
+    const marks = (result: ReturnType<typeof normalizeRecruitmentAnalysis>) => [
+      result.normalizedExperiences.map(item => [item.evidenceVerified, item.fromTranscription ?? false]),
+      result.normalizedLanguages.map(item => [item.evidenceVerified, item.fromTranscription ?? false]),
+      result.certifications.map(item => [item.name, item.evidenceVerified, item.fromTranscription ?? false]),
+    ];
+    // The vision read page 2 again: what is quoted there is marked, page 1 not.
+    const reread = normalizeRecruitmentAnalysis(facts, text, {
+      ...declared,
+      extractionMethod: "pdf_text",
+      extractionConfidence: 95,
+      invisibleText: { characters: 0, excerpt: "", unverifiable: { characters: 40, excerpt: "Licence DHA", reasons: ["image"], share: 0, rereadPages: [2] } },
+    });
+    expect(marks(reread)).toEqual([[[true, true]], [[true, true]], [["Licence DHA", true, true], ["ACLS", true, false]]]);
+    expect(reread.strengths).toEqual(expect.arrayContaining([
+      "Certification(s) trouvée(s) dans le texte lu par l’outil : ACLS.",
+      "Certification(s) lue(s) dans la transcription automatique du scan, à contrôler sur le scan : Licence DHA.",
+      "Langue(s) lue(s) dans la transcription automatique du scan, à contrôler sur le scan : Anglais.",
+      "1 expérience(s) professionnelle(s) lue(s) dans la transcription automatique du scan, à contrôler sur le scan.",
+      "Compétence(s) lue(s) dans la transcription automatique du scan, à contrôler sur le scan : réanimation polyvalente.",
+      "Titre professionnel trouvé dans le texte lu par l’outil : Médecin anesthésiste-réanimateur.",
+    ]));
+    expect(reread.strengths.join(" ")).not.toContain("trouvée(s) dans le texte lu par l’outil : Licence DHA");
+    // The facts kept for the filters and a mission carry the mark.
+    expect(verifiedRecruitmentFacts(reread).certifications.map(item => [item.name, item.fromTranscription ?? false])).toEqual([["Licence DHA", true], ["ACLS", false]]);
+    // A whole scan: every fact is marked; a digital PDF: none.
+    expect(marks(normalizeRecruitmentAnalysis(facts, text, { ...declared, extractionMethod: "pdf_vision", extractionConfidence: 95 }))).toEqual([[[true, true]], [[true, true]], [["Licence DHA", true, true], ["ACLS", true, true]]]);
+    const digital = normalizeRecruitmentAnalysis(facts, text, { ...declared, extractionMethod: "pdf_text" });
+    expect(marks(digital)).toEqual([[[true, false]], [[true, false]], [["Licence DHA", true, false], ["ACLS", true, false]]]);
+    expect(digital.strengths.join(" ")).not.toContain("transcription");
+  });
+
   it("PDF numérique dont la vision a relu la page 2 : seules les citations de cette page sont marquées", () => {
     const result = normalizeRecruitmentAnalysis(reading, source, {
       ...declared,

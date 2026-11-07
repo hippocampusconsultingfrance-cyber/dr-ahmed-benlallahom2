@@ -5,7 +5,7 @@ import { TRPCError } from "@trpc/server";
 import { getDb } from "../../db";
 import { cvApplications, cvCandidateCertifications, cvCandidateLanguages, clientBriefCandidates } from "../../../drizzle/schema";
 import { eq, and, or, sql, inArray, isNotNull, type SQL } from "drizzle-orm";
-import { certificationFacts, languageFacts, type CertificationRow, type LanguageRow } from "../../clientBriefMatching";
+import { certificationFacts, languageFacts, sameRecruitmentFact, type CertificationRow, type LanguageRow } from "../../clientBriefMatching";
 import { RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "../../recruitmentAnalysis";
 import { adminFilterContains } from "../../adminSearch";
 import type { CertificationRenewalRefusalReason, MissionAssociationRefusalReason, MissionConsentRefusalReason } from "../../../shared/recruitmentMissionRefusalReasons";
@@ -61,26 +61,70 @@ function groupByApplication<T extends { applicationId: number }>(rows: T[]) {
   return groups;
 }
 
+/** The names of the facts an analysis read in what the vision transcribed from a scan (IA-07), as its normalized_* column keeps them. */
+function transcribedFactNames(value: string | null, key: "name" | "language") {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed)
+      ? parsed.flatMap(item => {
+        const fact = item && typeof item === "object" ? item as Record<string, unknown> : {};
+        return fact.fromTranscription === true && typeof fact[key] === "string" ? [fact[key] as string] : [];
+      })
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Fact rows with what the latest analysis of their application says of them:
+ * whether that analysis is of the current version, and whether it read the
+ * fact, read in the CV, in what the vision transcribed from a scan (IA-07).
+ * One query, for the applications that have rows.
+ */
+async function withLatestAnalysis<T extends { applicationId: number; source: string }>(db: AdminDb, rows: T[], analysedFacts: typeof cvApplications.normalizedCertifications | typeof cvApplications.normalizedLanguages, key: "name" | "language", name: (row: T) => string) {
+  const ids = Array.from(new Set(rows.map(row => row.applicationId)));
+  const analyses = ids.length
+    ? await db.select({ id: cvApplications.id, version: cvApplications.analysisPromptVersion, facts: analysedFacts }).from(cvApplications).where(inArray(cvApplications.id, ids))
+    : [];
+  const byApplication = new Map(analyses.map(analysis => [analysis.id, { current: analysis.version === RECRUITMENT_ANALYSIS_PROMPT_VERSION, transcribed: transcribedFactNames(analysis.facts, key) }]));
+  return rows.map(row => ({
+    ...row,
+    analysisIsCurrent: byApplication.get(row.applicationId)?.current ?? false,
+    fromTranscription: row.source === "extracted" && (byApplication.get(row.applicationId)?.transcribed ?? []).some(item => sameRecruitmentFact(item, name(row))),
+  }));
+}
+
 /**
  * Certifications of these applications with their origins (IA-02): the
  * declared text and the cv_candidate_certifications rows, one query whatever
- * the number of applications.
+ * the number of applications, and one for what their analysis read in a
+ * scan's transcription (IA-07).
  */
 export async function certificationFactsByApplication(db: AdminDb, applications: Array<{ id: number; certifications: string | null }>) {
   const rows = applications.length
-    ? groupByApplication(await db.select({ applicationId: cvCandidateCertifications.applicationId, name: cvCandidateCertifications.name, source: cvCandidateCertifications.source, confirmedAt: cvCandidateCertifications.confirmedAt, expiresAt: cvCandidateCertifications.expiresAt })
+    ? groupByApplication(await withLatestAnalysis(db, await db.select({ applicationId: cvCandidateCertifications.applicationId, name: cvCandidateCertifications.name, source: cvCandidateCertifications.source, confirmedAt: cvCandidateCertifications.confirmedAt, expiresAt: cvCandidateCertifications.expiresAt })
       .from(cvCandidateCertifications)
-      .where(inArray(cvCandidateCertifications.applicationId, applications.map(application => application.id))))
+      .where(inArray(cvCandidateCertifications.applicationId, applications.map(application => application.id))), cvApplications.normalizedCertifications, "name", row => row.name))
     : new Map<number, CertificationRow[]>();
   return new Map(applications.map(application => [application.id, certificationFacts(application.certifications, rows.get(application.id) ?? [])]));
 }
 
-/** Languages of these applications with their origins (declared, read in the CV), one query. */
+/**
+ * Languages of these applications with their origins (declared, read in the
+ * CV), one query, and one for their analysis. A language read in the CV
+ * counts only for an analysis of the current version, as for the Langue
+ * filter and a matching profile: a dossier analysed under an older prompt
+ * keeps its declared languages until its CV is analysed again. Read in a
+ * scan's transcription, it says so (IA-07).
+ */
 export async function languageFactsByApplication(db: AdminDb, applications: Array<{ id: number; languages: string | null }>) {
   const rows = applications.length
-    ? groupByApplication(await db.select({ applicationId: cvCandidateLanguages.applicationId, language: cvCandidateLanguages.language, source: cvCandidateLanguages.source })
+    ? groupByApplication((await withLatestAnalysis(db, await db.select({ applicationId: cvCandidateLanguages.applicationId, language: cvCandidateLanguages.language, source: cvCandidateLanguages.source })
       .from(cvCandidateLanguages)
-      .where(inArray(cvCandidateLanguages.applicationId, applications.map(application => application.id))))
+      .where(inArray(cvCandidateLanguages.applicationId, applications.map(application => application.id))), cvApplications.normalizedLanguages, "language", row => row.language))
+      .filter(row => row.source !== "extracted" || row.analysisIsCurrent))
     : new Map<number, LanguageRow[]>();
   return new Map(applications.map(application => [application.id, languageFacts(application.languages, rows.get(application.id) ?? [])]));
 }

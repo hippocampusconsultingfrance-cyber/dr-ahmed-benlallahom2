@@ -31,6 +31,8 @@ const trapped = {
     { name: "ACLS", origins: ["declared", "extracted"], expiresAt: "2031-06-30" },
     // The expiry a CV whose analysis retained no facts gives the declared PALS.
     { name: "PALS", origins: ["declared"], expiresAt: "2020-03", expiryUnverified: true },
+    // Read by the AI in the vision's transcription of a scanned page (IA-07).
+    { name: "Permis DOH", origins: ["extracted"], fromTranscription: true, expiresAt: null },
   ],
 };
 
@@ -121,6 +123,17 @@ describe("IA-02 — vivier filtré par certification", () => {
   ] as const)("dans la langue de l’administration (%s)", (language, expected) => {
     view.language = language;
     searchCertification("licence");
+    expect(renderToStaticMarkup(render())).toContain(expected);
+  });
+
+  it.each([
+    ["fr", "Certification recherchée:</strong> Permis DOH (extraite par l’IA de la transcription automatique du scan, à contrôler sur le scan)</p>"],
+    ["en", "Searched certification:</strong> Permis DOH (read by the AI from the automatic transcription of the scan, to be checked on the scan)</p>"],
+    ["de", "Gesuchte Zertifizierung:</strong> Permis DOH (von der KI aus der automatischen Transkription des Scans gelesen, am Scan zu prüfen)</p>"],
+    ["zh", "所查认证:</strong> Permis DOH (AI 从扫描件的自动转录中提取，需对照扫描件核实)</p>"],
+  ] as const)("dit d’une certification lue dans la transcription d’un scan qu’elle est à contrôler sur le scan (IA-07, %s)", (language, expected) => {
+    view.language = language;
+    searchCertification("doh");
     expect(renderToStaticMarkup(render())).toContain(expected);
   });
 });

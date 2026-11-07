@@ -78,6 +78,8 @@ export type NormalizedExperience = {
   sourceLocation: string;
   confidence: number;
   evidenceVerified: boolean;
+  /** Read on a page the vision transcribed, as for CvEvidenceReference (IA-07). */
+  fromTranscription?: true;
 };
 
 export type NormalizedCertification = {
@@ -89,6 +91,8 @@ export type NormalizedCertification = {
   sourceLocation: string;
   confidence: number;
   evidenceVerified: boolean;
+  /** Read on a page the vision transcribed (IA-07): kept with the verified facts, and shown « à contrôler sur le scan ». */
+  fromTranscription?: true;
 };
 
 export type NormalizedLanguage = {
@@ -98,6 +102,8 @@ export type NormalizedLanguage = {
   sourceLocation: string;
   confidence: number;
   evidenceVerified: boolean;
+  /** Read on a page the vision transcribed, as for NormalizedCertification (IA-07). */
+  fromTranscription?: true;
 };
 
 export type RecruitmentAnalysisResult = {
@@ -1544,9 +1550,14 @@ export function normalizeRecruitmentAnalysis(
   // in what the vision transcribed, not in the file: the admin is told to
   // compare it with the scan. The marking changes no score: whether the score
   // of a CV the vision read is capped or withheld is left to the owner.
+  // Every fact quoted there is marked, an experience, a language or a
+  // certification as a field's quote: it is a licence read on a scan that the
+  // admin is asked to confirm.
   const transcribedPages = new Set(declared.invisibleText?.unverifiable?.rereadPages ?? []);
   const fromTranscription = (sourceLocation: string) =>
     declared.extractionMethod === "pdf_vision" || transcribedPages.has(locationPage(sourceLocation) ?? 0);
+  const transcriptionMark = (sourceLocation: string) =>
+    fromTranscription(sourceLocation) ? { fromTranscription: true as const } : {};
   const normalizedExperiences = analysis.normalizedExperiences.map(item => {
     const initiallyMarked = markEvidence(
       item,
@@ -1609,6 +1620,7 @@ export function normalizeRecruitmentAnalysis(
         ? item.country
         : null,
       durationMonths: timeline.durationMonths,
+      ...transcriptionMark(item.sourceLocation),
     };
   });
   const normalizedLanguages = analysis.normalizedLanguages.map(item => {
@@ -1636,6 +1648,7 @@ export function normalizeRecruitmentAnalysis(
       proficiency: isVerifiedFact(marked)
         ? verifiedLanguageProficiency(associatedSegments.join("\n"), item.proficiency)
         : "unknown" as const,
+      ...transcriptionMark(item.sourceLocation),
     };
   });
   const certifications = analysis.certifications.map(item => {
@@ -1680,6 +1693,7 @@ export function normalizeRecruitmentAnalysis(
       expiresAt: baseVerified && evidenceContainsDate(unambiguousEvidence, item.expiresAt)
         ? item.expiresAt
         : null,
+      ...transcriptionMark(item.sourceLocation),
     };
   });
   const fieldEvidence = analysis.fieldEvidence
@@ -1696,7 +1710,7 @@ export function normalizeRecruitmentAnalysis(
     .map((item): CvEvidenceReference => {
       const marked = {
         ...markEvidence(item, sourceText, [item.value], declared.extractionConfidence),
-        ...(fromTranscription(item.sourceLocation) ? { fromTranscription: true as const } : {}),
+        ...transcriptionMark(item.sourceLocation),
       };
       if (fieldEvidenceMatchesAnalysis(item, analysis)) return marked;
       return {
@@ -1726,7 +1740,7 @@ export function normalizeRecruitmentAnalysis(
         [item.documentValue],
         declared.extractionConfidence
       ),
-      ...(fromTranscription(item.sourceLocation) ? { fromTranscription: true as const } : {}),
+      ...transcriptionMark(item.sourceLocation),
     }));
   const evidenceExperiences = distinctExperiencesByFact(normalizedExperiences);
   const sourcePassages = normalizedSourcePassages(sourceText);
@@ -1798,26 +1812,34 @@ export function normalizeRecruitmentAnalysis(
   const verifiedEvidenceCount = allEvidence.filter(isVerifiedFact).length;
   // A "verified" fact only means its quote was found in the text read from the
   // CV, which can hold passages invisible on screen: the wording shown to the
-  // admin says so and never calls it verified (IA-01).
+  // admin says so and never calls it verified (IA-01). Found in what the vision
+  // transcribed from a scan, it is said to be checked on the scan (IA-07).
+  const readIn = <T extends { fromTranscription?: true }>(items: T[], value: (item: T) => string) => ({
+    text: uniqueStrings(items.filter(item => !item.fromTranscription).map(value)),
+    transcription: uniqueStrings(items.filter(item => item.fromTranscription).map(value)),
+  });
+  const foundStrengths = (found: string, read: string, items: { text: string[]; transcription: string[] }) => [
+    ...(items.text.length > 0 ? [`${found} dans le texte lu par l’outil : ${items.text.join(", ")}.`] : []),
+    ...(items.transcription.length > 0 ? [`${read} dans la transcription automatique du scan, à contrôler sur le scan : ${items.transcription.join(", ")}.`] : []),
+  ];
+  const titleField = verifiedFields.find(item => item.field === "professionalTitle");
+  const transcribedExperiences = verifiedExperiences.filter(item => item.fromTranscription).length;
   const deterministicStrengths = uniqueStrings([
-    ...(verifiedProfessionalTitle
-      ? [`Titre professionnel trouvé dans le texte lu par l’outil : ${verifiedProfessionalTitle}.`]
+    ...(titleField
+      ? [titleField.fromTranscription
+          ? `Titre professionnel lu dans la transcription automatique du scan, à contrôler sur le scan : ${verifiedProfessionalTitle}.`
+          : `Titre professionnel trouvé dans le texte lu par l’outil : ${verifiedProfessionalTitle}.`]
       : []),
-    ...(verifiedSpecialties.length > 0
-      ? [`Spécialité(s) trouvée(s) dans le texte lu par l’outil : ${verifiedSpecialties.join(", ")}.`]
+    ...foundStrengths("Spécialité(s) trouvée(s)", "Spécialité(s) lue(s)", readIn(verifiedFields.filter(item => item.field === "specialty"), item => item.value)),
+    ...(verifiedExperiences.length > transcribedExperiences
+      ? [`${verifiedExperiences.length - transcribedExperiences} expérience(s) professionnelle(s) sourcée(s).`]
       : []),
-    ...(verifiedExperiences.length > 0
-      ? [`${verifiedExperiences.length} expérience(s) professionnelle(s) sourcée(s).`]
+    ...(transcribedExperiences > 0
+      ? [`${transcribedExperiences} expérience(s) professionnelle(s) lue(s) dans la transcription automatique du scan, à contrôler sur le scan.`]
       : []),
-    ...(verifiedSkills.length > 0
-      ? [`Compétence(s) trouvée(s) dans le texte lu par l’outil : ${verifiedSkills.join(", ")}.`]
-      : []),
-    ...(verifiedLanguages.length > 0
-      ? [`Langue(s) trouvée(s) dans le texte lu par l’outil : ${verifiedLanguages.join(", ")}.`]
-      : []),
-    ...(verifiedCertifications.length > 0
-      ? [`Certification(s) trouvée(s) dans le texte lu par l’outil : ${verifiedCertifications.map(item => item.name).join(", ")}.`]
-      : []),
+    ...foundStrengths("Compétence(s) trouvée(s)", "Compétence(s) lue(s)", readIn(verifiedFields.filter(item => item.field === "skill"), item => item.value)),
+    ...foundStrengths("Langue(s) trouvée(s)", "Langue(s) lue(s)", readIn(normalizedLanguages.filter(isVerifiedFact), item => item.language)),
+    ...foundStrengths("Certification(s) trouvée(s)", "Certification(s) lue(s)", readIn(verifiedCertifications, item => item.name)),
   ]);
   const deterministicGaps = uniqueStrings([
     ...(!verifiedProfessionalTitle && verifiedSpecialties.length === 0

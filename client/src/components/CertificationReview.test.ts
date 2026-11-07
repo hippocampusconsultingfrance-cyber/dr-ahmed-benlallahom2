@@ -163,6 +163,27 @@ describe("confirmation des certifications par l’admin (IA-02)", () => {
     expect(renderToStaticMarkup(CertificationReview({ applicationId: 5, certifications: [] }))).toContain("Aucune certification déclarée ni lue dans le CV.");
   });
 
+  it("dit d’une certification lue dans la transcription d’un scan qu’elle est à contrôler sur le scan, dans la langue de l’écran (IA-07)", () => {
+    const scanned = [
+      { name: "Licence DHA", origins: ["extracted"], fromTranscription: true, expiresAt: null },
+      { name: "ACLS", origins: ["extracted", "confirmed"], expiresAt: null },
+    ];
+    const html = (language?: "fr" | "en" | "de" | "zh") => renderToStaticMarkup(CertificationReview({ applicationId: 5, certifications: scanned as never, language }));
+    expect(html()).toContain(">extraite par l’IA de la transcription automatique du scan, à contrôler sur le scan</span>");
+    // ACLS was read in the file's own text.
+    expect(html()).toContain(">extraite du CV par l’IA</span>");
+    expect(html()).toContain('aria-label="Confirmer Licence DHA"');
+    expect(html("en")).toContain(">read by the AI from the automatic transcription of the scan, to be checked on the scan</span>");
+    expect(html("de")).toContain(">von der KI aus der automatischen Transkription des Scans gelesen, am Scan zu prüfen</span>");
+    expect(html("zh")).toContain(">AI 从扫描件的自动转录中提取，需对照扫描件核实</span>");
+
+    // The certification filter of Candidatures says it too.
+    hooks.values = [];
+    state.items = [dossier({ certificationFacts: scanned })];
+    typeCertification("dha");
+    expect(renderToStaticMarkup(renderTab())).toContain("Certification recherchée : Licence DHA (extraite par l’IA de la transcription automatique du scan, à contrôler sur le scan)</p>");
+  });
+
   it("dit qu’une certification a expiré et propose de confirmer son renouvellement, avec sa nouvelle date d’expiration ou, si on le coche, sans", async () => {
     const certifications = [
       { name: "ACLS", origins: ["declared", "extracted", "confirmed"], expiresAt: "2023-05" },
