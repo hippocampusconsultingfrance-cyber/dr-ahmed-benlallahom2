@@ -1,4 +1,6 @@
+import { INVALID_CHARACTERS_REASON } from "@shared/publicFormRefusalReasons";
 import { recruitmentCvRefusalReason } from "@shared/recruitmentCvLimits";
+import { publicFormCopy } from "./publicFormCopy";
 
 type Language = "fr" | "en" | "de" | "zh";
 
@@ -9,6 +11,7 @@ const serverErrorCopy = {
     rateLimited: "Too many attempts have been made. Wait one hour before trying again.",
     invalidInformation: "The application details are invalid.",
     tooManyTargetCountries: "Too many target countries are selected. Remove some and try again.",
+    invalidCharacters: publicFormCopy.invalidCharacters.en,
     unavailable: "The application service is temporarily unavailable.",
     cvRequired: "The CV is required.",
     cvTooLarge: "The CV must not exceed 4 MB. Compress it or save it as a PDF, then try again.",
@@ -24,6 +27,7 @@ const serverErrorCopy = {
     rateLimited: "Es wurden zu viele Versuche unternommen. Warten Sie eine Stunde, bevor Sie es erneut versuchen.",
     invalidInformation: "Die Bewerbungsangaben sind ungültig.",
     tooManyTargetCountries: "Es sind zu viele Zielländer ausgewählt. Entfernen Sie einige und versuchen Sie es erneut.",
+    invalidCharacters: publicFormCopy.invalidCharacters.de,
     unavailable: "Der Bewerbungsdienst ist vorübergehend nicht verfügbar.",
     cvRequired: "Der Lebenslauf ist erforderlich.",
     cvTooLarge: "Der Lebenslauf darf höchstens 4 MB groß sein. Komprimieren Sie ihn oder speichern Sie ihn als PDF und versuchen Sie es erneut.",
@@ -39,6 +43,7 @@ const serverErrorCopy = {
     rateLimited: "尝试次数过多。请等待一小时后再试。",
     invalidInformation: "申请信息无效。",
     tooManyTargetCountries: "所选目标国家过多。请删除部分后重试。",
+    invalidCharacters: publicFormCopy.invalidCharacters.zh,
     unavailable: "申请服务暂时不可用。",
     cvRequired: "必须提供简历。",
     cvTooLarge: "简历不得超过 4 MB。请压缩或另存为 PDF 后重试。",
@@ -61,6 +66,8 @@ const serverErrorCauses = new Map<string, ServerErrorCause>([
   ["recruitment_rate_limited", "rateLimited"],
   ["recruitment_application_invalid", "invalidInformation"],
   ["recruitment_target_countries_too_many", "tooManyTargetCountries"],
+  // A field refused for its characters (INTL-05).
+  [INVALID_CHARACTERS_REASON, "invalidCharacters"],
   ["recruitment_service_unavailable", "unavailable"],
   ["recruitment_cv_required", "cvRequired"],
   ["recruitment_cv_too_large", "cvTooLarge"],

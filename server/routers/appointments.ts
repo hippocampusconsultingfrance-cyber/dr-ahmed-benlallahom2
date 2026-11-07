@@ -24,6 +24,7 @@ import {
   toE164PhoneNumber,
   type BookingRefusalReason,
 } from "../../shared/bookingPolicy";
+import { cleanTextInput, multiLineText, singleLineText } from "../../shared/textInput";
 import { getSafeCheckoutOrigin } from "./publicOrigin";
 import { enforcePublicFormRateLimit, givePublicFormAttemptBack, withinBookingGiveBackCap } from "./publicForms";
 import { parisDateKey, parseAppointmentDate, isNightRateForParis, isBookableAppointmentTime } from "./parisTime";
@@ -90,10 +91,6 @@ export function occupiesSlot() {
   );
 }
 
-/** Refuse NUL and other control characters (PostgreSQL rejects NUL in text). */
-const NO_CONTROL_CHARACTERS = /^[^\u0000-\u001F\u007F]*$/;
-const NO_CONTROL_CHARACTERS_EXCEPT_NEWLINES = /^[^\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]*$/;
-
 /**
  * Adresse du patient : la même règle à la réservation et à sa correction depuis
  * l’administration (EXPL-02), et sur la page de réservation (RES-10).
@@ -140,7 +137,11 @@ export const appointmentsRouter = router({
   create: publicProcedure
     .input(
       z.object({
-        customerName: z.string().min(1).max(255).regex(NO_CONTROL_CHARACTERS, "Caractères non autorisés"),
+        // Sans caractère de contrôle (PostgreSQL refuse NUL dans un texte) ni
+        // inversion du sens du texte (INTL-05) : refusé en 400, motif
+        // invalid_characters. Vide une fois nettoyé, il est refusé plus bas
+        // avec le motif invalid_name, que la page traduit.
+        customerName: singleLineText(z.string().max(255)),
         customerEmail: bookingCustomerEmail,
         // Lu comme la page le vérifie (chiffres arabes, persans ou pleine
         // chasse en 0-9, sans marques de direction), puis enregistré au format
@@ -149,7 +150,7 @@ export const appointmentsRouter = router({
         appointmentDate: appointmentDateInput,
         // Objet de la demande, sans information médicale (minimisation) :
         // conservé pour le tableau de bord, jamais recopié dans un email.
-        requestDetails: z.string().trim().min(1).max(BOOKING_REQUEST_SUBJECT_MAX_LENGTH).regex(NO_CONTROL_CHARACTERS_EXCEPT_NEWLINES, "Caractères non autorisés"),
+        requestDetails: multiLineText(z.string().min(1).max(BOOKING_REQUEST_SUBJECT_MAX_LENGTH)),
         // Langue affichée par la page de réservation : emails patients en
         // français pour « fr », en anglais sinon (EN-01).
         language: z.enum(SITE_LANGUAGES).optional().default("fr"),
@@ -326,8 +327,12 @@ export const appointmentsRouter = router({
           if (challenge !== "passed") throw await challengeRefusal(challenge);
           bookingChallengePassed = true;
         }
+        // DATA-13 : la fin du maintien part en chaîne ISO-8601 UTC, comme dans
+        // invoiceNumbering.ts. Une Date serait envoyée à l’heure locale du
+        // processus, avec un décalage que PostgreSQL ignore pour une colonne
+        // `timestamp` : en TZ=Europe/Paris, le maintien finirait 1 à 2 h trop tard.
         await db.execute(
-          sql`INSERT INTO appointments (tracking_id, customer_name, customer_email, customer_phone, consultation_type, request_details, appointment_date, slot_key, duration, base_price, final_price, is_night_rate, payment_status, appointment_status, hold_expires_at, language) VALUES (${trackingId}, ${input.customerName}, ${input.customerEmail}, ${input.customerPhone}, ${'health_advice'}, ${input.requestDetails}, ${appointmentDateFormatted}, ${slotKey}, ${30}, ${basePrice}, ${finalPrice}, ${isNightRate ? 1 : 0}, ${'pending'}, ${'held'}, ${holdExpiresAt}, ${input.language})`
+          sql`INSERT INTO appointments (tracking_id, customer_name, customer_email, customer_phone, consultation_type, request_details, appointment_date, slot_key, duration, base_price, final_price, is_night_rate, payment_status, appointment_status, hold_expires_at, language) VALUES (${trackingId}, ${input.customerName}, ${input.customerEmail}, ${input.customerPhone}, ${'health_advice'}, ${input.requestDetails}, ${appointmentDateFormatted}, ${slotKey}, ${30}, ${basePrice}, ${finalPrice}, ${isNightRate ? 1 : 0}, ${'pending'}, ${'held'}, ${holdExpiresAt.toISOString()}, ${input.language})`
         );
         await recordBookingHold(bookingIpHash, trackingId).catch(error => console.error("Booking hold record failed:", error instanceof Error ? error.name : "UnknownError"));
         // Réservations simultanées : chacune a pu lire l’état d’avant les
@@ -420,7 +425,10 @@ export const appointmentsRouter = router({
         if (!Number.isFinite(expectedPrice) || Math.round(expectedPrice * 100) !== Math.round(input.finalPrice * 100)) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "Le montant du paiement ne correspond pas au rendez-vous" });
         }
-        if (appointment.customerEmail !== input.customerEmail || appointment.customerName !== input.customerName) {
+        // Nom enregistré nettoyé (INTL-05), gardé tel que tapé par la page
+        // (espace final, marque de direction) : comparés nettoyés tous deux,
+        // ce qui vaut aussi pour un créneau retenu avant ce nettoyage.
+        if (appointment.customerEmail !== input.customerEmail || cleanTextInput(appointment.customerName) !== cleanTextInput(input.customerName)) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "Les informations du paiement ne correspondent pas au rendez-vous" });
         }
 
@@ -454,7 +462,7 @@ export const appointmentsRouter = router({
           customer_email: input.customerEmail,
           metadata: {
             trackingId: input.trackingId,
-            customerName: input.customerName,
+            customerName: appointment.customerName,
           },
           expires_at: stripeExpiresAt(appointment.holdExpiresAt),
           success_url: `${getSafeCheckoutOrigin()}/booking/confirmation?status=success&trackingId=${encodeURIComponent(input.trackingId)}&session_id={CHECKOUT_SESSION_ID}`,

@@ -18,13 +18,16 @@ describe("page de questions médicales — refus de l’envoi", () => {
     expect(medicalQuestionSubmitError("TOO_MANY_REQUESTS")).toBe("tooManyRequests");
     expect(medicalQuestionSubmitError("BAD_REQUEST")).toBe("turnstile");
     expect(medicalQuestionSubmitError(undefined)).toBe("turnstile");
+    // A field refused for its characters (INTL-05) is to be typed again, whatever the code.
+    expect(medicalQuestionSubmitError("BAD_REQUEST", "invalid_characters")).toBe("invalidCharacters");
+    expect(medicalQuestionSubmitError("BAD_REQUEST", "something_else")).toBe("turnstile");
   });
 
   it("n’entoure plus la case anti-robot d’un refus précédent quand le plafond est atteint ensuite", async () => {
     const { medicalQuestionAlert, medicalQuestionFeedback, medicalQuestionInvalidFields } = await import("./MedicalQuestionsPage");
     const form = { firstName: "Jeanne", lastName: "Martin", email: "jeanne@test.local", phone: "+33 6 12 34 56 78", question: "Puis-je garder mes lunettes jusqu’au bloc opératoire ?", privacy: true, publication: false, urgency: true };
 
-    let feedback = medicalQuestionFeedback({ invalid: new Set(), rateLimited: false }, { type: "submit", invalid: medicalQuestionInvalidFields(form, "first-token") });
+    let feedback = medicalQuestionFeedback({ invalid: new Set(), rateLimited: false, invalidCharacters: false }, { type: "submit", invalid: medicalQuestionInvalidFields(form, "first-token") });
     feedback = medicalQuestionFeedback(feedback, { type: "refused", code: "BAD_REQUEST" });
     expect(feedback.invalid).toEqual(new Set(["turnstile"]));
     expect(medicalQuestionAlert(feedback)).toBe("error");
@@ -37,9 +40,22 @@ describe("page de questions médicales — refus de l’envoi", () => {
 
     // A later submit with a field to fix shows the fields again, not the cap.
     feedback = medicalQuestionFeedback(feedback, { type: "submit", invalid: medicalQuestionInvalidFields({ ...form, phone: "" }, null) });
-    expect(feedback).toEqual({ invalid: new Set(["phone", "turnstile"]), rateLimited: false });
+    expect(feedback).toEqual({ invalid: new Set(["phone", "turnstile"]), rateLimited: false, invalidCharacters: false });
     expect(medicalQuestionAlert(feedback)).toBe("error");
     feedback = medicalQuestionFeedback(feedback, { type: "edit", field: "phone" });
     expect(feedback.invalid).toEqual(new Set(["turnstile"]));
+  });
+
+  it("dit de retaper un champ refusé pour ses caractères, sans entourer l’anti-robot, jusqu’à l’envoi suivant (INTL-05)", async () => {
+    const { medicalQuestionAlert, medicalQuestionFeedback, medicalQuestionInvalidFields } = await import("./MedicalQuestionsPage");
+    const form = { firstName: "Jeanne", lastName: "Martin", email: "jeanne@test.local", phone: "+33 6 12 34 56 78", question: "Puis-je garder mes lunettes jusqu’au bloc opératoire ?", privacy: true, publication: false, urgency: true };
+
+    let feedback = medicalQuestionFeedback({ invalid: new Set(), rateLimited: false, invalidCharacters: false }, { type: "submit", invalid: medicalQuestionInvalidFields(form, "token") });
+    feedback = medicalQuestionFeedback(feedback, { type: "refused", code: "BAD_REQUEST", reason: "invalid_characters" });
+    expect(feedback.invalid.size).toBe(0);
+    expect(medicalQuestionAlert(feedback)).toBe("invalidCharacters");
+
+    feedback = medicalQuestionFeedback(feedback, { type: "submit", invalid: medicalQuestionInvalidFields(form, "token") });
+    expect(medicalQuestionAlert(feedback)).toBeNull();
   });
 });

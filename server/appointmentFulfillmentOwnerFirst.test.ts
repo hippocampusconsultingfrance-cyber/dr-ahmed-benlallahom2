@@ -173,7 +173,9 @@ function job(id: number, jobType: string, overrides: Partial<Job> = {}): Job {
   return { id, appointmentId: 42, jobType, status: "queued", attempts: 0, maxAttempts: 3, scheduledFor: new Date(Date.now() - 1000), createdAt: new Date("2026-10-12T07:59:00Z"), ...overrides };
 }
 
-const subjects = () => resend.calls.map(call => String(call.message.subject));
+/** A subject without the « [reference] » the owner's notifications start with (INTL-11): theirs reads « Réservation payée … ». */
+const withoutReference = (subject: unknown) => String(subject).replace(/^\[[^\]]*\] /, "");
+const subjects = () => resend.calls.map(call => withoutReference(call.message.subject));
 
 afterAll(() => vi.unstubAllEnvs());
 
@@ -216,8 +218,8 @@ describe("envois après paiement — propriétaire d’abord, essais courts, ale
 
     expect(result.processed).toBe(3);
     const ownerEmails = resend.calls.filter(call => (call.message.to as string[])[0] === "owner@example.test");
-    expect(ownerEmails[0].message.subject).toMatch(/^Nouvelle réservation payée/);
-    expect(ownerEmails.filter(call => String(call.message.subject).startsWith("Nouvelle réservation payée"))).toHaveLength(1);
+    expect(ownerEmails[0].message.subject).toMatch(/^\[APT\w+\] Réservation payée/);
+    expect(ownerEmails.filter(call => withoutReference(call.message.subject).startsWith("Réservation payée"))).toHaveLength(1);
     expect(subjects().some(subject => subject.includes("Réservation APT") || subject.includes("📱"))).toBe(false);
     // Email patient : 3 essais (1 + 2 essais courts) avec la même clé d’idempotence.
     const patientConfirmations = resend.calls.filter(call => String(call.message.subject).startsWith("Confirmation de réservation"));
@@ -280,7 +282,7 @@ describe("envois après paiement — propriétaire d’abord, essais courts, ale
     expect(jobs.map(row => row.jobType)).toEqual(["confirmation", "owner"]);
     // Le job propriétaire créé est traité au passage suivant.
     await processDueAppointmentFulfillmentJobs();
-    expect(subjects().filter(subject => subject.startsWith("Nouvelle réservation payée"))).toHaveLength(1);
+    expect(subjects().filter(subject => subject.startsWith("Réservation payée"))).toHaveLength(1);
   });
 
   it("espace les trois envois d’un même paiement pour rester sous la limite de débit de Resend (ABUS-03)", async () => {
@@ -289,7 +291,7 @@ describe("envois après paiement — propriétaire d’abord, essais courts, ale
 
     await processDueAppointmentFulfillmentJobs();
 
-    expect(subjects().map(subject => subject.split(" ")[0])).toEqual(["Nouvelle", "Confirmation", "Facture"]);
+    expect(subjects().map(subject => subject.split(" ")[0])).toEqual(["Réservation", "Confirmation", "Facture"]);
     const [owner, confirmation, invoice] = resend.calls.map(call => call.at);
     // setTimeout may fire a millisecond early on some platforms.
     expect(confirmation - owner).toBeGreaterThanOrEqual(38);
@@ -319,7 +321,7 @@ describe("envois après paiement — propriétaire d’abord, essais courts, ale
 
     // Each job is sent once, by whichever processing claimed it first.
     expect(first.processed + second.processed).toBe(3);
-    expect(subjects().map(subject => subject.split(" ")[0])).toEqual(["Nouvelle", "Confirmation", "Facture"]);
+    expect(subjects().map(subject => subject.split(" ")[0])).toEqual(["Réservation", "Confirmation", "Facture"]);
     const [owner, confirmation, invoice] = resend.calls.map(call => call.at);
     expect(confirmation - owner).toBeGreaterThanOrEqual(998);
     expect(invoice - confirmation).toBeGreaterThanOrEqual(998);
@@ -340,7 +342,7 @@ describe("envois après paiement — propriétaire d’abord, essais courts, ale
 
     // Le second prend son tour après la limite et envoie le job, une fois.
     expect(second.processed).toBe(1);
-    expect(subjects().map(subject => subject.split(" ")[0])).toEqual(["Nouvelle"]);
+    expect(subjects().map(subject => subject.split(" ")[0])).toEqual(["Réservation"]);
     expect(Date.now() - startedAt).toBeGreaterThanOrEqual(95);
   });
 });
@@ -374,7 +376,7 @@ describe("un envoi refait après le retry-after de Resend prend lui aussi son cr
     // Le webhook (la notification, qui reçoit le 429) et la tâche planifiée en même temps.
     await Promise.all([processDueAppointmentFulfillmentJobs(), processDueAppointmentFulfillmentJobs()]);
 
-    expect(subjects().map(subject => subject.split(" ")[0])).toEqual(["Nouvelle", "Confirmation", "Nouvelle", "Facture"]);
+    expect(subjects().map(subject => subject.split(" ")[0])).toEqual(["Réservation", "Confirmation", "Réservation", "Facture"]);
     expect(jobs.map(row => [row.jobType, row.status, row.attempts])).toEqual([["owner", "completed", 1], ["confirmation", "completed", 1], ["invoice", "completed", 1]]);
     const times = sendTimes();
     for (let index = 1; index < times.length; index += 1) expect(times[index] - times[index - 1]).toBeGreaterThanOrEqual(PAUSE_MS - LATE_START_MS);
@@ -391,10 +393,10 @@ describe("un envoi refait après le retry-after de Resend prend lui aussi son cr
     const startedAt = Date.now();
     await Promise.all([processDueAppointmentFulfillmentJobs(5, { deadlineAt: startedAt + 500 }), processDueAppointmentFulfillmentJobs()]);
 
-    const ownerSends = resend.calls.filter(call => String(call.message.subject).startsWith("Nouvelle"));
+    const ownerSends = resend.calls.filter(call => withoutReference(call.message.subject).startsWith("Réservation payée"));
     expect(ownerSends).toHaveLength(1);
     expect(jobs.find(row => row.jobType === "owner")).toMatchObject({ status: "queued", attempts: 0 });
-    expect(subjects().map(subject => subject.split(" ")[0])).toEqual(["Nouvelle", "Confirmation", "Facture"]);
+    expect(subjects().map(subject => subject.split(" ")[0])).toEqual(["Réservation", "Confirmation", "Facture"]);
     expect(subjects().some(subject => subject.startsWith("Échec d’envoi"))).toBe(false);
     const times = sendTimes();
     for (let index = 1; index < times.length; index += 1) expect(times[index] - times[index - 1]).toBeGreaterThanOrEqual(PAUSE_MS - LATE_START_MS);
@@ -443,7 +445,7 @@ describe("envoi immédiat après paiement : la notification au médecin ne retie
     expect(jobs.map(row => [row.jobType, row.status, row.attempts])).toEqual([["owner", "completed", 1], ["confirmation", "queued", 0], ["invoice", "queued", 0]]);
     expect(jobs.filter(row => row.jobType !== "owner").every(row => (row as Job & { startedAt?: Date | null }).startedAt === null)).toBe(true);
     // Le temps a manqué, l’envoi n’a pas échoué : pas d’alerte « Échec d’envoi ».
-    expect(ownerSends().map(call => String(call.message.subject).split(" ")[0])).toEqual(["Nouvelle"]);
+    expect(ownerSends().map(call => withoutReference(call.message.subject).split(" ")[0])).toEqual(["Réservation"]);
 
     resend.rateLimitedFor.clear();
     await processDueAppointmentFulfillmentJobs();
@@ -468,7 +470,7 @@ describe("envoi immédiat après paiement : la notification au médecin ne retie
 
     await processDueAppointmentFulfillmentJobs(5, { deadlineAt: Date.now() + BUDGET_MS });
 
-    expect(subjects().map(subject => subject.split(" ")[0])).toEqual(["Nouvelle", "Nouvelle", "Confirmation", "Facture"]);
+    expect(subjects().map(subject => subject.split(" ")[0])).toEqual(["Réservation", "Réservation", "Confirmation", "Facture"]);
     expect(resend.calls[1].at - resend.calls[0].at).toBeGreaterThanOrEqual(295);
     expect(jobs.map(row => row.status)).toEqual(["completed", "completed", "completed"]);
   });
@@ -500,7 +502,7 @@ describe("page de statut aux valeurs de production : un 429 passager garde son n
   });
 
   it.each([
-    ["la notification au médecin", ["429"], "Nouvelle réservation payée"],
+    ["la notification au médecin", ["429"], "Réservation payée"],
     ["la confirmation au patient", ["ok", "429"], "Confirmation de réservation"],
   ])("un seul 429 sur %s : nouvel essai après le retry-after, médecin et patient prévenus pendant l’attente de la page ; la facture, dont le tour vient après, reste en file sans tentative ni alerte", async (_target, script, retriedSubject) => {
     resend.script.push(...script);
@@ -512,7 +514,7 @@ describe("page de statut aux valeurs de production : un 429 passager garde son n
 
     // Pendant les 3 s d’attente de la page : la notification et la confirmation.
     expect(jobs.slice(0, 2).map(row => [row.jobType, row.status])).toEqual([["owner", "completed"], ["confirmation", "completed"]]);
-    const retried = resend.calls.filter(call => String(call.message.subject).startsWith(retriedSubject));
+    const retried = resend.calls.filter(call => withoutReference(call.message.subject).startsWith(retriedSubject));
     expect(retried).toHaveLength(2);
     expect(retried[1].at - retried[0].at).toBeGreaterThanOrEqual(1_000);
     // Le budget de la page écoulé, aucun envoi ne démarre plus après sa réponse :
@@ -557,10 +559,10 @@ describe("page de statut aux valeurs de production : un 429 passager garde son n
 
     const sends = resend.calls.map(call => ({
       trackingId: [z1, z2, y].find(appointment => JSON.stringify(call.message).includes(appointment.trackingId))!.trackingId,
-      subject: String(call.message.subject).split(" ")[0],
+      subject: withoutReference(call.message.subject).split(" ")[0],
       startedAt: call.startedAt - startedAt,
     }));
-    expect(sends.map(send => `${send.trackingId} ${send.subject}`)).toEqual(["APTZ1 Confirmation", "APTZ2 Confirmation", "APTY Nouvelle", "APTZ1 Facture", "APTY Nouvelle"]);
+    expect(sends.map(send => `${send.trackingId} ${send.subject}`)).toEqual(["APTZ1 Confirmation", "APTZ2 Confirmation", "APTY Réservation", "APTZ1 Facture", "APTY Réservation"]);
     // No email starts once the page of its appointment has answered.
     expect(sends.filter(send => send.startedAt >= answeredAt.get(send.trackingId)! - startedAt)).toEqual([]);
     // Still a pause between two sends of the instance, the new try of Y included.
@@ -659,7 +661,7 @@ describe("alertes au médecin envoyées depuis un job : dans le créneau d’env
     vi.useRealTimers();
   });
 
-  const timeline = (startedAt: number) => resend.calls.map(call => ({ subject: String(call.message.subject).split(" ")[0]!, startedAt: call.startedAt - startedAt }));
+  const timeline = (startedAt: number) => resend.calls.map(call => ({ subject: withoutReference(call.message.subject).split(" ")[0]!, startedAt: call.startedAt - startedAt }));
 
   it("l’alerte « Échec d’envoi » d’une confirmation refusée part une pause après le refus, et la facture une pause après elle", async () => {
     resend.script.push("ok", "422");
@@ -671,7 +673,7 @@ describe("alertes au médecin envoyées depuis un job : dans le créneau d’env
     await webhook;
 
     const sends = timeline(startedAt);
-    expect(sends.map(send => send.subject)).toEqual(["Nouvelle", "Confirmation", "Échec", "Facture"]);
+    expect(sends.map(send => send.subject)).toEqual(["Réservation", "Confirmation", "Échec", "Facture"]);
     for (let index = 1; index < sends.length; index += 1) expect(sends[index].startedAt - sends[index - 1].startedAt).toBeGreaterThanOrEqual(PACING_DELAY_MS);
     expect(jobs.map(row => [row.jobType, row.status])).toEqual([["owner", "completed"], ["confirmation", "failed"], ["invoice", "completed"]]);
   });
@@ -698,13 +700,13 @@ describe("alertes au médecin envoyées depuis un job : dans le créneau d’env
     await vi.advanceTimersByTimeAsync(10_000);
     await page;
 
-    expect(timeline(startedAt).map(send => send.subject)).toEqual(["Nouvelle", "Nouvelle", "Confirmation"]);
+    expect(timeline(startedAt).map(send => send.subject)).toEqual(["Réservation", "Réservation", "Confirmation"]);
     expect(timeline(startedAt).filter(send => send.startedAt >= answeredAt)).toEqual([]);
     expect(jobs.map(row => [row.jobType, row.status, row.attempts])).toEqual([["owner", "completed", 1], ["confirmation", "failed", 1], ["invoice", "queued", 0], ["confirmation_failure_alert", "queued", 0]]);
 
     await runTwice();
     const sends = timeline(startedAt);
-    expect(sends.map(send => send.subject)).toEqual(["Nouvelle", "Nouvelle", "Confirmation", "Facture", "Échec"]);
+    expect(sends.map(send => send.subject)).toEqual(["Réservation", "Réservation", "Confirmation", "Facture", "Échec"]);
     for (let index = 1; index < sends.length; index += 1) expect(sends[index].startedAt - sends[index - 1].startedAt).toBeGreaterThanOrEqual(PACING_DELAY_MS);
     expect(resend.calls.at(-1)?.options?.idempotencyKey).toBe(patientEmailIdempotencyKey("appointment-confirmation-failure-APTOWNER0001-refused", "patient@example.test"));
     expect(String(resend.calls.at(-1)?.message.text)).toContain("a été refusé par le service d’envoi");

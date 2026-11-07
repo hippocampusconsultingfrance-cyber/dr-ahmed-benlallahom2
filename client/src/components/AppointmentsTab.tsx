@@ -132,10 +132,11 @@ function cancellationDetails(apt: { cancellationReason?: string | null; cancelle
   ].filter(Boolean);
 }
 
-export default function AppointmentsTab() {
+/** `initialSearch`: the reference the dashboard's address names (ADM-09), searched at once. */
+export default function AppointmentsTab({ initialSearch = "" }: { initialSearch?: string } = {}) {
   const [statusFilter, setStatusFilter] = useState<AppointmentListFilter>("useful");
   // ADM-02: patient name, email or booking reference, searched by the server.
-  const { text: searchText, search, setText: setSearchText, clear: clearSearch } = useAdminSearch();
+  const { text: searchText, search, setText: setSearchText, clear: clearSearch } = useAdminSearch(initialSearch);
   const utils = trpc.useUtils();
   // ADM-01: 50 rows, then « Charger plus » (offset + 50), back to the first page when the filter or the search changes.
   const { pageCount, loadMore } = useAdminPageCount(JSON.stringify({ status: statusFilter, search }));

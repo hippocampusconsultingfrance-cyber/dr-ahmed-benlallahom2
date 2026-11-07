@@ -20,7 +20,7 @@ import { allocateAppointmentInvoice, findAppointmentInvoices, type AppointmentIn
 import { deadlineCutShort, ProcessingDeadlineError, runWithProcessingDeadline, startFitsDeadline } from "./processingDeadline";
 import { hasErasedPatientData } from "./personalDataRetention";
 import type { ResendAppointmentEmail } from "./resendWebhookCorrelation";
-import { DEFAULT_PUBLIC_ORIGIN } from "./routers/publicOrigin";
+import { adminLink } from "./adminLinks";
 
 const MAX_BATCH = 5;
 /** Well above the 60 s function limit: a job still "running" after this was interrupted. */
@@ -601,7 +601,7 @@ function bounceAlertOf(appointment: Appointment) {
   return {
     payload: {
       title: `Email non reçu par le patient (${appointment.trackingId})`,
-      content: `Un email du rendez-vous ${appointment.trackingId} (consultation du ${consultation}, heure de Paris) a été accepté par le service d’envoi, puis refusé par la messagerie du patient ou signalé par lui comme indésirable (adresse inexistante ou boîte pleine, plainte, ou adresse bloquée par le service d’envoi) : les emails envoyés à cette adresse ne lui parviennent pas. Appelez-le au ${appointment.customerPhone} pour vérifier son adresse${refunded ? " et le prévenir de son remboursement" : " et lui rappeler la date et l’heure de sa consultation"}. Pour lui écrire à une autre adresse : ${DEFAULT_PUBLIC_ORIGIN}/admin, onglet « Réservations », rendez-vous ${appointment.trackingId} : « Corriger l’email du patient », puis « Renvoyer » lui envoie de nouveau ${refunded ? "l’email de remboursement" : "la confirmation et la facture"} (pas le rappel). ${patientContact(appointment)}`,
+      content: `Un email du rendez-vous ${appointment.trackingId} (consultation du ${consultation}, heure de Paris) a été accepté par le service d’envoi, puis refusé par la messagerie du patient ou signalé par lui comme indésirable (adresse inexistante ou boîte pleine, plainte, ou adresse bloquée par le service d’envoi) : les emails envoyés à cette adresse ne lui parviennent pas. Appelez-le au ${appointment.customerPhone} pour vérifier son adresse${refunded ? " et le prévenir de son remboursement" : " et lui rappeler la date et l’heure de sa consultation"}. Pour lui écrire à une autre adresse : ${adminLink("appointments", appointment.trackingId)}, onglet « Réservations », rendez-vous ${appointment.trackingId} : « Corriger l’email du patient », puis « Renvoyer » lui envoie de nouveau ${refunded ? "l’email de remboursement" : "la confirmation et la facture"} (pas le rappel). ${patientContact(appointment)}`,
     },
     idempotencyKey: patientEmailIdempotencyKey(`appointment-bounce-${appointment.trackingId}-${refunded ? "refunded" : "paid"}`, appointment.customerEmail),
   };

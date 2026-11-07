@@ -169,6 +169,8 @@ describe("EXPL-13 — email patient refusé après acceptation", () => {
     expect(state.alerts[0]!.title).toBe("Email non reçu par le patient (APTBOUNCE001)");
     expect(state.alerts[0]!.content).toContain("Appelez-le au +33611223344 pour vérifier son adresse et lui rappeler la date et l’heure de sa consultation");
     expect(state.alerts[0]!.content).toContain("« Corriger l’email du patient », puis « Renvoyer » lui envoie de nouveau la confirmation et la facture");
+    // ADM-09: the link opens the booking itself in the dashboard.
+    expect(state.alerts[0]!.content).toContain("Pour lui écrire à une autre adresse : https://drahmedbenlallahom.com/admin?tab=appointments&ref=APTBOUNCE001, onglet « Réservations »");
 
     // The same event delivered again, then another report about the same email: nothing more.
     expect(await deliver("msg_bounce_1", bounce)).toEqual({ status: 200, body: { received: true, duplicate: true } });

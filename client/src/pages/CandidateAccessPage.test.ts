@@ -27,6 +27,11 @@ describe("candidate access translations", () => {
     expect(candidateNotice("Le service candidat est temporairement indisponible.", candidateAccessCopy.zh, "INTERNAL_SERVER_ERROR", "candidate_service_unavailable")).toBe(candidateAccessCopy.zh.serviceUnavailable);
     expect(candidateNotice("Trop de tentatives de connexion depuis cet appareil.", candidateAccessCopy.de, "TOO_MANY_REQUESTS", "candidate_login_rate_limited")).toBe(candidateAccessCopy.de.tooManyAttempts);
     expect(candidateNotice("La vérification anti-bot doit être renouvelée.", english, "BAD_REQUEST", "candidate_security_check_required")).toBe(english.turnstileError);
+    // A name refused for its characters (INTL-05), whatever the code and the French message.
+    expect(candidateNotice("Un champ contient un saut de ligne ou un caractère invisible qui n’y est pas accepté.", english, "BAD_REQUEST", "invalid_characters"))
+      .toBe("A field contains a line break or an invisible character that is not accepted there, often left by copying and pasting: type that text again on the keyboard, then send the form again.");
+    expect(candidateNotice("TRPCError", candidateAccessCopy.de, "BAD_REQUEST", "invalid_characters"))
+      .toBe("Ein Feld enthält einen Zeilenumbruch oder ein unsichtbares Zeichen, das dort nicht zulässig ist, oft ein Rest vom Kopieren und Einfügen: Geben Sie diesen Text erneut über die Tastatur ein und senden Sie das Formular dann erneut.");
     // An unknown reason falls back to the code and field rules, never to the French text.
     expect(candidateNotice("Détail interne", english, undefined, "something_else")).toBe(english.genericError);
   });

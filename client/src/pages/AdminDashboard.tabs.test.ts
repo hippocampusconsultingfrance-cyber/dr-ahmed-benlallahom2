@@ -17,6 +17,7 @@ const view = vi.hoisted(() => ({
   mutate: {} as Record<string, ReturnType<typeof vi.fn>>,
   options: {} as Record<string, MutationOptions>,
   toasts: [] as Array<[string, string]>,
+  search: "",
 }));
 
 vi.mock("sonner", () => ({
@@ -24,7 +25,8 @@ vi.mock("sonner", () => ({
 }));
 vi.mock("@/_core/hooks/useAuth", () => ({ useAuth: () => ({ user: { name: "Dr Ahmed", role: "admin" }, loading: false, refresh: vi.fn(), logout: vi.fn() }) }));
 vi.mock("@clerk/react", () => ({ SignInButton: () => null, UserButton: () => null }));
-vi.mock("wouter", () => ({ useLocation: () => ["/admin", vi.fn()] }));
+// The section lives in the address (ADM-09): a navigation to /admin?… changes the search the dashboard reads.
+vi.mock("wouter", () => ({ useLocation: () => ["/admin", (path: string) => { view.search = path.split("?")[1] ?? ""; }], useSearch: () => view.search }));
 vi.mock("@/lib/trpc", () => {
   const noop = (): unknown => new Proxy(() => undefined, { get: () => noop(), apply: () => undefined });
   const builder = (path: string[]): unknown => new Proxy(() => undefined, {
@@ -88,6 +90,7 @@ beforeEach(() => {
   view.mutate = {};
   view.options = {};
   view.toasts = [];
+  view.search = "";
 });
 afterEach(() => {
   resetStatefulHooks();

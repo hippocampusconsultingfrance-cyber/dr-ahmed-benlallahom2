@@ -7,6 +7,7 @@ import { isAdminMfaVerified } from "../adminMfa";
 import { CHECK_VIOLATION, FOREIGN_KEY_VIOLATION, postgresConstraintName, UNIQUE_VIOLATION } from "../databaseConstraints";
 import { postgresErrorCode } from "../languageColumns";
 import type { DatabaseRefusalReason } from "@shared/databaseRefusalReasons";
+import { refusesTextInputCharacters, TEXT_INPUT_INVALID_CHARACTERS, TEXT_INPUT_INVALID_CHARACTERS_MESSAGE } from "@shared/textInput";
 
 export const GENERIC_INTERNAL_ERROR_MESSAGE = "Une erreur interne est survenue. Veuillez réessayer dans quelques instants.";
 
@@ -60,6 +61,8 @@ export function formatTrpcErrorShape<TShape extends { message: string; data: { c
   reference: () => string = internalErrorReference,
 ): ErrorShapeWithReason<TShape> {
   if (error.cause instanceof PublicErrorReason) return { ...shape, data: { ...shape.data, reason: error.cause.reason, ...(error.cause.date ? { date: error.cause.date } : {}) } };
+  // INTL-05: a field refused for its characters (shared/textInput.ts), by its stable reason rather than the validation's JSON.
+  if (error.code === "BAD_REQUEST" && refusesTextInputCharacters(error.cause)) return { ...shape, message: TEXT_INPUT_INVALID_CHARACTERS_MESSAGE, data: { ...shape.data, reason: TEXT_INPUT_INVALID_CHARACTERS } };
   if (error.code !== "INTERNAL_SERVER_ERROR" || error.cause === undefined) return shape as ErrorShapeWithReason<TShape>;
   const ref = reference();
   console.error(`[tRPC] Internal error ref=${ref}`, internalErrorSummary(error.cause));

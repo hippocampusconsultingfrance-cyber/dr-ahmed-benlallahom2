@@ -419,6 +419,7 @@ describe("actions d’administration du recrutement", () => {
     for (const expected of ["Mme RH", "rh@clinique.test", "+41 22 000 00 00", "Diplôme reconnu MEBEKO", "Janvier 2027", "Garde de nuit", "https://example.test/admin", "Reçu le"]) {
       expect(notification.content).toContain(expected);
     }
-    expect(notification.title).toContain("BRIEF-ABC");
+    // INTL-11: « [BRIEF-ABC] Brief employeur – Clinique du Lac » once composed by notifyOwner.
+    expect(notification).toMatchObject({ reference: "BRIEF-ABC", title: "Brief employeur", name: "Clinique du Lac" });
   });
 });

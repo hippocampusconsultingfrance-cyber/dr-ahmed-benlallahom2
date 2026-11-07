@@ -10,6 +10,7 @@ import { secureReference } from "./_core/secureReference";
 import { serveStatic } from "./_core/static";
 import { renderSitemapXml } from "./routeSeo";
 import { createInMemoryDrizzle, type InMemoryDrizzle } from "./testSupport/inMemoryDrizzle";
+import { hashSecurityValue } from "./candidateSecurity";
 import { listen } from "./testSupport/candidateUploadApp";
 
 // Formulaire employeur /api/client-briefs par la vraie route Express : limites
@@ -95,6 +96,9 @@ describe("formulaire employeur /api/client-briefs", () => {
     expect(state.inserted).toHaveLength(5);
     expect(state.notifications).toBe(5);
     expect(db().rows(securityEvents).map(event => event.category)).toEqual(["public_client_brief_rate_limited"]);
+    // RGPD-17: the employer's email is pseudonymised there, as in the other security events.
+    expect(db().rows(securityEvents)[0]!.actorReference).toBe(hashSecurityValue("rh6@clinique.test"));
+    expect(JSON.stringify(db().rows(securityEvents))).not.toContain("@clinique.test");
     // Another connection is not concerned; the blocked one waits an hour.
     expect((await postBrief(brief("rh7@clinique.test"), "198.51.100.82")).status).toBe(200);
     vi.setSystemTime(Date.now() + HOUR_MS - 1000);

@@ -13,6 +13,8 @@ import { SITE_LANGUAGES } from "../emailLanguage";
 import { isSameRecruitmentSubmission } from "../recruitmentSubmissionDeduplication";
 import { sendTrackedCvApplicationConfirmationEmail } from "../recruitmentEmailTrace";
 import { CV_APPLICATION_SUBMISSION_UNIQUE_INDEX, isUniqueViolation } from "../databaseConstraints";
+import { multiLineText, refusesTextInputCharacters, singleLineText, TEXT_INPUT_INVALID_CHARACTERS, TEXT_INPUT_INVALID_CHARACTERS_MESSAGE } from "../../shared/textInput";
+import { adminLink } from "../adminLinks";
 import { PUBLIC_APP_ORIGIN, safeErrorName, safeFileName } from "./routeHelpers";
 
 function safeErrorMetadata(error: unknown) {
@@ -50,20 +52,21 @@ const recruitmentUpload = multer({
   },
 });
 
+// INTL-05: no control character nor reversal of the text's direction.
 const recruitmentApplicationSchema = z.object({
-  firstName: z.string().trim().min(1).max(120),
-  lastName: z.string().trim().min(1).max(120),
+  firstName: singleLineText(z.string().min(1).max(120)),
+  lastName: singleLineText(z.string().min(1).max(120)),
   email: z.string().trim().email().max(320),
-  phone: z.string().trim().max(50).optional().default(""),
-  specialty: z.string().trim().min(1).max(160),
-  diplomaCountry: z.string().trim().min(1).max(100),
-  targetCountries: z.array(z.string().trim().min(1).max(80)).min(1).max(RECRUITMENT_MAX_TARGET_COUNTRIES),
-  languages: z.array(z.string().trim().min(1).max(80)).max(12).default([]),
+  phone: singleLineText(z.string().max(50)).optional().default(""),
+  specialty: singleLineText(z.string().min(1).max(160)),
+  diplomaCountry: singleLineText(z.string().min(1).max(100)),
+  targetCountries: z.array(singleLineText(z.string().min(1).max(80))).min(1).max(RECRUITMENT_MAX_TARGET_COUNTRIES),
+  languages: z.array(singleLineText(z.string().min(1).max(80))).max(12).default([]),
   yearsExperience: z.number().int().min(0).max(70).optional(),
-  availability: z.string().trim().max(100).optional().default(""),
-  mobility: z.string().trim().max(150).optional().default(""),
-  certifications: z.string().trim().max(1000).optional().default(""),
-  message: z.string().trim().max(5000).optional().default(""),
+  availability: singleLineText(z.string().max(100)).optional().default(""),
+  mobility: singleLineText(z.string().max(150)).optional().default(""),
+  certifications: multiLineText(z.string().max(1000)).optional().default(""),
+  message: multiLineText(z.string().max(5000)).optional().default(""),
   gdprConsent: z.literal("1"),
   marketingConsent: z.enum(["0", "1"]).default("0"),
   website: z.string().max(200).optional().default(""),
@@ -124,6 +127,10 @@ export function registerRecruitmentApplyRoute(app: Express) {
           // Names of the refused fields and the kind of issue only, never the submitted values.
           const rejectedFields = Array.from(new Set(parsed.error.issues.map(issue => `${issue.path.map(String).join(".")}:${issue.code}`)));
           console.warn("Recruitment application rejected:", rejectedFields.join(", "));
+          if (refusesTextInputCharacters(parsed.error)) {
+            res.status(400).json({ error: TEXT_INPUT_INVALID_CHARACTERS_MESSAGE, code: TEXT_INPUT_INVALID_CHARACTERS });
+            return;
+          }
           const targetCountriesTooMany = parsed.error.issues.some(issue => issue.path[0] === "targetCountries" && issue.code === "too_big");
           res.status(400).json({
             error: targetCountriesTooMany
@@ -146,7 +153,8 @@ export function registerRecruitmentApplyRoute(app: Express) {
         const clientIp = req.ip || "unknown";
         const ipHash = hashSecurityValue(clientIp);
         const refuseProtection = async (protectionError: unknown) => {
-          await logSecurityEvent({ actorKind: "anonymous", actorReference: parsed.data.email, category: "public_recruitment_apply_protection", outcome: "blocked", severity: "warning", ipHash })
+          // RGPD-17: the candidate's email is pseudonymised, as in the other security events.
+          await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(parsed.data.email), category: "public_recruitment_apply_protection", outcome: "blocked", severity: "warning", ipHash })
             .catch(securityLogError => console.error("Recruitment protection log error:", safeErrorName(securityLogError)));
           console.warn("Recruitment protection rejected:", safeErrorName(protectionError));
           const rateLimited = protectionError instanceof Error && protectionError.message === "candidate_security_rate_limited";
@@ -229,7 +237,7 @@ export function registerRecruitmentApplyRoute(app: Express) {
           }
           // This application keeps its place in the per-IP cap (its confirmation may be skipped beyond the day's volume).
           releaseIpAttempt = null;
-          await logSecurityEvent({ actorKind: "anonymous", actorReference: parsed.data.email, category: "public_recruitment_apply_duplicate_file", outcome: "allowed", severity: "info", ipHash });
+          await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(parsed.data.email), category: "public_recruitment_apply_duplicate_file", outcome: "allowed", severity: "info", ipHash });
           res.status(200).json({ success: true, duplicate: true, trackingId: duplicate.trackingId });
         };
 
@@ -262,6 +270,9 @@ export function registerRecruitmentApplyRoute(app: Express) {
         releaseIpAttempt = null;
         const retentionUntil = new Date();
         retentionUntil.setFullYear(retentionUntil.getFullYear() + 2);
+        // DATA-13: passed to the raw INSERT below as an ISO-8601 UTC string, as
+        // invoiceNumbering.ts does: a Date would be sent in the process's local
+        // time with an offset PostgreSQL drops for a `timestamp` column.
 
         recruitmentStage = "application-insert";
         const storedTargetCountries = JSON.stringify(parsed.data.targetCountries);
@@ -280,7 +291,7 @@ export function registerRecruitmentApplyRoute(app: Express) {
             ${parsed.data.availability || null}, ${parsed.data.mobility || null}, ${parsed.data.certifications || null},
             ${parsed.data.message || null}, ${storageResult.key}, ${originalName}, ${file.mimetype}, ${file.size},
             'quarantined', ${fileValidation.checksum}, ${fileValidation.notes}, 1,
-            ${parsed.data.marketingConsent === "1" ? 1 : 0}, 'new', NOW(), ${retentionUntil}, ${parsed.data.language}
+            ${parsed.data.marketingConsent === "1" ? 1 : 0}, 'new', NOW(), ${retentionUntil.toISOString()}, ${parsed.data.language}
           ) RETURNING id`);
         } catch (insertError) {
           // DATA-11: a simultaneous sending of the same application was stored
@@ -324,8 +335,11 @@ export function registerRecruitmentApplyRoute(app: Express) {
             });
           })(),
           notifyOwner({
-            title: `Nouvelle candidature recrutement — ${candidateName}`,
-            content: `**Référence:** ${trackingId}\n**Email:** ${parsed.data.email}\n**Spécialité:** ${parsed.data.specialty}\n**Pays du diplôme:** ${parsed.data.diplomaCountry}\n**Pays ciblés:** ${parsed.data.targetCountries.join(", ")}\n**CV:** reçu et stocké de manière privée`,
+            // INTL-11: « [CV…] Candidature – Prénom Nom », the reference first.
+            reference: trackingId,
+            title: "Candidature",
+            name: candidateName,
+            content: `**Référence:** ${trackingId}\n**Email:** ${parsed.data.email}\n**Spécialité:** ${parsed.data.specialty}\n**Pays du diplôme:** ${parsed.data.diplomaCountry}\n**Pays ciblés:** ${parsed.data.targetCountries.join(", ")}\n**CV:** reçu et stocké de manière privée\n**Ouvrir la candidature:** ${adminLink("recruitment", trackingId)}`,
           }),
         ]);
 

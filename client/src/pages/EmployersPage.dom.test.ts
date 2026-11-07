@@ -82,6 +82,18 @@ describe("brief employeur : valeur enregistrée, refus du serveur et information
     expect(text).toBe(employerCopy.en.serviceUnavailable.replace("{email}", siteConfig.email));
   });
 
+  it.each([
+    ["fr", "Un champ contient un saut de ligne ou un caractère invisible qui n’y est pas accepté, souvent laissé par un copier-coller : retapez ce texte au clavier, puis renvoyez le formulaire."],
+    ["en", "A field contains a line break or an invisible character that is not accepted there, often left by copying and pasting: type that text again on the keyboard, then send the form again."],
+    ["de", "Ein Feld enthält einen Zeilenumbruch oder ein unsichtbares Zeichen, das dort nicht zulässig ist, oft ein Rest vom Kopieren und Einfügen: Geben Sie diesen Text erneut über die Tastatur ein und senden Sie das Formular dann erneut."],
+    ["zh", "某个字段包含此处不允许的换行符或不可见字符，通常由复制粘贴带入：请用键盘重新输入该内容，然后重新提交表单。"],
+  ] as const)("%s : dit de retaper le texte d’un champ refusé pour ses caractères (400 invalid_characters, INTL-05)", async (language, expected) => {
+    const serverText = "Texte français écrit par le serveur.";
+    const { text } = await submitBrief(language, 400, { error: serverText, code: "invalid_characters" });
+    expect(text).toBe(expected);
+    expect(text).not.toContain(serverText);
+  });
+
   it("garde le message générique pour un autre échec", async () => {
     const { text } = await submitBrief("en", 500, { error: "Échec de l'enregistrement du brief." });
     expect(text).toBe(employerCopy.en.genericError);

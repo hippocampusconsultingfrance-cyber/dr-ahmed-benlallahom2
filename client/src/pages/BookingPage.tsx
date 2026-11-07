@@ -14,7 +14,7 @@ import LanguageMenu from "@/components/LanguageMenu";
 import { TurnstileWidget } from "@/components/TurnstileWidget";
 import { siteConfig } from "@/data/site-config";
 import { formatVisitorTime, getBookingDateTimeFormat, getBookingLocale } from "@/lib/bookingTime";
-import { getBookingFormCopy } from "@/lib/publicFormCopy";
+import { getBookingFormCopy, publicFormCopy } from "@/lib/publicFormCopy";
 import {
   clearBookingDraft,
   clearPendingBooking,
@@ -120,6 +120,7 @@ export const bookingContent = {
       invalid_name: "Saisissez votre nom complet : il doit comporter au moins une lettre ou un chiffre.",
       security_check_required: "Une vérification anti-robot est nécessaire pour finaliser cette réservation : effectuez-la au-dessus du bouton, puis cliquez de nouveau sur « Procéder au paiement ».",
       security_check_unavailable: "La vérification anti-robot est momentanément indisponible. Votre créneau n’a pas été réservé : réessayez dans quelques minutes ou contactez-nous.",
+      invalid_characters: publicFormCopy.invalidCharacters.fr,
     },
     pricing: {
       title: "Tarification",
@@ -224,6 +225,7 @@ export const bookingContent = {
       invalid_name: "Please enter your full name: it must contain at least one letter or digit.",
       security_check_required: "An anti-bot check is needed to complete this booking: complete it above the button, then click “Proceed to Payment” again.",
       security_check_unavailable: "The anti-bot check is temporarily unavailable. Your time slot has not been booked: please try again in a few minutes or contact us.",
+      invalid_characters: publicFormCopy.invalidCharacters.en,
     },
     pricing: {
       title: "Pricing",
@@ -327,6 +329,7 @@ export const bookingContent = {
       invalid_name: "Bitte geben Sie Ihren vollständigen Namen ein: Er muss mindestens einen Buchstaben oder eine Ziffer enthalten.",
       security_check_required: "Für diese Buchung ist eine Bot-Prüfung erforderlich: Führen Sie sie über der Schaltfläche durch und klicken Sie dann erneut auf „Zur Zahlung übergehen“.",
       security_check_unavailable: "Die Bot-Prüfung ist vorübergehend nicht verfügbar. Ihr Termin wurde nicht reserviert: Bitte versuchen Sie es in einigen Minuten erneut oder kontaktieren Sie uns.",
+      invalid_characters: publicFormCopy.invalidCharacters.de,
     },
     pricing: {
       title: "Preisgestaltung",
@@ -430,6 +433,7 @@ export const bookingContent = {
       invalid_name: "请填写您的全名：其中至少须包含一个文字或数字。",
       security_check_required: "完成此预约需要进行反机器人验证：请在按钮上方完成验证，然后再次点击“继续付款”。",
       security_check_unavailable: "反机器人验证暂时不可用，您的时段尚未预订：请几分钟后重试或联系我们。",
+      invalid_characters: publicFormCopy.invalidCharacters.zh,
     },
     pricing: {
       title: "价格",

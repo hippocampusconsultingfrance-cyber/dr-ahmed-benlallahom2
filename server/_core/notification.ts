@@ -8,6 +8,14 @@ export type NotificationPayload = {
   content: string;
   /** Where the owner's « Répondre » writes: the visitor of a public form (PUB-09); the owner's mailbox when absent. */
   replyTo?: string;
+  /**
+   * The record's reference (C…, APT…, CV…), put first in the subject,
+   * « [C…] Contact – Nom » (INTL-11): a search of the mailbox finds it
+   * however long the name.
+   */
+  reference?: string;
+  /** Who wrote (a visitor's name), last in the subject and cut there to about 60 visible characters. */
+  name?: string;
 };
 
 const TITLE_MAX_LENGTH = 1200;
@@ -27,6 +35,38 @@ export function getResendClient(): Resend | undefined {
   if (!apiKey) return undefined;
   resendClient ??= new Resend(apiKey);
   return resendClient;
+}
+
+/** Visible characters of a name in an owner subject, then of the whole subject (INTL-11). */
+export const OWNER_SUBJECT_NAME_MAX_CHARACTERS = 60;
+const OWNER_SUBJECT_MAX_CHARACTERS = 200;
+
+const graphemes = new Intl.Segmenter("fr", { granularity: "grapheme" });
+
+/**
+ * `text` cut to its first `max` visible characters, « … » included, between
+ * two of them (Intl.Segmenter): an emoji, a ZWJ sequence or a letter and its
+ * accents is never cut in two, as .slice() did with a lone half of an emoji.
+ */
+export function cutToVisibleCharacters(text: string, max: number): string {
+  const characters = Array.from(graphemes.segment(text), ({ segment }) => segment);
+  return characters.length <= max ? text : `${characters.slice(0, max - 1).join("").trimEnd()}…`;
+}
+
+// Written as escapes: line breaks and the other control characters (INTL-05).
+const LINE_BREAKS = new RegExp("[\\u0000-\\u001F\\u007F-\\u009F\\u2028\\u2029]+", "g");
+const oneLine = (text: string) => text.replace(LINE_BREAKS, " ").trim();
+
+/**
+ * « [reference] title – name » on one line: a line break in a name (INTL-05)
+ * becomes a space; in the subject, the name is cut to about 60 visible
+ * characters and the subject to 200, both between two characters (INTL-11).
+ */
+function ownerNotificationHeading(payload: Pick<NotificationPayload, "title" | "reference" | "name">, cut: boolean): string {
+  const reference = payload.reference?.trim() ? `[${oneLine(payload.reference)}] ` : "";
+  const name = payload.name?.trim() ? oneLine(payload.name) : "";
+  const heading = `${reference}${oneLine(payload.title)}${name ? ` – ${cut ? cutToVisibleCharacters(name, OWNER_SUBJECT_NAME_MAX_CHARACTERS) : name}` : ""}`;
+  return cut ? cutToVisibleCharacters(heading, OWNER_SUBJECT_MAX_CHARACTERS) : heading;
 }
 
 function escapeHtml(value: string): string {
@@ -79,12 +119,14 @@ const validatePayload = (input: NotificationPayload): NotificationPayload => {
  * else the owner's mailbox.
  */
 export function buildOwnerNotificationEmail(payload: NotificationPayload) {
-  const { title, content } = validatePayload(payload);
+  const { content } = validatePayload(payload);
+  // The whole name in the heading of the email; the subject cuts it.
+  const title = ownerNotificationHeading(payload, false);
   return {
     from: FROM_EMAIL,
     to: [OWNER_NOTIFICATION_EMAIL],
     replyTo: payload.replyTo?.trim() || OWNER_NOTIFICATION_EMAIL,
-    subject: title.slice(0, 200),
+    subject: ownerNotificationHeading(payload, true),
     html: `<div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;color:#0f172a"><div style="padding:18px 22px;background:#071827;color:#fff;border-bottom:3px solid #0891b2"><strong>Hippocampus Consulting</strong></div><div style="padding:24px;border:1px solid #dbe4ee;border-top:0"><h2 style="margin-top:0;color:#0e7490">${escapeHtml(title)}</h2><div style="white-space:pre-wrap;line-height:1.6">${escapeHtml(content)}</div><p style="margin-top:24px;font-size:12px;color:#64748b">Notification privée générée par drahmedbenlallahom.com</p></div></div>`,
     text: `${title}\n\n${content}\n\nNotification privée générée par drahmedbenlallahom.com`,
   };

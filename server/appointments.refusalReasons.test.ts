@@ -187,6 +187,7 @@ describe("appointments.create — motifs de refus stables (EN-06)", () => {
     expect(BOOKING_REFUSAL_REASONS).toEqual([
       "slot_taken", "too_soon", "too_far", "outside_schedule", "no_availability", "date_blocked",
       "rate_limited", "too_many_holds", "payment_unavailable", "invalid_name", "security_check_required", "security_check_unavailable",
+      "invalid_characters",
     ]);
   });
 

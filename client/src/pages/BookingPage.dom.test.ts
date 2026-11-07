@@ -135,6 +135,21 @@ describe("paiement de la réservation (navigateur simulé)", () => {
   });
 });
 
+describe("champ refusé pour ses caractères (INTL-05)", () => {
+  it("dit de retaper le texte, au lieu de la consigne générale de saisie, et rend le bouton", async () => {
+    mount();
+    fillForm();
+    view.create = vi.fn(async () => { throw Object.assign(new Error("Texte français écrit par le serveur."), { data: { code: "BAD_REQUEST", reason: "invalid_characters" } }); });
+
+    fireEvent.click(screen.getByRole("button", { name: copy.submit }));
+    const refusal = await screen.findByRole("alert");
+    expect(refusal.textContent).toBe("Un champ contient un saut de ligne ou un caractère invisible qui n’y est pas accepté, souvent laissé par un copier-coller : retapez ce texte au clavier, puis renvoyez le formulaire.");
+    expect(refusal.textContent).not.toBe(content.invalidInput);
+    await waitFor(() => expect(screen.getByRole("button", { name: copy.submit })).toHaveProperty("disabled", false));
+    expect(assign).not.toHaveBeenCalled();
+  });
+});
+
 const parisTime = (iso: string) => new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "Europe/Paris" }).format(new Date(iso));
 const pay = () => fireEvent.click(screen.getByRole("button", { name: copy.submit }));
 

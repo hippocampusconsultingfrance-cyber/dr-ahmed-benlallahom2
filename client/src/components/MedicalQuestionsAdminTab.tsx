@@ -85,10 +85,11 @@ export function revealQuestionDetail(detail: Pick<HTMLElement, "focus" | "scroll
   detail.scrollIntoView({ block: "start" });
 }
 
-export default function MedicalQuestionsAdminTab() {
+/** `initialSearch`: the reference the dashboard's address names (ADM-09), searched at once. */
+export default function MedicalQuestionsAdminTab({ initialSearch = "" }: { initialSearch?: string } = {}) {
   const [queue, setQueue] = useState<MedicalQuestionQueue>("todo");
   // ADM-02: patient name, email or the QMED-… reference of the notification email, searched by the server.
-  const { text: searchText, search, setText: setSearchText, clear: clearSearch } = useAdminSearch();
+  const { text: searchText, search, setText: setSearchText, clear: clearSearch } = useAdminSearch(initialSearch);
   const { pageCount, loadMore } = useAdminPageCount(JSON.stringify({ queue, search }));
   const { statuses, order } = MEDICAL_QUESTION_QUEUES[queue];
   const pages = trpc.useQueries(t => adminPageOffsets(pageCount).map(offset => t.medicalQuestions.admin.list({ statuses: statuses ? [...statuses] : undefined, order, search, limit: ADMIN_PAGE_SIZE, offset })));

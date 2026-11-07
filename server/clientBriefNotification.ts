@@ -1,4 +1,10 @@
-/** Owner notification for a new employer brief: everything needed to qualify and call back. */
+import { adminLink } from "./adminLinks";
+
+/**
+ * Owner notification for a new employer brief: everything needed to qualify
+ * and call back. Subject « [BRIEF…] Brief employeur – Organisation », the
+ * reference first (INTL-11); a link to the Missions tab (ADM-09).
+ */
 export function buildClientBriefOwnerNotification(input: {
   briefId: string;
   organizationName: string;
@@ -19,7 +25,9 @@ export function buildClientBriefOwnerNotification(input: {
   const receivedAt = (input.receivedAt ?? new Date()).toLocaleString("fr-FR", { timeZone: "Europe/Paris", dateStyle: "long", timeStyle: "short" });
   const optional = (value: string | null | undefined) => value && value.trim() ? value.trim() : "non précisé";
   return {
-    title: `Nouveau brief employeur (${input.briefId}) — ${input.organizationName}`,
+    reference: input.briefId,
+    title: "Brief employeur",
+    name: input.organizationName,
     content: [
       `Reçu le : ${receivedAt}`,
       `Organisation : ${input.organizationName}`,
@@ -34,7 +42,7 @@ export function buildClientBriefOwnerNotification(input: {
       `Notes de l’employeur : ${optional(input.notes)}`,
       `Langue de la page : ${input.language || "non précisée"}`,
       "",
-      `Qualifier le brief et préparer la shortlist : ${input.adminUrl ?? "https://drahmedbenlallahom.com/admin"} (onglet « Missions »).`,
+      `Qualifier le brief et préparer la shortlist : ${input.adminUrl ?? adminLink("employerBriefs", input.briefId)} (onglet « Missions »).`,
     ].join("\n"),
   };
 }

@@ -63,7 +63,9 @@ describe("service gratuit de questions santé", () => {
     expect(memory.rows(medicalQuestions)[0]).toMatchObject({ publication_consent: 0, privacy_consent: 1 });
     expect(state.ownerNotifications).toHaveLength(1);
     const owner = state.ownerNotifications[0]!;
-    expect(owner.title).toContain(result.trackingId);
+    // INTL-11: the reference first in the subject; no name.
+    expect(owner).toMatchObject({ reference: result.trackingId, title: "Nouvelle question santé à traiter" });
+    expect(owner).not.toHaveProperty("name");
     for (const forbidden of ["Jeanne", "Martin", "jeanne@test.local", "+33600000000", "anesthésie générale", "boire"]) {
       expect(`${owner.title}\n${owner.content}`).not.toContain(forbidden);
     }

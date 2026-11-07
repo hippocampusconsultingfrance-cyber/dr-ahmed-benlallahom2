@@ -10,11 +10,12 @@ import { adminListCount, adminPageOffsets, ADMIN_PAGE_SIZE, mergeAdminPages, use
 import { adminSearchStatus, useAdminSearch } from "@/components/adminSearch";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 
-export default function ContactsTab() {
+/** `initialSearch`: the reference the dashboard's address names (ADM-09), searched at once. */
+export default function ContactsTab({ initialSearch = "" }: { initialSearch?: string } = {}) {
   const utils = trpc.useUtils();
   const [unreadOnly, setUnreadOnly] = useState(false);
   // ADM-02: sender name, email or message reference, searched by the server.
-  const { text: searchText, search, setText: setSearchText, clear: clearSearch } = useAdminSearch();
+  const { text: searchText, search, setText: setSearchText, clear: clearSearch } = useAdminSearch(initialSearch);
   const { pageCount, loadMore } = useAdminPageCount(JSON.stringify({ unreadOnly, search }));
   const pages = trpc.useQueries(t => adminPageOffsets(pageCount).map(offset => t.admin.contacts.list({ unreadOnly, search, limit: ADMIN_PAGE_SIZE, offset })));
   const { items, total, isLoading, isLoadingMore, error, loadMoreError, retryLoadMore, retry, retrying } = mergeAdminPages(pages);

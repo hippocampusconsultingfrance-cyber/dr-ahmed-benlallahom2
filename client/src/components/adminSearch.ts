@@ -10,11 +10,13 @@ export const ADMIN_SEARCH_DELAY_MS = 300;
  * server once typing pauses (adminSearchTerm: without control or invisible
  * characters; undefined while nothing is left to search, such as a lone
  * accent). « Effacer » empties both at once. A new term is part of the list's
- * filters, so the list starts again from its first page.
+ * filters, so the list starts again from its first page. `initial`, the
+ * reference the dashboard's address names (ADM-09, /admin?tab=…&ref=…), is
+ * searched at once.
  */
-export function useAdminSearch() {
-  const [text, setText] = useState("");
-  const [search, setSearch] = useState("");
+export function useAdminSearch(initial = "") {
+  const [text, setText] = useState(initial);
+  const [search, setSearch] = useState(() => adminSearchTerm(initial));
   useEffect(() => {
     const term = adminSearchTerm(text);
     if (term === search) return;

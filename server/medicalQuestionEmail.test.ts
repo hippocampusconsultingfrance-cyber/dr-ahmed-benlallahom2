@@ -101,8 +101,11 @@ describe("emails du service de questions médicales", () => {
 
   it("alerte le propriétaire sans nom, email ni contenu de santé", () => {
     const notification = buildMedicalQuestionOwnerNotification({ trackingId: "QMED-ABCDEFGH-12345", language: "fr", publicationConsent: false, adminUrl: "https://example.test/admin" });
-    expect(notification.title).toBe("Nouvelle question santé à traiter (QMED-ABCDEFGH-12345)");
+    expect(notification).toMatchObject({ reference: "QMED-ABCDEFGH-12345", title: "Nouvelle question santé à traiter" });
     expect(notification.content).toContain("https://example.test/admin");
+    // ADM-09: without a given address, the link opens the question itself.
+    expect(buildMedicalQuestionOwnerNotification({ trackingId: "QMED-ABCDEFGH-12345", language: "fr", publicationConsent: false }).content)
+      .toContain("Consulter et répondre : https://drahmedbenlallahom.com/admin?tab=medicalQuestions&ref=QMED-ABCDEFGH-12345 (onglet « Questions santé »).");
     expect(notification.content).toContain("accord de publication anonymisée : non");
     expect(notification.content).not.toMatch(/@|Jeanne|douleur|anesthésie/i);
   });
