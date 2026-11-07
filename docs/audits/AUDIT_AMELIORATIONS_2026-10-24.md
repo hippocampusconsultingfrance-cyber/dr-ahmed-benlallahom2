@@ -553,6 +553,25 @@ Les 169 constats restants ont été triés dans le code actuel. Pour chacun, la 
 | SECU-03, SECU-04, SECU-08, SEOP-11 | ✅ ni `ws:` ni `wss:` dans la politique de sécurité de production ; plus d'en-tête `X-Powered-By` ; relais `/manus-storage` supprimé ; une seule adresse par page (redirection 308 sans barre finale, `/vvip-offshore` redirigé) | Contrôles sur une préproduction (voir « À faire de votre côté ») |
 | SEOP-05 | ⏳ balises `keywords` et `language` retirées | Titres, descriptions et H1 |
 
+**Vérification de bout en bout de la vague 2 (7 novembre).** Quatre vérificateurs ont refait chaque parcours sur la version poussée (600b1c3). Ils disposaient d'une vraie base PostgreSQL 16, du serveur construit, de Chromium de 320 à 1440 px et de doubles locaux de Stripe, Resend, de l'IA et de Google Drive. Sur 46 constats, 32 tiennent et 14 sont partiels. Les défauts trouvés ont été corrigés, puis revérifiés par un vérificateur indépendant :
+- **Tâches, emails et écritures en base** (corrigés et fusionnés) :
+  - une analyse en file n'écrase plus la décision de l'admin sur un document du coffre (EXPL-12) ;
+  - le nouvel essai d'un appel à l'IA, après un refus ou un délai dépassé, a bien lieu (EXPL-12) ;
+  - la décision sur un document du coffre et la relance de son analyse sont écrites d'un seul coup avec leur ligne d'audit (DATA-01) ;
+  - l'alerte de quota épuisé, refusée par ce même quota, est mise en file (ABUS-03) ;
+  - un serveur réglé à l'heure de Paris ne refuse plus le créneau libre juste avant un rendez-vous (DATA-13) ;
+  - une copie Drive aux essais épuisés, remise en file, garde la cause de son dernier échec (EXPL-17).
+- **Site public** (corrigés et fusionnés) :
+  - `/ADMIN` et `/Candidate/access` sont traités comme l'admin et l'espace candidat : ni bannière cookies, ni WhatsApp, ni bouton « Gérer les cookies » inutile sur leur 404 ;
+  - un navigateur qui refuse tout stockage au site n'affiche plus une page blanche ;
+  - une adresse email collée avec une espace ou une marque de direction en bout est nettoyée sur les six formulaires (INTL-05) ;
+  - la liste des pays n'est plus un arrêt de tabulation sans effet, et Échap ne vide plus le pays choisi (A11Y-11) ;
+  - passée en anglais, la page d'accueil a son titre et sa description en anglais, et le français pré-rendu ne change pas (EN-10) ;
+  - l'allemand tient à 320 px, le menu « Affichage » se ferme quand le focus en sort, et un téléphone de réservation qui contient un caractère de contrôle reçoit le message traduit ;
+  - `pnpm start` et `pnpm dev` redirigent aussi `/booking/` vers `/booking`, comme Vercel.
+- **IA des CV et admin** : un second tour de corrections est en cours. Le premier correctif d'IA-04 et d'IA-02 ne tient pas encore dans trois cas : un pied de page écrit en phrases, un CV à deux colonnes en PDF, et une mention comme « obligatoire » ou une variété comme « Golfe » après un tiret. Restent aussi les téléphones internationaux groupés par trois dans l'export (ADM-26) et deux contournements du contrôle de la CI (CODE-14).
+- **Laissés à votre décision** : la base réglée à l'heure de Paris (DATA-13, `SHOW timezone` sur Neon) ; les langues écrites en anglais dans l'export en français, qui relèvent du format d'export (INTL-10).
+
 **Vagues 3 à 6** : à faire. Elles couvrent le gabarit des emails, les finitions de l'admin, la FAQ, la recherche et la 404, le typage des tests, le premier affichage, l'accueil, les campagnes, les journaux, le poids du serveur, les pays et fichiers, le tarif et l'heure de Paris, l'effacement RGPD, la sécurité de l'admin, les tests de bout en bout et la mise en forme du code.
 
 ### À faire de votre côté
@@ -575,7 +594,7 @@ Les 169 constats restants ont été triés dans le code actuel. Pour chacun, la 
   - **préproduction** : `/booking/` doit répondre 308 vers `/booking`, et `/api/health` ne doit plus montrer `X-Powered-By`. Les webhooks Stripe (`/api/stripe/webhook`) et Resend (`/api/webhooks/resend`), les tâches planifiées et le retour OAuth de Google Drive doivent être déclarés sans barre finale : « Send test webhook » doit répondre 2xx, pas 308 ;
   - **configuration** : ouvrir `/admin` en production et en préproduction, puis corriger dans Vercel ce que signale « Configuration à vérifier » ;
   - **base** : lancer une fois `scripts/db-invariants.sql` et `SHOW timezone` (UTC attendu) dans l'éditeur SQL de Neon ;
-  - **relecture** : les nouveaux textes du menu, du pied de page, de l'offre d'anglais et de « Gérer les cookies », ainsi que la phrase de la politique de confidentialité qui renvoie à « Gérer les cookies ».
+  - **relecture** : les nouveaux textes du menu, du pied de page, de l'offre d'anglais et de « Gérer les cookies », ainsi que la phrase de la politique de confidentialité qui renvoie à « Gérer les cookies ». Relisez aussi le titre et la description de l'accueil en anglais, en allemand et en chinois : ce sont des traductions du titre et de la description pré-rendus en français.
 
 ### Avec l'avocat et le comptable
 - **Comptable** : régime de TVA et entité qui facture (RES-03). Les factures d'avoir (RES-07) suivront.
