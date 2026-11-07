@@ -18,6 +18,7 @@ const view = vi.hoisted(() => ({
   begin: vi.fn(),
   verify: vi.fn(),
   navigations: [] as string[],
+  search: "",
 }));
 
 vi.mock("@/_core/hooks/useAuth", () => ({ useAuth: () => ({ ...view.auth, refresh: view.refresh, logout: view.logout }) }));
@@ -25,7 +26,14 @@ vi.mock("@clerk/react", () => ({
   SignInButton: function SignInButton({ children }: { children: unknown }) { return children; },
   UserButton: function UserButton() { return null; },
 }));
-vi.mock("wouter", () => ({ useLocation: () => ["/admin", (path: string) => view.navigations.push(path)] }));
+// The section lives in the address (ADM-09): a navigation to /admin?… changes the search the dashboard reads.
+vi.mock("wouter", () => ({
+  useLocation: () => ["/admin", (path: string) => {
+    view.navigations.push(path);
+    if (path.startsWith("/admin")) view.search = path.split("?")[1] ?? "";
+  }],
+  useSearch: () => view.search,
+}));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() } }));
 vi.mock("@/lib/trpc", () => ({
   trpc: {
@@ -68,6 +76,7 @@ beforeEach(() => {
   view.security = { isLoading: false, data: { verified: true } };
   view.securityQueries = [];
   view.navigations = [];
+  view.search = "";
   vi.clearAllMocks();
 });
 afterEach(() => resetStatefulHooks());
@@ -79,6 +88,9 @@ describe("accès au tableau de bord", () => {
 
     const signIn = elements(tree).find(element => element.type === SignInButton)!;
     expect(signIn.props).toMatchObject({ mode: "modal", forceRedirectUrl: "/admin" });
+    // ADM-09: the section and the element of a notification's link survive the sign-in.
+    view.search = "tab=medicalQuestions&ref=QMED-ABCDEFGH-12345";
+    expect(elements(render()).find(element => element.type === SignInButton)!.props.forceRedirectUrl).toBe("/admin?tab=medicalQuestions&ref=QMED-ABCDEFGH-12345");
     expect(allText(tree)).toContain("Connexion administrateur requise");
     expect(view.securityQueries.at(-1)).toMatchObject({ enabled: false });
     expect(renderedTabs(tree)).not.toContain(OverviewTab);

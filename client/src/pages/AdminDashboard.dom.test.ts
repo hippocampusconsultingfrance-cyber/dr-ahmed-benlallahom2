@@ -78,6 +78,8 @@ beforeEach(() => {
   server.begin = vi.fn();
   server.verifyAttempts = [];
   server.toasts = [];
+  // The dashboard reads its section from the address (ADM-09): each test starts on /admin.
+  window.history.replaceState(null, "", "/admin");
 });
 afterEach(() => cleanup());
 
@@ -107,6 +109,25 @@ describe("double authentification de l’administration (navigateur simulé)", (
     expect(server.verifyAttempts).toEqual(["654321", "123456"]);
     expect(screen.queryByRole("heading", { name: "Validation de sécurité" })).toBeNull();
     expect(screen.getByRole("heading", { name: "Administration" })).toBeTruthy();
+  });
+
+  it("ouvre après le code de sécurité la section que nommait l’adresse, sans la perdre (ADM-09)", async () => {
+    window.history.replaceState(null, "", "/admin?tab=testimonials");
+    mount();
+    expect(await screen.findByRole("heading", { name: "Validation de sécurité" })).toBeTruthy();
+    fireEvent.change(codeField(), { target: { value: "123456" } });
+    fireEvent.click(validateButton());
+
+    const navigation = await screen.findByLabelText(NAVIGATION);
+    expect(navigation.querySelector('[aria-current="page"]')?.textContent?.trim()).toBe("Témoignages");
+    expect(window.location.pathname + window.location.search).toBe("/admin?tab=testimonials");
+
+    // A section chosen afterwards takes its place in the address, as a new history entry.
+    const entries = window.history.length;
+    fireEvent.click(screen.getByRole("button", { name: "Disponibilités" }));
+    await waitFor(() => expect(window.location.search).toBe("?tab=availability"));
+    expect(window.history.length).toBe(entries + 1);
+    expect(navigation.querySelector('[aria-current="page"]')?.textContent?.trim()).toBe("Disponibilités");
   });
 
   it("ouvre directement l’administration d’une session déjà vérifiée par le serveur", async () => {

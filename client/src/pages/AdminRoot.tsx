@@ -1,6 +1,7 @@
 import { ClerkProvider } from "@clerk/react";
 import { lazy, Suspense } from "react";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
+import { adminLocationOf, adminPath } from "@shared/adminTabs";
 
 // Chunk séparé : le tableau de bord garde son propre budget (scripts/check-performance-budgets.mjs),
 // @clerk/react est partagé entre cette racine et le tableau de bord.
@@ -16,6 +17,11 @@ const AdminDashboard = lazy(() => import("./AdminDashboard"));
  */
 export default function AdminRoot() {
   const publishableKey = import.meta.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+  // ADM-09: a sign-in returns to the section and element the address named
+  // (/admin?tab=…&ref=…), as the dashboard's « Se connecter » does. Clerk
+  // reads these options when it loads, from the address opened.
+  const { tab, reference } = adminLocationOf(typeof window === "undefined" ? "" : window.location.search);
+  const returnAddress = adminPath(tab, reference);
 
   if (!publishableKey) {
     // Variable de build : sans elle, seul l'espace admin est indisponible, le site public reste en ligne.
@@ -35,8 +41,8 @@ export default function AdminRoot() {
   return (
     <ClerkProvider
       publishableKey={publishableKey}
-      signInFallbackRedirectUrl="/admin"
-      signUpFallbackRedirectUrl="/admin"
+      signInFallbackRedirectUrl={returnAddress}
+      signUpFallbackRedirectUrl={returnAddress}
       afterSignOutUrl="/"
     >
       <Suspense

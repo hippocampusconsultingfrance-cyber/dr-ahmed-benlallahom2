@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Calendar, MessageSquare, Shield, DollarSign, ArrowLeft, Star, CalendarDays, UserRound, BriefcaseBusiness, Send, UsersRound, LogOut } from "lucide-react";
 import { toast } from "sonner";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
+import { adminLocationOf, adminPath, type AdminTab } from "@shared/adminTabs";
 import SecurityOperationsTab from "@/components/SecurityOperationsTab";
 import MedicalQuestionsAdminTab from "@/components/MedicalQuestionsAdminTab";
 import OverviewTab from "@/components/OverviewTab";
@@ -20,7 +21,7 @@ import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { getActiveAdminTabLabel } from "./adminDashboardMobileTabs";
 import { CandidateDocumentsAdminTab, EmployerBriefsTab, MailingTab, RecruitmentTab, VivierTab } from "./adminLazyTabs";
 
-export type Tab = "overview" | "appointments" | "contacts" | "gdpr" | "testimonials" | "availability" | "recruitment" | "candidateDocuments" | "security" | "vivier" | "mailing" | "employerBriefs" | "medicalQuestions";
+export type Tab = AdminTab;
 
 export default function AdminDashboard() {
   const { user, loading, refresh, logout } = useAuth();
@@ -30,7 +31,15 @@ export default function AdminDashboard() {
     void logout().finally(() => setSigningOut(false));
   };
   const [, setLocation] = useLocation();
-  const [activeTab, setActiveTab] = useState<Tab>("overview");
+  // ADM-09: the section and the element live in the address
+  // (/admin?tab=…&ref=…, shared/adminTabs.ts): a reload, the Clerk sign-in
+  // and the security code keep them, a notification's link opens them, and
+  // Back returns to the previous section. Another section, or the open one
+  // chosen again, leaves the element.
+  const { tab: activeTab, reference } = adminLocationOf(useSearch());
+  const setActiveTab = (tab: Tab) => {
+    if (tab !== activeTab || reference) setLocation(adminPath(tab));
+  };
   const [mailingSelectedIds, setMailingSelectedIds] = useState<number[]>([]);
   const [mfaCode, setMfaCode] = useState("");
   const adminSecurity = trpc.adminSecurity.status.useQuery(undefined, { enabled: Boolean(user?.role === "admin") });
@@ -53,7 +62,7 @@ export default function AdminDashboard() {
         <div className="max-w-md text-center">
           <h1 className="text-2xl font-bold text-foreground mb-4">Connexion administrateur requise</h1>
           <p className="text-muted-foreground mb-6">Connectez-vous avec le compte propriétaire pour accéder aux candidatures et aux missions.</p>
-          <SignInButton mode="modal" forceRedirectUrl="/admin">
+          <SignInButton mode="modal" forceRedirectUrl={adminPath(activeTab, reference)}>
             <Button>Se connecter</Button>
           </SignInButton>
         </div>
@@ -143,8 +152,9 @@ export default function AdminDashboard() {
               {tabs.map(tab => <option key={tab.id} value={tab.id}>{tab.label}</option>)}
             </select>
           </div>
+          {/* ADM-08: the tabs wrap onto a second line rather than run off screen. */}
           <div
-            className="hidden max-w-full gap-3 overflow-x-auto overscroll-x-contain px-1 py-2 [scrollbar-width:thin] sm:flex"
+            className="hidden max-w-full flex-wrap gap-x-3 gap-y-1 px-1 py-2 sm:flex"
             aria-label="Navigation des sections d’administration"
           >
             {tabs.map((tab) => {
@@ -174,21 +184,22 @@ export default function AdminDashboard() {
       <main className="max-w-7xl mx-auto px-4 py-5 sm:py-8">
         <AdminConfigurationBanner />
         {activeTab === "overview" && <OverviewTab onNavigate={setActiveTab} />}
-        {activeTab === "appointments" && <AppointmentsTab />}
-        {activeTab === "contacts" && <ContactsTab />}
+        {/* A list that searches by reference opens on the element the address names; another reference mounts it again. */}
+        {activeTab === "appointments" && <AppointmentsTab key={reference} initialSearch={reference} />}
+        {activeTab === "contacts" && <ContactsTab key={reference} initialSearch={reference} />}
         {activeTab === "gdpr" && <GdprTab />}
         {activeTab === "testimonials" && <TestimonialsTab />}
         {activeTab === "availability" && <AvailabilityTab />}
         {/* The recruitment tabs load when first opened (adminLazyTabs.ts). */}
         <Suspense fallback={<PublicContentSkeleton label="Chargement de la section" />}>
-          {activeTab === "recruitment" && <RecruitmentTab />}
+          {activeTab === "recruitment" && <RecruitmentTab key={reference} initialSearch={reference} />}
           {activeTab === "candidateDocuments" && <CandidateDocumentsAdminTab />}
           {activeTab === "vivier" && <VivierTab onCompose={candidateIds => { setMailingSelectedIds(candidateIds); setActiveTab("mailing"); }} />}
           {activeTab === "mailing" && <MailingTab initialSelectedIds={mailingSelectedIds} />}
           {activeTab === "employerBriefs" && <EmployerBriefsTab />}
         </Suspense>
         {activeTab === "security" && <SecurityOperationsTab />}
-        {activeTab === "medicalQuestions" && <MedicalQuestionsAdminTab />}
+        {activeTab === "medicalQuestions" && <MedicalQuestionsAdminTab key={reference} initialSearch={reference} />}
       </main>
     </div>
   );

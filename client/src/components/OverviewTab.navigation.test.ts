@@ -9,7 +9,9 @@ import { elementsOf, renderStateful, resetStatefulHooks } from "@/testing/statef
 vi.mock("react", async importOriginal => (await import("@/testing/statefulRender")).withStatefulHooks(await importOriginal()));
 vi.mock("@/_core/hooks/useAuth", () => ({ useAuth: () => ({ user: { name: "Dr Ahmed", role: "admin" }, loading: false, refresh: vi.fn(), logout: vi.fn() }) }));
 vi.mock("@clerk/react", () => ({ SignInButton: () => null, UserButton: () => null }));
-vi.mock("wouter", () => ({ useLocation: () => ["/admin", vi.fn()] }));
+// The section lives in the address (ADM-09): a navigation to /admin?… changes the search the dashboard reads.
+const address = vi.hoisted(() => ({ search: "" }));
+vi.mock("wouter", () => ({ useLocation: () => ["/admin", (path: string) => { address.search = path.split("?")[1] ?? ""; }], useSearch: () => address.search }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() } }));
 vi.mock("@/lib/trpc", () => ({
   trpc: {
@@ -50,6 +52,7 @@ describe("raccourcis de la vue d’ensemble", () => {
   it("ouvrent Réservations, Candidatures et Missions dans le tableau de bord", () => {
     for (const [open, label, section] of [[attentionPanel, "Réservations", AppointmentsTab], [shortcut("Candidatures"), "Candidatures", RecruitmentTab], [shortcut("Missions"), "Missions", EmployerBriefsTab]] as const) {
       resetStatefulHooks();
+      address.search = "";
       const before = render();
       expect(currentTab(before)).toEqual(["Vue d'ensemble"]);
       open(overview(before));

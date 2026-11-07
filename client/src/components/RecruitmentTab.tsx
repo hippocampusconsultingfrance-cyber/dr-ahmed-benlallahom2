@@ -139,7 +139,8 @@ function describeErasureReport(report: { storageObjectsDeleted: number; googleDr
   return parts.join(" · ");
 }
 
-export default function RecruitmentTab() {
+/** `initialSearch`: the reference the dashboard's address names (ADM-09), searched at once. */
+export default function RecruitmentTab({ initialSearch = "" }: { initialSearch?: string } = {}) {
   const [statusFilter, setStatusFilter] = useState<Status | "">("");
   const [countryFilter, setCountryFilter] = useState("");
   const [specialtyFilter, setSpecialtyFilter] = useState("");
@@ -148,7 +149,7 @@ export default function RecruitmentTab() {
   const [minimumScore, setMinimumScore] = useState("");
   const [selectedProfileId, setSelectedProfileId] = useState("");
   // ADM-02: first name, last name, email or reference, searched by the server.
-  const { text: searchText, search, setText: setSearchText, clear: clearSearch } = useAdminSearch();
+  const { text: searchText, search, setText: setSearchText, clear: clearSearch } = useAdminSearch(initialSearch);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [candidate360Id, setCandidate360Id] = useState<number | null>(null);
   const [profileName, setProfileName] = useState("");

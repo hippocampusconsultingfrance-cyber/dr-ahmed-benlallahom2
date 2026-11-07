@@ -94,6 +94,26 @@ describe("racine de l’administration", () => {
     vi.unstubAllEnvs();
   });
 
+  it("revient après la connexion sur la section et l’élément que nommait l’adresse (ADM-09)", async () => {
+    vi.stubEnv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", "pk_test_admin_root");
+    const { default: AdminRoot } = await import("./pages/AdminRoot");
+    const props = (address: string) => {
+      vi.stubGlobal("window", { location: { search: address } });
+      return (AdminRoot() as { props: Record<string, unknown> }).props;
+    };
+    try {
+      expect(props("?tab=appointments&ref=APT1A2B3C4D5E6F")).toMatchObject({
+        signInFallbackRedirectUrl: "/admin?tab=appointments&ref=APT1A2B3C4D5E6F",
+        signUpFallbackRedirectUrl: "/admin?tab=appointments&ref=APT1A2B3C4D5E6F",
+      });
+      // Only a known section and a reference's shape are carried over.
+      expect(props("?tab=inconnue&ref=jeanne%40example.test&next=https://evil.test")).toMatchObject({ signInFallbackRedirectUrl: "/admin" });
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("sans clé Clerk, n’indispose que /admin avec un message clair", async () => {
     vi.stubEnv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", "");
     const { renderToStaticMarkup } = await import("react-dom/server");
