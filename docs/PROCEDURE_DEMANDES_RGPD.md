@@ -87,7 +87,7 @@ Base de données (Neon) :
 | `gdpr_requests` | `email` | la demande elle-même | conservée (§ 4) |
 | `appointments` | `customer_email` | identité, coordonnées, motif, date, montant, statuts | anonymisation des rendez-vous passés, annulés ou abandonnés |
 | `appointment_invoices` | `appointment_id` | numéro et dates de facture | conservé (§ 4) |
-| `appointment_fulfillment_jobs` | `appointment_id` | état des envois après paiement, sans identité | purgé 30 jours après l’envoi |
+| `appointment_fulfillment_jobs` | `appointment_id` | état des envois après paiement, sans identité, sauf l’adresse essayée par un email au patient que garde l’alerte de son échec tant qu’elle attend de partir | purgé 30 jours après l’envoi ; l’adresse disparaît dès que l’alerte part, abandonne ou est close (remboursement, effacement) |
 | `cv_applications` et tables liées | `email` | candidature, CV, analyses, historique | « Effacer le dossier candidat » |
 | `candidate_accounts`, `candidate_sessions`, `candidate_documents` | `email` / `candidate_id` | espace candidat et coffre | avec le dossier candidat ; un espace sans candidature est effacé après 2 ans d’inactivité, sinon le supprimer dans Neon |
 | `client_briefs` | `email` | besoin d’un employeur (contact, organisation) | pas d’écran : vérifier et supprimer dans Neon |

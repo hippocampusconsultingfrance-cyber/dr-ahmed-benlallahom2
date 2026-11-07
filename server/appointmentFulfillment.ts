@@ -343,12 +343,40 @@ function queueJob(db: Database, appointmentId: number, jobType: FulfillmentJobTy
 }
 
 /**
- * Queues the owner's failure alert of a patient email that could not leave at
- * once (ABUS-03), due now. The alert of the same email already sent or given
- * up is queued again for this new failure; one still waiting or being sent is
- * left as it is: it is written from the email's job as it stands at its run.
+ * End of the last error of the owner's failure alert of a patient email while
+ * it waits in the queue (ABUS-03): the address that email was tried with.
+ * Corrected on the appointment before the alert leaves (« Corriger l’email du
+ * patient » without « Renvoyer »), the address the appointment holds was never
+ * tried: the alert quotes the refused one, under its key, and says it was
+ * corrected since. Only the waiting alert keeps it, never the email's job:
+ * every end of that alert (sent, given up, outdated, closed by a refund or an
+ * erasure, interrupted for good) writes its last error over it, so the
+ * address leaves the table with it.
  */
-function queueFailureAlert(db: Database, appointmentId: number, jobType: PatientJobType) {
+const TRIED_ADDRESS_MARK = "\ntried_address:";
+
+function triedAddressMark(customerEmail: string) {
+  return `${TRIED_ADDRESS_MARK}${customerEmail}`;
+}
+
+/** The mark a waiting failure alert keeps (TRIED_ADDRESS_MARK), empty for any other job. */
+function keptTriedAddress(lastError: string | null | undefined) {
+  const at = lastError?.lastIndexOf(TRIED_ADDRESS_MARK) ?? -1;
+  return at < 0 ? "" : lastError!.slice(at);
+}
+
+function triedAddressOf(lastError: string | null) {
+  return keptTriedAddress(lastError).slice(TRIED_ADDRESS_MARK.length) || null;
+}
+
+/**
+ * Queues the owner's failure alert of a patient email that could not leave at
+ * once (ABUS-03), due now, with the address the email was tried with. The
+ * alert of the same email already sent or given up is queued again for this
+ * new failure; one still waiting or being sent is left as it is: it is
+ * written from the email's job as it stands at its run (keepTriedAddress).
+ */
+function queueFailureAlert(db: Database, appointmentId: number, jobType: PatientJobType, customerEmail: string) {
   const now = new Date();
   return db.insert(appointmentFulfillmentJobs).values({
     appointmentId,
@@ -357,11 +385,26 @@ function queueFailureAlert(db: Database, appointmentId: number, jobType: Patient
     attempts: 0,
     maxAttempts: APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS,
     scheduledFor: now,
+    lastError: triedAddressMark(customerEmail),
   }).onConflictDoUpdate({
     target: [appointmentFulfillmentJobs.appointmentId, appointmentFulfillmentJobs.jobType],
-    set: { status: "queued", attempts: 0, maxAttempts: APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS, scheduledFor: now, startedAt: null, finishedAt: null, lastError: null, updatedAt: now },
+    set: { status: "queued", attempts: 0, maxAttempts: APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS, scheduledFor: now, startedAt: null, finishedAt: null, lastError: triedAddressMark(customerEmail), updatedAt: now },
     setWhere: inArray(appointmentFulfillmentJobs.status, ["completed", "failed"]),
   });
+}
+
+/**
+ * The failure alert of a patient email still waiting in the queue is written,
+ * at its run, from the failure the email's job records then: at each new
+ * failure the owner is told of, it takes the address of that failure, not of
+ * the one it was queued for.
+ */
+function keepTriedAddress(db: Database, appointmentId: number, jobType: PatientJobType, customerEmail: string) {
+  return db.update(appointmentFulfillmentJobs).set({ lastError: triedAddressMark(customerEmail) }).where(and(
+    eq(appointmentFulfillmentJobs.appointmentId, appointmentId),
+    eq(appointmentFulfillmentJobs.jobType, FAILURE_ALERT_JOB_TYPES[jobType]),
+    inArray(appointmentFulfillmentJobs.status, ["queued", "retry"]),
+  ));
 }
 
 /** Queues the notices of a refund recorded from Stripe's notification (RES-06); idempotent. */
@@ -606,33 +649,6 @@ function patientContact(appointment: Appointment) {
 type PatientEmailFailure = Pick<FulfillmentJob, "attempts" | "maxAttempts" | "lastError"> & { refused: boolean; terminal: boolean; customerEmail: string };
 
 /**
- * End of the last error of a patient email whose owner alert waits in the
- * queue (ABUS-03): the address the email was tried with. Corrected on the
- * appointment before the alert leaves (« Corriger l’email du patient »
- * without « Renvoyer »), the address the appointment holds was never tried:
- * the alert quotes the refused one, under its key, and says it was corrected
- * since. Kept only while that alert waits: it is forgotten once the alert has
- * left or given up (forgetTriedAddress), and closed with the email's job when
- * the patient's data is erased (closeErasedPatientFulfillment).
- */
-const TRIED_ADDRESS_MARK = "\ntried_address:";
-
-function triedAddressOf(lastError: string | null) {
-  const at = lastError?.lastIndexOf(TRIED_ADDRESS_MARK) ?? -1;
-  return at < 0 ? null : lastError!.slice(at + TRIED_ADDRESS_MARK.length);
-}
-
-/** Once its owner alert has left or given up, a patient email's job no longer keeps the address it was tried with. */
-async function forgetTriedAddress(db: Database, appointmentId: number, jobType: PatientJobType) {
-  const [patientJob] = await db.select({ id: appointmentFulfillmentJobs.id, lastError: appointmentFulfillmentJobs.lastError }).from(appointmentFulfillmentJobs)
-    .where(and(eq(appointmentFulfillmentJobs.appointmentId, appointmentId), eq(appointmentFulfillmentJobs.jobType, jobType))).limit(1);
-  const at = patientJob?.lastError?.lastIndexOf(TRIED_ADDRESS_MARK) ?? -1;
-  if (!patientJob?.lastError || at < 0) return;
-  await db.update(appointmentFulfillmentJobs).set({ lastError: patientJob.lastError.slice(0, at) })
-    .where(and(eq(appointmentFulfillmentJobs.id, patientJob.id), eq(appointmentFulfillmentJobs.lastError, patientJob.lastError)));
-}
-
-/**
  * The owner's alert that a patient email did not go out: at its first failure
  * (the next automatic attempt may only come with the next scheduled run), at
  * a refusal, for which no new attempt is promised, and when retries are
@@ -694,11 +710,11 @@ function bounceAlertOf(appointment: Appointment) {
  * after its first failure, whose alert is written as it was then. Null once
  * the email went out or was closed, or while it waits for a first attempt
  * again (« Renvoyer »): nothing is left to alert about. Tried with the
- * address the job kept for the alert (TRIED_ADDRESS_MARK), or else the one
- * the appointment holds.
+ * address the alert kept (TRIED_ADDRESS_MARK), or else the one the
+ * appointment holds.
  */
-function recordedFailureOf(job: FulfillmentJob, appointment: Appointment): PatientEmailFailure | null {
-  const customerEmail = triedAddressOf(job.lastError) ?? appointment.customerEmail;
+function recordedFailureOf(job: FulfillmentJob, appointment: Appointment, triedAddress: string | null): PatientEmailFailure | null {
+  const customerEmail = triedAddress ?? appointment.customerEmail;
   if (job.status === "failed") return { ...job, refused: isRefusedJob(job), terminal: true, customerEmail };
   if (job.status === "retry") return { ...job, attempts: 1, refused: false, terminal: false, customerEmail };
   return null;
@@ -831,8 +847,8 @@ async function runJob(id: number) {
       // The owner's failure alert of a patient email, queued when it could not
       // leave right after that failure (ABUS-03): written from the email's job
       // and the appointment as they stand now; it quotes the address the email
-      // was tried with, and takes its key, even once the appointment holds a
-      // corrected one (failureAlertOf).
+      // was tried with, which it kept (TRIED_ADDRESS_MARK), and takes its key,
+      // even once the appointment holds a corrected one (failureAlertOf).
       const patientJobType = alertedPatientJob(jobType)!;
       const [patientJob] = await db.select().from(appointmentFulfillmentJobs)
         .where(and(eq(appointmentFulfillmentJobs.appointmentId, appointment.id), eq(appointmentFulfillmentJobs.jobType, patientJobType))).limit(1);
@@ -841,7 +857,7 @@ async function runJob(id: number) {
         await releaseClaimedJob(db, job);
         return { completed: false, retry: true };
       }
-      const failure = patientJob ? recordedFailureOf(patientJob, appointment) : null;
+      const failure = patientJob ? recordedFailureOf(patientJob, appointment, triedAddressOf(job.lastError)) : null;
       if (!failure) {
         await db.update(appointmentFulfillmentJobs).set({ status: "completed", finishedAt: new Date(), lastError: "failure_alert_outdated" }).where(eq(appointmentFulfillmentJobs.id, id));
         return { skipped: true };
@@ -851,8 +867,6 @@ async function runJob(id: number) {
       // Not asked again after the immediate budget: the job goes back to the queue.
       const delivered = await notifyOwner(alert.payload, { idempotencyKey: alert.idempotencyKey, stopAtDeadline: true }).catch(() => false);
       if (!delivered) throw new Error("owner_failure_alert_failed");
-      // Sent: a failure to forget the address must not have it sent again.
-      await forgetTriedAddress(db, appointment.id, patientJobType).catch(() => undefined);
     }
     await db.update(appointmentFulfillmentJobs).set({ status: "completed", finishedAt: new Date(), lastError: null }).where(eq(appointmentFulfillmentJobs.id, id));
     return { completed: true };
@@ -879,13 +893,13 @@ async function runJob(id: number) {
     const refused = postPaymentEmailRefused(error);
     const terminal = refused || job.attempts >= job.maxAttempts;
     const lastError = refused ? `${PROVIDER_REJECTED_ERROR}${message}` : message;
-    await db.update(appointmentFulfillmentJobs).set({ status: terminal ? "failed" : "retry", lastError, scheduledFor: retryAt(job.attempts), finishedAt: terminal ? new Date() : null }).where(eq(appointmentFulfillmentJobs.id, id));
+    // A failure alert waiting for its next attempt keeps the address its email
+    // was tried with (TRIED_ADDRESS_MARK); one that gives up no longer does.
+    const kept = terminal ? "" : keptTriedAddress(job.lastError);
+    await db.update(appointmentFulfillmentJobs).set({ status: terminal ? "failed" : "retry", lastError: `${lastError}${kept}`, scheduledFor: retryAt(job.attempts), finishedAt: terminal ? new Date() : null }).where(eq(appointmentFulfillmentJobs.id, id));
     if (!isPatientJob(jobType)) {
       // The owner alert would use the very channel that just failed.
       console.error("[AppointmentFulfillment] Owner notification failed", { trackingId: appointment.trackingId, jobType, terminal });
-      // A failure alert that gives up no longer needs the address its email was tried with.
-      const alertedJobType = alertedPatientJob(jobType);
-      if (terminal && alertedJobType) await forgetTriedAddress(db, appointment.id, alertedJobType).catch(() => undefined);
     } else if (job.attempts === 1 || terminal) {
       // The owner is alerted (failureAlertOf). The alert takes its send slot,
       // a pause after the email that failed (ABUS-03). When that slot may come
@@ -895,11 +909,11 @@ async function runJob(id: number) {
       // after the page or the webhook has answered, and not lost.
       const alert = failureAlertOf(jobType, appointment, { attempts: job.attempts, maxAttempts: job.maxAttempts, lastError, refused, terminal, customerEmail: appointment.customerEmail });
       const delivered = (await alertSendSlot()) && (await notifyOwner(alert.payload, { idempotencyKey: alert.idempotencyKey, stopAtDeadline: true }).catch(() => false));
+      // An alert of this email still waiting from an earlier failure is written from this one at its run.
+      await keepTriedAddress(db, appointment.id, jobType, appointment.customerEmail).catch(() => undefined);
       if (!delivered) {
         console.warn("[AppointmentFulfillment] Owner failure alert not sent at once; queued for the next run", { trackingId: appointment.trackingId, jobType });
-        // The email's job keeps the address it was tried with for the alert (TRIED_ADDRESS_MARK).
-        await db.update(appointmentFulfillmentJobs).set({ lastError: `${lastError}${TRIED_ADDRESS_MARK}${appointment.customerEmail}` }).where(and(eq(appointmentFulfillmentJobs.id, id), eq(appointmentFulfillmentJobs.lastError, lastError)))
-          .then(() => queueFailureAlert(db, appointment.id, jobType))
+        await queueFailureAlert(db, appointment.id, jobType, appointment.customerEmail)
           .catch(queueError => console.error("[AppointmentFulfillment] Owner failure alert could not be queued", { trackingId: appointment.trackingId, jobType, error: queueError instanceof Error ? queueError.name : "UnknownError" }));
       }
     }
@@ -1003,6 +1017,7 @@ export async function recoverStaleAppointmentFulfillmentJobs(staleAfterMs = APPO
     status: appointmentFulfillmentJobs.status,
     attempts: appointmentFulfillmentJobs.attempts,
     maxAttempts: appointmentFulfillmentJobs.maxAttempts,
+    lastError: appointmentFulfillmentJobs.lastError,
   }).from(appointmentFulfillmentJobs).where(or(
     and(eq(appointmentFulfillmentJobs.status, "running"), lte(appointmentFulfillmentJobs.startedAt, staleBefore)),
     and(inArray(appointmentFulfillmentJobs.status, ["queued", "retry"]), gte(appointmentFulfillmentJobs.attempts, appointmentFulfillmentJobs.maxAttempts)),
@@ -1017,7 +1032,8 @@ export async function recoverStaleAppointmentFulfillmentJobs(staleAfterMs = APPO
       scheduledFor: now,
       startedAt: null,
       finishedAt: terminal ? now : null,
-      lastError: terminal ? "worker_interrupted_attempts_exhausted" : "worker_interrupted",
+      // A failure alert tried again keeps the address its email was tried with (TRIED_ADDRESS_MARK).
+      lastError: terminal ? "worker_interrupted_attempts_exhausted" : `worker_interrupted${keptTriedAddress(candidate.lastError)}`,
       updatedAt: now,
     }).where(and(
       eq(appointmentFulfillmentJobs.id, candidate.id),

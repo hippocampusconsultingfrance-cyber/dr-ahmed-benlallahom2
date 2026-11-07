@@ -107,6 +107,8 @@ function seedJob(appointmentId: number, jobType: string, overrides: Record<strin
 const job = (appointmentId: number, jobType: string) => memory.rows(appointmentFulfillmentJobs).find(row => row.appointment_id === appointmentId && row.job_type === jobType)!;
 const emailsTo = (to: string) => resend.calls.filter(call => (call.message.to as string[])[0] === to);
 const alerts = () => owner.notifyOwner.mock.calls.map(([payload, options]) => ({ ...payload, key: options?.idempotencyKey }));
+/** The jobs that keep an address in their last error, with their status. */
+const jobsKeeping = (address: string) => memory.rows(appointmentFulfillmentJobs).filter(row => String(row.last_error ?? "").includes(address)).map(row => [row.job_type, row.status]);
 const deliveriesOf = async (trackingId: string) => (await admin().appointments.list({ search: trackingId })).items.find(item => item.trackingId === trackingId)!.deliveries;
 
 /** Stripe double: the refund succeeds. */
@@ -579,7 +581,8 @@ describe("ABUS-03 — l’alerte « Échec d’envoi » que Resend ne prend pas 
     owner.notifyOwner.mockResolvedValueOnce(false);
     const retry = await admin().appointments.retryFulfillment({ trackingId: "APTALERT0001" });
     expect(retry.requeuedJobTypes).toEqual(["confirmation"]);
-    expect(alertJob()).toMatchObject({ status: "queued", attempts: 0, last_error: null });
+    // Queued again from scratch, with nothing but the address this failure was tried with.
+    expect(alertJob()).toMatchObject({ status: "queued", attempts: 0, last_error: "\ntried_address:aptalert0001@example.test" });
     await processDueAppointmentFulfillmentJobs();
     expect(alertJob()).toMatchObject({ status: "completed", attempts: 1 });
     expect(alerts().at(-1)!.key).toBe(patientEmailIdempotencyKey("appointment-confirmation-failure-APTALERT0001-first", "aptalert0001@example.test"));
@@ -597,6 +600,8 @@ describe("ABUS-03 — l’alerte « Échec d’envoi » que Resend ne prend pas 
     owner.notifyOwner.mockResolvedValueOnce(false);
     await processAppointmentFulfillmentNow(id);
     expect(job(id, "confirmation_failure_alert")).toMatchObject({ status: "queued" });
+    // Only the waiting alert keeps the refused address, not the email's job.
+    expect(jobsKeeping(refusedAddress)).toEqual([["confirmation_failure_alert", "queued"]]);
 
     // Corrected on the appointment, without « Renvoyer »: the new address is not tried.
     await admin().appointments.updateCustomerEmail({ trackingId: "APTALERT0002", customerEmail: correctedAddress });
@@ -614,8 +619,8 @@ describe("ABUS-03 — l’alerte « Échec d’envoi » que Resend ne prend pas 
     expect(first.key).toBe(refusedKey);
     expect(queued.key).toBe(patientEmailIdempotencyKey(refusedKey, correctedAddress));
     expect(queued.key).not.toBe(patientEmailIdempotencyKey("appointment-confirmation-failure-APTALERT0002-refused", correctedAddress));
-    // Once the alert has left, the email's job no longer keeps the refused address; it is still refused.
-    expect(String(job(id, "confirmation").last_error)).not.toContain(refusedAddress);
+    // Once the alert has left, no job keeps the refused address; the email is still refused.
+    expect(jobsKeeping(refusedAddress)).toEqual([]);
     expect((await deliveriesOf("APTALERT0002")).map(delivery => delivery.state)).toEqual(["sent", "refused"]);
 
     // « Renvoyer » then writes to the corrected address, once.
@@ -655,5 +660,93 @@ describe("ABUS-03 — l’alerte « Échec d’envoi » que Resend ne prend pas 
       ["confirmation", "completed", "patient_data_erased"],
       ["confirmation_failure_alert", "completed", "patient_data_erased"],
     ]);
+    expect(jobsKeeping("aptalert0004@example.test")).toEqual([]);
+  });
+
+  it("un remboursement le jour même ferme l’alerte en file sans garder l’adresse refusée", async () => {
+    const refusedAddress = "aptalert0005@example.test";
+    const { id } = seedAppointment("APTALERT0005");
+    seedJob(id, "owner", { status: "completed", attempts: 1 });
+    seedJob(id, "confirmation");
+    resend.rejected.add(refusedAddress);
+    owner.notifyOwner.mockResolvedValueOnce(false);
+    await processAppointmentFulfillmentNow(id);
+    expect(jobsKeeping(refusedAddress)).toEqual([["confirmation_failure_alert", "queued"]]);
+
+    // Refunded from the dashboard before the next run: the refund email is refused too, and told at once.
+    await refundAppointmentPayment(stripe, { trackingId: "APTALERT0005", initiator: "practitioner", reason: "Indisponibilité du médecin" });
+    await processDueAppointmentFulfillmentJobs();
+
+    expect(job(id, "confirmation_failure_alert")).toMatchObject({ status: "completed", last_error: "appointment_not_paid_or_missing" });
+    expect(job(id, "refund")).toMatchObject({ status: "failed" });
+    expect(alerts().map(alert => alert.title)).toEqual(["Échec d’envoi après paiement (APTALERT0005)", "Échec d’envoi après remboursement (APTALERT0005)"]);
+    expect(jobsKeeping(refusedAddress)).toEqual([]);
+  });
+
+  it("l’alerte en file qui abandonne, ou dont le dernier essai est interrompu, ne garde pas l’adresse refusée ; un essai interrompu avant la fin la garde", async () => {
+    const { recoverStaleAppointmentFulfillmentJobs } = await import("./appointmentFulfillment");
+    const refusedAddress = "aptalert0006@example.test";
+    const { id } = seedAppointment("APTALERT0006");
+    seedJob(id, "owner", { status: "completed", attempts: 1 });
+    seedJob(id, "confirmation");
+    seedJob(id, "invoice", { status: "completed", attempts: 1 });
+    resend.rejected.add(refusedAddress);
+    owner.notifyOwner.mockResolvedValue(false);
+    await processAppointmentFulfillmentNow(id);
+    const alertJob = () => job(id, "confirmation_failure_alert");
+
+    // Resend does not take it: it waits for its next attempt, still with the address it quotes.
+    await processDueAppointmentFulfillmentJobs();
+    expect(alertJob()).toMatchObject({ status: "retry", attempts: 1, last_error: "owner_failure_alert_failed\ntried_address:aptalert0006@example.test" });
+
+    // Its worker stops during an attempt before the last one: tried again, it keeps the address.
+    Object.assign(alertJob(), { status: "running", attempts: 2, started_at: pgTimestamp(new Date(Date.now() - 20 * 60_000)) });
+    await recoverStaleAppointmentFulfillmentJobs();
+    expect(alertJob()).toMatchObject({ status: "retry", last_error: "worker_interrupted\ntried_address:aptalert0006@example.test" });
+
+    // Its last attempt fails: it gives up, and forgets the address.
+    Object.assign(alertJob(), { attempts: 6, scheduled_for: pgTimestamp(new Date(Date.now() - 1000)) });
+    await processDueAppointmentFulfillmentJobs();
+    expect(alertJob()).toMatchObject({ status: "failed", attempts: 7, last_error: "owner_failure_alert_failed" });
+    expect(jobsKeeping(refusedAddress)).toEqual([]);
+
+    // Queued again by a new refusal, then interrupted during its last attempt: closed without the address.
+    await admin().appointments.retryFulfillment({ trackingId: "APTALERT0006" });
+    expect(jobsKeeping(refusedAddress)).toEqual([["confirmation_failure_alert", "queued"]]);
+    Object.assign(alertJob(), { status: "running", attempts: 7, started_at: pgTimestamp(new Date(Date.now() - 20 * 60_000)) });
+    await recoverStaleAppointmentFulfillmentJobs();
+    expect(alertJob()).toMatchObject({ status: "failed", last_error: "worker_interrupted_attempts_exhausted" });
+    expect(jobsKeeping(refusedAddress)).toEqual([]);
+  });
+
+  it("une alerte qui attend son nouvel essai, puis « Renvoyer » refusé à l’adresse corrigée et dit aussitôt : elle cite ensuite cette adresse, sous la même clé", async () => {
+    const refusedAddress = "aptalert0007@example.test";
+    const correctedAddress = "autre.adresse.0007@example.test";
+    const { id } = seedAppointment("APTALERT0007");
+    seedJob(id, "owner", { status: "completed", attempts: 1 });
+    seedJob(id, "confirmation");
+    resend.rejected.add(refusedAddress);
+    resend.rejected.add(correctedAddress);
+    // The alert of the first refusal is not taken, at once nor at the next run: it waits for its next attempt.
+    owner.notifyOwner.mockResolvedValueOnce(false).mockResolvedValueOnce(false);
+    await processAppointmentFulfillmentNow(id);
+    await processDueAppointmentFulfillmentJobs();
+    expect(job(id, "confirmation_failure_alert")).toMatchObject({ status: "retry", attempts: 1 });
+
+    // Corrected, then « Renvoyer »: refused again, told at once.
+    await admin().appointments.updateCustomerEmail({ trackingId: "APTALERT0007", customerEmail: correctedAddress });
+    await admin().appointments.retryFulfillment({ trackingId: "APTALERT0007" });
+    expect(alerts()).toHaveLength(3);
+    expect(jobsKeeping(refusedAddress)).toEqual([]);
+
+    // At its hour, the waiting alert is written from that refusal: the address tried, not one « corrigée depuis ».
+    job(id, "confirmation_failure_alert").scheduled_for = pgTimestamp(new Date(Date.now() - 1000));
+    await processDueAppointmentFulfillmentJobs();
+    const [told, queued] = alerts().slice(-2);
+    expect(queued).toEqual(told);
+    expect(queued.content).toContain(`— ${correctedAddress} —`);
+    expect(queued.content).not.toContain("corrigée depuis");
+    expect(queued.key).toBe(patientEmailIdempotencyKey("appointment-confirmation-failure-APTALERT0007-refused", correctedAddress));
+    expect(job(id, "confirmation_failure_alert")).toMatchObject({ status: "completed", last_error: null });
   });
 });

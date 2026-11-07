@@ -204,7 +204,8 @@ describe("revendication atomique des envois post-paiement", () => {
     const result = await processDueAppointmentFulfillmentJobs();
 
     expect(result.results).toEqual([{ completed: false, retry: false }]);
-    expect(writes.at(-1)?.values).toMatchObject({ status: "failed" });
+    // The last change of status; an alert still waiting in the queue may then take the address tried.
+    expect(writes.filter(write => "status" in write.values).at(-1)?.values).toMatchObject({ status: "failed" });
     expect(owner.notifyOwner).toHaveBeenCalledWith(expect.objectContaining({ title: expect.stringContaining("APT-42") }), expect.anything());
   });
 
