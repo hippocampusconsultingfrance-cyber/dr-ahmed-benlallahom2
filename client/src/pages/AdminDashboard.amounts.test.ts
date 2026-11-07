@@ -10,7 +10,8 @@ import { elementsOf, renderStateful, resetStatefulHooks } from "@/testing/statef
 vi.mock("react", async importOriginal => (await import("@/testing/statefulRender")).withStatefulHooks(await importOriginal()));
 
 const view = vi.hoisted(() => ({
-  stats: { appointments: 7, contacts: 2, gdpr: 1, revenue: "650.00" as string | number },
+  // The revenue of the current month, the one of the previous month being 100.00.
+  revenue: "650.00" as string | number,
   items: [] as Array<Record<string, unknown>>,
 }));
 
@@ -29,7 +30,20 @@ vi.mock("@/lib/trpc", () => {
       useQueries: (build: (t: unknown) => unknown[]) => build({ admin: { appointments: { list: (input: unknown) => input } } })
         .map(() => ({ data: { items: view.items, total: view.items.length }, isLoading: false, error: null, refetch: vi.fn() })),
       admin: {
-        stats: { useQuery: () => ({ data: view.stats, isLoading: false, error: null }) },
+        stats: {
+          useQuery: () => ({
+            data: {
+              appointments: { today: 0, tomorrow: 0 },
+              medicalQuestions: { open: 0, oldestReceivedAt: null },
+              unreadMessages: 0,
+              gdprRequests: { open: 0, nextDeadline: null },
+              documentsToReview: 0,
+              revenue: { currentMonth: { month: "2026-11", amount: view.revenue }, previousMonth: { month: "2026-10", amount: "100.00" } },
+            },
+            isLoading: false,
+            error: null,
+          }),
+        },
         appointments: {
           agenda: { useQuery: () => ({ data: { items: [], truncated: false }, isLoading: false, error: null }) },
           updateStatus: mutation(),
@@ -75,7 +89,7 @@ function appointment(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   view.items = [];
-  view.stats = { appointments: 7, contacts: 2, gdpr: 1, revenue: "650.00" };
+  view.revenue = "650.00";
 });
 afterEach(() => {
   resetStatefulHooks();
@@ -85,9 +99,9 @@ afterEach(() => {
 describe("montants au format français dans l’administration", () => {
   it("tuile des revenus : « 650,00 € », comme les emails, quel que soit le format reçu de la base", () => {
     expect(shown(renderToStaticMarkup(createElement(OverviewTab, { onNavigate: vi.fn() })))).toContain(">650,00 €<");
-    view.stats = { ...view.stats, revenue: 1250.5 };
+    view.revenue = 1250.5;
     expect(shown(renderToStaticMarkup(createElement(OverviewTab, { onNavigate: vi.fn() })))).toContain(">1 250,50 €<");
-    view.stats = { ...view.stats, revenue: 0 };
+    view.revenue = 0;
     expect(shown(renderToStaticMarkup(createElement(OverviewTab, { onNavigate: vi.fn() })))).toContain(">0,00 €<");
   });
 

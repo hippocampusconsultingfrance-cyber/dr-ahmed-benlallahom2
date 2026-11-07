@@ -3,8 +3,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { elementsOf, renderStateful, resetStatefulHooks } from "@/testing/statefulRender";
 
 // Raccourcis de la vue d’ensemble, telle que le tableau de bord la monte :
-// « Ouvrir les réservations » du panneau À traiter, puis les accès rapides
-// Candidatures et Missions, ouvrent chacun leur onglet dans le tableau de bord.
+// « Ouvrir les réservations » du panneau À traiter, les cartes de ce qui
+// attend une action (ADM-06), puis les accès rapides Candidatures et Missions,
+// ouvrent chacun leur onglet dans le tableau de bord.
 
 vi.mock("react", async importOriginal => (await import("@/testing/statefulRender")).withStatefulHooks(await importOriginal()));
 vi.mock("@/_core/hooks/useAuth", () => ({ useAuth: () => ({ user: { name: "Dr Ahmed", role: "admin" }, loading: false, refresh: vi.fn(), logout: vi.fn() }) }));
@@ -18,15 +19,33 @@ vi.mock("@/lib/trpc", () => ({
       begin: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
       verify: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
     },
-    admin: { stats: { useQuery: () => ({ data: { appointments: 3, contacts: 1, gdpr: 0, revenue: "300.00" }, isLoading: false, error: null }) } },
+    admin: {
+      stats: {
+        useQuery: () => ({
+          data: {
+            appointments: { today: 3, tomorrow: 1 },
+            medicalQuestions: { open: 2, oldestReceivedAt: new Date("2026-10-20T08:00:00Z") },
+            unreadMessages: 1,
+            gdprRequests: { open: 0, nextDeadline: null },
+            documentsToReview: 0,
+            revenue: { currentMonth: { month: "2026-11", amount: "300.00" }, previousMonth: { month: "2026-10", amount: "0.00" } },
+          },
+          isLoading: false,
+          error: null,
+        }),
+      },
+    },
   },
 }));
 
 const { default: AdminDashboard } = await import("@/pages/AdminDashboard");
 const { default: OverviewTab } = await import("./OverviewTab");
 const { default: AppointmentsTab } = await import("./AppointmentsTab");
+const { default: MedicalQuestionsAdminTab } = await import("./MedicalQuestionsAdminTab");
+const { default: ContactsTab } = await import("./ContactsTab");
+const { default: GdprTab } = await import("./GdprTab");
 // Candidatures and Missions are loaded on demand: the dashboard mounts their lazy components.
-const { RecruitmentTab, EmployerBriefsTab } = await import("@/pages/adminLazyTabs");
+const { CandidateDocumentsAdminTab, RecruitmentTab, EmployerBriefsTab } = await import("@/pages/adminLazyTabs");
 const { default: AdminAttentionPanel } = await import("./AdminAttentionPanel");
 
 const textOf = (node: unknown): string => {
@@ -42,13 +61,24 @@ const currentTab = (tree: ReactElement) => elementsOf(tree).filter(element => el
 /** The overview the dashboard mounts, called with the props the dashboard gives it. */
 const overview = (tree: ReactElement) => OverviewTab(elementsOf(tree).find(element => element.type === OverviewTab)!.props as Parameters<typeof OverviewTab>[0]);
 const shortcut = (label: string) => (tree: ReactElement) => (elementsOf(tree).find(element => element.type === "button" && textOf(element).trim().startsWith(label))!.props.onClick as () => void)();
+/** A card of what waits for an action: its figure, then its label. */
+const card = (label: string) => (tree: ReactElement) => (elementsOf(tree).find(element => element.type === "button" && textOf(element).includes(label))!.props.onClick as () => void)();
 const attentionPanel = (tree: ReactElement) => (elementsOf(tree).find(element => element.type === AdminAttentionPanel)!.props.onOpenAppointments as () => void)();
 
 afterEach(() => resetStatefulHooks());
 
 describe("raccourcis de la vue d’ensemble", () => {
-  it("ouvrent Réservations, Candidatures et Missions dans le tableau de bord", () => {
-    for (const [open, label, section] of [[attentionPanel, "Réservations", AppointmentsTab], [shortcut("Candidatures"), "Candidatures", RecruitmentTab], [shortcut("Missions"), "Missions", EmployerBriefsTab]] as const) {
+  it("ouvrent Réservations, Questions santé, Messages, RGPD, Documents candidats, Candidatures et Missions dans le tableau de bord", () => {
+    for (const [open, label, section] of [
+      [attentionPanel, "Réservations", AppointmentsTab],
+      [card("Rendez-vous demain"), "Réservations", AppointmentsTab],
+      [card("Questions santé à répondre"), "Questions santé", MedicalQuestionsAdminTab],
+      [card("Messages non lus"), "Messages", ContactsTab],
+      [card("Demandes RGPD ouvertes"), "RGPD", GdprTab],
+      [card("Documents candidats à revoir"), "Documents candidats", CandidateDocumentsAdminTab],
+      [shortcut("Candidatures"), "Candidatures", RecruitmentTab],
+      [shortcut("Missions"), "Missions", EmployerBriefsTab],
+    ] as const) {
       resetStatefulHooks();
       const before = render();
       expect(currentTab(before)).toEqual(["Vue d'ensemble"]);
