@@ -95,7 +95,12 @@ async function notifyOwnerOfSecurityAlert(input: SecurityAlertInput) {
       await deferAlertToNextRun(input.category);
       return null;
     }
-    return sendSecurityAlertEmail(input);
+    const delivered = await sendSecurityAlertEmail(input).catch(() => false);
+    // Refused in turn, the used-up quota's own alert by that very quota: queued
+    // the same way, its next run sends it once the quota is back, after the
+    // new try that follows a failure (OWNER_ALERT_RETRY_AFTER_FAILURE_MS).
+    if (!delivered) await deferAlertToNextRun(input.category);
+    return delivered;
   });
 }
 
