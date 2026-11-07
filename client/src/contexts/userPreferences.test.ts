@@ -1,14 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { getNextLanguage, readLanguageParameter, readLanguagePreference, readThemePreference, removeLanguageParameter } from "./userPreferences";
+import { readInitialLanguage, readLanguageParameter, readLanguagePreference, readThemePreference, removeLanguageParameter, shouldSuggestEnglish } from "./userPreferences";
 
 describe("préférences d’interface", () => {
-  it("accepte uniquement les langues prises en charge et respecte le cycle complet", () => {
+  it("accepte uniquement les langues prises en charge", () => {
     expect(readLanguagePreference("de", "fr")).toBe("de");
     expect(readLanguagePreference("it", "fr")).toBe("fr");
-    expect(getNextLanguage("fr")).toBe("en");
-    expect(getNextLanguage("en")).toBe("de");
-    expect(getNextLanguage("de")).toBe("zh");
-    expect(getNextLanguage("zh")).toBe("fr");
+  });
+
+  it("distingue une langue choisie (lien ?lang=, choix mémorisé) de la langue par défaut (EN-08)", () => {
+    expect(readInitialLanguage("?lang=en", "de", "fr")).toEqual({ language: "en", chosen: true });
+    expect(readInitialLanguage("", "de", "fr")).toEqual({ language: "de", chosen: true });
+    expect(readInitialLanguage("", "fr", "fr")).toEqual({ language: "fr", chosen: true });
+    expect(readInitialLanguage("", null, "fr")).toEqual({ language: "fr", chosen: false });
+    expect(readInitialLanguage("?lang=it", "it", "fr")).toEqual({ language: "fr", chosen: false });
+  });
+
+  it("ne propose l’anglais qu’à un navigateur sans français et sans choix fait (EN-08)", () => {
+    for (const browser of [["en-US", "en"], ["ar-AE"], ["de-DE", "de"], ["zh-CN"]]) expect(shouldSuggestEnglish("fr", false, browser), browser.join()).toBe(true);
+    for (const browser of [["fr-FR"], ["en-US", "fr"], ["ar-AE", "FR-ca"], ["fr"]]) expect(shouldSuggestEnglish("fr", false, browser), browser.join()).toBe(false);
+    // A remembered choice or a ?lang= link, a page already in another language, an unknown browser: nothing is offered.
+    expect(shouldSuggestEnglish("fr", true, ["en-US"])).toBe(false);
+    expect(shouldSuggestEnglish("en", false, ["en-US"])).toBe(false);
+    expect(shouldSuggestEnglish("fr", false, [])).toBe(false);
+    // "fri" (a language tag that only starts like French) is not French.
+    expect(shouldSuggestEnglish("fr", false, ["fri"])).toBe(true);
   });
 
   it("lit la langue d’un lien ?lang= sans jamais en inventer une (EN-03)", () => {

@@ -182,7 +182,7 @@ describe("CAND-10 — retour vers la connexion", () => {
   });
 });
 
-describe("CAND-21 — boutons flottants dans les espaces privés", () => {
+describe("CAND-21, ADM-16, PUB-12 — boutons flottants et bandeau cookies", () => {
   /** The floating widgets of App, as mounted for the current address. */
   async function floatingWidgets(location: string) {
     view.location = location;
@@ -190,16 +190,25 @@ describe("CAND-21 — boutons flottants dans les espaces privés", () => {
     const widgets = elementsOf((holder.type as () => ReactElement)());
     return {
       whatsApp: widgets.some(element => element.type === WhatsAppButton),
-      cookiePreferencesShortcut: widgets.find(element => element.type === CookieConsent)!.props.showPreferencesShortcut,
+      cookieConsent: widgets.some(element => element.type === CookieConsent),
     };
   }
 
-  it("masque WhatsApp et la pastille cookies sur l’espace candidat et l’administration", async () => {
+  it("ne monte ni WhatsApp, ni bandeau cookies, ni préférences sur l’espace candidat et l’administration (ADM-16)", async () => {
     for (const path of ["/candidate/access", "/candidate/portal", "/candidate/verify?email=a&token=b", "/admin", "/admin/"]) expect(isPrivateAreaPath(path), path).toBe(true);
     for (const path of ["/", "/booking", "/recruitment/standard", "/candidates", "/administration"]) expect(isPrivateAreaPath(path), path).toBe(false);
 
-    await expect(floatingWidgets("/candidate/portal")).resolves.toEqual({ whatsApp: false, cookiePreferencesShortcut: false });
-    await expect(floatingWidgets("/admin")).resolves.toEqual({ whatsApp: false, cookiePreferencesShortcut: false });
-    await expect(floatingWidgets("/booking")).resolves.toEqual({ whatsApp: true, cookiePreferencesShortcut: true });
+    for (const path of ["/candidate/portal", "/candidate/access", "/admin"]) {
+      await expect(floatingWidgets(path), path).resolves.toEqual({ whatsApp: false, cookieConsent: false });
+    }
+  });
+
+  it("garde le bandeau cookies sur les pages publiques, et WhatsApp hors des formulaires (PUB-12)", async () => {
+    for (const path of ["/", "/faq", "/booking/confirmation", "/legal"]) {
+      await expect(floatingWidgets(path), path).resolves.toEqual({ whatsApp: true, cookieConsent: true });
+    }
+    for (const path of ["/booking", "/recruitment", "/recruitment/standard", "/recruitment/vvip-offshore", "/vvip-offshore", "/recruitment/unsubscribe", "/employers", "/questions-anesthesie", "/gdpr"]) {
+      await expect(floatingWidgets(path), path).resolves.toEqual({ whatsApp: false, cookieConsent: true });
+    }
   });
 });

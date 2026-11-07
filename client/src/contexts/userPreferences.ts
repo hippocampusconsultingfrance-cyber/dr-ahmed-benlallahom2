@@ -28,8 +28,24 @@ export function removeLanguageParameter(href: string): string | null {
   return url.href;
 }
 
-export function getNextLanguage(language: UserLanguage): UserLanguage {
-  return USER_LANGUAGES[(USER_LANGUAGES.indexOf(language) + 1) % USER_LANGUAGES.length];
+/**
+ * Language a page opens in, and whether the visitor chose it: a ?lang= link or a remembered choice
+ * is one, the site's default is not (and is not remembered, so that shouldSuggestEnglish still applies).
+ */
+export function readInitialLanguage(search: string, stored: string | null, fallback: UserLanguage): { language: UserLanguage; chosen: boolean } {
+  const linked = readLanguageParameter(search);
+  if (linked) return { language: linked, chosen: true };
+  return { language: readLanguagePreference(stored, fallback), chosen: USER_LANGUAGES.includes(stored as UserLanguage) };
+}
+
+/**
+ * English is offered, never applied, to a visitor who has not chosen a language and whose browser
+ * declares no French (EN-08): a switch made by the page itself would show Google, which crawls with
+ * an English browser, English text under the French addresses (readLanguageParameter).
+ */
+export function shouldSuggestEnglish(language: UserLanguage, chosen: boolean, browserLanguages: readonly string[]): boolean {
+  if (chosen || language !== "fr" || browserLanguages.length === 0) return false;
+  return !browserLanguages.some(tag => /^fr(?:-|$)/i.test(tag.trim()));
 }
 
 export function readThemePreference(value: string | null, fallback: UserTheme): UserTheme {

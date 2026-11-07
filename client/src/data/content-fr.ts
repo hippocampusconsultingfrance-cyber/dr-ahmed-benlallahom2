@@ -12,7 +12,11 @@ export const contentFr = {
     contact: "Contact",
     getInTouch: "Me Contacter",
     blog: "Actualités",
-    switchLang: "EN",
+    // Libellés courts de l'en-tête, repris par le pied de page (PUB-08).
+    consultation: "Consultation",
+    healthQuestions: "Questions santé",
+    recruitment: "Recrutement",
+    employers: "Employeurs",
   },
 
   // Section Hero
@@ -220,7 +224,12 @@ export const contentFr = {
   // Footer
   footer: {
     tagline: "L'excellence clinique au service de l'innovation médicale mondiale.",
-    navigate: "Navigation",
+    // Colonnes Patients / Recrutement (nav.recruitment) / Informations / Légal (PUB-08).
+    patients: "Patients",
+    information: "Informations",
+    legalHeading: "Légal",
+    apply: "Postuler",
+    candidatePortal: "Espace candidat",
     legal: "Mentions Légales",
     privacy: "Politique de Confidentialité",
     terms: "Conditions Générales",

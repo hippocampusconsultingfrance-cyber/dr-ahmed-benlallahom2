@@ -771,15 +771,16 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
     await page.context().close();
   }, 60_000);
 
-  it("laisse remonter le texte de la confirmation au-dessus de la pastille « Préférences cookies » et du bouton WhatsApp sur téléphone (RES-05)", async () => {
+  it("laisse remonter le texte de la confirmation au-dessus du bouton WhatsApp sur téléphone, sans pastille cookies (RES-05, PUB-12)", async () => {
     const start = parisBookingSlotStart(toParisBookingDateKey(new Date(Date.now() + 5 * 24 * 60 * 60 * 1000)), "19:00")!;
-    // Pixel 7, en anglais, choix cookies déjà fait : la pastille reste en bas à gauche de l'écran, WhatsApp en bas à droite.
+    // Pixel 7, en anglais, choix cookies déjà fait : WhatsApp en bas à droite ; le choix se rouvre depuis le pied de page.
     const { page } = await open("/booking/confirmation?status=success&trackingId=APTCONFIRM0003&session_id=cs_test_confirmed", {
       "appointments.publicStatus": () => ({ state: "confirmed", appointment: { appointmentDate: start.toISOString(), durationMinutes: 30, amountEur: 150 } }),
     }, { language: "en", timezoneId: "Asia/Dubai", context: { viewport: { width: 412, height: 839 }, deviceScaleFactor: 2.625, isMobile: true, hasTouch: true } });
     await page.getByRole("definition").first().waitFor();
-    await page.getByRole("button", { name: cookieCopy.en.settings }).waitFor();
+    await page.locator("footer").getByRole("button", { name: cookieCopy.en.manage }).waitFor();
     await page.locator(".whatsapp-contact-float").waitFor();
+    expect(await page.locator(".cookie-preferences-shortcut").count()).toBe(0);
     await page.evaluate(() => Promise.all(document.getAnimations().filter((animation) => (animation as CSSAnimation).animationName === "page-transition-enter").map((animation) => animation.finished)));
 
     // Chaque texte et chaque commande, amené en bas de l'écran comme le fait le navigateur pour un focus.
@@ -801,7 +802,7 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
       }
       return { floating: floating.length, count: blocks.length, result };
     });
-    expect(covered.floating).toBe(2);
+    expect(covered.floating).toBe(1);
     expect(covered.count).toBeGreaterThan(10);
     expect(covered.result).toEqual([]);
     await page.context().close();

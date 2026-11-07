@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 // PUB-COOKIE-01 : le lien « En savoir plus » du bandeau cookies mène à une
 // section #cookies de la politique de confidentialité, dans chaque langue, qui
-// renvoie au bouton « Préférences cookies » plutôt qu’aux réglages du navigateur.
+// renvoie à « Gérer les cookies » du pied de page plutôt qu’aux réglages du navigateur.
 
 const state = vi.hoisted(() => ({ language: "fr" as "fr" | "en" | "de" | "zh" }));
 
@@ -22,7 +22,7 @@ vi.mock("@/components/SEOHead", () => ({ SEOHead: () => null }));
 vi.mock("@/components/Breadcrumb", () => ({ default: () => null }));
 
 const { default: LegalPage } = await import("./LegalPage");
-const { COOKIE_POLICY_HREF } = await import("@/components/CookieConsent");
+const { COOKIE_POLICY_HREF, cookieCopy } = await import("@/components/CookieConsent");
 
 function privacyPolicy(language: typeof state.language) {
   state.language = language;
@@ -37,7 +37,12 @@ describe("politique cookies visée par le bandeau", () => {
     expect(html).not.toMatch(/configurant votre navigateur|configuring your browser|Ihren Browser konfigurieren|通过配置浏览器/);
   });
 
-  it("renvoie, en français, au bouton « Préférences cookies » du pied de page", () => {
-    expect(privacyPolicy("fr")).toContain("via le bouton « Préférences cookies » en bas de page");
+  it("renvoie, en français, à « Gérer les cookies » du pied de page (PUB-12)", () => {
+    expect(privacyPolicy("fr")).toContain("via « Gérer les cookies », en bas de page");
+  });
+
+  it.each(["fr", "en", "de", "zh"] as const)("nomme le bouton du pied de page par son libellé (%s, PUB-12)", language => {
+    expect(privacyPolicy(language)).toContain(cookieCopy[language].manage);
+    expect(privacyPolicy(language)).not.toContain(cookieCopy[language].settings);
   });
 });

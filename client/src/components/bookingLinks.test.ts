@@ -48,11 +48,12 @@ afterEach(() => {
 
 describe("liens de réservation (PUB-02)", () => {
   it("place la réservation dans l'en-tête à la place du bouton « Me contacter »", () => {
+    // « Consultation » de la navigation dès 1024 px, puis aussi le bouton dès 1280 px (PUB-08).
     const fr = render(createElement(Navigation));
-    expect(bookingLinks(fr)).toEqual([contentFr.hero.bookConsultation]);
+    expect(bookingLinks(fr)).toEqual([contentFr.nav.consultation, contentFr.hero.bookConsultation]);
     expect(fr).not.toContain(contentFr.nav.getInTouch);
 
-    expect(bookingLinks(render(createElement(Navigation), { language: "en" }))).toEqual([contentEn.hero.bookConsultation]);
+    expect(bookingLinks(render(createElement(Navigation), { language: "en" }))).toEqual([contentEn.nav.consultation, contentEn.hero.bookConsultation]);
   });
 
   it("ajoute la réservation à la colonne Navigation du pied de page", () => {

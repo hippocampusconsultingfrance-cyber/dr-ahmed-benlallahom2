@@ -5,6 +5,7 @@ import superjson from "superjson";
 import { createServer, type ViteDevServer } from "vite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { COOKIE_CONSENT_STORAGE_KEY, createCookieConsent } from "@/components/cookieConsentState";
+import { contentDe } from "@/data/content-de";
 import { contentFr } from "@/data/content-fr";
 
 /**
@@ -68,11 +69,14 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
     else process.env.VITE_TURNSTILE_SITE_KEY = previousTurnstileSiteKey;
   });
 
-  /** Sans consentement enregistré (par défaut), le bandeau cookies est ouvert en bas de l'écran. */
-  async function open(route: string, { width = 1440, height = 800, theme = "dark" as Theme, touch = false, consent = false, language = "fr", turnstileToken = null as string | null } = {}) {
-    const context = await browser.newContext({ viewport: { width, height }, isMobile: touch, hasTouch: touch });
+  /**
+   * Sans consentement enregistré (par défaut), le bandeau cookies est ouvert en bas de l'écran. Avec
+   * language: null, aucune langue n'est mémorisée, pour un navigateur réglé sur `locale`.
+   */
+  async function open(route: string, { width = 1440, height = 800, theme = "dark" as Theme, touch = false, consent = false, language = "fr" as string | null, locale = "en-US", turnstileToken = null as string | null } = {}) {
+    const context = await browser.newContext({ viewport: { width, height }, isMobile: touch, hasTouch: touch, locale });
     await context.addInitScript(({ storedLanguage, storedTheme, storedConsent }) => {
-      localStorage.setItem("language", storedLanguage);
+      if (storedLanguage) localStorage.setItem("language", storedLanguage);
       localStorage.setItem("theme", storedTheme);
       if (storedConsent) localStorage.setItem(storedConsent.key, storedConsent.value);
     }, { storedLanguage: language, storedTheme: theme, storedConsent: consent ? { key: COOKIE_CONSENT_STORAGE_KEY, value: JSON.stringify(createCookieConsent(false)) } : null });
@@ -233,13 +237,17 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
     // Chaque section a sa propre marge haute : elle ne doit pas s'arrêter en plus sous le scroll-padding de l'en-tête.
     for (const width of [1600, 390]) {
       for (const [id, trigger] of [["services", "menu"], ["contact", "menu"], ["contact", "hero"]] as const) {
+        // Dès 1024 px, l'en-tête ne liste plus les sections de l'accueil, sauf Contact (PUB-08).
+        if (width >= 1024 && id === "services" && trigger === "menu") continue;
         const page = await open("/", { width, height: width < 768 ? 844 : 900, consent: true });
         if (trigger === "hero") {
           await page.locator("#hero").getByRole("button", { name: contentFr.nav.getInTouch }).click();
         } else {
-          if (width < 1536) await page.getByRole("button", { name: "Ouvrir le menu" }).click();
+          if (width < 1024) await page.getByRole("button", { name: "Ouvrir le menu" }).click();
           const name = id === "services" ? contentFr.nav.services : contentFr.nav.contact;
-          await page.locator(width < 1536 ? "#mobile-navigation" : "header nav").getByRole("button", { name, exact: true }).click();
+          await page.locator(width < 1024 ? "#mobile-navigation" : "header nav").getByRole("link", { name, exact: true }).click();
+          // Un vrai lien /#section, que l'accueil fait défiler sans changer d'adresse.
+          expect(await page.evaluate(() => location.pathname + location.hash), `${id} par ${trigger} à ${width} px`).toBe("/");
         }
         await page.waitForFunction(() => window.scrollY > 0);
         await page.evaluate(scrollSettled);
@@ -448,12 +456,122 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
     expect(await mobile.locator("#mobile-navigation").getByText(contentFr.nav.getInTouch, { exact: true }).count()).toBe(0);
     await mobile.context().close();
 
-    for (const [width, visible] of [[800, false], [1024, true], [1536, true]] as const) {
+    // « Consultation » de la navigation dès 1024 px, le bouton en plus dès 1280 px (PUB-08).
+    for (const [width, visible] of [[800, []], [1024, [contentFr.nav.consultation]], [1280, [contentFr.nav.consultation, contentFr.hero.bookConsultation]], [1536, [contentFr.nav.consultation, contentFr.hero.bookConsultation]]] as const) {
       const page = await open("/faq", { width });
-      expect(await page.locator('header.site-nav a[href="/booking"]').isVisible(), `${width} px`).toBe(visible);
+      const shown = await page.locator('header.site-nav a[href="/booking"]').filter({ visible: true }).allTextContents();
+      expect(shown, `${width} px`).toEqual(visible);
       await page.context().close();
     }
   }, 120_000);
+
+  it("montre les rubriques principales dès 1024 px sans chevauchement, et le menu compact en dessous (PUB-08)", async () => {
+    // Le français, et l'allemand aux libellés les plus longs.
+    for (const [language, { nav }] of [["fr", contentFr], ["de", contentDe]] as const) {
+      for (const width of [360, 430, 800, 1024, 1180, 1280, 1366, 1440, 1600]) {
+        const page = await open("/faq", { width, language, consent: true });
+        const header = await page.evaluate(() => {
+          const box = (element: Element | null) => {
+            const rect = element?.getBoundingClientRect();
+            return rect && rect.width > 0 ? { left: rect.left, right: rect.right } : null;
+          };
+          const row = document.querySelector("header.site-nav .site-nav-container")!;
+          const nav = row.querySelector("nav");
+          const actions = [...row.children[2].children].map(box).filter((entry) => entry !== null);
+          return {
+            logo: box(row.querySelector(".brand-lockup img")),
+            lockup: box(row.querySelector(".brand-lockup")),
+            nav: box(nav),
+            links: nav && box(nav) ? [...nav.querySelectorAll("a")].map((link) => ({ text: link.textContent, clipped: link.scrollWidth > link.clientWidth + 1 })) : [],
+            actions: { left: Math.min(...actions.map((entry) => entry.left)), right: Math.max(...actions.map((entry) => entry.right)) },
+            burger: box(row.querySelector('[aria-controls="mobile-navigation"]')),
+            overflow: document.documentElement.scrollWidth - innerWidth,
+          };
+        });
+        const label = `${language}, ${width} px`;
+        expect(header.overflow, label).toBeLessThanOrEqual(0);
+        expect(header.logo, label).not.toBeNull();
+        if (width >= 1024) {
+          expect(header.links.map((link) => link.text), label).toEqual([nav.consultation, nav.healthQuestions, nav.recruitment, nav.employers, nav.contact]);
+          expect(header.links.filter((link) => link.clipped), label).toEqual([]);
+          expect(header.lockup!.right, label).toBeLessThan(header.nav!.left);
+          expect(header.nav!.right, label).toBeLessThan(header.actions.left);
+          expect(header.burger, label).toBeNull();
+        } else {
+          expect(header.nav, label).toBeNull();
+          expect(header.burger, label).not.toBeNull();
+          // Le logo reste entier sur les téléphones de 360 à 430 px (M19 / PUB-UI-01).
+          expect(header.logo!.right, label).toBeLessThan(header.actions.left);
+        }
+        await page.context().close();
+      }
+    }
+  }, 240_000);
+
+  it("ne laisse flotter ni pastille cookies ni WhatsApp sur les formulaires, et rouvre le choix depuis le pied de page (PUB-12)", async () => {
+    for (const route of ["/booking", "/employers", "/questions-anesthesie", "/recruitment/standard", "/gdpr"]) {
+      const page = await open(route, { width: 390, height: 844, consent: true });
+      expect(await page.locator(".cookie-preferences-shortcut, .whatsapp-contact-float").count(), route).toBe(0);
+      await page.context().close();
+    }
+    const home = await open("/", { width: 390, height: 844, consent: true });
+    expect(await home.locator(".whatsapp-contact-float").count()).toBe(1);
+    expect(await home.locator(".cookie-preferences-shortcut").count()).toBe(0);
+    const manage = home.locator("footer").getByRole("button", { name: "Gérer les cookies" });
+    await manage.click();
+    const dialog = home.getByRole("dialog", { name: "Préférences cookies" });
+    await dialog.waitFor();
+    await home.keyboard.press("Escape");
+    await dialog.waitFor({ state: "detached" });
+    expect(await manage.evaluate((element) => element === document.activeElement)).toBe(true);
+    await home.context().close();
+  }, 120_000);
+
+  it("propose l'anglais à un navigateur sans français, sans changer la page tant que le visiteur ne choisit pas (EN-08)", async () => {
+    for (const width of [320, 360, 1440]) {
+      const page = await open("/", { width, language: null, locale: "en-US", consent: true });
+      const offer = page.locator('[lang="en"][data-nosnippet]');
+      await offer.waitFor();
+      expect(await page.evaluate(() => document.documentElement.lang), `${width} px`).toBe("fr");
+      const box = (await offer.boundingBox())!;
+      expect(box.x, `${width} px`).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width, `${width} px`).toBeLessThanOrEqual(width);
+      if (width >= 640) {
+        // Le menu « Affichage » s'ouvre à la place de l'offre, qui revient à sa fermeture.
+        await page.locator("header").getByRole("button", { name: "Affichage" }).click();
+        expect(await offer.count(), `${width} px, menu Affichage ouvert`).toBe(0);
+        await page.keyboard.press("Escape");
+        await offer.waitFor();
+      }
+      // La page défile : l'offre ne reste pas au-dessus du contenu sous l'en-tête fixe.
+      await page.evaluate(() => window.scrollTo({ top: 600, behavior: "instant" }));
+      await offer.waitFor({ state: "detached" });
+      await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+      await offer.waitFor();
+      // Passage à l'anglais sur place : la page n'est pas rechargée (EN-10).
+      await page.evaluate(() => { (window as unknown as { before?: boolean }).before = true; });
+      await offer.getByRole("button", { name: "Switch to English" }).click();
+      await page.waitForFunction(() => document.documentElement.lang === "en");
+      expect(await page.evaluate(() => (window as unknown as { before?: boolean }).before), `${width} px`).toBe(true);
+      expect(await page.evaluate(() => localStorage.getItem("language")), `${width} px`).toBe("en");
+      expect(await offer.count(), `${width} px`).toBe(0);
+      await page.context().close();
+    }
+    const french = await open("/", { language: null, locale: "fr-FR", consent: true });
+    expect(await french.locator('[lang="en"][data-nosnippet]').count()).toBe(0);
+    await french.context().close();
+  }, 120_000);
+
+  it("garde la saisie d'une candidature quand le visiteur passe en anglais (EN-10)", async () => {
+    const page = await open("/recruitment/standard", { consent: true });
+    await page.locator("#recruitment-firstName").fill("Ahmed");
+    await page.getByRole("button", { name: "FR — Changer de langue" }).click();
+    await page.getByRole("menuitem", { name: "English" }).click();
+    await page.waitForFunction(() => document.documentElement.lang === "en");
+    expect(await page.locator("#recruitment-firstName").inputValue()).toBe("Ahmed");
+    expect(await page.getByRole("button", { name: "EN — Change language" }).count()).toBe(1);
+    await page.context().close();
+  }, 60_000);
 
   it("laisse atteindre au clavier la dernière entrée du menu mobile sur un écran peu haut, bandeau cookies fermé ou ouvert", async () => {
     // L'en-tête étant vraiment fixe (PUB-01), le menu doit défiler lui-même : sous 640 px, thème,
@@ -463,17 +581,21 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
       for (const [width, height] of [[390, 664], [360, 640], [844, 390]] as const) {
         const page = await open("/faq", { width, height, consent });
         await page.getByRole("button", { name: "Ouvrir le menu" }).click();
-        const lastEntry = page.locator("#mobile-navigation nav > *").last();
-        await lastEntry.focus();
-        const reached = await lastEntry.evaluate((element) => {
-          const box = element.getBoundingClientRect();
-          const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
-          return { height: box.height, bottom: box.bottom, visible: hit !== null && element.contains(hit) };
-        });
-        const label = `${width}x${height}, bandeau ${consent ? "fermé" : "ouvert"}`;
-        expect(reached.height, label).toBeGreaterThan(0);
-        expect(reached.bottom, label).toBeLessThanOrEqual(height);
-        expect(reached.visible, label).toBe(true);
+        // La dernière entrée, puis le dernier réglage du sous-menu « Affichage » une fois ouvert (PUB-08).
+        for (const entry of ["#mobile-navigation nav > *", "#mobile-display-settings > button"]) {
+          if (entry !== "#mobile-navigation nav > *") await page.locator("#mobile-navigation").getByRole("button", { name: "Affichage" }).click();
+          const lastEntry = page.locator(entry).last();
+          await lastEntry.focus();
+          const reached = await lastEntry.evaluate((element) => {
+            const box = element.getBoundingClientRect();
+            const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+            return { height: box.height, bottom: box.bottom, visible: hit !== null && element.contains(hit) };
+          });
+          const label = `${width}x${height}, bandeau ${consent ? "fermé" : "ouvert"}, ${entry}`;
+          expect(reached.height, label).toBeGreaterThan(0);
+          expect(reached.bottom, label).toBeLessThanOrEqual(height);
+          expect(reached.visible, label).toBe(true);
+        }
         await page.context().close();
       }
     }
@@ -580,8 +702,16 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
       await page.context().close();
     }
 
+    // L'espace candidat n'a pas de bandeau, même sans choix enregistré : rien n'y couvre les commandes (ADM-16).
+    for (const route of ["/candidate/access", "/candidate/reset-password"]) {
+      const page = await open(route, { width: 320, height: 568, touch: true });
+      expect(await page.locator(".cookie-consent-banner, .cookie-preferences-shortcut, .whatsapp-contact-float").count(), route).toBe(0);
+      expect(await page.evaluate(() => document.documentElement.hasAttribute("data-cookie-banner-open")), route).toBe(false);
+      await page.context().close();
+    }
+
     // Pages voisines sur le plus petit écran : chaque commande se fait remonter au-dessus du bandeau.
-    for (const route of ["/candidate/access", "/candidate/reset-password", "/booking/confirmation?status=canceled", "/maintenance"]) {
+    for (const route of ["/booking/confirmation?status=canceled", "/maintenance"]) {
       const page = await open(route, { width: 320, height: 568, touch: true });
       const covered = await page.evaluate(async () => {
         const banner = document.querySelector(".cookie-consent-banner")!;

@@ -6,7 +6,7 @@ import { Router } from "wouter";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { trpc } from "@/lib/trpc";
 import { LanguageProvider } from "@/contexts/LanguageContext";
-import LanguageMenu, { chooseLanguage, languageOptions } from "./LanguageMenu";
+import LanguageMenu, { englishSuggestionCopy, languageOptions } from "./LanguageMenu";
 import BookingPage from "@/pages/BookingPage";
 import BookingConfirmationPage from "@/pages/BookingConfirmationPage";
 import CandidateAccessPage from "@/pages/CandidateAccessPage";
@@ -47,33 +47,32 @@ describe("menu de langue réutilisable (EN-03)", () => {
   it("affiche la langue d'un lien ?lang= plutôt que la langue mémorisée", () => {
     stubBrowser({ search: "?lang=en", storedLanguage: "fr" });
     const html = render(createElement(LanguageMenu));
-    expect(html).toContain('aria-label="Change language"');
+    expect(html).toContain('aria-label="EN — Change language"');
     expect(html).toContain(">EN<");
     expect(html).toContain('aria-expanded="false"');
   });
 
   it("accepte ?lang= en majuscules et ignore une langue inconnue", () => {
     stubBrowser({ search: "?lang=ZH" });
-    expect(render(createElement(LanguageMenu))).toContain('aria-label="切换语言"');
+    expect(render(createElement(LanguageMenu))).toContain('aria-label="ZH — 切换语言"');
     stubBrowser({ search: "?lang=it", storedLanguage: "de" });
-    expect(render(createElement(LanguageMenu))).toContain('aria-label="Sprache ändern"');
+    expect(render(createElement(LanguageMenu))).toContain('aria-label="DE — Sprache ändern"');
   });
 
-  it("ne suit jamais la langue du navigateur", () => {
+  it("ne suit jamais la langue du navigateur : il propose l'anglais, la page reste en français (EN-08)", () => {
     stubBrowser();
     const html = render(createElement(LanguageMenu));
-    expect(html).toContain('aria-label="Changer de langue"');
+    expect(html).toContain('aria-label="FR — Changer de langue"');
     expect(html).toContain(">FR<");
+    expect(html).toContain(englishSuggestionCopy.message);
+    expect(html).toMatch(/<div lang="en" data-nosnippet=""/);
   });
 
-  it("mémorise la langue choisie puis recharge la page, sauf si elle est déjà active", () => {
-    const { storage, location } = stubBrowser();
-    chooseLanguage("en", "fr");
-    expect(storage.setItem).toHaveBeenCalledWith("language", "en");
-    expect(location.reload).toHaveBeenCalledTimes(1);
-    chooseLanguage("fr", "fr");
-    expect(storage.setItem).toHaveBeenCalledTimes(1);
-    expect(location.reload).toHaveBeenCalledTimes(1);
+  it("ne propose rien quand la langue vient d'un choix mémorisé ou d'un lien ?lang= (EN-08)", () => {
+    stubBrowser({ storedLanguage: "fr" });
+    expect(render(createElement(LanguageMenu))).not.toContain(englishSuggestionCopy.message);
+    stubBrowser({ search: "?lang=fr" });
+    expect(render(createElement(LanguageMenu))).not.toContain(englishSuggestionCopy.message);
     expect(languageOptions.map((option) => option.code)).toEqual(["fr", "en", "de", "zh"]);
   });
 
@@ -93,7 +92,7 @@ describe("menu de langue réutilisable (EN-03)", () => {
   it.each(pages)("est présent sur %s, dans la langue du lien", (path, Page, search = "") => {
     stubBrowser({ path, search: `${search}${search ? "&" : "?"}lang=en`, storedLanguage: "fr" });
     const html = render(createElement(Page), path);
-    expect(html).toContain('aria-label="Change language"');
+    expect(html).toContain('aria-label="EN — Change language"');
     expect(html).toContain('aria-haspopup="menu"');
   });
 });

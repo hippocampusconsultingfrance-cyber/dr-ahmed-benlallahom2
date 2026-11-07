@@ -3,6 +3,11 @@ import { COOKIE_BANNER_HEIGHT_PROPERTY, COOKIE_BANNER_OPEN_ATTRIBUTE, cookieCopy
 
 // Dialogue des préférences, retrait du consentement et section #cookies de la
 // politique : CookieConsent.behaviour.test.ts et pages/LegalPage.cookies.test.ts.
+// Bandeau et préférences absents de /admin et /candidate (ADM-16) :
+// pages/CandidatePortalPage.test.ts (FloatingWidgets d'App). Plus de pastille
+// flottante sur les pages publiques (PUB-12) : CookieConsent.behaviour.test.ts ;
+// « Gérer les cookies » du pied de page : Footer.dom.test.ts, et des pages sans
+// pied de page : pages/footerlessPages.cookies.dom.test.ts.
 
 describe("coordination des contrôles fixes", () => {
   it("marque le document lorsque le bandeau cookies est ouvert", () => {
@@ -68,6 +73,13 @@ describe("bandeau et préférences cookies (PUB-COOKIE-01 / PUB-COOKIE-04)", () 
       expect(copy.functionalDescription.length).toBeGreaterThan(40);
     }
     expect(cookieCopy.fr.functionalDescription).toContain("exempté de consentement");
+  });
+
+  it("renvoie, dans chaque langue, au bouton « Gérer les cookies » du pied de page (PUB-12)", () => {
+    for (const copy of Object.values(cookieCopy)) {
+      expect(copy.settingsDescription).toContain(copy.manage);
+      expect(copy.settingsDescription).not.toContain(copy.settings);
+    }
   });
 
 });

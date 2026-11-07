@@ -11,7 +11,11 @@ export const contentZh = {
     contact: "联系",
     getInTouch: "联系我们",
     blog: "新闻",
-    switchLang: "中文",
+    // Short header labels, also used by the footer (PUB-08).
+    consultation: "咨询",
+    healthQuestions: "健康问答",
+    recruitment: "招聘",
+    employers: "雇主专区",
   },
 
   // Hero Section
@@ -195,7 +199,12 @@ export const contentZh = {
   // Footer
   footer: {
     tagline: "临床卓越服务于全球医学创新。",
-    navigate: "导航",
+    // Patients / Recruitment (nav.recruitment) / Information / Legal columns (PUB-08).
+    patients: "患者",
+    information: "信息",
+    legalHeading: "法律",
+    apply: "申请职位",
+    candidatePortal: "候选人空间",
     legal: "法律声明",
     privacy: "隐私政策",
     terms: "使用条款",

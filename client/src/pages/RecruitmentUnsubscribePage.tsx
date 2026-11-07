@@ -5,6 +5,7 @@ import { trpc } from "@/lib/trpc";
 import { SEOHead } from "@/components/SEOHead";
 import { useLanguage } from "@/contexts/LanguageContext";
 import LanguageMenu from "@/components/LanguageMenu";
+import { ManageCookiesButton } from "@/components/CookieConsent";
 
 type SupportedLanguage = "fr" | "en" | "de" | "zh";
 
@@ -108,6 +109,8 @@ export default function RecruitmentUnsubscribePage() {
             {copy.home}
           </button>
         </section>
+        {/* Page sans pied de page : « Gérer les cookies » sous la carte, hors de la zone annoncée (PUB-12). */}
+        <ManageCookiesButton className="mt-6 text-sm text-slate-400 underline underline-offset-4 transition-colors hover:text-cyan-100" />
       </main>
     </>
   );

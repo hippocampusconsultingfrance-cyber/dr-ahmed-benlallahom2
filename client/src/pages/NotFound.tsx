@@ -4,6 +4,7 @@ import { useLocation } from "wouter";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { SEOHead } from "@/components/SEOHead";
 import LanguageMenu from "@/components/LanguageMenu";
+import { ManageCookiesButton } from "@/components/CookieConsent";
 
 export const notFoundSeo = { noIndex: true } as const;
 
@@ -92,6 +93,9 @@ export default function NotFound() {
             {c.goBack}
           </Button>
         </div>
+
+        {/* Page sans pied de page : « Gérer les cookies » sous le contenu (PUB-12). */}
+        <ManageCookiesButton className="mt-10 text-sm text-muted-foreground underline underline-offset-4 transition-colors hover:text-primary" />
       </div>
     </div>
   );
