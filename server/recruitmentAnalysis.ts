@@ -301,26 +301,29 @@ function decodedTagEntity(entity: RegExpExecArray) {
 const MARK_OR_FORMAT = new RegExp("[\\p{M}\\p{Cf}\\u115f\\u1160\\u3164\\uffa0\\u2800]", "gu");
 /**
  * The tag characters U+E0020 to U+E007E: invisible, each the copy of an ASCII
- * character (« ASCII smuggling »), which a model may read as that character.
+ * character (« ASCII smuggling »), which a model may read as that character,
+ * or skip as the format characters they are.
  */
 const TAG_CHARACTER_FIRST = 0xe0020;
 const TAG_CHARACTER_LAST = 0xe007e;
+const TAG_CHARACTER = new RegExp("[\\u{e0020}-\\u{e007e}]", "u");
 
 /**
  * The candidate's text as a lenient reader of our tag would read it (IA-05):
- * entities decoded, tag characters read as their ASCII, in compatibility
- * form, without accents, format characters (zero width space, soft hyphen,
- * word joiner…), blank letters or case, look-alikes replaced.
+ * entities decoded, in compatibility form, without accents, format
+ * characters (zero width space, soft hyphen, word joiner…), blank letters or
+ * case, look-alikes replaced; the tag characters read as their ASCII
+ * (`tagCharactersAsAscii`) or, as the other format characters, skipped.
  * `starts` and `ends` give, for each character of `text`, the part of the
  * original text it was read from.
  */
-function readAsTag(value: string) {
+function readAsTag(value: string, tagCharactersAsAscii: boolean) {
   const read = new Map<string, string>();
   const readCharacter = (character: string) => {
     let reading = read.get(character);
     if (reading === undefined) {
       const code = character.codePointAt(0)!;
-      const shown = code >= TAG_CHARACTER_FIRST && code <= TAG_CHARACTER_LAST ? String.fromCodePoint(code - 0xe0000) : character;
+      const shown = tagCharactersAsAscii && code >= TAG_CHARACTER_FIRST && code <= TAG_CHARACTER_LAST ? String.fromCodePoint(code - 0xe0000) : character;
       reading = Array.from(
         shown.normalize("NFKD").replace(MARK_OR_FORMAT, "").toLowerCase(),
         letter => TAG_LOOKALIKES.get(letter) ?? letter
@@ -366,14 +369,32 @@ const CANDIDATE_DATA_TAG_READ = new RegExp("<[\\s/\\\\]*donne{1,2}s?[\\s\\p{Pd}\
 /** A line of three dashes or more (« --- », « ——— », « ___ »), which delimited the CV in earlier prompts and could feign its end. */
 const SEPARATOR_LINE = new RegExp("^[ \\t]*[\\p{Pd}\\p{Pc}]{3,}[ \\t]*$", "gmu");
 
-/** `value` with what reads as our tag replaced, in the original text, by a mark. */
-function withoutCandidateDataTags(value: string) {
-  const reading = readAsTag(value);
-  const spans = Array.from(reading.text.matchAll(CANDIDATE_DATA_TAG_READ), match =>
+/** Where the tags of this reading of the candidate's text lie in the original text. */
+function candidateDataTagSpans(value: string, tagCharactersAsAscii: boolean) {
+  const reading = readAsTag(value, tagCharactersAsAscii);
+  return Array.from(reading.text.matchAll(CANDIDATE_DATA_TAG_READ), match =>
     [reading.starts[match.index]!, reading.ends[match.index + match[0].length - 1]!] as const);
+}
+
+/**
+ * `value` with what reads as our tag replaced, in the original text, by a
+ * mark. With tag characters, in both readings of them: a reader that skips
+ * them sees « </donnees_candidat> » in « </donn\u{E0078}ees_candidat> », one
+ * that reads their ASCII sees it in the tag written in them.
+ */
+function withoutCandidateDataTags(value: string) {
+  const spans = [
+    ...candidateDataTagSpans(value, true),
+    ...(TAG_CHARACTER.test(value) ? candidateDataTagSpans(value, false) : []),
+  ].sort(([left], [right]) => left - right);
   let result = "";
   let kept = 0;
   for (const [start, end] of spans) {
+    // A tag both readings find, or that overlaps one already marked, is one mark.
+    if (start < kept) {
+      kept = Math.max(kept, end);
+      continue;
+    }
     result += `${value.slice(kept, start)}[balise retirée]`;
     kept = end;
   }
