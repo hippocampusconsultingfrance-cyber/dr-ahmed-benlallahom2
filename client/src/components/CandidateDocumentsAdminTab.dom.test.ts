@@ -191,3 +191,45 @@ describe("état d’analyse affiché sur la carte (EXPL-12)", () => {
     expect(screen.getByText("Analyse non disponible : une revue humaine est requise.")).toBeTruthy();
   });
 });
+
+describe("documents regroupés par candidat, avec leur candidature (ADM-19)", () => {
+  const omar = { candidateId: 9, candidateEmail: "omar@test.local", firstName: "Omar", lastName: "Said" };
+
+  beforeEach(() => {
+    view.list.data = [
+      diploma({ id: 14, originalName: "identite.pdf", category: "identity_document", applicationTrackingId: "CVAMINA00001" }),
+      diploma({ id: 13, ...omar, originalName: "licence.pdf", category: "medical_license", applicationTrackingId: null }),
+      diploma({ id: 12, applicationTrackingId: "CVAMINA00001" }),
+    ];
+  });
+
+  it("montre chaque document une seule fois, sous le nom de son candidat, dans l’ordre de son dernier dépôt", () => {
+    mount();
+    const groups = screen.getAllByRole("region");
+    expect(groups.map(group => within(group).getByRole("heading", { level: 3 }).textContent)).toEqual(["Amina Haddad", "Omar Said"]);
+
+    const amina = screen.getByRole("region", { name: "Amina Haddad" });
+    expect(amina.textContent).toContain("amina@test.local · 2 document(s)");
+    expect(within(amina).getByText(/identite\.pdf/)).toBeTruthy();
+    expect(within(amina).getByText(/diplome\.pdf/)).toBeTruthy();
+    expect(within(screen.getByRole("region", { name: "Omar Said" })).getByText(/licence\.pdf/)).toBeTruthy();
+    for (const name of [/identite\.pdf/, /diplome\.pdf/, /licence\.pdf/]) expect(screen.getAllByText(name)).toHaveLength(1);
+  });
+
+  it("« Voir la candidature » ouvre la candidature du candidat dans l’onglet Candidatures ; rien sans candidature", () => {
+    window.history.replaceState(null, "", "/admin?tab=candidateDocuments");
+    mount();
+    const link = within(screen.getByRole("region", { name: "Amina Haddad" })).getByRole("link", { name: /Voir la candidature/ });
+    expect(link.getAttribute("href")).toBe("/admin?tab=recruitment&ref=CVAMINA00001");
+    expect(within(screen.getByRole("region", { name: "Omar Said" })).queryByRole("link")).toBeNull();
+
+    fireEvent.click(link);
+    expect(`${window.location.pathname}${window.location.search}`).toBe("/admin?tab=recruitment&ref=CVAMINA00001");
+  });
+
+  it.each([["en", "View application"], ["de", "Bewerbung ansehen"], ["zh", "查看申请"]] as const)("en %s, le lien dit « %s »", (language, label) => {
+    view.language = language;
+    mount();
+    expect(screen.getByRole("link", { name: new RegExp(label) })).toBeTruthy();
+  });
+});

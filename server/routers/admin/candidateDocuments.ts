@@ -4,8 +4,8 @@ import { z } from "zod";
 import { CANDIDATE_DOCUMENT_ACTIVE_JOB_STATUSES, CANDIDATE_DOCUMENT_JOB_STALE_AFTER_MS, canRequestCandidateDocumentReanalysis } from "../../../shared/candidateDocumentReanalysis";
 import { candidateDocumentAllowsAiAnalysis } from "../../../shared/candidateDocumentCategories";
 import { getDb } from "../../db";
-import { candidateAccounts, candidateDocumentAuditLogs, candidateDocumentProcessingJobs, candidateDocuments } from "../../../drizzle/schema";
-import { and, eq, desc, gt, inArray, lte, ne, or } from "drizzle-orm";
+import { candidateAccounts, candidateDocumentAuditLogs, candidateDocumentProcessingJobs, candidateDocuments, cvApplications } from "../../../drizzle/schema";
+import { and, eq, desc, gt, inArray, lte, ne, or, sql } from "drizzle-orm";
 
 type Database = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 
@@ -39,6 +39,8 @@ export const adminCandidateDocumentsRouter = router({
       const documents = await db.select({
         id: candidateDocuments.id,
         candidateId: candidateDocuments.candidateId,
+        // ADM-19: the reference of the application the document goes with (« Voir la candidature »).
+        applicationTrackingId: cvApplications.trackingId,
         candidateEmail: candidateAccounts.email,
         firstName: candidateAccounts.firstName,
         lastName: candidateAccounts.lastName,
@@ -58,7 +60,10 @@ export const adminCandidateDocumentsRouter = router({
         reviewNotes: candidateDocuments.reviewNotes,
         createdAt: candidateDocuments.createdAt,
         analyzedAt: candidateDocuments.analyzedAt,
-      }).from(candidateDocuments).innerJoin(candidateAccounts, eq(candidateDocuments.candidateId, candidateAccounts.id)).where(conditions).orderBy(desc(candidateDocuments.createdAt)).limit(input.limit);
+      }).from(candidateDocuments).innerJoin(candidateAccounts, eq(candidateDocuments.candidateId, candidateAccounts.id))
+        // The application the document was sent for, else the one its account is linked to since; none once erased.
+        .leftJoin(cvApplications, eq(cvApplications.id, sql`coalesce(${candidateDocuments.applicationId}, ${candidateAccounts.linkedApplicationId})`))
+        .where(conditions).orderBy(desc(candidateDocuments.createdAt)).limit(input.limit);
       // « Relancer l’analyse » is offered by the job, not the document's status alone (DATA-06).
       const active = await documentsWithActiveAnalysisJob(db, documents.map(document => document.id));
       return documents.map(document => ({ ...document, hasActiveAnalysisJob: active.has(document.id) }));
