@@ -57,16 +57,53 @@ export function cutToVisibleCharacters(text: string, max: number): string {
 const LINE_BREAKS = new RegExp("[\\u0000-\\u001F\\u007F-\\u009F\\u2028\\u2029]+", "g");
 const oneLine = (text: string) => text.replace(LINE_BREAKS, " ").trim();
 
+// Written as escapes: the embeddings and overrides (LRE, RLE, PDF, LRO, RLO), closed by PDF, and the
+// isolates (LRI, RLI, FSI, PDI), closed by PDI.
+const DIRECTIONAL_FORMATTING = new RegExp("[\\u202A-\\u202E\\u2066-\\u2069]", "g");
+const POP_DIRECTIONAL_FORMATTING = "\u202C";
+const POP_DIRECTIONAL_ISOLATE = "\u2069";
+
+/**
+ * `text` with each embedding, override and isolate it opens closed at its
+ * end, and without a closing mark that closes nothing, as the bidirectional
+ * algorithm pairs them (UAX #9: a PDI also closes the embeddings opened
+ * inside its isolate, a PDF never closes past an isolate). The stored name
+ * keeps what cleanTextInput left (INTL-05): its last PDI goes with the
+ * marks at its end even when it closes an isolate, and a name cut in the
+ * subject can lose it too; the subject never leaves an isolate open.
+ */
+function closeDirectionalFormatting(text: string): string {
+  const closers: string[] = [];
+  const kept = text.replace(DIRECTIONAL_FORMATTING, mark => {
+    if (mark === POP_DIRECTIONAL_FORMATTING) {
+      if (closers.at(-1) !== POP_DIRECTIONAL_FORMATTING) return "";
+      closers.pop();
+      return mark;
+    }
+    if (mark === POP_DIRECTIONAL_ISOLATE) {
+      const isolate = closers.lastIndexOf(POP_DIRECTIONAL_ISOLATE);
+      if (isolate < 0) return "";
+      closers.length = isolate;
+      return mark;
+    }
+    closers.push(mark >= "\u2066" ? POP_DIRECTIONAL_ISOLATE : POP_DIRECTIONAL_FORMATTING);
+    return mark;
+  });
+  return kept + closers.reverse().join("");
+}
+
 /**
  * « [reference] title – name » on one line: a line break in a name (INTL-05)
  * becomes a space; in the subject, the name is cut to about 60 visible
  * characters and the subject to 200, both between two characters (INTL-11).
+ * The isolates and embeddings a name opens are closed, after any cut.
  */
 function ownerNotificationHeading(payload: Pick<NotificationPayload, "title" | "reference" | "name">, cut: boolean): string {
   const reference = payload.reference?.trim() ? `[${oneLine(payload.reference)}] ` : "";
   const name = payload.name?.trim() ? oneLine(payload.name) : "";
-  const heading = `${reference}${oneLine(payload.title)}${name ? ` – ${cut ? cutToVisibleCharacters(name, OWNER_SUBJECT_NAME_MAX_CHARACTERS) : name}` : ""}`;
-  return cut ? cutToVisibleCharacters(heading, OWNER_SUBJECT_MAX_CHARACTERS) : heading;
+  const shownName = closeDirectionalFormatting(cut ? cutToVisibleCharacters(name, OWNER_SUBJECT_NAME_MAX_CHARACTERS) : name);
+  const heading = `${reference}${oneLine(payload.title)}${name ? ` – ${shownName}` : ""}`;
+  return cut ? closeDirectionalFormatting(cutToVisibleCharacters(heading, OWNER_SUBJECT_MAX_CHARACTERS)) : heading;
 }
 
 function escapeHtml(value: string): string {

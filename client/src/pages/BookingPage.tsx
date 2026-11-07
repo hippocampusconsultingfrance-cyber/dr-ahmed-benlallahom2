@@ -36,7 +36,7 @@ import {
   normalizePhoneInput,
   type BookingRefusalReason,
 } from "@shared/bookingPolicy";
-import { cleanTextInput } from "@shared/textInputCleaning";
+import { cleanTextInput, EMAIL_INVISIBLE_CHARACTER } from "@shared/textInputCleaning";
 
 // Délai minimal et horizon : même texte pour la vérification de la page et pour
 // le refus du serveur (EN-06).
@@ -833,6 +833,15 @@ export default function BookingPage() {
   // Adresse sans domaine complet : erreur sous le champ ; faute de frappe courante : correction proposée, sans bloquer (RES-10).
   const [emailError, setEmailError] = useState<string | null>(null);
   const [emailSuggestion, setEmailSuggestion] = useState<string | null>(null);
+  // Under the field, what the server would refuse: an invisible character left inside the address
+  // (a direction mark before the @), named as the other forms name it, the reason invalid_characters
+  // (INTL-05), rather than an address said incomplete that looks complete; then the format (RES-10).
+  const bookingEmailIssue = (email: string) => EMAIL_INVISIBLE_CHARACTER.test(email) ? content.refusals.invalid_characters : isBookingEmailAddress(email) ? null : content.form.invalidEmail;
+  const showEmailIssue = (email: string, issue: string | null) => {
+    setEmailError(issue);
+    // No correction proposed for an address to type again.
+    setEmailSuggestion(issue === content.refusals.invalid_characters ? null : suggestBookingEmail(email));
+  };
   // Refus de l’envoi affiché dans la page, qui prend le focus (RES-10, A11Y-10) : une clé neuve à
   // chaque refus, pour qu’un même message soit de nouveau annoncé. Créneau pris : le message passe
   // en tête de la grille, amenée à l’écran, qui met en avant les horaires libres les plus proches ;
@@ -1187,11 +1196,11 @@ export default function BookingPage() {
       return;
     }
 
-    // Même règle que le serveur : une adresse qu’il refuserait l’est ici, sous le champ (RES-10).
+    // Même règle que le serveur : une adresse qu’il refuserait l’est ici, sous le champ (RES-10, INTL-05).
     const email = formData.email.trim();
-    if (!isBookingEmailAddress(email)) {
-      setEmailError(content.form.invalidEmail);
-      setEmailSuggestion(suggestBookingEmail(email));
+    const emailIssue = bookingEmailIssue(email);
+    if (emailIssue) {
+      showEmailIssue(email, emailIssue);
       document.getElementById("booking-email")?.focus();
       return;
     }
@@ -1525,8 +1534,7 @@ export default function BookingPage() {
                 }}
                 onBlur={() => {
                   const email = formData.email.trim();
-                  setEmailError(email && !isBookingEmailAddress(email) ? content.form.invalidEmail : null);
-                  setEmailSuggestion(suggestBookingEmail(email));
+                  showEmailIssue(email, email ? bookingEmailIssue(email) : null);
                 }}
                 autoComplete="email"
                 inputMode="email"

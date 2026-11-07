@@ -13,3 +13,12 @@ const EDGES = new RegExp(`^[${EDGE_MARKS}]+|[${EDGE_MARKS}]+$`, "g");
 export function cleanTextInput(value: string): string {
   return value.normalize("NFC").replace(EDGES, "");
 }
+
+/**
+ * What an email address, once cleaned, may not hold anywhere (INTL-05): the
+ * controls, the zero-width characters, the direction marks, embeddings,
+ * overrides and isolates, the word joiner and the byte order mark. The
+ * server refuses it with the reason `invalid_characters` (emailText); the
+ * booking page, which checks the address before sending, says the same.
+ */
+export const EMAIL_INVISIBLE_CHARACTER = new RegExp("[\\u0000-\\u001F\\u007F-\\u009F\\u200B-\\u200F\\u2028-\\u202E\\u2060-\\u2069\\uFEFF]");

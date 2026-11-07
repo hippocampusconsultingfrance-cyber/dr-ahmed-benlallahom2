@@ -434,6 +434,65 @@ describe.skipIf(!executablePath)("nom du CV choisi dans les formulaires de candi
     await page.context().close();
   }, 60_000);
 
+  it("ne garde aucun pays du diplôme une fois le champ vidé, par son bouton d’effacement ou au clavier, et relie au champ la note du pays retenu (A11Y-11)", async () => {
+    const page = await openStandard(1280);
+    const input = page.locator("#recruitment-diploma-country-search");
+    const read = () => page.evaluate((key) => {
+      const field = document.getElementById("recruitment-diploma-country-search") as HTMLInputElement;
+      const describedBy = field.getAttribute("aria-describedby");
+      return {
+        value: field.value,
+        description: describedBy ? document.getElementById(describedBy)?.textContent ?? `missing ${describedBy}` : null,
+        note: [...document.querySelectorAll("p")].map((paragraph) => paragraph.textContent ?? "").find((text) => text.startsWith("Pays d’obtention du diplôme :")) ?? null,
+        // The country of the draft, "" when it has none or no draft is left.
+        draft: (JSON.parse(sessionStorage.getItem(key) ?? "{}") as { diplomaCountry?: string }).diplomaCountry ?? "",
+        invalid: field.getAttribute("aria-invalid"),
+      };
+    }, DRAFT_KEY);
+    const choose = async () => {
+      await input.focus();
+      await page.keyboard.type("Maroc");
+      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("Enter");
+      expect(await read()).toMatchObject({ value: "Maroc", description: "Pays d’obtention du diplôme : Maroc", note: "Pays d’obtention du diplôme : Maroc", draft: "Maroc" });
+    };
+
+    // The clear button, reached by Tab and pressed with Enter as in the audit: the country goes with the search.
+    await choose();
+    await page.keyboard.press("Tab");
+    expect(await page.evaluate(() => document.activeElement?.getAttribute("aria-label"))).toBe("Effacer la recherche de pays");
+    await page.keyboard.press("Enter");
+    expect(await read()).toMatchObject({ value: "", description: null, note: null, draft: "" });
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Tab");
+    expect(await read()).toMatchObject({ value: "", note: null, draft: "" });
+
+    // Emptied from the keyboard, the field keeps no country either.
+    await choose();
+    await page.keyboard.press("ControlOrMeta+a");
+    await page.keyboard.press("Backspace");
+    expect(await read()).toMatchObject({ value: "", description: null, note: null, draft: "" });
+
+    // A search typed over the country chosen leaves it chosen, and the field announces it.
+    await choose();
+    await page.keyboard.press("ControlOrMeta+a");
+    await page.keyboard.type("Tun");
+    expect(await read()).toMatchObject({ value: "Tun", description: "Pays d’obtention du diplôme : Maroc", draft: "Maroc" });
+
+    // Cleared, the empty required field is the one to correct, and no application leaves.
+    await page.getByRole("button", { name: "Effacer la recherche de pays" }).click();
+    const sent: string[] = [];
+    await page.route("**/api/recruitment/apply", (request) => { sent.push(request.request().method()); return request.abort(); });
+    const submit = page.locator("main form button[type=submit]");
+    await expect.poll(() => submit.isEnabled(), { timeout: 10_000 }).toBe(true);
+    await submit.click();
+    await page.locator("main form [role=alert]").waitFor();
+    expect(await read()).toMatchObject({ value: "", note: null, invalid: "true" });
+    expect(await page.locator("main form [role=alert]").textContent()).toContain("Pays d’obtention du diplôme");
+    expect(sent).toEqual([]);
+    await page.context().close();
+  }, 60_000);
+
   it("désigne l’option active de la liste des pays par un contour en couleurs forcées (A11Y-11)", async () => {
     const page = await openStandard(1366, { language: "en", forcedColors: "active" });
     await page.locator("#recruitment-diploma-country-search").fill("al");

@@ -300,6 +300,36 @@ describe("erreurs et repères du parcours de réservation (RES-10, A11Y-10, INTL
     expect(document.getElementById("booking-email-error")).toBeNull();
   });
 
+  it("nomme, comme les autres formulaires, une marque invisible laissée à l’intérieur de l’adresse plutôt qu’une adresse incomplète (INTL-05)", async () => {
+    mount();
+    fillForm();
+    // A left-to-right mark before the @, a zero-width space, a word joiner: the address looks complete.
+    for (const address of ["jeanne‎@example.test", "jean​ne@gmial.com", "jeanne@exam⁠ple.test"]) {
+      fireEvent.change(field("booking-email"), { target: { value: address } });
+      fireEvent.blur(field("booking-email"));
+      expect(document.getElementById("booking-email-error")?.textContent, address).toBe(content.refusals.invalid_characters);
+      pay();
+      expect(document.getElementById("booking-email-error")?.textContent, address).toBe(content.refusals.invalid_characters);
+      expect(field("booking-email").getAttribute("aria-invalid"), address).toBe("true");
+      expect(document.activeElement, address).toBe(field("booking-email"));
+      // No correction proposed for an address to type again, nor an address read back before paying.
+      expect(document.getElementById("booking-email-suggestion")!.textContent, address).toBe("");
+      expect(document.getElementById("booking-confirmation-email"), address).toBeNull();
+    }
+    expect(view.create).not.toHaveBeenCalled();
+
+    // A badly formed address keeps its own message.
+    fireEvent.change(field("booking-email"), { target: { value: "jeanne@gmail" } });
+    pay();
+    expect(document.getElementById("booking-email-error")!.textContent).toBe(content.form.invalidEmail);
+
+    // Typed again, the address leaves.
+    fireEvent.change(field("booking-email"), { target: { value: "jeanne@example.test" } });
+    expect(document.getElementById("booking-email-error")).toBeNull();
+    pay();
+    await waitFor(() => expect(view.create).toHaveBeenCalledWith(expect.objectContaining({ customerEmail: "jeanne@example.test" })));
+  });
+
   it("ne bloque pas une adresse complète même quand une correction est proposée, et la rappelle avant le paiement", async () => {
     mount();
     fillForm();

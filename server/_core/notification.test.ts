@@ -209,6 +209,45 @@ describe("sujet des notifications au propriétaire (INTL-11)", () => {
     expect(cutToVisibleCharacters(`${"a".repeat(169)}${"😀".repeat(40)}`, 200)).toBe(`${"a".repeat(169)}${"😀".repeat(30)}…`);
   });
 
+  it("ferme l’isolat ou l’enchâssement qu’un nom laisse ouvert, et retire une marque fermante qui ne ferme rien (INTL-05)", async () => {
+    const { buildOwnerNotificationEmail } = await import("./notification");
+    const { cleanTextInput } = await import("../../shared/textInputCleaning");
+    const [RLE, PDF, RLO, RLI, FSI, PDI] = [0x202b, 0x202c, 0x202e, 0x2067, 0x2068, 0x2069].map((code) => String.fromCodePoint(code));
+    const HEBREW = "דוד";
+    /** Whether every isolate and embedding opened is closed, and every closing mark closes one (UAX #9 pairing). */
+    const balanced = (text: string) => {
+      const open: string[] = [];
+      for (const mark of text.match(/[‪-‮⁦-⁩]/g) ?? []) {
+        if (mark === PDF) { if (open.at(-1) !== PDF) return false; open.pop(); }
+        else if (mark === PDI) { const isolate = open.lastIndexOf(PDI); if (isolate < 0) return false; open.length = isolate; }
+        else open.push(mark >= "⁦" ? PDI : PDF);
+      }
+      return open.length === 0;
+    };
+    const heading = (name: string) => {
+      const email = buildOwnerNotificationEmail({ reference: "APT97BCC60E01E8", title: "Réservation payée 100 €", name, content: "Paiement" });
+      expect(balanced(email.subject), JSON.stringify(email.subject)).toBe(true);
+      expect(balanced(email.text.split("\n")[0]!), JSON.stringify(email.text)).toBe(true);
+      return email.subject.split(" – ")[1];
+    };
+
+    // The audit's name: its final PDI goes when it is stored, the subject closes the isolate again.
+    const stored = cleanTextInput(`José ${RLI}${HEBREW}${PDI}`);
+    expect(stored).toBe(`José ${RLI}${HEBREW}`);
+    expect(heading(stored)).toBe(`José ${RLI}${HEBREW}${PDI}`);
+    // An isolate opening the name goes when it is stored: its PDI, left closing nothing, goes from the subject.
+    expect(heading(cleanTextInput(`${RLI}${HEBREW}${PDI} José`))).toBe(`${HEBREW} José`);
+    // A name whose marks are paired is left as it is.
+    expect(heading(`Ali ${FSI}${HEBREW}${PDI} ${RLE}${HEBREW}${PDF} Cohen`)).toBe(`Ali ${FSI}${HEBREW}${PDI} ${RLE}${HEBREW}${PDF} Cohen`);
+    // A PDI closes the embedding opened inside its isolate; a PDF does not close past an isolate.
+    expect(heading(`Ali ${RLI}${RLO}${HEBREW}${PDI} Cohen`)).toBe(`Ali ${RLI}${RLO}${HEBREW}${PDI} Cohen`);
+    expect(heading(`Ali ${RLE}x ${RLI}${HEBREW}${PDF} y`)).toBe(`Ali ${RLE}x ${RLI}${HEBREW} y${PDI}${PDF}`);
+    // A long name cut inside its isolate keeps it closed in the subject, and whole in the email.
+    const long = `Ali ${RLI}${"א".repeat(80)}${PDI}`;
+    expect(heading(long)!.endsWith(`…${PDI}`)).toBe(true);
+    expect(buildOwnerNotificationEmail({ reference: "C123", title: "Contact", name: long, content: "Bonjour" }).text).toContain(long);
+  });
+
   it("remplace les sauts de ligne d’un nom par une espace dans le sujet", async () => {
     const { buildOwnerNotificationEmail } = await import("./notification");
     for (const name of ["Ali\r\nBcc: x@evil.test", `Ali${LINE_SEPARATOR}Bcc: x@evil.test`]) {
