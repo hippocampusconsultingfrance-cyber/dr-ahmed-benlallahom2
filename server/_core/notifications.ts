@@ -882,6 +882,28 @@ export async function sendReminderEmail(
   }
 }
 
+/**
+ * RGPD-24, in the words of the site's privacy policy (« Recrutement et IA »)
+ * and of the retention coded in server/recruitmentRetention.ts
+ * (RECRUITMENT_RETENTION_YEARS, after the latest activity). Whether the profile
+ * is presented to client facilities is a legal text still to be written with
+ * the owner (RGPD-03): it is not said here.
+ */
+const RECRUITMENT_PRIVACY_COPY = {
+  fr: {
+    retention: "Vos données de candidature sont conservées 2 ans après votre dernière activité.",
+    analysis: "L’analyse automatisée des candidatures sert uniquement d’aide à la lecture et au rapprochement de profils. Elle ne produit aucune décision d’embauche ou de rejet sans revue humaine.",
+    policyLink: "Politique de confidentialité",
+    rightsLink: "Exercer mes droits RGPD",
+  },
+  en: {
+    retention: "Your application data is kept for 2 years after your latest activity.",
+    analysis: "The automated analysis of applications is used only as an aid to reading applications and matching profiles. It produces no hiring or rejection decision without human review.",
+    policyLink: "Privacy policy",
+    rightsLink: "Exercise my GDPR rights",
+  },
+} as const;
+
 export async function sendCvApplicationConfirmationEmail(
   candidateEmail: string,
   candidateFirstName: string,
@@ -904,6 +926,7 @@ export async function sendCvApplicationConfirmationEmail(
         noPatientData: "Do not send patient data, medical records or clinical documents with your application.",
         spam: "If you cannot find this email, check your Spam or Junk folder, then add recrutement@drahmedbenlallahom.com to your contacts.",
         preheader: `Application recorded under tracking number ${trackingId}`,
+        ...RECRUITMENT_PRIVACY_COPY.en,
       }
     : {
         subject: `Candidature reçue - ${trackingId}`,
@@ -917,11 +940,15 @@ export async function sendCvApplicationConfirmationEmail(
         noPatientData: "Ne transmettez pas de données de patients, de dossiers médicaux ou de documents cliniques dans votre candidature.",
         spam: "Si vous ne retrouvez pas cet email, vérifiez votre dossier Spam ou Courriers indésirables, puis ajoutez recrutement@drahmedbenlallahom.com à vos contacts.",
         preheader: `Candidature enregistrée sous le numéro de suivi ${trackingId}`,
+        ...RECRUITMENT_PRIVACY_COPY.fr,
       };
   const inviteUrl = candidatePortalInviteUrl ? withEmailLanguage(candidatePortalInviteUrl, language) : undefined;
   const candidatePortalInvitation = inviteUrl
       ? `<div style="margin:24px 0;padding:18px;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;"><h3 style="margin:0 0 8px;color:#0e7490;">${copy.portalTitle}</h3><p style="margin:0 0 14px;">${copy.portalText}</p>${emailButton(inviteUrl, copy.portalAction, "0")}<p style="margin:12px 0 0;color:#475569;font-size:13px;">${escapeHtml(candidateInvitationValidityNote(language))}</p></div>`
       : "";
+  // RGPD-24: the one document the candidate keeps says how long the data is
+  // kept, what the analysis does, and where the policy and the rights are.
+  const privacyNotice = `<div style="margin:20px 0;padding:14px 16px;border-radius:8px;background:#f8fafc;font-size:13px;line-height:1.55;color:#475569;"><p style="margin:0 0 8px;">${copy.retention} ${copy.analysis}</p><p style="margin:0;"><a href="${escapeHtml(emailSiteLink("/legal?tab=privacy", language))}" style="color:#0e7490;">${copy.policyLink}</a> · <a href="${escapeHtml(emailSiteLink("/gdpr", language))}" style="color:#0e7490;">${copy.rightsLink}</a></p></div>`;
   const emailContent = buildHippocampusEmailShell(`
       <h2 style="color: #0891b2;">${copy.title}</h2>
       <p>${escapeHtml(unverifiedRecipientGreeting(candidateFirstName, language))}</p>
@@ -932,6 +959,7 @@ export async function sendCvApplicationConfirmationEmail(
       <p>${copy.review}</p>
       ${candidatePortalInvitation}
       <p>${copy.noPatientData}</p>
+      ${privacyNotice}
       <p style="color:#64748b;font-size:13px;">${copy.spam}</p>
     `, language, { brand: "hippocampus", title: copy.subject, preheader: copy.preheader });
 
