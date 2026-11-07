@@ -53,10 +53,12 @@
  * signs a font lacks, as wide as the widest of the fonts of signs measured a
  * quarter more (`signs`); emoji, as Noto Color Emoji's a quarter more
  * (DOCX_EMOJI_METRICS); what kerning may add to a character, the widest
- * positive pair of the fonts measured a quarter more (DOCX_KERNING_MOST).
- * These only add to the file: run on the folder of the round 11's sources
- * without its subfolder `complex`, the script stops; with it, every value
- * written before is written again the same, to the byte.
+ * positive pair of each font measured a quarter more (DOCX_FONT_KERNING), of
+ * all the fonts measured for a font of no files here (DOCX_KERNING_MOST), and
+ * of these and those of signs and scripts for a character drawn in one of
+ * these (DOCX_KERNING_FALLBACK). These only add to the file: run on the folder
+ * of the round 11's sources without its subfolder `complex`, the script stops;
+ * with it, every value written before is written again the same, to the byte.
  *
  * Run again after changing the fonts or the characters:
  *   node scripts/generate-docx-font-metrics.mjs [fonts folder]
@@ -87,20 +89,24 @@
  *   @capsizecss/metrics@4.4.0 (copied in VERTICAL)
  *   installed (Debian): fonts-crosextra-carlito 20230309, fonts-crosextra-caladea
  *     20200211, fonts-liberation2 2.1.5, fonts-dejavu-core 2.37.
- * And, for round 12's measures, in the folder's subfolder `complex`: the WOFF of
- * the arabic, hebrew, symbols and math subsets (400 and 700, normal and italic)
- * of @fontsource/{amiri,scheherazade-new,noto-naskh-arabic,noto-sans-arabic,
+ * And, for round 12's measures, in the folder's subfolder `complex`, each
+ * package in a folder of its name (complex/amiri…): its package/files, or the
+ * whole package, of which the script measures every WOFF file of weight 400 or
+ * 700, normal or italic, of all its subsets (*-{400,700}-{normal,italic}.woff:
+ * arabic, hebrew, symbols, math, but latin, latin-ext, cyrillic-ext, greek-ext,
+ * braille… as well; COMPLEX_PACKAGES, complexFiles), of
+ * @fontsource/{amiri,scheherazade-new,noto-naskh-arabic,noto-sans-arabic,
  *   noto-kufi-arabic,cairo,tajawal,vazirmatn,ibm-plex-sans-arabic,harmattan,
  *   lateef,markazi-text,el-messiri,almarai,readex-pro,mada,noto-sans-hebrew,
  *   noto-serif-hebrew,frank-ruhl-libre,david-libre,miriam-libre,alef,heebo,
  *   assistant,rubik,arimo,tinos,noto-sans-symbols,noto-sans-symbols-2,
  *   noto-sans-math}@5.3.0 (SIL Open Font License, Apache License for Arimo and
- *   Tinos), each in a folder of its own;
+ *   Tinos);
  *   installed (Ubuntu 24.04): fonts-freefont-ttf 20211204, fonts-opensymbol
  *     102.12, fonts-noto-color-emoji 2.047, and those above.
  */
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -234,7 +240,7 @@ const SYNTHETIC_BOLD = 84;
  * wide as the widest of these of Latin text (`every`, FIRST_CHARACTERS).
  */
 const SUBSTITUTES = [
-  { key: "sans-or-serif", of: ["liberation-sans", "liberation-serif"] },
+  { key: "sans-or-serif", of: ["liberation-sans", "liberation-serif"], drawnIn: true },
   { key: "widest", of: undefined },
   { key: "east-asian-latin", of: ["liberation-sans", "liberation-serif", "verdana", "selawik"], eastAsian: true },
   { key: "half-width", of: ["sans-or-serif"], basicLatin: 500, eastAsian: true },
@@ -561,8 +567,9 @@ const publishedLine = name => {
 
 /** Of each font, its advances in each style (STYLES), in thousandths of its size, and its line; the names it stands for. */
 const fonts = {};
-/** The files of the fonts measured (FONTS), for their kerning (positiveKerning). */
+/** The files of the fonts measured (FONTS), for their kerning (positiveKerning), and of each font. */
 const measuredFiles = [];
+const filesOf = {};
 const aliases = {};
 /** What is written of each font measured, standing in or substitute (DOCX_FONT_METRICS). */
 const metrics = {};
@@ -572,6 +579,7 @@ for (const { key, family, names, ownLine, published, styles, synthetic, rounding
     if (synthetic && /bold/i.test(name)) return [];
     const files = fontFiles(family, { style: style.style, names: styles?.[name] ?? style.names });
     measuredFiles.push(...files);
+    (filesOf[key] ??= {})[name] = files;
     return files.length ? [[name, files.map(readFont)]] : [];
   }));
   if (!found.regular || (!found.bold && !synthetic)) throw new Error(`${family}: no Regular or Bold`);
@@ -749,12 +757,11 @@ function shapedFont(path) {
  * The fonts of right-to-left scripts and signs Word may draw text in that the check measures through others, those installed here
  * (fc-match: DejaVu Sans and Serif, FreeSans and FreeSerif, Liberation Sans and Serif in each style, OpenSymbol; DejaVu Serif and
  * OpenSymbol hold no Arabic nor Hebrew, FreeSans no Arabic, as fc-list :lang=ar and :lang=he say) and those of the folder's
- * subfolder `complex` (its subfolders too): the WOFF of the arabic, hebrew, symbols and math subsets, 400 and 700, normal and
- * italic, of @fontsource's Amiri, Scheherazade New, Noto Naskh, Sans and Kufi Arabic, Cairo, Tajawal, Vazirmatn (Persian), IBM
- * Plex Sans Arabic, Harmattan, Lateef, Markazi Text, El Messiri, Almarai, Readex Pro, Mada (Naskh, Kufi and sans designs, as
- * Word's), Noto Sans and Serif Hebrew, Frank Ruhl Libre, David Libre, Miriam Libre (the free fonts of Windows' FrankRuehl, David
- * and Miriam), Alef, Heebo, Assistant, Rubik, Arimo, Tinos, Noto Sans Symbols, Symbols 2 and Math, at the versions of
- * FALLBACK_VERSIONS.
+ * subfolder `complex` (complexFiles): of @fontsource's Amiri, Scheherazade New, Noto Naskh, Sans and Kufi Arabic, Cairo, Tajawal,
+ * Vazirmatn (Persian), IBM Plex Sans Arabic, Harmattan, Lateef, Markazi Text, El Messiri, Almarai, Readex Pro, Mada (Naskh, Kufi
+ * and sans designs, as Word's), Noto Sans and Serif Hebrew, Frank Ruhl Libre, David Libre, Miriam Libre (the free fonts of Windows'
+ * FrankRuehl, David and Miriam), Alef, Heebo, Assistant, Rubik, Arimo, Tinos, Noto Sans Symbols, Symbols 2 and Math, at the
+ * versions of FALLBACK_VERSIONS.
  */
 const FALLBACK_INSTALLED = [
   ["DejaVu Sans", ["Book", "Bold"]], ["DejaVu Serif", ["Book", "Bold"]], ["FreeSans", ["Regular", "Bold", "Oblique", "Bold Oblique"]],
@@ -762,6 +769,23 @@ const FALLBACK_INSTALLED = [
   ["Liberation Serif", ["Regular", "Bold", "Italic", "Bold Italic"]], ["OpenSymbol", ["Regular"]],
 ];
 const FALLBACK_VERSIONS = "5.3.0";
+const COMPLEX_PACKAGES = [
+  "amiri", "scheherazade-new", "noto-naskh-arabic", "noto-sans-arabic", "noto-kufi-arabic", "cairo", "tajawal", "vazirmatn", "ibm-plex-sans-arabic", "harmattan",
+  "lateef", "markazi-text", "el-messiri", "almarai", "readex-pro", "mada", "noto-sans-hebrew", "noto-serif-hebrew", "frank-ruhl-libre", "david-libre", "miriam-libre",
+  "alef", "heebo", "assistant", "rubik", "arimo", "tinos", "noto-sans-symbols", "noto-sans-symbols-2", "noto-sans-math",
+];
+/**
+ * The files measured of each package of COMPLEX_PACKAGES, chosen here, not by who fills the folder: in its folder (complex/<package>,
+ * its subfolders too), every WOFF file of weight 400 or 700, normal or italic, of every subset; a package of no folder, or of no
+ * such file, stops the script.
+ */
+const COMPLEX_FILE = /-(400|700)-(normal|italic)\.woff$/;
+const complexFiles = folder ? COMPLEX_PACKAGES.flatMap(name => {
+  const directory = resolve(folder, "complex", name);
+  const files = existsSync(directory) ? readdirSync(directory, { recursive: true }).filter(file => COMPLEX_FILE.test(file)).map(file => resolve(directory, file)).sort() : [];
+  if (!files.length) throw new Error(`${directory}: no WOFF file of @fontsource/${name}@${FALLBACK_VERSIONS} of weight 400 or 700; give a folder whose subfolder complex holds each package`);
+  return files;
+}) : [];
 /**
  * The characters of Hebrew (U+0590 to U+05FF, U+FB1D to U+FB4F) and Arabic (U+0600 to U+06FF, its Supplement and Extended-A,
  * U+0870 to U+08FF, its Presentation Forms A and B), Persian's among them, Word draws in a run's complex script font: those
@@ -776,7 +800,8 @@ const COMPLEX_CHARACTERS = [[0x0590, 0x05ff], [0x0600, 0x06ff], [0x0750, 0x077f]
  * Traditional Arabic, Arabic Typesetting and Sakkal Majalla; Segoe UI Symbol for signs) are of the Naskh, Kufi and sans designs
  * measured, of no metrics published: the bound of each character already the widest form of it in the widest font of some forty,
  * bold ones included (س, ص, ڪ up to 1.5 and 1.9 em, Amiri's swash ڪ), a quarter covers a font of them that drew all its letters a
- * quarter wider than the widest measured, which none of these does; and what Word adds to each advance of a font it emboldens
+ * quarter wider than the widest measured; that none of Word's does is a judgement, not measured here, which the owner's check of
+ * Windows' files confirms or not (check-windows-fonts.mjs); and what Word adds to each advance of a font it emboldens
  * (SYNTHETIC_BOLD) to a bold one.
  */
 const FALLBACK_SHARE = 250;
@@ -791,12 +816,13 @@ const COMPLEX_FONTS = {
   "arial": "liberation-sans", "times new roman": "liberation-serif", "segoe ui": "selawik", "tahoma": "tahoma",
   "simplified arabic": "complex", "traditional arabic": "complex", "arabic typesetting": "complex", "sakkal majalla": "complex",
 };
-const fallbackFonts = [
-  ...FALLBACK_INSTALLED.flatMap(([family, styles]) => styles.flatMap(style => fontFiles(family, { style, names: [style] }))),
-  ...(folder ? execFileSync("fc-scan", ["--format", "%{file}\\n", resolve(folder, "complex")], { encoding: "utf8" }).split("\n").filter(line => /\.(ttf|otf|woff)$/i.test(line)).sort() : []),
-].map(shapedFont);
-if (!fallbackFonts.some(font => /complex/.test(font.path))) throw new Error("no fonts in the folder's subfolder complex: give a folder that holds them");
-/** Of each code point, in each weight (regular, bold), the widest its forms are in the fonts measured, in thousandths of the size, rounded up; 0 when none holds it. */
+const fallbackFonts = [...FALLBACK_INSTALLED.flatMap(([family, styles]) => styles.flatMap(style => fontFiles(family, { style, names: [style] }))), ...complexFiles].map(shapedFont);
+if (!complexFiles.length) throw new Error("no fonts in the folder's subfolder complex: give a folder that holds them");
+/**
+ * Of each code point, in each weight (regular, bold), the widest its forms are in the fonts measured, in thousandths of the size,
+ * rounded up; 0 when none holds it, or all that hold it draw it of no advance (a mark over the letter before it, as Hebrew's points
+ * and accents): of no bound, since Word's font may draw it of one.
+ */
 function widestForms(codes, fonts = fallbackFonts) {
   // A letter's isolated, initial, medial and final presentation forms (Arabic Presentation Forms, NFKC to it alone).
   const forms = new Map();
@@ -837,7 +863,8 @@ const complexLine = Math.ceil(Math.max(...textFonts.filter(font => font.glyphOf(
  * (`tallest`). A sequence (ZWJ, a flag, a skin tone) is as wide as its parts so bounded, which a sequence Word draws as one emoji is
  * not wider than.
  */
-const emojiFont = readFont(execFileSync("fc-match", ["-f", "%{file}", "Noto Color Emoji"], { encoding: "utf8" }));
+const emojiPath = execFileSync("fc-match", ["-f", "%{file}", "Noto Color Emoji"], { encoding: "utf8" });
+const emojiFont = readFont(emojiPath);
 const emojiWidest = Math.ceil(Math.max(...range(0, 0xffff).map(glyph => emojiFont.advance(glyph))) * 1000 / emojiFont.unitsPerEm);
 const [emojiRegular, emojiBold] = fallbackBound(emojiWidest, emojiWidest);
 /**
@@ -901,11 +928,33 @@ function positiveKerning(path) {
   return Math.ceil(most * 1000 / tables.get("head").readUInt16BE(18));
 }
 /**
- * What kerning may add to each character of a run that asks for it, in thousandths of its size: the largest positive adjustment of a
- * pair of the fonts measured (FONTS), a quarter more (FALLBACK_SHARE), as fonts of Word not measured, or whose stand-in does not
- * share their kerning, may kern so too.
+ * What kerning may add to each character of a run that asks for it, in thousandths of its size, a quarter more (FALLBACK_SHARE) than
+ * the largest positive adjustment of a pair: of a font of no files here (one published, `listed`, a substitute but one Word draws in
+ * Arial or Times New Roman, `drawnIn`), of all the fonts measured (FONTS); of each style of a font of FONTS, of its files (a
+ * stand-in's, as Carlito's for Calibri: that Word's font kerns no wider than its stand-in a quarter more is a judgement the owner's
+ * check confirms or not, check-windows-fonts.mjs), of a style it lacks the one Word draws instead (slanted, emboldened), of files of
+ * no positive pair, which tell nothing of the kerning of the font Word has (Selawik's of Segoe UI's, a cloud font of another
+ * version), of all the fonts measured; of a style standing in its font's; of a substitute Word draws in one of its fonts, the
+ * largest of theirs; of the font of signs, of a character drawn in a font of signs, of scripts or of emoji (fallbackFonts, Noto
+ * Color Emoji), of all of these and the fonts measured (DOCX_KERNING_FALLBACK).
  */
-const kerningBound = Math.ceil(Math.max(...measuredFiles.map(positiveKerning)) * (1000 + FALLBACK_SHARE) / 1000);
+const kerned = files => Math.ceil(Math.max(0, ...files.map(positiveKerning)) * (1000 + FALLBACK_SHARE) / 1000);
+const kerningBound = kerned(measuredFiles);
+const kerningFallback = kerned([...measuredFiles, ...fallbackFonts.map(font => font.path), emojiPath]);
+const everyStyle = value => Object.fromEntries(Object.keys(STYLES).map(style => [style, value]));
+const kerningOf = {};
+for (const { key, synthetic } of FONTS) {
+  const own = {};
+  for (const [style, { fallback }] of Object.entries(STYLES)) {
+    const files = filesOf[key][style] ?? filesOf[key][synthetic && /bold/i.test(style) ? (/italic/i.test(style) ? "italic" : "regular") : fallback] ?? filesOf[key][fallback === "bold" ? "regular" : fallback] ?? [];
+    own[style] = kerned(files) || kerningBound;
+  }
+  kerningOf[key] = own;
+}
+for (const { key, from, style } of STANDING_IN) if (from) kerningOf[key] = everyStyle(Math.max(kerningOf[from][style], kerningOf[from][`${style}Italic`] ?? 0));
+for (const { key, of, drawnIn } of SUBSTITUTES) kerningOf[key] = drawnIn ? Object.fromEntries(Object.keys(STYLES).map(style => [style, Math.max(...of.map(font => kerningOf[font][style]))])) : everyStyle(kerningBound);
+kerningOf.signs = everyStyle(kerningFallback);
+const fontKerning = Object.fromEntries(Object.keys(metrics).map(key => [key, kerningOf[key] ?? everyStyle(kerningBound)]));
 
 /** Widths written two digits each, but AS_BEFORE for two or more as wide as the one before them (of characters not of CHARACTERS: no base letter, no upright style). */
 function plainDigitsOf(advances) {
@@ -1009,9 +1058,17 @@ export const DOCX_COMPLEX_FONTS: Record<string, string> = ${JSON.stringify(COMPL
 /** An emoji, in thousandths of the size, in regular and bold, and the height of its line. */
 export const DOCX_EMOJI_METRICS = { line: ${tallest}, regular: ${emojiRegular}, bold: ${emojiBold} };
 
-/** What kerning (w:kern) may add to each character of a run that asks for it, in thousandths of its size. */
+/** What kerning (w:kern) may add to each character of a run that asks for it, in thousandths of its size, in a font of no files measured. */
 export const DOCX_KERNING_MOST = ${kerningBound};
+
+/** What kerning may add to each character in each font of DOCX_FONT_METRICS, in each style, in thousandths of its size. */
+export const DOCX_FONT_KERNING: Record<string, { regular: number; italic: number; bold: number; boldItalic: number }> = {
+${Object.entries(fontKerning).map(([key, styles]) => `  "${key}": ${JSON.stringify(styles).replace(/"(\w+)":/g, "$1: ").replace(/,/g, ", ").replace(/^\{/, "{ ").replace(/\}$/, " }")},`).join("\n")}
+};
+
+/** What kerning may add to a character drawn in a font of signs, of Hebrew and Arabic, or of emoji, in thousandths of its size. */
+export const DOCX_KERNING_FALLBACK = ${kerningFallback};
 `;
 writeFileSync(fileURLToPath(new URL("../server/docxFontMetrics.ts", import.meta.url)), output);
 console.log(`server/docxFontMetrics.ts: ${FONTS.length} fonts measured, ${PUBLISHED.length} published, ${Array.from(CHARACTERS).length} characters, ${output.length} bytes`);
-console.log(`  ${fallbackFonts.length} font files of right-to-left scripts and signs; ${complexBounds.filter(([regular]) => regular).length} of ${COMPLEX_CHARACTERS.length} Hebrew and Arabic characters bounded; ${metrics.signs.advances.regular.filter(Boolean).length} signs; emoji ${emojiRegular}; kerning ${kerningBound}; ligatures wider than their parts, their first part widened: ${widened.length}`);
+console.log(`  ${fallbackFonts.length} font files of right-to-left scripts and signs; ${complexBounds.filter(([regular]) => regular).length} of ${COMPLEX_CHARACTERS.length} Hebrew and Arabic characters bounded; ${metrics.signs.advances.regular.filter(Boolean).length} signs; emoji ${emojiRegular}; kerning ${kerningBound}, of signs and scripts ${kerningFallback}, by font ${JSON.stringify(fontKerning)}; ligatures wider than their parts, their first part widened: ${widened.length}`);
