@@ -264,19 +264,108 @@ export const escapeCvPageMarkers = (value: string): string =>
  */
 const CANDIDATE_DATA_TAG = "donnees_candidat";
 /**
- * Our tag written in the candidate's text, opening or closing, whatever its
- * case, spacing or brackets (full width, or as an HTML entity), with its
- * attributes up to its closing bracket.
+ * Characters a reader could take for those of our tag (IA-05), beyond what
+ * the compatibility form already brings back (the full width letters, < and
+ * >): the angle brackets and slashes that look like ours, and the Cyrillic or
+ * Greek letters drawn like those of its name.
  */
-const CANDIDATE_DATA_TAG_IN_TEXT = /(?:[<＜﹤]|&lt;)\s*\/?\s*donn(?:e\u0301?|\u00e9)es[\s_-]*candidat(?:[^<>＜＞﹤﹥\n]{0,200}?(?:[>＞﹥]|&gt;))?/gi;
-/** A « --- » line, which delimited the CV in earlier prompts and could feign its end. */
-const SEPARATOR_LINE = /^[ \t]*-{3,}[ \t]*$/gm;
+const TAG_LOOKALIKES = new Map<string, string>([
+  ...[0x3008, 0x27e8, 0x2039, 0x02c2, 0x1438, 0x276e, 0x29fc].map(code => [String.fromCodePoint(code), "<"] as const),
+  ...[0x3009, 0x27e9, 0x203a, 0x02c3, 0x1433, 0x276f, 0x29fd].map(code => [String.fromCodePoint(code), ">"] as const),
+  ...[0x2215, 0x2044, 0x29f8].map(code => [String.fromCodePoint(code), "/"] as const),
+  ...([[0x0430, "a"], [0x03b1, "a"], [0x0251, "a"], [0x0441, "c"], [0x03f2, "c"], [0x0501, "d"], [0x0435, "e"], [0x0456, "i"],
+    [0x03b9, "i"], [0x0131, "i"], [0x043e, "o"], [0x03bf, "o"], [0x0455, "s"], [0x0578, "n"]] as const)
+    .map(([code, letter]) => [String.fromCodePoint(code), letter] as const),
+]);
+/** An HTML entity a reader could decode into a character of the tag: any numeric one, and the named ones for < > / _ -. */
+const TAG_ENTITY = new RegExp("&(?:#(\\d{1,7})|#x([\\da-f]{1,6})|(lt|gt|sol|lowbar|hyphen|dash));?", "iy");
+const NAMED_TAG_ENTITIES: Record<string, string> = { lt: "<", gt: ">", sol: "/", lowbar: "_", hyphen: "-", dash: "-" };
+
+function decodedTagEntity(entity: RegExpExecArray) {
+  if (entity[3]) return NAMED_TAG_ENTITIES[entity[3].toLowerCase()]!;
+  const code = entity[1] ? Number(entity[1]) : parseInt(entity[2]!, 16);
+  return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : "";
+}
+
+/** Accents and format characters (zero width space, soft hyphen, word joiner…), which a reader skips. */
+const MARK_OR_FORMAT = new RegExp("[\\p{M}\\p{Cf}]", "gu");
+
+/**
+ * The candidate's text as a lenient reader of our tag would read it (IA-05):
+ * entities decoded, in compatibility form, without accents, format characters
+ * (zero width space, soft hyphen, word joiner…) or case, look-alikes replaced.
+ * `starts` and `ends` give, for each character of `text`, the part of the
+ * original text it was read from.
+ */
+function readAsTag(value: string) {
+  const read = new Map<string, string>();
+  const readCharacter = (character: string) => {
+    let reading = read.get(character);
+    if (reading === undefined) {
+      reading = Array.from(
+        character.normalize("NFKD").replace(MARK_OR_FORMAT, "").toLowerCase(),
+        letter => TAG_LOOKALIKES.get(letter) ?? letter
+      ).join("");
+      read.set(character, reading);
+    }
+    return reading;
+  };
+  let text = "";
+  const starts: number[] = [];
+  const ends: number[] = [];
+  for (let index = 0; index < value.length;) {
+    // ASCII but « & », the most of a CV: read as it is, lowercased.
+    const code = value.charCodeAt(index);
+    if (code < 0x80 && code !== 0x26) {
+      text += code >= 0x41 && code <= 0x5a ? String.fromCharCode(code + 0x20) : value[index];
+      starts.push(index);
+      ends.push(index + 1);
+      index += 1;
+      continue;
+    }
+    TAG_ENTITY.lastIndex = index;
+    const entity = value[index] === "&" ? TAG_ENTITY.exec(value) : null;
+    const source = entity ? decodedTagEntity(entity) : String.fromCodePoint(value.codePointAt(index)!);
+    const length = entity ? entity[0].length : source.length;
+    const reading = Array.from(source, readCharacter).join("");
+    for (let unit = 0; unit < reading.length; unit += 1) {
+      starts.push(index);
+      ends.push(index + length);
+    }
+    text += reading;
+    index += length;
+  }
+  return { text, starts, ends };
+}
+
+/**
+ * Our tag in the candidate's text as readAsTag reads it, opening or closing,
+ * whatever its spacing or the dash between its words, with its attributes up
+ * to its closing bracket.
+ */
+const CANDIDATE_DATA_TAG_READ = new RegExp("<[\\s/\\\\]*donne{1,2}s?[\\s\\p{Pd}\\p{Pc}]*candidats?(?:[^<>\\n]{0,200}?>)?", "gu");
+/** A line of three dashes or more (« --- », « ——— », « ___ »), which delimited the CV in earlier prompts and could feign its end. */
+const SEPARATOR_LINE = new RegExp("^[ \\t]*[\\p{Pd}\\p{Pc}]{3,}[ \\t]*$", "gmu");
+
+/** `value` with what reads as our tag replaced, in the original text, by a mark. */
+function withoutCandidateDataTags(value: string) {
+  const reading = readAsTag(value);
+  const spans = Array.from(reading.text.matchAll(CANDIDATE_DATA_TAG_READ), match =>
+    [reading.starts[match.index]!, reading.ends[match.index + match[0].length - 1]!] as const);
+  let result = "";
+  let kept = 0;
+  for (const [start, end] of spans) {
+    result += `${value.slice(kept, start)}[balise retirée]`;
+    kept = end;
+  }
+  return result + value.slice(kept);
+}
 
 export const newCandidateDataId = () => randomBytes(9).toString("base64url");
 
 /** The candidate's text, unable to close the tags around it or to open others. */
 export const neutralizeCandidateData = (value: string): string =>
-  value.replace(CANDIDATE_DATA_TAG_IN_TEXT, "[balise retirée]").replace(SEPARATOR_LINE, "- - -");
+  withoutCandidateDataTags(value).replace(SEPARATOR_LINE, "- - -");
 
 /** `content` from the candidate, between the server's tags of id `id`; `source` says what it is (formulaire, cv, document…). */
 export const candidateDataBlock = (id: string, source: string, content: string): string =>
