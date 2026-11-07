@@ -114,7 +114,7 @@ describe("rubriques de navigation (PUB-08)", () => {
       ["A", "Employeurs", "/employers"],
       ["A", contentFr.nav.contact, "/#contact"],
     ]);
-    // « Parcours » (ex-« Leadership ») et les autres sections de l'accueil quittent l'en-tête, pas le menu mobile.
+    // « Leadership » et les autres sections de l'accueil quittent l'en-tête, pas le menu mobile.
     expect(within(mainNavigation()).queryByText(contentFr.nav.experience)).toBeNull();
 
     openMobileMenu();
@@ -122,7 +122,7 @@ describe("rubriques de navigation (PUB-08)", () => {
     expect(mobile.map((entry) => entry.getAttribute("href") ?? entry.textContent)).toEqual([
       "/booking", "/questions-anesthesie", "/recruitment", "/employers", "/#contact", "/#experience", "/#services", "/#education", "/search", copy.display,
     ]);
-    expect(mobile[5].textContent).toBe("Parcours");
+    expect(mobile[5].textContent).toBe("Leadership");
   });
 
   it("marque la page ouverte dans les deux navigations", () => {

@@ -6,8 +6,7 @@
 export const contentFr = {
   // Navigation
   nav: {
-    // « Parcours » plutôt que l'anglicisme « Leadership » : la section retrace le parcours du médecin (PUB-08).
-    experience: "Parcours",
+    experience: "Leadership",
     services: "Services",
     education: "Formation",
     contact: "Contact",

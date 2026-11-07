@@ -58,9 +58,8 @@ describe("pied de page dans les quatre langues", () => {
       Informations: ["/#experience", "/#services", "/#education", "/#contact", "/press"],
       Légal: ["/legal", "/legal?tab=privacy", "/legal?tab=terms", "/gdpr", cookieCopy.fr.manage],
     });
-    // « Leadership » devient « Parcours » en français (PUB-08).
-    expect(screen.getByRole("link", { name: "Parcours" }).getAttribute("href")).toBe("/#experience");
-    expect(screen.queryByText("Leadership")).toBeNull();
+    // « Leadership » garde son libellé (en attente d'une décision du propriétaire, PUB-08).
+    expect(screen.getByRole("link", { name: "Leadership" }).getAttribute("href")).toBe("/#experience");
     const contact = screen.getByRole("contentinfo").querySelector("address")!;
     expect(Array.from(contact.querySelectorAll("a")).map((link) => link.getAttribute("href")?.split(":")[0])).toEqual(["tel", "mailto", "https"]);
   });
