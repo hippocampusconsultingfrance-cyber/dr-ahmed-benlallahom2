@@ -408,6 +408,19 @@ export default function RecruitmentPage() {
   };
 
   /**
+   * A search in the diploma country list. Once the field is emptied, by its clear button or from the
+   * keyboard, no country stays chosen (A11Y-11): an empty field no longer hides a country that its
+   * note, the draft and the application kept, just as Escape no longer empties a field that shows the
+   * country chosen.
+   */
+  const searchDiplomaCountry = (search: string) => {
+    setDiplomaCountryQuery(search);
+    setDiplomaCountryActiveIndex(-1);
+    setDiplomaCountryOpen(true);
+    if (!search) update("diplomaCountry", "");
+  };
+
+  /**
    * Up/Down move the active option (opening the list), Enter picks it, Escape closes the list (A11Y-11).
    * The list closed, Escape does nothing: Chromium would empty the search field while the country
    * chosen stays in the form, its note and the draft.
@@ -614,10 +627,11 @@ export default function RecruitmentPage() {
                         value={diplomaCountryQuery}
                         onFocus={() => setDiplomaCountryOpen(true)}
                         onInput={event => { const visibleCountry = event.currentTarget.value; const matchingCountry = worldwideCountries.find(country => country.label === visibleCountry); if (matchingCountry) update("diplomaCountry", matchingCountry.label); }}
-                        onChange={event => { setDiplomaCountryQuery(event.target.value); setDiplomaCountryOpen(true); setDiplomaCountryActiveIndex(-1); }}
+                        onChange={event => searchDiplomaCountry(event.target.value)}
                         onKeyDown={handleDiplomaCountryKeyDown}
                         placeholder={diplomaCopy.search}
                         aria-labelledby="recruitment-diploma-country-label"
+                        aria-describedby={form.diplomaCountry ? "recruitment-diploma-country-chosen" : undefined}
                         aria-invalid={isInvalid("diplomaCountry")}
                         className={`recruitment-field site-search-input ${diplomaCountryQuery ? "site-search-input-with-clear" : ""} ${isInvalid("diplomaCountry") ? "form-field-invalid" : ""}`}
                         role="combobox"
@@ -626,9 +640,10 @@ export default function RecruitmentPage() {
                         aria-autocomplete="list"
                         aria-activedescendant={activeDiplomaCountryOptionId}
                       />
-                      {diplomaCountryQuery && <button type="button" onClick={() => { setDiplomaCountryQuery(""); setDiplomaCountryActiveIndex(-1); setDiplomaCountryOpen(true); diplomaCountryInputRef.current?.focus(); }} className="site-search-clear" aria-label={diplomaCopy.clear}><X className="h-4 w-4" /></button>}
+                      {diplomaCountryQuery && <button type="button" onClick={() => { searchDiplomaCountry(""); diplomaCountryInputRef.current?.focus(); }} className="site-search-clear" aria-label={diplomaCopy.clear}><X className="h-4 w-4" /></button>}
                     </div>
-                    {form.diplomaCountry && <p className="text-xs font-medium text-primary">{diplomaCopy.label} : {form.diplomaCountry}</p>}
+                    {/* Le pays retenu, annoncé avec le champ tant qu’une recherche tapée par-dessus ne l’a pas remplacé (A11Y-11). */}
+                    {form.diplomaCountry && <p id="recruitment-diploma-country-chosen" className="text-xs font-medium text-primary">{diplomaCopy.label} : {form.diplomaCountry}</p>}
                     {diplomaCountryListShown && (
                       // Liste et options hors de l’ordre de tabulation : défilante, la liste serait sinon un arrêt
                       // de Tab où flèches et Entrée ne font rien ; mousedown annulé pour garder le focus dans le champ.
