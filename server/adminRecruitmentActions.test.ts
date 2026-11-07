@@ -359,6 +359,39 @@ describe("actions d’administration du recrutement", () => {
     expect(memory.rows(cvApplications).filter(row => row.last_candidate_response_at !== null)).toHaveLength(2);
   });
 
+  it("« Le candidat a répondu » clôt ses relances en attente, pas celles des autres ni celles déjà tranchées, et refuse un dossier inexistant sans écrire de ligne d’audit (ADM-13)", async () => {
+    const answered = seedCandidate(1, { last_contacted_at: "2026-10-01 09:00:00.000" });
+    const other = seedCandidate(2, { last_contacted_at: "2026-10-01 09:00:00.000" });
+    const due = (day: number) => new Date(Date.UTC(2026, 9, day));
+    const [day7, day14, dismissed, othersTask] = memory.seed(recruitmentFollowUpTasks, [
+      { application_id: answered.id, kind: "follow_up_7", due_at: due(8), status: "suggested", notes: "Relance après campagne" },
+      { application_id: answered.id, kind: "follow_up_14", due_at: due(15), status: "suggested" },
+      { application_id: answered.id, kind: "follow_up_7", due_at: due(1), status: "dismissed", completed_by_open_id: "earlier_admin" },
+      { application_id: other.id, kind: "follow_up_7", due_at: due(8), status: "suggested" },
+    ]);
+
+    await expect(admin().admin.recruitment.candidate.markResponse({ id: answered.id as number })).resolves.toMatchObject({ success: true, closedFollowUps: 2 });
+    const byId = new Map(memory.rows(recruitmentFollowUpTasks).map(row => [row.id, row]));
+    expect(byId.get(day7!.id)).toMatchObject({ status: "completed", completed_by_open_id: "user_owner", notes: "Relance après campagne" });
+    expect(byId.get(day14!.id)).toMatchObject({ status: "completed", completed_by_open_id: "user_owner" });
+    expect(byId.get(dismissed!.id)).toMatchObject({ status: "dismissed", completed_by_open_id: "earlier_admin" });
+    expect(byId.get(othersTask!.id)).toMatchObject({ status: "suggested", completed_at: null });
+    // The dashboard's « relances manuelles à examiner » counts the other candidate's alone.
+    expect(Number((await admin().admin.recruitment.dashboard())!.followUpStats!.pending)).toBe(1);
+    const audits = memory.rows(recruitmentAuditLogs).map(row => ({ applicationId: row.application_id, metadata: JSON.parse(String(row.metadata)) }));
+    expect(audits).toEqual([
+      { applicationId: answered.id, metadata: { event: "candidate_response", note: null } },
+      { applicationId: answered.id, metadata: { event: "follow_up", taskId: day7!.id, status: "completed", reason: "candidate_response" } },
+      { applicationId: answered.id, metadata: { event: "follow_up", taskId: day14!.id, status: "completed", reason: "candidate_response" } },
+    ]);
+
+    // Another answer later closes nothing more.
+    await expect(admin().admin.recruitment.candidate.markResponse({ id: answered.id as number })).resolves.toMatchObject({ closedFollowUps: 0 });
+    // A dossier that does not exist (erased meanwhile): refused, nothing logged.
+    await expect(admin().admin.recruitment.candidate.markResponse({ id: 99_999_999 })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(memory.rows(recruitmentAuditLogs).filter(row => row.application_id === 99_999_999)).toEqual([]);
+  });
+
   it("refuse un export du vivier dont plus aucun candidat sélectionné n’est exportable, au lieu d’un fichier vide (REC-01)", async () => {
     const refused = seedCandidate(1, { status: "rejected" });
     await expect(admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: [refused.id as number] }))

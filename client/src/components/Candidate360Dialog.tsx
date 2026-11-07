@@ -46,12 +46,15 @@ export default function Candidate360Dialog({ applicationId, onOpenChange, certif
     },
     onError: updateError => toast.error(updateError.message),
   });
-  // ADM-13: the candidate answered (email, phone…): dated, it counts in the response rate of « Pilotage recrutement ».
+  // ADM-13: the candidate answered (email, phone…): dated, it counts in the response rate of « Pilotage recrutement »,
+  // and their follow-ups still to review are closed, which « Relances à faire » then no longer lists.
   const markResponse = trpc.admin.recruitment.candidate.markResponse.useMutation({
-    onSuccess: () => {
-      toast.success("Réponse du candidat enregistrée");
+    onSuccess: result => {
+      const closed = result?.closedFollowUps ?? 0;
+      toast.success(closed ? `Réponse du candidat enregistrée ; ${closed === 1 ? "sa relance en attente est close" : `ses ${closed} relances en attente sont closes`}` : "Réponse du candidat enregistrée");
       if (applicationId) utils.admin.recruitment.candidate.detail.invalidate({ id: applicationId });
       utils.admin.recruitment.dashboard.invalidate();
+      if (closed) utils.admin.recruitment.followUps.list.invalidate();
     },
     onError: updateError => toast.error(updateError.message),
   });

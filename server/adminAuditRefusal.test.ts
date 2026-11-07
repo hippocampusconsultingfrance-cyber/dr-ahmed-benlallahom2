@@ -180,15 +180,16 @@ describe("DATA-01 — une modification en base et sa ligne d'audit, d'un seul co
 
     // Accepted, each change with its line.
     await expect(admin().recruitment.updateStatus({ id, status: "shortlisted", adminNotes: "À appeler lundi" })).resolves.toEqual({ success: true });
-    await admin().recruitment.candidate.markResponse({ id, note: "A répondu par téléphone" });
     await expect(admin().recruitment.followUps.update({ id: task!.id as number, status: "completed", notes: "Fait" })).resolves.toEqual({ success: true });
+    // The follow-up already handled, the answer closes nothing more (ADM-13).
+    await expect(admin().recruitment.candidate.markResponse({ id, note: "A répondu par téléphone" })).resolves.toMatchObject({ closedFollowUps: 0 });
     expect(application(id)).toMatchObject({ status: "shortlisted", admin_notes: "À appeler lundi" });
     expect(application(id).last_candidate_response_at).not.toBeNull();
     expect(memory.rows(recruitmentFollowUpTasks)[0]).toMatchObject({ status: "completed", notes: "Fait", completed_by_open_id: "user_owner" });
     expect(auditLines()).toEqual([
       { applicationId: id, action: "status_update", metadata: { status: "shortlisted" } },
-      { applicationId: id, action: "status_update", metadata: { event: "candidate_response", note: "A répondu par téléphone" } },
       { applicationId: id, action: "status_update", metadata: { event: "follow_up", taskId: task!.id, status: "completed" } },
+      { applicationId: id, action: "status_update", metadata: { event: "candidate_response", note: "A répondu par téléphone" } },
     ]);
   });
 
