@@ -140,6 +140,26 @@ function stillAwaitsAnalysis(documentId: number) {
  */
 const DOCUMENT_SETTLED = "document_settled";
 
+/** Statuses of a document the admin approved, rejected or archived. */
+const DECIDED_DOCUMENT_STATUSES = ["reviewed", "rejected", "archived"] as const;
+
+/**
+ * EXPL-12: a document the admin approved, rejected or archived while its
+ * analysis waited or ran is not analysed, so its analysis no longer says
+ * « en file » or « en cours » once no job is left: it is closed as a document
+ * left to the human review, without any AI result, in the batch that closes
+ * its job. Written only while the decision stands and the analysis still says
+ * so, so that a reanalysis the admin asks for meanwhile, or the analysis of
+ * another job, is kept.
+ */
+function decidedDocumentAnalysisClosing(db: Database, documentId: number) {
+  return db.update(candidateDocuments).set({ analysisStatus: "needs_review", analysisLastError: DOCUMENT_SETTLED }).where(and(
+    eq(candidateDocuments.id, documentId),
+    inArray(candidateDocuments.status, [...DECIDED_DOCUMENT_STATUSES]),
+    inArray(candidateDocuments.analysisStatus, [...ANALYSIS_IN_PROGRESS_STATUSES]),
+  ));
+}
+
 /**
  * EXPL-12: a job left "running" by a run that stopped (function limit, frozen
  * instance) goes back to the queue, due at once, its interrupted attempt
@@ -167,7 +187,7 @@ export async function recoverStaleCandidateDocumentJobs(staleAfterMs = CANDIDATE
     const documentSettled = !document || !awaitsAnalysis(document);
     const terminal = job.attempts >= job.maxAttempts;
     const lastError = documentSettled ? "worker_interrupted_document_settled" : terminal ? "worker_interrupted_attempts_exhausted" : "worker_interrupted";
-    const taken = await db.update(candidateDocumentProcessingJobs)
+    const take = db.update(candidateDocumentProcessingJobs)
       .set(documentSettled || terminal ? { status: "completed", finishedAt: now, lastError } : { status: "retry", scheduledFor: now, startedAt: null, lastError })
       .where(and(
         eq(candidateDocumentProcessingJobs.id, job.id),
@@ -175,6 +195,7 @@ export async function recoverStaleCandidateDocumentJobs(staleAfterMs = CANDIDATE
         eq(candidateDocumentProcessingJobs.attempts, job.attempts),
         lte(candidateDocumentProcessingJobs.startedAt, staleBefore),
       ));
+    const [taken] = documentSettled ? await db.batch([take, decidedDocumentAnalysisClosing(db, job.documentId)]) : [await take];
     if (mutationRowCount(taken) !== 1) continue;
     if (documentSettled) {
       closed += 1;
@@ -193,6 +214,8 @@ export async function recoverStaleCandidateDocumentJobs(staleAfterMs = CANDIDATE
       .where(analysing)
       .returning({ candidateId: candidateDocuments.candidateId });
     if (settled) await db.insert(candidateDocumentAuditLogs).values({ candidateId: settled.candidateId, documentId: job.documentId, actorType: "system", action: "analysis_completed", metadata: JSON.stringify({ outcome: "human_review_fallback", error: lastError }) });
+    // Decided by the admin since it was read: its job, now closed, leaves it no longer « en cours ».
+    else await decidedDocumentAnalysisClosing(db, job.documentId);
   }
   return { recovered, exhausted, closed };
 }
@@ -220,6 +243,8 @@ export async function processDueCandidateDocumentAnalysisJobs(limit = 1) {
     if (mutationRowCount(claim) !== 1) continue;
     processed += 1;
     const closeJob = (lastError: string | null) => db.update(candidateDocumentProcessingJobs).set({ status: "completed", finishedAt: new Date(), lastError }).where(eq(candidateDocumentProcessingJobs.id, job.id));
+    // The job of a document that no longer waits for it, closed with the analysis of a document the admin decided meanwhile.
+    const closeSettled = () => db.batch([closeJob(DOCUMENT_SETTLED), decidedDocumentAnalysisClosing(db, job.documentId)]);
     const document = (await db.select().from(candidateDocuments).where(eq(candidateDocuments.id, job.documentId)).limit(1))[0];
     if (!document || document.validationStatus === "rejected") {
       await closeJob("document_unavailable_or_rejected");
@@ -231,7 +256,7 @@ export async function processDueCandidateDocumentAnalysisJobs(limit = 1) {
     // closed, and the AI never reads it. Each later write of the document is
     // made only while it still waits, for a decision taken during the analysis.
     if (!awaitsAnalysis(document)) {
-      await closeJob(DOCUMENT_SETTLED);
+      await closeSettled();
       continue;
     }
     const awaiting = stillAwaitsAnalysis(document.id);
@@ -242,16 +267,18 @@ export async function processDueCandidateDocumentAnalysisJobs(limit = 1) {
     if (!candidateDocumentAllowsAiAnalysis(document.category)) {
       // Identity documents, proofs of address, free-form files and retired sensitive
       // categories are never read for, nor sent to, an AI service (LEGAL-12).
-      const settled = mutationRowCount(await db.update(candidateDocuments).set(candidateHumanReviewOnlyFields()).where(takenOffQueue)) !== 1;
-      await closeJob(settled ? DOCUMENT_SETTLED : "human_review_only");
-      if (settled) continue;
+      if (mutationRowCount(await db.update(candidateDocuments).set(candidateHumanReviewOnlyFields()).where(takenOffQueue)) !== 1) {
+        await closeSettled();
+        continue;
+      }
+      await closeJob("human_review_only");
       await db.insert(candidateDocumentAuditLogs).values({ candidateId: document.candidateId, documentId: document.id, actorType: "system", action: "analysis_completed", metadata: JSON.stringify({ outcome: "human_review_only", category: document.category }) });
       needsReview += 1;
       continue;
     }
     try {
       if (mutationRowCount(await db.update(candidateDocuments).set({ status: "analyzing", analysisStatus: "analyzing", analysisAttempts: attempts }).where(takenOffQueue)) !== 1) {
-        await closeJob(DOCUMENT_SETTLED);
+        await closeSettled();
         continue;
       }
       const result = await analyzeCandidateDocument({ buffer: await privateDocumentBytes(document), mimeType: document.mimeType, declaredCategory: document.categoryOtherLabel || document.category, attempt: attempts });
@@ -267,7 +294,7 @@ export async function processDueCandidateDocumentAnalysisJobs(limit = 1) {
         analyzedAt: new Date(),
         analysisLastError: null,
       }).where(awaiting)) === 1;
-      await closeJob(recorded ? null : DOCUMENT_SETTLED);
+      await (recorded ? closeJob(null) : closeSettled());
       // The AI read the document either way; its result is dropped when the admin decided during the analysis.
       await db.insert(candidateDocumentAuditLogs).values({ candidateId: document.candidateId, documentId: document.id, actorType: "system", action: "analysis_completed", metadata: JSON.stringify(recorded ? { model: result.model, confidence: result.analysis.confidence } : { model: result.model, outcome: "result_dropped_document_settled" }) });
       if (recorded) completed += 1;
@@ -277,22 +304,32 @@ export async function processDueCandidateDocumentAnalysisJobs(limit = 1) {
         // Neither the file's nor the AI's fault: the cron invocation is about
         // to end (EXPL-12). The job goes back to the queue at the same place,
         // for the next run, without counting this attempt, and this run
-        // starts no other analysis.
-        await db.update(candidateDocumentProcessingJobs).set({ status: job.status, attempts: job.attempts, startedAt: null, lastError: message }).where(eq(candidateDocumentProcessingJobs.id, job.id));
-        await db.update(candidateDocuments).set({ status: "uploaded", analysisStatus: "queued", analysisAttempts: job.attempts }).where(awaiting);
-        released += 1;
+        // starts no other analysis. A document the admin decided meanwhile is
+        // not put back: its job is closed.
+        if (mutationRowCount(await db.update(candidateDocuments).set({ status: "uploaded", analysisStatus: "queued", analysisAttempts: job.attempts }).where(awaiting)) === 1) {
+          await db.update(candidateDocumentProcessingJobs).set({ status: job.status, attempts: job.attempts, startedAt: null, lastError: message }).where(eq(candidateDocumentProcessingJobs.id, job.id));
+          released += 1;
+        } else {
+          await closeSettled();
+        }
         break;
       }
       // Another attempt would read the same text: only what may fail once (download, AI) is tried again.
+      // A document the admin decided meanwhile gets no other attempt: its job is closed.
       if (attempts < job.maxAttempts && !(error instanceof CandidateDocumentTextSetAsideError)) {
+        if (mutationRowCount(await db.update(candidateDocuments).set({ status: "uploaded", analysisStatus: "queued", analysisAttempts: attempts, analysisLastError: message }).where(awaiting)) !== 1) {
+          await closeSettled();
+          continue;
+        }
         await db.update(candidateDocumentProcessingJobs).set({ status: "retry", scheduledFor: retryTime(attempts), lastError: message }).where(eq(candidateDocumentProcessingJobs.id, job.id));
-        await db.update(candidateDocuments).set({ status: "uploaded", analysisStatus: "queued", analysisAttempts: attempts, analysisLastError: message }).where(awaiting);
         retried += 1;
       } else {
         const fallback = humanReviewFallback(error);
-        const settled = mutationRowCount(await db.update(candidateDocuments).set({ validationStatus: "accepted", status: "needs_review", analysisStatus: "needs_review", analysisAttempts: attempts, analysisLastError: message, analyzedAt: new Date(), ...fallback }).where(awaiting)) !== 1;
-        await closeJob(settled ? DOCUMENT_SETTLED : message);
-        if (settled) continue;
+        if (mutationRowCount(await db.update(candidateDocuments).set({ validationStatus: "accepted", status: "needs_review", analysisStatus: "needs_review", analysisAttempts: attempts, analysisLastError: message, analyzedAt: new Date(), ...fallback }).where(awaiting)) !== 1) {
+          await closeSettled();
+          continue;
+        }
+        await closeJob(message);
         await db.insert(candidateDocumentAuditLogs).values({ candidateId: document.candidateId, documentId: document.id, actorType: "system", action: "analysis_completed", metadata: JSON.stringify({ outcome: "human_review_fallback", error: message }) });
         needsReview += 1;
       }
