@@ -407,7 +407,11 @@ export default function RecruitmentPage() {
     closeDiplomaCountryList();
   };
 
-  /** Up/Down move the active option (opening the list), Enter picks it, Escape closes the list (A11Y-11). */
+  /**
+   * Up/Down move the active option (opening the list), Enter picks it, Escape closes the list (A11Y-11).
+   * The list closed, Escape does nothing: Chromium would empty the search field while the country
+   * chosen stays in the form, its note and the draft.
+   */
   const handleDiplomaCountryKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
@@ -416,9 +420,9 @@ export default function RecruitmentPage() {
     } else if (event.key === "Enter" && activeDiplomaCountry) {
       event.preventDefault();
       chooseDiplomaCountry(activeDiplomaCountry);
-    } else if (event.key === "Escape" && diplomaCountryOpen) {
+    } else if (event.key === "Escape") {
       event.preventDefault();
-      closeDiplomaCountryList();
+      if (diplomaCountryOpen) closeDiplomaCountryList();
     }
   };
 
@@ -626,8 +630,9 @@ export default function RecruitmentPage() {
                     </div>
                     {form.diplomaCountry && <p className="text-xs font-medium text-primary">{diplomaCopy.label} : {form.diplomaCountry}</p>}
                     {diplomaCountryListShown && (
-                      // Options hors de l’ordre de tabulation ; mousedown annulé pour garder le focus dans le champ.
-                      <ul id="recruitment-diploma-country-options" role="listbox" aria-label={diplomaCopy.label} className="recruitment-country-options" onMouseDown={event => event.preventDefault()}>
+                      // Liste et options hors de l’ordre de tabulation : défilante, la liste serait sinon un arrêt
+                      // de Tab où flèches et Entrée ne font rien ; mousedown annulé pour garder le focus dans le champ.
+                      <ul id="recruitment-diploma-country-options" role="listbox" tabIndex={-1} aria-label={diplomaCopy.label} className="recruitment-country-options" onMouseDown={event => event.preventDefault()}>
                         {filteredDiplomaCountries.map((country, index) => (
                           <li key={country.code} id={diplomaCountryOptionId(country.code)} role="option" aria-selected={index === diplomaCountryActiveIndex} className="recruitment-country-option cursor-pointer" onClick={() => chooseDiplomaCountry(country)}>
                             <span>{country.label}</span><span className="text-xs text-muted-foreground">{country.code}</span>
