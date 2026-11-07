@@ -6,7 +6,7 @@ import { RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "./recruitmentAnalysis";
 // server/adminRecruitmentProcedures.test.ts run those queries.
 describe("scores de recrutement vérifiés", () => {
   it("versionne les nouvelles analyses dans la colonne analysis_prompt_version", () => {
-    expect(RECRUITMENT_ANALYSIS_PROMPT_VERSION).toBe("recruitment-v7-verified-score");
+    expect(RECRUITMENT_ANALYSIS_PROMPT_VERSION).toBe("recruitment-v8");
     expect(RECRUITMENT_ANALYSIS_PROMPT_VERSION.length).toBeLessThanOrEqual(40);
   });
 });

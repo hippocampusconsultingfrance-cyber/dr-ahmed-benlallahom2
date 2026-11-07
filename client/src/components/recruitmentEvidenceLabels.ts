@@ -15,18 +15,23 @@ export const CV_READING_LABELS = {
 
 const FORM_SOURCE = "formulaire de candidature";
 
-export function fieldEvidenceStatusLabel(item: { sourceLocation?: string; evidenceVerified?: boolean }) {
+/** `fromTranscription`: quoted from a page the vision transcribed, found in its transcription rather than in the file (IA-07). */
+type FieldEvidenceStatus = { sourceLocation?: string; evidenceVerified?: boolean; fromTranscription?: boolean };
+
+export function fieldEvidenceStatusLabel(item: FieldEvidenceStatus) {
   if (item.sourceLocation === FORM_SOURCE) return "Donnée déclarée, non vérifiée dans le CV";
-  return item.evidenceVerified ? "Citation trouvée dans le texte lu par l’outil (à comparer au CV)" : "Citation à vérifier manuellement";
+  if (!item.evidenceVerified) return "Citation à vérifier manuellement";
+  return item.fromTranscription ? "Issue de la transcription automatique, à contrôler sur le scan" : "Citation trouvée dans le texte lu par l’outil (à comparer au CV)";
 }
 
-/** Never green: a quote found in the text read is not a validated fact. */
-export function fieldEvidenceStatusTone(item: { sourceLocation?: string; evidenceVerified?: boolean }) {
-  return item.sourceLocation !== FORM_SOURCE && item.evidenceVerified ? "text-foreground" : "text-amber-700 dark:text-amber-300";
+/** Never green: a quote found in the text read is not a validated fact; one found in a transcription of the scan stays to check. */
+export function fieldEvidenceStatusTone(item: FieldEvidenceStatus) {
+  return item.sourceLocation !== FORM_SOURCE && item.evidenceVerified && !item.fromTranscription ? "text-foreground" : "text-amber-700 dark:text-amber-300";
 }
 
-export function contradictionEvidenceLabel(evidenceVerified: boolean | undefined) {
-  return evidenceVerified ? "citation trouvée dans le texte lu par l’outil" : "citation à vérifier";
+export function contradictionEvidenceLabel(evidenceVerified: boolean | undefined, fromTranscription?: boolean) {
+  if (!evidenceVerified) return "citation à vérifier";
+  return fromTranscription ? "citation issue de la transcription automatique, à contrôler sur le scan" : "citation trouvée dans le texte lu par l’outil";
 }
 
 // Analyses saved before this wording still call the server-generated summary,

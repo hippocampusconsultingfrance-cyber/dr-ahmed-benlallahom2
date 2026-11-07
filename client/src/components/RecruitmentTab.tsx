@@ -15,6 +15,7 @@ import CertificationReview from "./CertificationReview";
 import { useCvDownload } from "./useCvDownload";
 import { certificationFactLabel, recruitmentFactNameContains } from "@shared/recruitmentFactOrigins";
 import { RECRUITMENT_APPLICATION_STATUS_OPTIONS, type RecruitmentApplicationStatus } from "@shared/recruitmentApplicationStatuses";
+import { RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "@shared/recruitmentAiAnalysis";
 import { AI_ANALYSIS_UNAVAILABLE_LABEL, isAiAnalysisUnavailable, SCORE_UNAVAILABLE_EXPLANATION, SCORE_UNAVAILABLE_HEADING, scoredApplicationsFirst } from "./recruitmentScoreGroups";
 import { contradictionEvidenceLabel, CV_READING_LABELS, CV_REVIEW_REMINDER, cvReadingTextForDisplay, extractionWarningLabel, fieldEvidenceStatusLabel, fieldEvidenceStatusTone } from "./recruitmentEvidenceLabels";
 import {
@@ -39,7 +40,8 @@ const statusOptions = RECRUITMENT_APPLICATION_STATUS_OPTIONS;
 
 type Status = RecruitmentApplicationStatus;
 type RecruitmentEmailTemplate = "profile_interest" | "additional_information";
-const VERIFIED_ANALYSIS_VERSION = "recruitment-v7-verified-score";
+// The version the server stores with each analysis: a score of another version is to be recalculated.
+const VERIFIED_ANALYSIS_VERSION = RECRUITMENT_ANALYSIS_PROMPT_VERSION;
 
 type ExtractedProfile = {
   professionalTitle?: string;
@@ -50,8 +52,8 @@ type ExtractedProfile = {
   countriesOfInterest?: string[];
   yearsExperience?: number | null;
   normalizedExperiences?: Array<{ role?: string; organization?: string; startDate?: string | null; endDate?: string | null; employmentType?: string; durationMonths?: number | null; evidence?: string; sourceLocation?: string; confidence?: number; evidenceVerified?: boolean }>;
-  fieldEvidence?: Array<{ field?: string; value?: string; evidence?: string; sourceLocation?: string; confidence?: number; evidenceVerified?: boolean }>;
-  contradictions?: Array<{ field?: string; declaredValue?: string; documentValue?: string; evidence?: string; sourceLocation?: string; confidence?: number; evidenceVerified?: boolean }>;
+  fieldEvidence?: Array<{ field?: string; value?: string; evidence?: string; sourceLocation?: string; confidence?: number; evidenceVerified?: boolean; fromTranscription?: boolean }>;
+  contradictions?: Array<{ field?: string; declaredValue?: string; documentValue?: string; evidence?: string; sourceLocation?: string; confidence?: number; evidenceVerified?: boolean; fromTranscription?: boolean }>;
   confidence?: number;
   evidenceCoverage?: number;
   requiredFollowUps?: string[];
@@ -660,7 +662,7 @@ export default function RecruitmentTab() {
                                 {extracted.contradictions.map((item, index) => (
                                   <li key={`${item.field}-${index}`}>
                                     <strong>{item.field || "Champ"} :</strong> formulaire « {item.declaredValue || "—"} » / CV « {item.documentValue || "—"} » — {item.sourceLocation || "source non localisée"}
-                                    <span className="ml-1 font-medium">({contradictionEvidenceLabel(item.evidenceVerified)})</span>
+                                    <span className="ml-1 font-medium">({contradictionEvidenceLabel(item.evidenceVerified, item.fromTranscription)})</span>
                                   </li>
                                 ))}
                               </ul>

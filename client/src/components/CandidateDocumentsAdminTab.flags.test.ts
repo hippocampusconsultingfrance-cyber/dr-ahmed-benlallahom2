@@ -46,3 +46,18 @@ describe("texte écarté d’un document du coffre, dans l’onglet de l’admin
     expect(flagsLine(language)).toBe(expected);
   });
 });
+
+describe("aucun indice de confiance pour un document dont l’authenticité n’est pas contrôlée (IA-06)", () => {
+  it.each([
+    ["fr", "Modèle: test"],
+    ["en", "Model: test"],
+    ["de", "Modell: test"],
+    ["zh", "模型: test"],
+  ] as const)("dit seulement le modèle qui a lu le document (%s)", (language, model) => {
+    view.language = language;
+    const text = renderToStaticMarkup(createElement(CandidateDocumentsAdminTab)).replace(/<[^>]+>/g, " ");
+    expect(text).toContain(model);
+    // The document's aiConfidence is 50: never shown, in any wording.
+    expect(text).not.toMatch(/50\s*%|confiance|confidence|Konfidenz|置信/i);
+  });
+});

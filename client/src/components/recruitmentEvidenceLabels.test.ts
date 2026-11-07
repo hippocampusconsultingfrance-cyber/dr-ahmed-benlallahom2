@@ -15,6 +15,20 @@ describe("libellés des preuves IA d’un CV (IA-01)", () => {
     expect(fieldEvidenceStatusLabel({ sourceLocation: "formulaire de candidature", evidenceVerified: true })).toBe("Donnée déclarée, non vérifiée dans le CV");
   });
 
+  it("dit d’une citation trouvée dans la transcription d’une page relue par la vision qu’elle est à contrôler sur le scan (IA-07)", () => {
+    const transcribed = { sourceLocation: "page 2", evidenceVerified: true, fromTranscription: true };
+    expect(fieldEvidenceStatusLabel(transcribed)).toBe("Issue de la transcription automatique, à contrôler sur le scan");
+    expect(fieldEvidenceStatusTone(transcribed)).toBe("text-amber-700 dark:text-amber-300");
+    // Not found in the transcription either: to verify, as any other quote.
+    expect(fieldEvidenceStatusLabel({ ...transcribed, evidenceVerified: false })).toBe("Citation à vérifier manuellement");
+    // A quote of a page read in the file itself keeps its wording.
+    expect(fieldEvidenceStatusLabel({ ...transcribed, fromTranscription: false })).toBe("Citation trouvée dans le texte lu par l’outil (à comparer au CV)");
+    // The same for a contradiction's quote.
+    expect(contradictionEvidenceLabel(true, true)).toBe("citation issue de la transcription automatique, à contrôler sur le scan");
+    expect(contradictionEvidenceLabel(false, true)).toBe("citation à vérifier");
+    expect(contradictionEvidenceLabel(true, false)).toBe("citation trouvée dans le texte lu par l’outil");
+  });
+
   it("rappelle d’ouvrir le CV avant toute shortlist", () => {
     expect(CV_REVIEW_REMINDER).toMatch(/^Ouvrir le CV avant toute shortlist/);
   });

@@ -1,6 +1,7 @@
 import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { elementsOf, renderStateful, resetStatefulHooks } from "@/testing/statefulRender";
+import { RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "@shared/recruitmentAiAnalysis";
 import { CV_READING_LABELS, CV_REVIEW_REMINDER, contradictionEvidenceLabel, cvReadingTextForDisplay, fieldEvidenceStatusLabel, fieldEvidenceStatusTone } from "./recruitmentEvidenceLabels";
 import { recruitmentAnalysisErrorLabel, recruitmentDriveExportErrorLabel, recruitmentEmailDeliveryErrorLabel } from "@/lib/recruitmentTraceability";
 
@@ -263,6 +264,8 @@ describe("lecture du CV par l’outil (IA-01)", () => {
     { field: "title", value: "Anesthésiste-réanimateur", evidence: "Anesthésiste-réanimateur", sourceLocation: "page 1", confidence: 92, evidenceVerified: true },
     { field: "language", value: "Anglais", evidence: "Anglais courant", sourceLocation: "formulaire de candidature", confidence: 80, evidenceVerified: true },
     { field: "skill", value: "ALR", evidence: "ALR échoguidée", sourceLocation: "page 2", confidence: 60, evidenceVerified: false },
+    // Read on a page the vision transcribed (IA-07).
+    { field: "skill", value: "Réanimation", evidence: "Réanimation polyvalente", sourceLocation: "page 3", confidence: 90, evidenceVerified: true, fromTranscription: true },
   ];
   const analysed = (promptVersion: string) => dossier(1, {
     analysisStatus: "completed", analysisPromptVersion: promptVersion, aiScore: 82, aiAnalyzedAt: "2026-10-02T08:00:00.000Z",
@@ -273,12 +276,15 @@ describe("lecture du CV par l’outil (IA-01)", () => {
       professionalTitle: "Anesthésiste-réanimateur", specialties: ["Anesthésie"], verifiedSkills: ["ALR"], confidence: 90, evidenceCoverage: 75,
       scoreBreakdown: { specialtyMatch: 30, experienceEvidence: 20, skillsEvidence: 15, languageReadiness: 10, credentialReadiness: 7 },
       fieldEvidence,
-      contradictions: [{ field: "specialty", declaredValue: "Anesthésie", documentValue: "Réanimation", sourceLocation: "page 1", evidenceVerified: true }],
+      contradictions: [
+        { field: "specialty", declaredValue: "Anesthésie", documentValue: "Réanimation", sourceLocation: "page 1", evidenceVerified: true },
+        { field: "language", declaredValue: "Anglais", documentValue: "Allemand", sourceLocation: "page 3", evidenceVerified: true, fromTranscription: true },
+      ],
     }),
   });
 
   it("présente les citations comme trouvées dans le texte lu, jamais comme vérifiées", () => {
-    state.applications = [analysed("recruitment-v7-verified-score")];
+    state.applications = [analysed(RECRUITMENT_ANALYSIS_PROMPT_VERSION)];
     open(1);
     const tree = render();
     const text = textOf(tree);
@@ -290,7 +296,9 @@ describe("lecture du CV par l’outil (IA-01)", () => {
       expect(status, item.field).toBeDefined();
       expect(status!.props.className).toContain(fieldEvidenceStatusTone(item));
     }
-    expect(text).toContain(`(${contradictionEvidenceLabel(true)})`);
+    expect(text).toContain("Issue de la transcription automatique, à contrôler sur le scan");
+    expect(text).toContain(`Réanimation » — page 1(${contradictionEvidenceLabel(true)})`);
+    expect(text).toContain(`Allemand » — page 3(${contradictionEvidenceLabel(true, true)})`);
     // Analyses saved with the earlier wording are shown with the current one.
     expect(text).toContain(cvReadingTextForDisplay("Lecture automatisée : 3 citation(s) vérifiée(s) sur 4. Les faits disposent d’une preuve exploitable. Revue humaine obligatoire."));
     expect(text).toContain("Titre professionnel trouvé dans le texte lu par l’outil : Anesthésiste-réanimateur");
@@ -301,7 +309,7 @@ describe("lecture du CV par l’outil (IA-01)", () => {
   });
 
   it("ne montre le score et son détail que pour une analyse au score vérifié", () => {
-    state.applications = [analysed("recruitment-v7-verified-score")];
+    state.applications = [analysed(RECRUITMENT_ANALYSIS_PROMPT_VERSION)];
     open(1);
     expect(pageText()).toContain("Score IA 82/100");
     expect(pageText()).toContain("Détail du score professionnel");
