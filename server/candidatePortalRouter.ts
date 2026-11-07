@@ -2,6 +2,7 @@ import { parse as parseCookie } from "cookie";
 import { and, desc, eq, gt, isNotNull, isNull, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { singleLineText } from "../shared/textInput";
 import {
   candidateAccounts,
   candidateDocumentAuditLogs,
@@ -236,8 +237,9 @@ export const candidatePortalRouter = router({
   register: publicProcedure
     .input(z.object({
       email: z.string().email().max(320),
-      firstName: z.string().trim().min(1).max(120),
-      lastName: z.string().trim().min(1).max(120),
+      // INTL-05: no control character nor reversal of the text's direction.
+      firstName: singleLineText(z.string().min(1).max(120)),
+      lastName: singleLineText(z.string().min(1).max(120)),
       termsAccepted: z.boolean().refine(value => value, "L’acceptation des conditions est requise."),
       documentConsent: z.boolean().refine(value => value, "Le consentement au traitement documentaire est requis."),
       invitationToken: z.string().min(24).max(600).optional(),
@@ -487,8 +489,8 @@ export const candidatePortalRouter = router({
   verifyEmail: publicProcedure
     .input(activationLinkInput.extend({
       password: passwordInput,
-      firstName: z.string().trim().min(1).max(120).optional(),
-      lastName: z.string().trim().min(1).max(120).optional(),
+      firstName: singleLineText(z.string().min(1).max(120)).optional(),
+      lastName: singleLineText(z.string().min(1).max(120)).optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const db = databaseOrThrow(await getDb());

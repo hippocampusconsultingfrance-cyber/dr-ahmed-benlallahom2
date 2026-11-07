@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import { buildOwnerNotificationEmail } from "./notification";
+import { adminLink } from "../adminLinks";
 import { CANDIDATE_INVITATION_MAX_AGE_MS, CANDIDATE_TOKEN_MAX_AGE_MS, formatCandidateLinkValidity } from "../candidateAuth";
 import { PATIENT_CANCELLATION_POLICY, PATIENT_CANCELLATION_POLICY_EN, resolveConsultationContact, type ConsultationContact } from "../consultationContact";
 import { appointmentCalendarFilename, buildAppointmentCalendarEvent } from "../appointmentCalendar";
@@ -509,10 +510,12 @@ export async function sendOwnerNotificationEmail(
     // Language of the booking page; the patient's emails are in French only for FR (EN-01).
     `Langue : ${(delivery.language || "fr").toUpperCase()}`,
     "Objet de la demande : consultable uniquement dans le tableau de bord (jamais recopié par email).",
+    `Ouvrir le rendez-vous : ${adminLink("appointments", trackingId)}`,
   ].join("\n");
 
   try {
-    const email = buildOwnerNotificationEmail({ title: `Nouvelle réservation payée : ${customerName} - ${finalPrice} €`, content: notificationContent });
+    // INTL-11: « [APT…] Réservation payée 100 € – Nom », the reference and the amount before the name.
+    const email = buildOwnerNotificationEmail({ reference: trackingId, title: `Réservation payée ${finalPrice} €`, name: customerName, content: notificationContent });
     await sendPostPaymentEmail({ rejected: "owner_notification_rejected", failed: "owner_notification_failed" }, email, delivery.idempotencyKey);
     console.log("Owner booking notification sent");
   } catch (error) {

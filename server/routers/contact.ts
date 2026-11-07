@@ -9,6 +9,8 @@ import { enforcePublicFormRateLimit, verifyPublicFormTurnstile, enforcePublicFor
 import { sendPublicFormAcknowledgement } from "../publicFormAcknowledgements";
 import { SITE_LANGUAGES } from "../emailLanguage";
 import { CONTACT_CATEGORIES, type ContactCategory } from "../../shared/contactCategories";
+import { multiLineText, singleLineText } from "../../shared/textInput";
+import { adminLink } from "../adminLinks";
 
 /** Who wrote, as the owner's notification names it (PUB-22). */
 const CONTACT_CATEGORY_LABELS: Record<ContactCategory, string> = {
@@ -22,10 +24,11 @@ export const contactRouter = router({
   submit: publicProcedure
     .input(
       z.object({
-        name: z.string().min(1, "Le nom est requis").max(255),
+        // INTL-05 : sans caractère de contrôle ni inversion du sens du texte.
+        name: singleLineText(z.string().min(1, "Le nom est requis").max(255)),
         email: z.string().email("Email invalide").max(320),
-        phone: z.string().max(50).optional(),
-        message: z.string().min(1, "Le message est requis").max(5000),
+        phone: singleLineText(z.string().max(50)).optional(),
+        message: multiLineText(z.string().min(1, "Le message est requis").max(5000)),
         gdprConsent: z.number().int().min(0).max(1),
         turnstileToken: z.string().min(20).max(4096).optional(),
         // Chosen on the form (PUB-22), sent in the notification only: no column in the database.
@@ -72,8 +75,11 @@ export const contactRouter = router({
       if (await countPublicFormDailyVolume("contact")) {
         await Promise.all([
           notifyOwner({
-            title: `Nouveau message de contact de ${input.name} (${trackingId})`,
-            content: `**Numéro de suivi:** ${trackingId}\n**De:** ${input.name}\n**Vous êtes:** ${input.category ? CONTACT_CATEGORY_LABELS[input.category] : "Non précisé"}\n**Langue de la page:** ${input.language ?? "Non précisée"}\n**Email:** ${input.email}\n**Téléphone:** ${input.phone || "Non renseigné"}\n**Consentement RGPD:** ${input.gdprConsent === 1 ? "✅ Accepté" : "❌ Refusé"}\n\n**Message:**\n${input.message}`,
+            // INTL-11 : « [C…] Contact – Nom », la référence d’abord.
+            reference: trackingId,
+            title: "Contact",
+            name: input.name,
+            content: `**Numéro de suivi:** ${trackingId}\n**De:** ${input.name}\n**Vous êtes:** ${input.category ? CONTACT_CATEGORY_LABELS[input.category] : "Non précisé"}\n**Langue de la page:** ${input.language ?? "Non précisée"}\n**Email:** ${input.email}\n**Téléphone:** ${input.phone || "Non renseigné"}\n**Consentement RGPD:** ${input.gdprConsent === 1 ? "✅ Accepté" : "❌ Refusé"}\n\n**Message:**\n${input.message}\n\n**Ouvrir le message:** ${adminLink("contacts", trackingId)}`,
             // « Répondre » écrit au visiteur, et non plus au propriétaire lui-même (PUB-09).
             replyTo: input.email,
           }),

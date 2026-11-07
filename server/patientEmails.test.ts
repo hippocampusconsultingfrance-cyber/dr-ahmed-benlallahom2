@@ -213,7 +213,9 @@ describe("emails patients dans la langue de la réservation (EN-01) et fichier a
     await sendOwnerNotificationEmail("John Smith", "patient@example.test", "+971500000000", "APTMAIL0002", NIGHT_APPOINTMENT, 150, { language: "en" });
     expect(String(last().text)).toContain("Langue : EN");
     await sendOwnerNotificationEmail("Patient Test", "patient@example.test", "+33600000000", "APTMAIL0001", NIGHT_APPOINTMENT, 100);
-    expect(last().subject).toBe("Nouvelle réservation payée : Patient Test - 100 €");
+    // INTL-11: the reference first, then the amount, then the name; a direct link to the booking (ADM-09).
+    expect(last().subject).toBe("[APTMAIL0001] Réservation payée 100 € – Patient Test");
+    expect(String(last().text)).toContain("Ouvrir le rendez-vous : https://drahmedbenlallahom.com/admin?tab=appointments&ref=APTMAIL0001");
     expect(String(last().text)).toContain("Langue : FR");
   });
 });

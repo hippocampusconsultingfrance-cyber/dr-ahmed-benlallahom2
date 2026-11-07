@@ -167,3 +167,53 @@ describe("notifyOwner", () => {
     expect(send.mock.calls[1][0].subject).toContain("resend_quota_exceeded");
   });
 });
+
+// INTL-11 — the subject of an owner notification: the reference first, so a
+// search of the mailbox finds it, then the title, then the visitor's name cut
+// to about 60 visible characters; never a half of an emoji, never a line break.
+describe("sujet des notifications au propriétaire (INTL-11)", () => {
+  /** The characters are built from their code points: none of them appears as such in this file. */
+  const ZWJ = String.fromCodePoint(0x200d);
+  const LINE_SEPARATOR = String.fromCodePoint(0x2028);
+  const loneSurrogate = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
+  it("met la référence en tête, puis le titre et le nom, et garde le nom entier dans l’email", async () => {
+    const { buildOwnerNotificationEmail } = await import("./notification");
+    const email = buildOwnerNotificationEmail({ reference: "C7EPGD79OKU03", title: "Contact", name: "Jeanne Martin", content: "Bonjour" });
+    expect(email.subject).toBe("[C7EPGD79OKU03] Contact – Jeanne Martin");
+    expect(email.text.startsWith("[C7EPGD79OKU03] Contact – Jeanne Martin\n\nBonjour")).toBe(true);
+    expect(buildOwnerNotificationEmail({ reference: "APT1A2B3C4D5E6F", title: "Réservation payée 100 €", name: "Ali Hassan", content: "Paiement" }).subject).toBe("[APT1A2B3C4D5E6F] Réservation payée 100 € – Ali Hassan");
+    expect(buildOwnerNotificationEmail({ title: "Bilan quotidien de sécurité", content: "Rien" }).subject).toBe("Bilan quotidien de sécurité");
+  });
+
+  it("coupe un nom de 255 caractères vers 60 caractères visibles, en gardant la référence et le montant", async () => {
+    const { buildOwnerNotificationEmail, OWNER_SUBJECT_NAME_MAX_CHARACTERS } = await import("./notification");
+    const longName = "Mohammed Bin Khalid Abdulrahman Al-Saud ".repeat(7).slice(0, 255);
+    const email = buildOwnerNotificationEmail({ reference: "APT1A2B3C4D5E6F", title: "Réservation payée 150 €", name: longName, content: "Paiement" });
+    expect(email.subject.startsWith("[APT1A2B3C4D5E6F] Réservation payée 150 € – Mohammed Bin Khalid")).toBe(true);
+    const shownName = email.subject.split(" – ")[1]!;
+    expect(shownName.endsWith("…")).toBe(true);
+    expect(Array.from(shownName).length).toBeLessThanOrEqual(OWNER_SUBJECT_NAME_MAX_CHARACTERS);
+    // The whole name stays in the heading of the email.
+    expect(email.text).toContain(longName.trim());
+  });
+
+  it("coupe entre deux caractères visibles : jamais une moitié d’emoji, ni une séquence ZWJ coupée", async () => {
+    const { buildOwnerNotificationEmail, cutToVisibleCharacters } = await import("./notification");
+    const family = ["👩", "👩", "👧", "👦"].join(ZWJ);
+    // The case of the audit: 169 « a » then emojis, which .slice(0, 200) cut in the middle of one.
+    const subject = buildOwnerNotificationEmail({ reference: "C7EPGD79OKU03", title: "Contact", name: `${"a".repeat(55)}${"😀".repeat(3)}${family.repeat(3)}`, content: "Bonjour" }).subject;
+    expect(subject).not.toMatch(loneSurrogate);
+    expect(subject.startsWith("[C7EPGD79OKU03] Contact – ")).toBe(true);
+    expect(subject.endsWith(`😀😀${family}…`)).toBe(true);
+    expect(cutToVisibleCharacters(`${"a".repeat(169)}${"😀".repeat(40)}`, 200)).toBe(`${"a".repeat(169)}${"😀".repeat(30)}…`);
+  });
+
+  it("remplace les sauts de ligne d’un nom par une espace dans le sujet", async () => {
+    const { buildOwnerNotificationEmail } = await import("./notification");
+    for (const name of ["Ali\r\nBcc: x@evil.test", `Ali${LINE_SEPARATOR}Bcc: x@evil.test`]) {
+      const email = buildOwnerNotificationEmail({ reference: "C123", title: "Contact", name, content: "Bonjour" });
+      expect(email.subject).toBe("[C123] Contact – Ali Bcc: x@evil.test");
+    }
+  });
+});

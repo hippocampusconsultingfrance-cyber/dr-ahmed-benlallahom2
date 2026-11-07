@@ -392,6 +392,19 @@ describe("message de contact : réponse au visiteur, catégorie et accusé de r�
     expect(buildOwnerNotificationEmail({ title: "Alerte", content: "Sans visiteur." }).replyTo).toBe(ownerEmail.to[0]);
   });
 
+  it("met la référence en tête du sujet et relie la notification à l’élément dans l’administration (INTL-11, ADM-09)", async () => {
+    const caller = appRouter.createCaller(createPublicContext());
+    const contact = await caller.contact.submit({ ...typed, name: "Jeanne Martin" });
+    const request = await caller.gdpr.submit({ name: "Jeanne Martin", email: "jeanne@example.com", requestType: "access" });
+
+    const [contactPayload, requestPayload] = vi.mocked(notifyOwner).mock.calls.map(([payload]) => payload);
+    const { buildOwnerNotificationEmail } = await vi.importActual<typeof import("./_core/notification")>("./_core/notification");
+    expect(buildOwnerNotificationEmail(contactPayload!).subject).toBe(`[${contact.trackingId}] Contact – Jeanne Martin`);
+    expect(buildOwnerNotificationEmail(requestPayload!).subject).toBe(`[${request.trackingId}] Demande RGPD – Jeanne Martin`);
+    expect(contactPayload!.content).toContain(`**Ouvrir le message:** https://drahmedbenlallahom.com/admin?tab=contacts&ref=${contact.trackingId}`);
+    expect(requestPayload!.content).toContain(`**Ouvrir la demande:** https://drahmedbenlallahom.com/admin?tab=gdpr&ref=${request.trackingId}`);
+  });
+
   it("refuse une catégorie inconnue sans rien enregistrer", async () => {
     const caller = appRouter.createCaller(createPublicContext());
     await expect(caller.contact.submit({ ...typed, category: "spam" as never })).rejects.toMatchObject({ code: "BAD_REQUEST" });

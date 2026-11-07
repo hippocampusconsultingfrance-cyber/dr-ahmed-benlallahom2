@@ -92,8 +92,10 @@ describe("POST /api/client-briefs — lecture des corps JSON et formulaire (body
     expect(result).toEqual({ status: 200, body: { success: true, briefId: expect.stringMatching(/^BRIEF/) } });
     expect(state.insertedParams).toHaveLength(1);
     expect(state.insertedParams[0]).toEqual(expect.arrayContaining(Object.values(brief)));
-    expect(state.notifications).toEqual([expect.objectContaining({ title: expect.stringContaining("Clinique Saint-Étienne") })]);
+    // INTL-11: « [BRIEF…] Brief employeur – Clinique Saint-Étienne » once composed; ADM-09: a link to the brief.
+    expect(state.notifications).toEqual([expect.objectContaining({ reference: result.body.briefId, title: "Brief employeur", name: "Clinique Saint-Étienne" })]);
     expect(state.notifications[0].content).toContain("Contact : Zoé Müller");
+    expect(state.notifications[0].content).toContain(`https://drahmedbenlallahom.com/admin?tab=employerBriefs&ref=${result.body.briefId}`);
   });
 
   it("accepte le même brief envoyé en formulaire urlencoded", async () => {

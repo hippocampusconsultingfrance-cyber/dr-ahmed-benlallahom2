@@ -13,6 +13,8 @@ import { SITE_LANGUAGES } from "../emailLanguage";
 import { isSameRecruitmentSubmission } from "../recruitmentSubmissionDeduplication";
 import { sendTrackedCvApplicationConfirmationEmail } from "../recruitmentEmailTrace";
 import { CV_APPLICATION_SUBMISSION_UNIQUE_INDEX, isUniqueViolation } from "../databaseConstraints";
+import { multiLineText, refusesTextInputCharacters, singleLineText, TEXT_INPUT_INVALID_CHARACTERS, TEXT_INPUT_INVALID_CHARACTERS_MESSAGE } from "../../shared/textInput";
+import { adminLink } from "../adminLinks";
 import { PUBLIC_APP_ORIGIN, safeErrorName, safeFileName } from "./routeHelpers";
 
 function safeErrorMetadata(error: unknown) {
@@ -50,20 +52,21 @@ const recruitmentUpload = multer({
   },
 });
 
+// INTL-05: no control character nor reversal of the text's direction.
 const recruitmentApplicationSchema = z.object({
-  firstName: z.string().trim().min(1).max(120),
-  lastName: z.string().trim().min(1).max(120),
+  firstName: singleLineText(z.string().min(1).max(120)),
+  lastName: singleLineText(z.string().min(1).max(120)),
   email: z.string().trim().email().max(320),
-  phone: z.string().trim().max(50).optional().default(""),
-  specialty: z.string().trim().min(1).max(160),
-  diplomaCountry: z.string().trim().min(1).max(100),
-  targetCountries: z.array(z.string().trim().min(1).max(80)).min(1).max(RECRUITMENT_MAX_TARGET_COUNTRIES),
-  languages: z.array(z.string().trim().min(1).max(80)).max(12).default([]),
+  phone: singleLineText(z.string().max(50)).optional().default(""),
+  specialty: singleLineText(z.string().min(1).max(160)),
+  diplomaCountry: singleLineText(z.string().min(1).max(100)),
+  targetCountries: z.array(singleLineText(z.string().min(1).max(80))).min(1).max(RECRUITMENT_MAX_TARGET_COUNTRIES),
+  languages: z.array(singleLineText(z.string().min(1).max(80))).max(12).default([]),
   yearsExperience: z.number().int().min(0).max(70).optional(),
-  availability: z.string().trim().max(100).optional().default(""),
-  mobility: z.string().trim().max(150).optional().default(""),
-  certifications: z.string().trim().max(1000).optional().default(""),
-  message: z.string().trim().max(5000).optional().default(""),
+  availability: singleLineText(z.string().max(100)).optional().default(""),
+  mobility: singleLineText(z.string().max(150)).optional().default(""),
+  certifications: multiLineText(z.string().max(1000)).optional().default(""),
+  message: multiLineText(z.string().max(5000)).optional().default(""),
   gdprConsent: z.literal("1"),
   marketingConsent: z.enum(["0", "1"]).default("0"),
   website: z.string().max(200).optional().default(""),
@@ -124,6 +127,10 @@ export function registerRecruitmentApplyRoute(app: Express) {
           // Names of the refused fields and the kind of issue only, never the submitted values.
           const rejectedFields = Array.from(new Set(parsed.error.issues.map(issue => `${issue.path.map(String).join(".")}:${issue.code}`)));
           console.warn("Recruitment application rejected:", rejectedFields.join(", "));
+          if (refusesTextInputCharacters(parsed.error)) {
+            res.status(400).json({ error: TEXT_INPUT_INVALID_CHARACTERS_MESSAGE, code: TEXT_INPUT_INVALID_CHARACTERS });
+            return;
+          }
           const targetCountriesTooMany = parsed.error.issues.some(issue => issue.path[0] === "targetCountries" && issue.code === "too_big");
           res.status(400).json({
             error: targetCountriesTooMany
@@ -328,8 +335,11 @@ export function registerRecruitmentApplyRoute(app: Express) {
             });
           })(),
           notifyOwner({
-            title: `Nouvelle candidature recrutement — ${candidateName}`,
-            content: `**Référence:** ${trackingId}\n**Email:** ${parsed.data.email}\n**Spécialité:** ${parsed.data.specialty}\n**Pays du diplôme:** ${parsed.data.diplomaCountry}\n**Pays ciblés:** ${parsed.data.targetCountries.join(", ")}\n**CV:** reçu et stocké de manière privée`,
+            // INTL-11: « [CV…] Candidature – Prénom Nom », the reference first.
+            reference: trackingId,
+            title: "Candidature",
+            name: candidateName,
+            content: `**Référence:** ${trackingId}\n**Email:** ${parsed.data.email}\n**Spécialité:** ${parsed.data.specialty}\n**Pays du diplôme:** ${parsed.data.diplomaCountry}\n**Pays ciblés:** ${parsed.data.targetCountries.join(", ")}\n**CV:** reçu et stocké de manière privée\n**Ouvrir la candidature:** ${adminLink("recruitment", trackingId)}`,
           }),
         ]);
 

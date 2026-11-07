@@ -24,6 +24,7 @@ import {
   toE164PhoneNumber,
   type BookingRefusalReason,
 } from "../../shared/bookingPolicy";
+import { multiLineText, singleLineText } from "../../shared/textInput";
 import { getSafeCheckoutOrigin } from "./publicOrigin";
 import { enforcePublicFormRateLimit, givePublicFormAttemptBack, withinBookingGiveBackCap } from "./publicForms";
 import { parisDateKey, parseAppointmentDate, isNightRateForParis, isBookableAppointmentTime } from "./parisTime";
@@ -90,10 +91,6 @@ export function occupiesSlot() {
   );
 }
 
-/** Refuse NUL and other control characters (PostgreSQL rejects NUL in text). */
-const NO_CONTROL_CHARACTERS = /^[^\u0000-\u001F\u007F]*$/;
-const NO_CONTROL_CHARACTERS_EXCEPT_NEWLINES = /^[^\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]*$/;
-
 /**
  * Adresse du patient : la même règle à la réservation et à sa correction depuis
  * l’administration (EXPL-02), et sur la page de réservation (RES-10).
@@ -140,7 +137,11 @@ export const appointmentsRouter = router({
   create: publicProcedure
     .input(
       z.object({
-        customerName: z.string().min(1).max(255).regex(NO_CONTROL_CHARACTERS, "Caractères non autorisés"),
+        // Sans caractère de contrôle (PostgreSQL refuse NUL dans un texte) ni
+        // inversion du sens du texte (INTL-05) : refusé en 400, motif
+        // invalid_characters. Vide une fois nettoyé, il est refusé plus bas
+        // avec le motif invalid_name, que la page traduit.
+        customerName: singleLineText(z.string().max(255)),
         customerEmail: bookingCustomerEmail,
         // Lu comme la page le vérifie (chiffres arabes, persans ou pleine
         // chasse en 0-9, sans marques de direction), puis enregistré au format
@@ -149,7 +150,7 @@ export const appointmentsRouter = router({
         appointmentDate: appointmentDateInput,
         // Objet de la demande, sans information médicale (minimisation) :
         // conservé pour le tableau de bord, jamais recopié dans un email.
-        requestDetails: z.string().trim().min(1).max(BOOKING_REQUEST_SUBJECT_MAX_LENGTH).regex(NO_CONTROL_CHARACTERS_EXCEPT_NEWLINES, "Caractères non autorisés"),
+        requestDetails: multiLineText(z.string().min(1).max(BOOKING_REQUEST_SUBJECT_MAX_LENGTH)),
         // Langue affichée par la page de réservation : emails patients en
         // français pour « fr », en anglais sinon (EN-01).
         language: z.enum(SITE_LANGUAGES).optional().default("fr"),

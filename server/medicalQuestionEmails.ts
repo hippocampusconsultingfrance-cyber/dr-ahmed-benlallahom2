@@ -2,6 +2,7 @@ import { Resend } from "resend";
 import { buildHippocampusEmailShell, unverifiedRecipientGreeting } from "./_core/notifications";
 import { reportResendQuotaError, sendWithRateLimitRetry } from "./_core/resendDelivery";
 import { DEFAULT_TRANSACTIONAL_FROM, resolveConsultationContact } from "./consultationContact";
+import { adminLink } from "./adminLinks";
 
 /**
  * Emails of the free medical-question service.
@@ -120,11 +121,15 @@ export async function sendMedicalQuestionAcknowledgementEmail(input: { email: st
   }
 }
 
-/** Owner alert: no name, email or health content — only the reference and a link to the admin. */
+/**
+ * Owner alert: no name, email or health content — only the reference, first
+ * in the subject (INTL-11), and a link to the question in the admin (ADM-09).
+ */
 export function buildMedicalQuestionOwnerNotification(input: { trackingId: string; language: string; publicationConsent: boolean; receivedAt?: Date; adminUrl?: string }) {
   const receivedAt = (input.receivedAt ?? new Date()).toLocaleString("fr-FR", { timeZone: "Europe/Paris", dateStyle: "long", timeStyle: "short" });
   return {
-    title: `Nouvelle question santé à traiter (${input.trackingId})`,
+    reference: input.trackingId,
+    title: "Nouvelle question santé à traiter",
     content: [
       `Une nouvelle question a été déposée sur le service gratuit de questions santé.`,
       `Référence : ${input.trackingId}`,
@@ -132,7 +137,7 @@ export function buildMedicalQuestionOwnerNotification(input: { trackingId: strin
       `Langue : ${input.language.toUpperCase()} · accord de publication anonymisée : ${input.publicationConsent ? "oui" : "non"}`,
       "",
       "Pour des raisons de confidentialité, la question et les coordonnées ne figurent pas dans cet email.",
-      `Consulter et répondre : ${input.adminUrl ?? "https://drahmedbenlallahom.com/admin"} (onglet « Questions santé »).`,
+      `Consulter et répondre : ${input.adminUrl ?? adminLink("medicalQuestions", input.trackingId)} (onglet « Questions santé »).`,
     ].join("\n"),
   };
 }

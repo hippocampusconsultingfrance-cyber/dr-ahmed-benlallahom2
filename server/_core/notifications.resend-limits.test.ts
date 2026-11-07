@@ -107,7 +107,7 @@ describe("limite de débit Resend (429 rate_limit_exceeded) : échec passager", 
     await expect(delivery).resolves.toBeUndefined();
 
     expect(state.send).toHaveBeenCalledTimes(2);
-    expect(state.send.mock.calls[1][0]).toMatchObject({ subject: "Nouvelle réservation payée : Patient Test - 100 €" });
+    expect(state.send.mock.calls[1][0]).toMatchObject({ subject: "[APTLIMIT0001] Réservation payée 100 € – Patient Test" });
     expect(state.send.mock.calls.map(call => call[1])).toEqual([{ idempotencyKey: "appointment-owner-APTLIMIT0001" }, { idempotencyKey: "appointment-owner-APTLIMIT0001" }]);
   });
 

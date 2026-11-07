@@ -14,15 +14,16 @@ import { improveMedicalAnswerDraft } from "./medicalQuestionAssistant";
 import { notifyOwner } from "./_core/notification";
 import { buildMedicalQuestionOwnerNotification, sendMedicalQuestionAcknowledgementEmail, sendMedicalQuestionResponseEmail } from "./medicalQuestionEmails";
 import { adminSearchCondition, adminSearchInput } from "./adminSearch";
-
-const PUBLIC_APP_ORIGIN = process.env.PUBLIC_APP_ORIGIN || "https://drahmedbenlallahom.com";
+import { adminLink } from "./adminLinks";
+import { multiLineText, singleLineText } from "../shared/textInput";
 
 const privateQuestionInput = z.object({
-  firstName: z.string().trim().min(1).max(120),
-  lastName: z.string().trim().min(1).max(120),
+  // INTL-05: no control character nor reversal of the text's direction.
+  firstName: singleLineText(z.string().min(1).max(120)),
+  lastName: singleLineText(z.string().min(1).max(120)),
   email: z.string().trim().email().max(320),
-  phone: z.string().trim().min(5).max(50),
-  question: z.string().trim().min(30).max(3000),
+  phone: singleLineText(z.string().min(5).max(50)),
+  question: multiLineText(z.string().min(30).max(3000)),
   language: z.enum(["fr", "en", "de", "zh"]).default("fr"),
   privacyConsent: z.literal(true),
   // Separate and optional: answering never depends on accepting publication.
@@ -180,7 +181,7 @@ export const medicalQuestionsRouter = router({
       return { trackingId, acknowledgementSent: false };
     }
     const [ownerNotified, acknowledged] = await Promise.all([
-      notifyOwner(buildMedicalQuestionOwnerNotification({ trackingId, language: input.language, publicationConsent: input.publicationConsent, adminUrl: `${PUBLIC_APP_ORIGIN}/admin` })).catch(() => false),
+      notifyOwner(buildMedicalQuestionOwnerNotification({ trackingId, language: input.language, publicationConsent: input.publicationConsent, adminUrl: adminLink("medicalQuestions", trackingId) })).catch(() => false),
       sendMedicalQuestionAcknowledgementEmail({ email: input.email, firstName: input.firstName, trackingId, language: input.language }).then(() => true, () => false),
     ]);
     await auditQuestion({ questionId, action: acknowledged ? "acknowledgement_sent" : "acknowledgement_failed", metadata: { ownerNotified } }).catch(() => undefined);

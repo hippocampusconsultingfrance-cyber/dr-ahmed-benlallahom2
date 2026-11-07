@@ -5,16 +5,20 @@ import { notifyOwner } from "../_core/notification";
 import { sql } from "drizzle-orm";
 import { countPublicFormDailyVolume, releasePublicEmailIpRateLimit } from "../publicFormRateLimit";
 import { enforcePublicFormRateLimit, verifyPublicFormTurnstile, enforcePublicFormIpLimit, createPublicTrackingId } from "./publicForms";
+import { multiLineText, singleLineText } from "../../shared/textInput";
+import { adminLink } from "../adminLinks";
 
 export const gdprRouter = router({
   submit: publicProcedure
     .input(
       z.object({
-        name: z.string().min(1, "Le nom est requis").max(255),
+        // INTL-05 : sans caractère de contrôle ni inversion du sens du texte.
+        name: singleLineText(z.string().min(1, "Le nom est requis").max(255)),
         email: z.string().email("Email invalide").max(320),
-        phone: z.string().max(50).optional(),
+        phone: singleLineText(z.string().max(50)).optional(),
         requestType: z.enum(["access", "rectification", "deletion", "portability", "objection"]),
-        description: z.string().min(1, "La description est requise").max(5000).optional(),
+        // Facultative : une description faite d’espaces seuls est gardée vide, la demande n’est pas refusée.
+        description: multiLineText(z.string().max(5000)).optional(),
         turnstileToken: z.string().min(20).max(4096).optional(),
       })
     )
@@ -54,8 +58,11 @@ export const gdprRouter = router({
       // ABUS-01 : au-delà du volume du jour, la demande est gardée sans email au propriétaire.
       if (await countPublicFormDailyVolume("gdpr")) {
         await notifyOwner({
-          title: `Nouvelle demande RGPD de ${input.name} (${trackingId})`,
-          content: `**Numéro de suivi:** ${trackingId}\n**Type de demande:** ${requestTypeLabels[input.requestType]}\n**De:** ${input.name}\n**Email:** ${input.email}\n**Téléphone:** ${input.phone || "Non renseigné"}\n\n**Description:**\n${input.description || "Aucune description fournie"}`,
+          // INTL-11 : « [G…] Demande RGPD – Nom », la référence d’abord.
+          reference: trackingId,
+          title: "Demande RGPD",
+          name: input.name,
+          content: `**Numéro de suivi:** ${trackingId}\n**Type de demande:** ${requestTypeLabels[input.requestType]}\n**De:** ${input.name}\n**Email:** ${input.email}\n**Téléphone:** ${input.phone || "Non renseigné"}\n\n**Description:**\n${input.description || "Aucune description fournie"}\n\n**Ouvrir la demande:** ${adminLink("gdpr", trackingId)}`,
         });
       }
 

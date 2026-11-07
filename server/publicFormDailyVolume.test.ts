@@ -131,7 +131,7 @@ describe("seuil quotidien global : demandes gardées, effets coûteux coupés (A
   it("garde les messages de contact au-delà du seuil, sans email pour chacun, avec une seule alerte groupée", async () => {
     const threshold = PUBLIC_FORM_DAILY_VOLUME_THRESHOLDS.contact;
     for (let index = 1; index <= threshold; index += 1) await caller(null).contact.submit(contactMessage(`visiteur${index}@test.local`));
-    expect(ownerTitles().filter(title => title.startsWith("Nouveau message de contact"))).toHaveLength(threshold);
+    expect(ownerTitles().filter(title => title === "Contact")).toHaveLength(threshold);
     vi.mocked(notifyOwner).mockClear();
 
     await expect(caller(null).contact.submit(contactMessage("au-dela1@test.local"))).resolves.toMatchObject({ success: true });
@@ -160,7 +160,7 @@ describe("seuil quotidien global : demandes gardées, effets coûteux coupés (A
 
     expect(ownerTitles()).toEqual([
       `Volume inhabituel : plus de ${threshold} demandes RGPD en 24 heures`,
-      expect.stringMatching(/^Nouveau message de contact/),
+      "Contact",
     ]);
   });
 

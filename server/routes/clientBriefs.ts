@@ -4,25 +4,28 @@ import { z } from "zod";
 import { notifyOwner } from "../_core/notification";
 import { secureReference } from "../_core/secureReference";
 import { SITE_LANGUAGES } from "../emailLanguage";
-import { PUBLIC_APP_ORIGIN, safeErrorName } from "./routeHelpers";
+import { multiLineText, refusesTextInputCharacters, singleLineText, TEXT_INPUT_INVALID_CHARACTERS, TEXT_INPUT_INVALID_CHARACTERS_MESSAGE } from "../../shared/textInput";
+import { safeErrorName } from "./routeHelpers";
 
 /**
  * Employer brief form (public, JSON body). A refusal of the limits or of an
  * unavailable service carries a stable code (rate_limited,
- * service_unavailable) that the page translates (REC-12).
+ * service_unavailable) that the page translates (REC-12); a field refused
+ * for its characters, the code invalid_characters (INTL-05).
  */
 export function registerClientBriefRoute(app: Express) {
+  // INTL-05: no control character nor reversal of the text's direction.
   const clientBriefSchema = z.object({
-    organizationName: z.string().trim().min(1).max(180),
-    contactName: z.string().trim().min(1).max(120),
+    organizationName: singleLineText(z.string().min(1).max(180)),
+    contactName: singleLineText(z.string().min(1).max(120)),
     email: z.string().trim().email().max(320),
-    phone: z.string().trim().max(50).optional().default(""),
-    targetEnvironment: z.string().trim().min(1).max(120),
-    specialtyNeeded: z.string().trim().min(1).max(160),
-    country: z.string().trim().min(1).max(100),
-    requiredCertifications: z.string().trim().max(1000).optional().default(""),
-    timeline: z.string().trim().max(100).optional().default(""),
-    notes: z.string().trim().max(3000).optional().default(""),
+    phone: singleLineText(z.string().max(50)).optional().default(""),
+    targetEnvironment: singleLineText(z.string().min(1).max(120)),
+    specialtyNeeded: singleLineText(z.string().min(1).max(160)),
+    country: singleLineText(z.string().min(1).max(100)),
+    requiredCertifications: multiLineText(z.string().max(1000)).optional().default(""),
+    timeline: singleLineText(z.string().max(100)).optional().default(""),
+    notes: multiLineText(z.string().max(3000)).optional().default(""),
     website: z.string().max(200).optional().default(""),
     // Language of the page: that of the acknowledgement (REC-12). Not stored.
     language: z.enum(SITE_LANGUAGES).optional(),
@@ -32,6 +35,10 @@ export function registerClientBriefRoute(app: Express) {
     try {
       const parsed = clientBriefSchema.safeParse(req.body);
       if (!parsed.success) {
+        if (refusesTextInputCharacters(parsed.error)) {
+          res.status(400).json({ error: TEXT_INPUT_INVALID_CHARACTERS_MESSAGE, code: TEXT_INPUT_INVALID_CHARACTERS });
+          return;
+        }
         res.status(400).json({ error: "Les informations du brief sont invalides." });
         return;
       }
@@ -81,7 +88,7 @@ export function registerClientBriefRoute(app: Express) {
       try {
         const { buildClientBriefOwnerNotification } = await import("../clientBriefNotification");
         // « Répondre » écrit à l’employeur, et non plus au propriétaire lui-même (PUB-09).
-        await notifyOwner({ ...buildClientBriefOwnerNotification({ briefId, ...parsed.data, adminUrl: `${PUBLIC_APP_ORIGIN}/admin` }), replyTo: parsed.data.email });
+        await notifyOwner({ ...buildClientBriefOwnerNotification({ briefId, ...parsed.data }), replyTo: parsed.data.email });
       } catch {
         // notification fail non bloquante
       }
