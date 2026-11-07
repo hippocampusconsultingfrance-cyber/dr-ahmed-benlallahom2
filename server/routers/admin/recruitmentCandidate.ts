@@ -15,7 +15,7 @@ import {
 } from "../../../drizzle/schema";
 import { and, eq, sql, desc, getTableColumns, inArray } from "drizzle-orm";
 import { sendCandidatePortalAccessEmail, candidatePortalAccessEmailFailureCode } from "../../_core/notifications";
-import { logRecruitmentAction, recruitmentAuditInsert } from "../../recruitmentAudit";
+import { recordWithRecruitmentAudit, recruitmentAuditInsert, traceRecruitmentActionDone } from "../../recruitmentAudit";
 import { analysedCertificationNames, CERTIFICATION_NAME_MAX_LENGTH, certificationFacts, declaredCertificationNames, sameRecruitmentFact } from "../../clientBriefMatching";
 import { certificationDateIsCurrent, latestCertificationRenewalDay, CERTIFICATION_RENEWAL_MAX_YEARS } from "../../../shared/recruitmentFactOrigins";
 import { createCandidateInvitationToken } from "../../candidateAuth";
@@ -87,13 +87,12 @@ export const adminRecruitmentCandidateRouter = router({
         providerEmailId: null,
         failureCode,
       }, { localEventId: randomUUID() }));
-      await logRecruitmentAction({ applicationId: application.id, adminOpenId: ctx.user.openId, action: "email", metadata: { template: "candidate_portal_invitation", outcome: failureCode === "delivery_exception" ? "unknown" : "failed", trackingId: application.trackingId, attempt: invitationAttempt, ...(uncertain ? { forced: true } : {}) } });
-      throw new TRPCError({
-        code: "INTERNAL_SERVER_ERROR",
-        message: failureCode === "delivery_exception"
-          ? `La livraison de l’invitation est incertaine. Vérifiez son suivi avant tout nouvel envoi pour éviter un doublon ; « Renvoyer quand même » sera proposé dans ${CANDIDATE_INVITATION_FORCED_RESEND_DELAY_MS / 60_000} minutes.`
-          : "L’invitation a été refusée par le service d’envoi. L’échec est enregistré pour reprise.",
-      });
+      const message = failureCode === "delivery_exception"
+        ? `La livraison de l’invitation est incertaine. Vérifiez son suivi avant tout nouvel envoi pour éviter un doublon ; « Renvoyer quand même » sera proposé dans ${CANDIDATE_INVITATION_FORCED_RESEND_DELAY_MS / 60_000} minutes.`
+        : "L’invitation a été refusée par le service d’envoi. L’échec est enregistré pour reprise.";
+      // Its audit line refused, the admin is told what became of the invitation all the same (DATA-01).
+      await traceRecruitmentActionDone([{ applicationId: application.id, adminOpenId: ctx.user.openId, action: "email", metadata: { template: "candidate_portal_invitation", outcome: failureCode === "delivery_exception" ? "unknown" : "failed", trackingId: application.trackingId, attempt: invitationAttempt, ...(uncertain ? { forced: true } : {}) } }], message);
+      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message });
     }
     const invitationEvent = buildCandidatePortalInvitationEmailEvent({
       applicationId: application.id,
@@ -110,7 +109,7 @@ export const adminRecruitmentCandidateRouter = router({
       .where(eq(recruitmentEmailEvents.providerEventId, invitationEvent.providerEventId))
       .limit(1);
     if (!existingInvitationEvent) await db.insert(recruitmentEmailEvents).values(invitationEvent);
-    await logRecruitmentAction({ applicationId: application.id, adminOpenId: ctx.user.openId, action: "email", metadata: { template: "candidate_portal_invitation", resendId: result.id, trackingId: application.trackingId, attempt: invitationAttempt, ...(uncertain ? { forced: true } : {}) } });
+    await traceRecruitmentActionDone([{ applicationId: application.id, adminOpenId: ctx.user.openId, action: "email", metadata: { template: "candidate_portal_invitation", resendId: result.id, trackingId: application.trackingId, attempt: invitationAttempt, ...(uncertain ? { forced: true } : {}) } }], "L’invitation est envoyée.");
     return { success: true };
   }),
   detail: adminProcedure.input(z.object({ id: z.number().int().positive() })).query(async ({ input }) => {
@@ -241,8 +240,9 @@ export const adminRecruitmentCandidateRouter = router({
     const db = await getDb();
     if (!db) throw new Error("Database connection failed");
     const responseAt = new Date();
-    await db.update(cvApplications).set({ lastCandidateResponseAt: responseAt, updatedAt: responseAt }).where(eq(cvApplications.id, input.id));
-    await logRecruitmentAction({ applicationId: input.id, adminOpenId: ctx.user.openId, action: "status_update", metadata: { event: "candidate_response", note: input.note || null } });
+    // With its audit line, both or neither (DATA-01).
+    await recordWithRecruitmentAudit(db, db.update(cvApplications).set({ lastCandidateResponseAt: responseAt, updatedAt: responseAt }).where(eq(cvApplications.id, input.id)),
+      [{ applicationId: input.id, adminOpenId: ctx.user.openId, action: "status_update", metadata: { event: "candidate_response", note: input.note || null } }]);
     return { success: true, responseAt };
   }),
 });
@@ -272,14 +272,14 @@ export const adminRecruitmentFollowUpsRouter = router({
     if (!db) throw new Error("Database connection failed");
     const [task] = await db.select().from(recruitmentFollowUpTasks).where(eq(recruitmentFollowUpTasks.id, input.id)).limit(1);
     if (!task) throw new TRPCError({ code: "NOT_FOUND", message: "Relance introuvable" });
-    await db.update(recruitmentFollowUpTasks).set({
+    // With its audit line, both or neither (DATA-01).
+    await recordWithRecruitmentAudit(db, db.update(recruitmentFollowUpTasks).set({
       status: input.status,
       notes: input.notes ?? task.notes,
       completedAt: input.status === "suggested" ? null : new Date(),
       completedByOpenId: input.status === "suggested" ? null : ctx.user.openId,
       updatedAt: new Date(),
-    }).where(eq(recruitmentFollowUpTasks.id, input.id));
-    await logRecruitmentAction({ applicationId: task.applicationId, adminOpenId: ctx.user.openId, action: "status_update", metadata: { event: "follow_up", taskId: task.id, status: input.status } });
+    }).where(eq(recruitmentFollowUpTasks.id, input.id)), [{ applicationId: task.applicationId, adminOpenId: ctx.user.openId, action: "status_update", metadata: { event: "follow_up", taskId: task.id, status: input.status } }]);
     return { success: true };
   }),
   // ADM-13: « Marquer traitée » or « Ignorer » for the follow-ups selected in

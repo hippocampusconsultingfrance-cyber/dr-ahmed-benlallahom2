@@ -49,6 +49,19 @@ describe("langues du recrutement comparées par code (IA-02)", () => {
     expect(meetsRequiredLanguage(["English - polished"], polish!)).toBe(false);
   });
 
+  it("reconnaît l’hébreu sous chacun de ses noms et les adjectifs qui nomment une langue, pas les lieux qu’ils nomment aussi (IA-02)", () => {
+    for (const name of ["hébraïque", "Hébraïque", "langue hébraïque", "études hébraïques", "hébreu", "Hébreux", "Hebrew", "Hebräisch", "Hebräische", "希伯来语", "希伯来文", "עברית"]) {
+      expect(recruitmentLanguageCodes(name), name).toEqual(["he"]);
+    }
+    for (const [name, code] of [["langue arabique", "ar"], ["Persique", "fa"], ["langue hellénique", "el"], ["Hollandais", "nl"], ["hollandaise", "nl"]] as const) {
+      expect(recruitmentLanguageCodes(name), name).toEqual([code]);
+    }
+    for (const text of ["golfe Persique", "Golfe-Persique", "pays du Golfe arabo-persique", "péninsule arabique", "Golfe arabique", "gomme arabique", "République hellénique"]) expect(recruitmentLanguageCodes(text), text).toEqual([]);
+    const [hebrew] = recruitmentLanguageRequirements("Hébreu");
+    expect(meetsRequiredLanguage(["Langue hébraïque"], hebrew!)).toBe(true);
+    expect(meetsRequiredLanguage(["Hebrew"], recruitmentLanguageRequirements("hébraïque")[0]!)).toBe(true);
+  });
+
   it("ne lit que les flexions d’une langue, pas un pays ni une ville qui commence comme elle, ni un hôtel (IA-02)", () => {
     // The feminine and plural forms of the French names, turque included.
     for (const [text, code] of [["turque", "tr"], ["Turques", "tr"], ["Turcs", "tr"], ["grecque", "el"], ["langue grecque", "el"], ["Hébreux", "he"], ["coréenne", "ko"], ["Allemande", "de"]] as const) {
@@ -83,6 +96,29 @@ describe("langues du recrutement comparées par code (IA-02)", () => {
     // A Chinese conjunction separates two names only: 及 is also the second character of 埃及, Egypt.
     expect(recruitmentLanguageRequirements("埃及阿拉伯语")).toEqual([{ text: "埃及阿拉伯语", codes: ["ar"], anyOf: [] }]);
     expect(recruitmentLanguageRequirements("英语及阿拉伯语").map(requirement => requirement.codes)).toEqual([["en"], ["ar"]]);
+  });
+
+  it("sépare deux langues à un tiret entre espaces, demi-cadratin ou cadratin, pas à un trait d’union ni avant un niveau (IA-02)", () => {
+    for (const required of ["Anglais - Arabe", "Anglais – Arabe", "Anglais — Arabe", "Anglais–Arabe", "Anglais\u00a0-\u00a0Arabe", "English - Arabic", "Anglais (C1) – Arabe (notions)"]) {
+      expect(recruitmentLanguageRequirements(required).map(requirement => requirement.codes), required).toEqual([["en"], ["ar"]]);
+    }
+    expect(recruitmentLanguageRequirements("Français - Anglais - Arabe").map(requirement => requirement.text)).toEqual(["Français", "Anglais", "Arabe"]);
+    // As with « / », a candidate who has one of them meets one requirement of the two.
+    const requirements = recruitmentLanguageRequirements("Anglais - Arabe");
+    expect(requirements.map(requirement => meetsRequiredLanguage(["English"], requirement))).toEqual([true, false]);
+    // A hyphen within a name, a level after a dash: one requirement.
+    expect(recruitmentLanguageRequirements("serbo-croate")).toEqual([{ text: "serbo-croate", codes: [], anyOf: [] }]);
+    expect(recruitmentLanguageRequirements("Anglais - courant")).toEqual([{ text: "Anglais - courant", codes: ["en"], anyOf: [] }]);
+    expect(recruitmentLanguageRequirements("Arabe – langue maternelle")).toEqual([{ text: "Arabe – langue maternelle", codes: ["ar"], anyOf: [] }]);
+    // A level between two dashes stays with the language before it, as « Anglais - Arabe courant » does.
+    for (const [required, texts] of [
+      ["Anglais - Arabe - courant", ["Anglais", "Arabe - courant"]],
+      ["Anglais - C1 - Arabe", ["Anglais - C1", "Arabe"]],
+      ["Anglais - Arabe courant", ["Anglais", "Arabe courant"]],
+      ["埃及阿拉伯语和英语", ["埃及阿拉伯语", "英语"]],
+    ] as const) {
+      expect(recruitmentLanguageRequirements(required).map(requirement => requirement.text), required).toEqual(texts);
+    }
   });
 
   it("lit une exigence qui laisse le choix comme une seule, tenue par l’une de ses langues (IA-02)", () => {

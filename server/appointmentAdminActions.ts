@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { appointments } from "../drizzle/schema";
 import { getDb } from "./db";
 import { mutationRowCount } from "./dbMutation";
+import { securityEventInsert } from "./candidateSecurity";
 import { archiveIssuedAppointmentInvoice, closeUnsentAppointmentFulfillment, hasRefusedPatientEmail, sendAppointmentRefundEmail } from "./appointmentFulfillment";
 import { sendRefundConfirmationEmail, type RefundEmailContext } from "./_core/notifications";
 import { emailLanguageFor } from "./emailLanguage";
@@ -283,7 +284,7 @@ export async function refundUnconfirmedCheckoutSession(stripe: Stripe, input: { 
  * booking reduced to its accounting record (erasure or retention, RGPD-12):
  * its emptied address stays empty, even under a concurrent erasure.
  */
-export async function updateAppointmentCustomerEmailByAdmin(input: { trackingId: string; customerEmail: string }, now = new Date()) {
+export async function updateAppointmentCustomerEmailByAdmin(input: { trackingId: string; customerEmail: string; actorOpenId: string }, now = new Date()) {
   const db = await database();
   const appointment = await loadAppointment(input.trackingId);
   if (!appointment.customerEmail.trim()) {
@@ -307,8 +308,15 @@ export async function updateAppointmentCustomerEmailByAdmin(input: { trackingId:
         : "ne répond pas pour l’instant. Réessayez quand le stockage répond."}`,
     });
   }
-  const result = await db.update(appointments).set({ customerEmail: input.customerEmail, updatedAt: now })
-    .where(and(eq(appointments.id, appointment.id), eq(appointments.customerEmail, appointment.customerEmail)));
+  // The new address and its trace in the security journal, without the
+  // addresses, in one batch (DATA-01): when the database refuses the trace,
+  // the address is not corrected either. Only a booking changed in between
+  // keeps the trace of the attempt, refused below.
+  const [result] = await db.batch([
+    db.update(appointments).set({ customerEmail: input.customerEmail, updatedAt: now })
+      .where(and(eq(appointments.id, appointment.id), eq(appointments.customerEmail, appointment.customerEmail))),
+    securityEventInsert(db, { actorKind: "admin", actorReference: input.actorOpenId, category: "admin_appointment_email_corrected", outcome: "allowed", metadata: { trackingId: input.trackingId } }),
+  ]);
   if (mutationRowCount(result) !== 1) {
     throw new TRPCError({ code: "CONFLICT", message: "Le rendez-vous a été modifié entre-temps. Actualisez la liste." });
   }

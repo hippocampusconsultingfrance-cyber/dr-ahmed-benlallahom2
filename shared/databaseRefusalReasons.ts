@@ -12,3 +12,10 @@ export type DatabaseRefusalReason = (typeof DATABASE_REFUSAL_REASONS)[number];
 export function isDatabaseRefusalReason(value: unknown): value is DatabaseRefusalReason {
   return typeof value === "string" && (DATABASE_REFUSAL_REASONS as readonly string[]).includes(value);
 }
+
+/**
+ * Sent by the server when an action done elsewhere (an email sent, an analysis
+ * or a Google Drive copy started) stands but its audit line was refused
+ * (DATA-01): the screen shows it done, not to be done again.
+ */
+export const AUDIT_NOT_RECORDED_REASON = "audit_not_recorded";

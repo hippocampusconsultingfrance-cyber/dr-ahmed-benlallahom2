@@ -27,7 +27,7 @@ export const RECRUITMENT_LANGUAGES = [
   { code: "ro", names: { fr: "Roumain", en: "Romanian", de: "Rumänisch", zh: "罗马尼亚语" }, otherNames: ["Română", "羅馬尼亞語"] },
   { code: "el", names: { fr: "Grec", en: "Greek", de: "Griechisch", zh: "希腊语" }, otherNames: ["Ελληνικά", "希臘語"] },
   { code: "fa", names: { fr: "Persan", en: "Persian", de: "Persisch", zh: "波斯语" }, otherNames: ["Farsi", "فارسی", "波斯語"] },
-  { code: "he", names: { fr: "Hébreu", en: "Hebrew", de: "Hebräisch", zh: "希伯来语" }, otherNames: ["עברית", "希伯來語"] },
+  { code: "he", names: { fr: "Hébreu", en: "Hebrew", de: "Hebräisch", zh: "希伯来语" }, otherNames: ["עברית", "希伯來語", "希伯来文", "希伯來文"] },
   { code: "hi", names: { fr: "Hindi", en: "Hindi", de: "Hindi", zh: "印地语" }, otherNames: ["हिन्दी", "印地語"] },
   { code: "ur", names: { fr: "Ourdou", en: "Urdu", de: "Urdu", zh: "乌尔都语" }, otherNames: ["اردو", "烏爾都語"] },
   { code: "ja", names: { fr: "Japonais", en: "Japanese", de: "Japanisch", zh: "日语" }, otherNames: ["日本語", "日文"] },
@@ -35,6 +35,21 @@ export const RECRUITMENT_LANGUAGES = [
 ] as const;
 
 export type RecruitmentLanguageCode = (typeof RECRUITMENT_LANGUAGES)[number]["code"];
+
+/**
+ * The other French names of a language, inflected as its French name
+ * (« langue hébraïque », « études hébraïques »): the adjectives in -ique
+ * that name it (hébraïque, hellénique, arabique, persique) and « hollandais »
+ * for Dutch. The places they also name (golfe Persique, péninsule arabique)
+ * are among the texts below that name no language.
+ */
+const FRENCH_OTHER_NAMES: Partial<Record<RecruitmentLanguageCode, readonly string[]>> = {
+  ar: ["Arabique"],
+  nl: ["Hollandais"],
+  el: ["Hellénique"],
+  fa: ["Persique"],
+  he: ["Hébraïque"],
+};
 
 /** A text as the languages compare it: folded like the admin search (accents, Arabic harakat, ligatures), case aside. */
 const foldLanguageText = (text: string) => foldAdminSearchText(text).toLowerCase();
@@ -79,10 +94,17 @@ function nameForms(folded: string, writtenIn: string) {
  * like one (Grèce, Germany, Deutschland, Polska) end with no inflection of
  * its name.
  */
-const NOT_LANGUAGES = ["Émirats arabes", "Arabische Emirate", "الإمارات العربية", "المملكة العربية", "Mandarin Oriental"].map(foldLanguageText);
+const NOT_LANGUAGES = [
+  "Émirats arabes", "Arabische Emirate", "الإمارات العربية", "المملكة العربية", "Mandarin Oriental",
+  "golfe Persique", "golfe-Persique", "golfe arabo-persique", "golfe Arabique", "péninsule Arabique", "gomme arabique", "République hellénique",
+].map(foldLanguageText);
 
 const LANGUAGE_NAMES = RECRUITMENT_LANGUAGES.flatMap(language =>
-  [...Object.entries(language.names), ...language.otherNames.map(name => ["other", name] as const)].map(([writtenIn, name]) => {
+  [
+    ...Object.entries(language.names),
+    ...(FRENCH_OTHER_NAMES[language.code] ?? []).map(name => ["fr", name] as const),
+    ...language.otherNames.map(name => ["other", name] as const),
+  ].map(([writtenIn, name]) => {
     const folded = foldLanguageText(name);
     return { code: language.code as RecruitmentLanguageCode, folded, atWordStart: SPACED_SCRIPT.test(folded), forms: nameForms(folded, writtenIn) };
   }),
@@ -174,6 +196,14 @@ export type RecruitmentLanguageRequirement = { text: string; codes: readonly Rec
 const REQUIREMENT_SEPARATOR = new RegExp("[,;/+&|\\n、，；／＋＆]|\\s(?:et|and|und|y|e)\\s", "giu");
 /** A conjunction between two Chinese names (« 英语和阿拉伯语 »), that may also be a character of one (埃及, Egypt, in « 埃及阿拉伯语 »). */
 const CHINESE_CONJUNCTION = new RegExp("[和及与與]", "gu");
+/**
+ * A dash between two names (« Anglais - Arabe », « Anglais – Arabe »), that
+ * may also introduce a level (« Anglais - courant »): a hyphen or minus sign
+ * between spaces, an en or em dash. Not a hyphen within a word (« serbo-croate »).
+ */
+const DASH = new RegExp("\\s[-\u2010\u2011\u2212]+\\s|[\u2012-\u2015]", "gu");
+/** What separates two languages only when each side names one. */
+const BETWEEN_NAMES = new RegExp(`${CHINESE_CONJUNCTION.source}|${DASH.source}`, "gu");
 /** What makes a required text an alternative: « ou », « or », « oder », « o », « et/ou », « and/or », « 或 ». */
 const ALTERNATIVE = new RegExp("(?:^|[\\s/／])(?:ou|or|oder|o)(?=[\\s/／]|$)|或", "iu");
 /** What separates the languages of an alternative: a separator above, « ou », « or », « oder », « o », « 或 », « 或者 »… */
@@ -183,6 +213,26 @@ const OPTION_CONNECTOR = new RegExp("^(?:et|and|und|y|e|ou|or|oder|o)\\s+|\\s+(?
 
 /** The required texts already split, as the compared texts above. */
 const READ_REQUIREMENTS = new Map<string, readonly RecruitmentLanguageRequirement[]>();
+
+/**
+ * The parts of a text at a Chinese conjunction or a dash, each that names a
+ * language with the parts after it that name none (a level: « Anglais - C1
+ * - Arabe » is « Anglais - C1 » and « Arabe »), and the parts before the
+ * first one that names one with it (埃 in 埃及阿拉伯语, Egyptian Arabic).
+ */
+function partsBetweenNames(text: string) {
+  const groups: Array<{ start: number; end: number; names: boolean }> = [];
+  let cursor = 0;
+  for (const part of partsOutsideBrackets(text, BETWEEN_NAMES)) {
+    const start = text.indexOf(part, cursor);
+    cursor = start + part.length;
+    const names = recruitmentLanguageCodes(part).length > 0;
+    const last = groups.at(-1);
+    if (last && (!names || !last.names)) Object.assign(last, { end: cursor, names: names || last.names });
+    else groups.push({ start, end: cursor, names });
+  }
+  return groups.map(({ start, end }) => text.slice(start, end));
+}
 
 /** The parts of a text between the separators found outside its brackets, each trimmed, those with a letter or a digit. */
 function partsOutsideBrackets(text: string, separator: RegExp) {
@@ -201,13 +251,14 @@ function partsOutsideBrackets(text: string, separator: RegExp) {
 /**
  * The languages a required text names, each a requirement of its own
  * (« Anglais/Arabe », « anglais et arabe », « Englisch und Arabisch »,
- * « 英语和阿拉伯语 »: two), so that the matching profiles, the missions and
- * the Langue filter count them alike. Not split inside brackets (« Anglais
- * (C1/C2) » is one), nor at a Chinese conjunction unless each side names a
- * language. A part that names several languages without a separator
- * (« anglais arabe ») requires them all; a text that offers a choice
- * (« Anglais ou arabe », « anglais et/ou arabe ») is one requirement, met by
- * any of its languages.
+ * « Anglais - Arabe », « 英语和阿拉伯语 »: two), so that the matching
+ * profiles, the missions and the Langue filter count them alike. Not split
+ * inside brackets (« Anglais (C1/C2) » is one), nor at a Chinese conjunction
+ * or a dash before a part that names no language (« Anglais - courant » is
+ * one). A part that names several languages without a separator (« anglais
+ * arabe ») requires them all; a text that offers a choice (« Anglais ou
+ * arabe », « anglais et/ou arabe ») is one requirement, met by any of its
+ * languages.
  */
 export function recruitmentLanguageRequirements(required: string): readonly RecruitmentLanguageRequirement[] {
   // A profile reads its requirements again for each of its 10 000 dossiers: each text is split once.
@@ -219,10 +270,8 @@ export function recruitmentLanguageRequirements(required: string): readonly Recr
     const anyOf = partsOutsideBrackets(text, OPTION_SEPARATOR).map(option => option.replace(OPTION_CONNECTOR, "")).filter(option => LETTER_OR_DIGIT.test(option));
     requirements = anyOf.length ? [{ text, codes: recruitmentLanguageCodes(text), anyOf }] : [];
   } else {
-    requirements = partsOutsideBrackets(required, REQUIREMENT_SEPARATOR).flatMap(part => {
-      const named = partsOutsideBrackets(part, CHINESE_CONJUNCTION);
-      return named.length > 1 && named.every(name => recruitmentLanguageCodes(name).length) ? named : [part];
-    }).map(text => ({ text, codes: recruitmentLanguageCodes(text), anyOf: [] }));
+    requirements = partsOutsideBrackets(required, REQUIREMENT_SEPARATOR).flatMap(partsBetweenNames)
+      .map(text => ({ text, codes: recruitmentLanguageCodes(text), anyOf: [] }));
   }
   if (required.length <= COMPARED_TEXT_MAX_LENGTH) {
     if (READ_REQUIREMENTS.size >= COMPARED_TEXTS_LIMIT) READ_REQUIREMENTS.clear();

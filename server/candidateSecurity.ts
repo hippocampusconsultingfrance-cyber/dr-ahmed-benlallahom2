@@ -22,7 +22,7 @@ export function requestIpHash(headers: Record<string, unknown>): string | null {
   return ip ? hashSecurityValue(ip) : null;
 }
 
-export async function logSecurityEvent(input: {
+type SecurityEvent = {
   actorKind: "candidate" | "admin" | "anonymous" | "system";
   actorReference?: string | null;
   category: string;
@@ -30,19 +30,30 @@ export async function logSecurityEvent(input: {
   severity?: "info" | "warning" | "high" | "critical";
   ipHash?: string | null;
   metadata?: Record<string, unknown>;
-}) {
-  const db = await getDb();
-  if (!db) return;
-  const category = input.category.slice(0, 100);
-  await db.insert(securityEvents).values({
+};
+
+/**
+ * The insert of this event, not yet sent: for a db.batch that writes it with
+ * the change it traces (an admin's deletion), both or neither (DATA-01). It
+ * sends no alert: for an event allowed, which none is sent for.
+ */
+export function securityEventInsert(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, input: SecurityEvent) {
+  return db.insert(securityEvents).values({
     actorKind: input.actorKind,
     actorReference: input.actorReference ?? null,
-    category,
+    category: input.category.slice(0, 100),
     outcome: input.outcome,
     severity: input.severity ?? "info",
     ipHash: input.ipHash ?? null,
     metadata: input.metadata ? JSON.stringify(input.metadata) : null,
   });
+}
+
+export async function logSecurityEvent(input: SecurityEvent) {
+  const db = await getDb();
+  if (!db) return;
+  const category = input.category.slice(0, 100);
+  await securityEventInsert(db, input);
   if ((input.severity === "high" || input.severity === "critical") && input.outcome !== "allowed") {
     await notifyOwnerOfSecurityAlert({ ...input, category }).catch((error: unknown) => {
       console.error("security_alert_notification_failed", error instanceof Error ? error.name : "UnknownError");

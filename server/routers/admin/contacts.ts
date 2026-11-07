@@ -5,7 +5,7 @@ import { getDb } from "../../db";
 import { mutationRowCount } from "../../dbMutation";
 import { contactMessages } from "../../../drizzle/schema";
 import { eq, and, sql, desc } from "drizzle-orm";
-import { logSecurityEvent } from "../../candidateSecurity";
+import { securityEventInsert } from "../../candidateSecurity";
 import { adminSearchCondition, adminSearchInput } from "../../adminSearch";
 
 // List all contact messages
@@ -67,9 +67,15 @@ export const adminContactsRouter = router({
       const db = await getDb();
       if (!db) throw new Error("Database connection failed");
 
-      const deleted = mutationRowCount(await db.delete(contactMessages).where(eq(contactMessages.id, input.id)));
-      if (deleted === 0) throw new TRPCError({ code: "NOT_FOUND", message: "Message introuvable : il a peut-être déjà été supprimé." });
-      await logSecurityEvent({ actorKind: "admin", actorReference: ctx.user.openId, category: "admin_contact_message_deleted", outcome: "allowed", metadata: { deleted } });
+      const notFound = () => new TRPCError({ code: "NOT_FOUND", message: "Message introuvable : il a peut-être déjà été supprimé." });
+      const [message] = await db.select({ id: contactMessages.id }).from(contactMessages).where(eq(contactMessages.id, input.id)).limit(1);
+      if (!message) throw notFound();
+      // Deleted with its trace, both or neither (DATA-01).
+      const [deletion] = await db.batch([
+        db.delete(contactMessages).where(eq(contactMessages.id, input.id)),
+        securityEventInsert(db, { actorKind: "admin", actorReference: ctx.user.openId, category: "admin_contact_message_deleted", outcome: "allowed", metadata: { deleted: 1 } }),
+      ]);
+      if (mutationRowCount(deletion) === 0) throw notFound();
 
       return { success: true };
     }),

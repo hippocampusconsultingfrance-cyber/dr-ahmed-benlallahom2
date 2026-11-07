@@ -1,7 +1,11 @@
-import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { existsSync, readdirSync, realpathSync } from "node:fs";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+import os from "node:os";
 import path from "node:path";
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
+import { createVitest, parseCLI } from "vitest/node";
 
 const root = process.cwd();
 const read = (relative: string) => readFile(path.join(root, relative), "utf8");
@@ -43,9 +47,10 @@ function yamlValue(value: string) {
  * among the dependencies): `- ` opens a step at the steps' indentation, each
  * `key: value` below it is one of its keys (read without its YAML quotes), and a
  * block scalar (`run: |`, `run: >-`, `if: |+`…) keeps every more indented line
- * that follows. Only `with:` and `env:` may hold more indented lines of their own. A line this
- * layout does not explain, such as a value carried on to a more indented line,
- * fails the test rather than being skipped.
+ * that follows. Only `with:` and `env:` may hold more indented lines of their own,
+ * each `key: value` one of its entries, kept as the step's key `with.<key>` or
+ * `env.<key>`. A line this layout does not explain, such as a value carried on to
+ * a more indented line, fails the test rather than being skipped.
  */
 function jobSteps(workflow: string, job: string): Step[] {
   const lines = workflow.split("\n");
@@ -58,8 +63,8 @@ function jobSteps(workflow: string, job: string): Step[] {
   const steps: Step[] = [];
   const blocks: BlockScalar[] = [];
   let block: BlockScalar | null = null;
-  // The last key read holds a mapping (`with:`, `env:`) on the more indented lines.
-  let mapping = false;
+  // The mapping the last key read opens (`with:`, `env:`), whose entries are on the more indented lines.
+  let mapping: string | null = null;
   for (const line of body.slice(stepsAt + 1)) {
     const indent = line.search(/\S/);
     if (block && (indent < 0 || indent > 8)) {
@@ -72,13 +77,16 @@ function jobSteps(workflow: string, job: string): Step[] {
     if (indent <= 4) break;
     const entry = /^ {6}(- | {2})([\w-]+):\s?(.*)$/.exec(line);
     if (!entry) {
-      if (mapping && indent > 8) continue;
-      throw new Error(`ci.yml: unexpected line in ${job}: ${line}`);
+      const item = mapping ? /^ {10}([\w-]+):\s?(.*)$/.exec(line) : null;
+      if (!item) throw new Error(`ci.yml: unexpected line in ${job}: ${line}`);
+      steps.at(-1)!.keys[`${mapping}.${item[1]}`] = yamlValue(item[2]!);
+      continue;
     }
     const [, marker, key, value] = entry;
     if (marker === "- ") steps.push({ name: "", keys: {}, run: "" });
     const step = steps.at(-1)!;
-    mapping = value === "" && (key === "with" || key === "env");
+    mapping = value === "" && (key === "with" || key === "env") ? key : null;
+    if (mapping) continue;
     step.keys[key] = yamlValue(value);
     if (BLOCK_SCALAR.test(value)) {
       block = { step, key, folded: value.startsWith(">"), lines: [] };
@@ -182,6 +190,9 @@ function unquoted(command: string) {
 
 type Silencer = { what: string; pattern: RegExp };
 
+/** A function's name before its body (`f()`, `function f`, `function f()`), read as `function`. */
+const FUNCTION_HEADER = /(?<![^\s;&|(){}])(?:function\s+[\w.:-]+(?:\s*\(\s*\))?|[\w.:-]+\s*\(\s*\))/g;
+
 /**
  * What lets a step pass under `bash -e` though one of its commands fails: bash does not
  * stop on a command tested by `||`, `&&`, `!`, `if`, `while` or `until`, nor wait for one
@@ -191,6 +202,9 @@ type Silencer = { what: string; pattern: RegExp };
  * condition, alone before its `then` or `do`, and an `&&` list only the step's last command,
  * whose status is the step's. A command given as quoted text (`eval`, `trap`, `bash -c`) is
  * refused, since quoted text is not read, and so is knip told to exit 0 whatever it finds.
+ * Nor may a command name run another program than its own: a function, called or not, an
+ * alias (`shopt -s expand_aliases; alias pnpm=true`), `hash -p /bin/true pnpm`, or a file
+ * sourced, which may define them, before `pnpm check`.
  */
 const STEP_SILENCERS: readonly Silencer[] = [
   { what: "||", pattern: /\|\|/ },
@@ -203,6 +217,7 @@ const STEP_SILENCERS: readonly Silencer[] = [
   { what: "$(…) outside an assignment", pattern: /^(?![ \t]*[A-Za-z_]\w*="?(?:\$\((?:[^$`();&|\n]|\$(?!\())*\)|`[^$`();&|\n]*`)"?[ \t]*$).*(?:\$\((?!\()|`)/m },
   { what: "eval, trap or sh -c", pattern: /\b(?:eval|trap|(?:ba|da|z)?sh\s+(?:[^\s;&|]+\s+)*?-[a-z]*c[a-z]*)\b/ },
   { what: "knip --no-exit-code or --max-issues", pattern: /\bknip\b[^;&|\n]*\s--(?:no-exit-code|max-issues)\b/ },
+  { what: "a function, an alias, hash -p or source", pattern: new RegExp(`${FUNCTION_HEADER.source}|(?:^|[;&|({]|\\b(?:then|do|else)\\b)\\s*(?:alias\\s|hash\\s+(?:-\\S+\\s+)*-[a-z]*p|(?:source|\\.)\\s)`, "m") },
 ];
 
 /**
@@ -247,9 +262,6 @@ function silencersIn(command: string, where: string, silencers: readonly Silence
 /** The words that open a construct whose commands may not run: a test's branches, a loop, a `case`. */
 const CONDITIONAL_CONSTRUCTS = new Set(["if", "while", "until", "for", "select", "case"]);
 
-/** A function's name before its body (`f()`, `function f`, `function f()`), read as `function`. */
-const FUNCTION_HEADER = /(?<![^\s;&|(){}])(?:function\s+[\w.:-]+(?:\s*\(\s*\))?|[\w.:-]+\s*\(\s*\))/g;
-
 /** A redirection, part of the simple command it follows: `2>&1`, `> check.log`, `&>> out.log`, `< /dev/null`. */
 const REDIRECTION = /(?:^| )\d*(?:[<>]&|&>>?|>>|>\||<>|[<>])(?: ?[^\s<>&;|()]+)?/g;
 
@@ -291,6 +303,9 @@ function simpleCommands(command: string) {
   return commands;
 }
 
+/** The step that runs this check alone, so that a vitest configuration leaving it out of the suite fails the job. */
+const GUARD_COMMAND = "pnpm vitest run server/ciWorkflow.test.ts --passWithNoTests=false";
+
 /**
  * The commands the quality job must run, each a simple command one of its steps runs
  * whenever it runs, whole: not an argument (`echo pnpm check`), a comment (`true # pnpm
@@ -300,6 +315,7 @@ function simpleCommands(command: string) {
 const REQUIRED_STEP_COMMANDS = [
   "pnpm install --frozen-lockfile",
   "pnpm check",
+  GUARD_COMMAND,
   "pnpm test:ci",
   "pnpm build",
   "node scripts/check-performance-budgets.mjs",
@@ -382,9 +398,27 @@ function scriptsRun(command: string, scripts: Record<string, string>, found = ne
 const NODE_OPTIONS = /node[-_]?options/i;
 
 /**
+ * The pnpm and npm settings that change how a script runs: in another shell than sh
+ * (script-shell, `script-shell=/bin/true` running none of them; shell-emulator) or not at
+ * all (ignore-scripts), whether in their configuration (`.npmrc`, `pnpm-workspace.yaml` in
+ * camelCase), set by a command (`pnpm config set`) or an option; and any npm_config_ or
+ * pnpm_config_ variable, any case, in the workflow's, a job's or a step's env:, each one a
+ * setting of every pnpm command (npm_config_script_shell, npm_config_userconfig…).
+ */
+const SCRIPT_SETTINGS = /script[-_]?shell|shell[-_]?emulator|ignore[-_]?scripts|\bp?npm_config_/i;
+
+/**
+ * What changes the variables the next steps run with, or where they look for a command: a
+ * line written to $GITHUB_ENV or $GITHUB_PATH, the workflow commands GitHub disabled
+ * (::set-env, ::add-path); and, within a step or a script, a PATH of its own (`export
+ * PATH=./bin:$PATH`, `PATH:` in an env:) or a BASH_ENV file bash loads before the command.
+ */
+const ENVIRONMENT_CHANGES = /\bGITHUB_(?:ENV|PATH)\b|::(?:set-env|add-path)\b|\bACTIONS_ALLOW_UNSECURE_COMMANDS\b|\bBASH_ENV\b|(?:^|[\s;&|(])PATH[:=]/m;
+
+/**
  * No step of the quality job, nor any package.json script it runs, may pass whatever its
  * command does; nor may the configuration files pnpm reads (`configs`, by name) load code
- * into it.
+ * into it or change how it runs a script.
  */
 function expectNoNeutralizedStep(workflow: string, packageJson: string, exceptions = NAMED_EXCEPTIONS, configs: Readonly<Record<string, string>> = {}) {
   const steps = jobSteps(workflow, "quality");
@@ -398,7 +432,12 @@ function expectNoNeutralizedStep(workflow: string, packageJson: string, exceptio
   // Nor a condition on the whole job, nor code loaded into each node process (--require, --import).
   expect(quality).not.toMatch(/^ {4}if:/m);
   expect(workflow, "NODE_OPTIONS").not.toMatch(NODE_OPTIONS);
-  for (const [file, config] of Object.entries(configs)) expect(config, file).not.toMatch(NODE_OPTIONS);
+  expect(workflow, "script settings").not.toMatch(SCRIPT_SETTINGS);
+  expect(workflow, "environment changes").not.toMatch(ENVIRONMENT_CHANGES);
+  for (const [file, config] of Object.entries(configs)) {
+    expect(config, file).not.toMatch(NODE_OPTIONS);
+    expect(config, file).not.toMatch(SCRIPT_SETTINGS);
+  }
   // `steps.build` has an outcome only once the step with that id has run.
   const build = steps.findIndex(step => step.keys.id?.trim() === "build");
   for (const [index, step] of steps.entries()) {
@@ -418,9 +457,276 @@ function expectNoNeutralizedStep(workflow: string, packageJson: string, exceptio
   for (const [name, script] of scriptsRun(steps.map(step => step.run).join("\n"), scripts)) {
     expect(silencersIn(script, `script "${name}"`, SCRIPT_SILENCERS, exceptions), `script "${name}"`).toEqual([]);
     expect(script, `script "${name}"`).not.toMatch(NODE_OPTIONS);
+    expect(script, `script "${name}"`).not.toMatch(SCRIPT_SETTINGS);
+    expect(script, `script "${name}"`).not.toMatch(ENVIRONMENT_CHANGES);
     const tool = REQUIRED_SCRIPT_COMMANDS[name];
     if (tool) expect(scriptRunsTool(name, tool, scripts, exceptions), `script "${name}": ${tool.command}`).toBe(true);
   }
+}
+
+/** The keys of ci.yml at its root: neither an `env:` nor a `defaults:` of the whole workflow. */
+const WORKFLOW_KEYS = ["name", "on", "permissions", "concurrency", "jobs"];
+
+/**
+ * The quality job's own keys, and each variable of its `env:` as `env.<NAME>`: dummy values
+ * the tests read, the external tests left off. No `container:`, `defaults:`, `services:`
+ * nor variable of a setting (`npm_config_script_shell`) besides: a PostgreSQL service for
+ * the tests (CODE-14) is added here, with the job.
+ */
+const QUALITY_JOB: Readonly<Record<string, string>> = {
+  name: "TypeScript and test suite",
+  "runs-on": "ubuntu-latest",
+  "timeout-minutes": "20",
+  env: "",
+  "env.RESEND_API_KEY": "re_test_dummy_key_12345678",
+  "env.STRIPE_SECRET_KEY": "sk_test_51N9oXjDummyKeyForContinuousIntegration000000",
+  "env.TURNSTILE_SECRET_KEY": "1x00000000000000000000AA",
+  "env.CANDIDATE_AUTH_PEPPER": "dummy_pepper_for_ci_testing_32_chars_long",
+  "env.CANDIDATE_DOCUMENT_ENCRYPTION_KEY": "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=",
+  "env.JWT_SECRET": "dummy_jwt_secret_for_ci_testing_32_chars_long",
+  "env.GOOGLE_DRIVE_CLIENT_ID": "dummy_client_id",
+  "env.GOOGLE_DRIVE_CLIENT_SECRET": "dummy_client_secret",
+  "env.GOOGLE_DRIVE_CV_FOLDER_ID": "dummy_ci_folder_id",
+  "env.RUN_EXTERNAL_SECURITY_TESTS": "false",
+  steps: "",
+};
+
+/**
+ * Its steps in this order, each with all its keys as jobSteps reads them (a `with:` entry
+ * as `with.<key>`), a `run` of several lines with one command a line: no `env:` of a step,
+ * no `with:` but Node's version and cache (not `ref:` checking out another commit).
+ */
+const QUALITY_STEPS: readonly Readonly<Record<string, string>>[] = [
+  { name: "Check out source", uses: "actions/checkout@v4" },
+  { name: "Set up pnpm", uses: "pnpm/action-setup@v4" },
+  { name: "Set up Node.js", uses: "actions/setup-node@v4", "with.node-version-file": ".nvmrc", "with.cache": "pnpm" },
+  { name: "Install dependencies", run: "pnpm install --frozen-lockfile" },
+  { name: "Verify TypeScript", run: "pnpm check" },
+  { name: "Check this workflow", run: GUARD_COMMAND },
+  { name: "Run test suite", run: "pnpm test:ci" },
+  { name: "Verify production build", id: "build", run: "pnpm build" },
+  { name: "Check performance budgets", run: "node scripts/check-performance-budgets.mjs" },
+  { name: "Start the built server", if: AFTER_BUILD, run: "node scripts/smoke-built-server.mjs" },
+  {
+    name: "Verify migrations match the schema",
+    if: AFTER_BUILD,
+    run: [
+      "node scripts/check-migrations-in-sync.mjs",
+      "git diff --exit-code -- drizzle/pg",
+      'untracked="$(git status --porcelain --untracked-files=all -- drizzle/pg)"',
+      'if [ -n "$untracked" ]; then echo "$untracked"; exit 1; fi',
+    ].join("\n"),
+  },
+  { name: "Find unused files and dependencies", if: AFTER_BUILD, run: "pnpm knip" },
+];
+
+/** The package.json scripts these steps run, each as it is: test:ci with the two files named above. */
+const QUALITY_SCRIPTS: Readonly<Record<string, string>> = {
+  check: "tsc --noEmit",
+  "test:ci": "vitest run --exclude server/googleDriveOAuthCredentials.test.ts --exclude server/googleDriveExport.test.ts",
+  build: `NODE_ENV=production vite build && tsx scripts/prerender-route-seo.ts && esbuild server/_core/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist && esbuild server/vercelEntry.ts --platform=node --packages=external --bundle --format=esm --banner:js="import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" --outfile=api/index.js`,
+  knip: "knip",
+};
+
+/**
+ * The scripts pnpm runs by itself around those, which no step shows: those of the project's
+ * install, and the pre and post scripts of each one (run with enable-pre-post-scripts). None
+ * may be set.
+ */
+const QUALITY_HOOKS = ["pnpm:devPreinstall", "preinstall", "install", "postinstall", "preprepare", "prepare", "postprepare", ...Object.keys(QUALITY_SCRIPTS).flatMap(name => [`pre${name}`, `post${name}`])];
+
+/**
+ * The keys of the workflow at its root, or of one of its jobs (`job`), each with its value,
+ * and an entry of the job's `env:` as `env.<NAME>`. The lines of another key (`on:`,
+ * `steps:`…) are its own; a line this layout does not explain fails the test.
+ */
+function workflowKeys(workflow: string, job?: string) {
+  const lines = workflow.split("\n");
+  const start = job ? lines.indexOf(`  ${job}:`) : -1;
+  if (job) expect(start, `job ${job}`).toBeGreaterThanOrEqual(0);
+  const end = lines.findIndex((line, index) => index > start && job !== undefined && /^ {0,2}\S/.test(line));
+  const indent = job ? 4 : 0;
+  const keys: Record<string, string> = {};
+  let key = "";
+  for (const line of lines.slice(start + 1, end < 0 ? undefined : end)) {
+    const at = line.search(/\S/);
+    if (at < 0 || line.trim().startsWith("#") || (at > indent && key !== "env")) continue;
+    const entry = (at === indent ? /^ *([\w-]+):\s?(.*)$/ : at === indent + 2 ? /^ *([A-Za-z_]\w*):\s?(.*)$/ : null)?.exec(line);
+    if (!entry) throw new Error(`ci.yml: unexpected line ${job ? `in ${job}` : "at the root"}: ${line}`);
+    if (at === indent) key = entry[1]!;
+    keys[at === indent ? key : `env.${entry[1]}`] = yamlValue(entry[2]!);
+  }
+  return keys;
+}
+
+/**
+ * The quality job runs what is listed above, as it is, and pnpm the scripts listed. A list
+ * of what may not run is always got round (`builtin alias pnpm=true`, `BASH_CMDS[pnpm]=/bin/true`,
+ * `printf -v PATH`, a link from node_modules/.bin/tsc to /bin/true, a pnpm rc written in the
+ * home directory, a script `ln -s … && tsc --noEmit`): any change of what the job or those
+ * scripts run is a change of these lists, read in review. The checks above refuse in turn a
+ * listed change that silences a check.
+ */
+function expectQualityJobAsListed(workflow: string, packageJson: string) {
+  expect(Object.keys(workflowKeys(workflow)).sort(), "ci.yml: keys of the workflow").toEqual([...WORKFLOW_KEYS].sort());
+  expect(workflowKeys(workflow, "quality"), "ci.yml: keys of the quality job").toEqual(QUALITY_JOB);
+  const steps = jobSteps(workflow, "quality").map(({ keys }) => (keys.run === undefined ? keys : { ...keys, run: keys.run.replace(/\n$/, "") }));
+  expect(steps, "ci.yml: steps of the quality job").toEqual(QUALITY_STEPS);
+  const scripts = (JSON.parse(packageJson) as { scripts?: Record<string, string> }).scripts ?? {};
+  const run = Object.fromEntries(scriptsRun(QUALITY_STEPS.map(step => step.run ?? "").join("\n"), scripts));
+  expect(run, "package.json: scripts the quality job runs").toEqual(QUALITY_SCRIPTS);
+  expect(QUALITY_HOOKS.filter(hook => Object.hasOwn(scripts, hook)), "package.json: scripts pnpm runs by itself").toEqual([]);
+}
+
+/** The files of these directories and of the directories within them, relative to the root, with `/` between their parts. */
+const filesIn = (...directories: string[]) => directories.flatMap(directory =>
+  readdirSync(path.join(root, directory), { recursive: true, encoding: "utf8" }).map(file => `${directory}/${file.split(path.sep).join("/")}`));
+
+/** A path relative to the root, with `/` between its parts. */
+const fromRoot = (file: string) => path.relative(root, file).split(path.sep).join("/");
+
+const TEST_FILE = /\.(?:test|spec)\.tsx?$/;
+
+/** The test files of the repository: those of server/ and client/. */
+const repositoryTests = () => filesIn("server", "client").filter(file => TEST_FILE.test(file));
+
+/** Its source files, tests aside: the TypeScript of client/src, server and shared. */
+const repositorySources = () => filesIn("client/src", "server", "shared").filter(file => /\.tsx?$/.test(file) && !TEST_FILE.test(file));
+
+/** A JSON file as TypeScript reads tsconfig.json, and knip its knip.json: comments and trailing commas allowed. */
+function readJsonWithComments(file: string, text: string) {
+  const { config, error } = ts.parseConfigFileTextToJson(file, text);
+  if (error) throw new Error(`${file}: ${ts.flattenDiagnosticMessageText(error.messageText, "\n")}`);
+  return config as Record<string, unknown>;
+}
+
+/**
+ * The configuration vitest reads (vitest.config.ts, which no step's command shows; `config`,
+ * a file of its own, in the test of this check) runs every test file of server/ and client/,
+ * under any name: not `exclude: ['**']`, `include: []`, nor a `testNamePattern`, as
+ * `vitest run -t` is refused above. The files are those vitest itself finds with it, and
+ * `passWithNoTests` is refused too. One that leaves out this file never runs this check in
+ * the suite: the step « Check this workflow » then fails (guardStepRun below).
+ */
+async function expectVitestRunsEveryTest(config?: string) {
+  const vitest = await createVitest("test", { root, config, watch: false }, { server: { watch: null } });
+  try {
+    const run = new Set((await vitest.globTestSpecifications()).map(specification => fromRoot(specification.moduleId)));
+    expect(repositoryTests().filter(file => !run.has(file)), "vitest: test files left out").toEqual([]);
+    expect(vitest.config.testNamePattern, "vitest: testNamePattern").toBeUndefined();
+    expect(vitest.config.passWithNoTests ?? false, "vitest: passWithNoTests").toBe(false);
+  } finally {
+    await vitest.close();
+  }
+}
+
+/**
+ * The test files vitest finds for the command of the step « Check this workflow », with the
+ * project's configuration (`config`, a file of its own in a test), and whether it then passes
+ * with none: when it finds none and does not, vitest exits 1 and the job fails.
+ */
+async function guardStepRun(config?: string) {
+  const { filter, options } = parseCLI(GUARD_COMMAND.replace(/^pnpm /, ""));
+  const vitest = await createVitest("test", { ...options, root, config, watch: false }, { server: { watch: null } });
+  try {
+    const files = (await vitest.globTestSpecifications(filter)).map(specification => fromRoot(specification.moduleId));
+    return { files, passWithNoTests: vitest.config.passWithNoTests ?? false };
+  } finally {
+    await vitest.close();
+  }
+}
+
+/**
+ * tsconfig.json, which no step's command shows either, read as TypeScript reads it (its
+ * `extends`, `files`, `include` and `exclude`): `tsc --noEmit` checks the types of every
+ * source file of client/src, server and shared. Not `include: []`, nor `noCheck`, as
+ * `tsc --noCheck` is refused above.
+ */
+function expectTypeScriptChecksEverySource(tsconfig: string) {
+  const file = path.join(root, "tsconfig.json");
+  const parsed = ts.parseJsonConfigFileContent(readJsonWithComments(file, tsconfig), ts.sys, root, undefined, file);
+  const checked = new Set(parsed.fileNames.map(fromRoot));
+  expect(repositorySources().filter(source => !checked.has(source)), "tsconfig.json: source files left out").toEqual([]);
+  expect(parsed.options.noCheck ?? false, "tsconfig.json: noCheck").toBe(false);
+}
+
+/** The matcher knip compares its file patterns with (picomatch), taken from knip's own dependencies. */
+const knipPicomatch = createRequire(realpathSync(path.join(root, "node_modules/knip/package.json")))("picomatch") as
+  (patterns: string[], options: { dot: boolean; ignore: string[] }) => (file: string) => boolean;
+
+/**
+ * Whether a file is among these patterns as knip reads them: one that starts with `!` takes back
+ * what the others match, and the `!` that ends a pattern of production mode is left out.
+ */
+function knipMatcher(patterns: string[]) {
+  const bare = patterns.map(pattern => pattern.replace(/!$/, ""));
+  const positive = bare.filter(pattern => !pattern.startsWith("!"));
+  if (!positive.length) return () => false;
+  return knipPicomatch(positive, { dot: true, ignore: bare.filter(pattern => pattern.startsWith("!")).map(pattern => pattern.slice(1)) });
+}
+
+type KnipConfiguration = {
+  entry?: string[];
+  project?: string[];
+  ignore?: string[];
+  ignoreFiles?: string[];
+  ignoreDependencies?: string[];
+  ignoreUnresolved?: string[];
+  ignoreIssues?: Record<string, string[]>;
+  ignoreWorkspaces?: string[];
+  workspaces?: Record<string, KnipConfiguration>;
+  rules?: Record<string, string>;
+  include?: string[];
+  exclude?: string[];
+};
+
+/** What the step « Find unused files and dependencies » reports, each an issue type of knip. */
+const KNIP_REPORTED_ISSUES = ["files", "dependencies", "devDependencies", "unlisted", "unresolved"];
+
+/**
+ * The keys knip's configuration may hold, at its root or in its root workspace: those read
+ * below, and those that bear only on issue types the step does not require (exports, types,
+ * members, binaries). Any other one is refused, as it may hide a file or a dependency: a
+ * plugin's own entries (`"vitest": { "entry": … }`), `paths`, a `preprocessor`…
+ */
+const KNIP_KEYS = new Set([
+  "$schema", "entry", "project", "ignore", "ignoreFiles", "ignoreDependencies", "ignoreUnresolved", "ignoreIssues", "ignoreWorkspaces", "workspaces", "rules", "include", "exclude",
+  "ignoreBinaries", "ignoreGlobalBinaries", "ignoreMembers", "ignoreExportsUsedInFile", "includeEntryExports", "tags", "treatConfigHintsAsErrors",
+]);
+
+/** A name knip reads as a regular expression in ignoreDependencies or ignoreUnresolved (its util/regex.js): `.*` ignores them all. */
+const KNIP_REGEX_LIKE = /[*+\\(|{^$]/;
+
+/**
+ * knip's configuration, read as knip reads it (package.json's `knip` under knip.json, key by
+ * key), looks for unused code in every source file of client/src, server and shared: each
+ * one in its project, the root workspace's if it has one, and in no `ignore` or
+ * `ignoreFiles` pattern (not `ignore: ['**']`), the root workspace not ignored and no other
+ * one configured; each entry a file of its own, as one pattern of many sources makes them all
+ * entries, never reported unused; and unused files and dependencies reported as errors, as
+ * `knip --exclude files,dependencies` is refused above: no rule `off` or `warn` (knip exits 0
+ * on a warning), nor left out by `include`, `exclude` or an `ignoreIssues` pattern, nor a
+ * dependency or an import ignored by a pattern rather than by its name.
+ */
+function expectKnipReadsEverySource(knipJson: string, manifestKnip: Record<string, unknown> = {}) {
+  const knip = { ...manifestKnip, ...readJsonWithComments("knip.json", knipJson) } as KnipConfiguration;
+  const workspace = knip.workspaces?.["."] ?? {};
+  const configs = [knip, workspace];
+  expect(configs.flatMap(config => Object.keys(config).filter(key => !KNIP_KEYS.has(key))), "knip.json: keys of no check").toEqual([]);
+  expect(Object.keys(knip.workspaces ?? {}).filter(name => name !== "."), "knip.json: other workspaces").toEqual([]);
+  // Without `project`, knip reads every JavaScript and TypeScript file.
+  const project = knipMatcher(workspace.project ?? knip.project ?? ["**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}"]);
+  const ignored = knipMatcher([...knip.ignore ?? [], ...knip.ignoreFiles ?? [], ...workspace.ignore ?? [], ...workspace.ignoreFiles ?? []]);
+  expect(repositorySources().filter(source => !project(source) || ignored(source)), "knip.json: source files left out").toEqual([]);
+  expect(knip.ignoreWorkspaces ?? [], "knip.json: ignoreWorkspaces").not.toContain(".");
+  const entries = configs.flatMap(config => config.entry ?? []).filter(pattern => !pattern.startsWith("!"));
+  expect(entries.filter(pattern => repositorySources().filter(knipMatcher([pattern])).length > 1), "knip.json: entries of several source files").toEqual([]);
+  expect(configs.flatMap(config => [...config.ignoreDependencies ?? [], ...config.ignoreUnresolved ?? []]).filter(name => KNIP_REGEX_LIKE.test(name)), "knip.json: names ignored by a pattern").toEqual([]);
+  const ignoredIssues = configs.flatMap(config => Object.entries(config.ignoreIssues ?? {}).flatMap(([pattern, issues]) => issues.filter(issue => KNIP_REPORTED_ISSUES.includes(issue)).map(issue => `${pattern}: ${issue}`)));
+  expect(ignoredIssues, "knip.json: issue types ignored").toEqual([]);
+  const reported = (issue: string) => [knip.rules?.[issue], workspace.rules?.[issue]].every(rule => (rule ?? "error") === "error")
+    && !(knip.exclude ?? []).includes(issue) && (knip.include?.includes(issue) ?? true);
+  expect(KNIP_REPORTED_ISSUES.filter(issue => !reported(issue)), "knip.json: issue types left out").toEqual([]);
 }
 
 /**
@@ -453,6 +759,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Verify TypeScript
         run: pnpm check
+      - name: Check this workflow
+        run: ${GUARD_COMMAND}
       - name: Run test suite
         run: pnpm test:ci
       - name: Verify production build
@@ -513,7 +821,7 @@ describe("intégration continue GitHub", () => {
     expect(workflow).not.toContain("continue-on-error: true");
     expect(workflow).toContain("STRIPE_SECRET_KEY: sk_test_");
     expect(workflow).toContain("CANDIDATE_DOCUMENT_ENCRYPTION_KEY:");
-    // Une base PostgreSQL de test (`services:`) est permise ; jamais un push du schéma.
+    // Une base PostgreSQL de test (`services:`) s'ajoute au job listé dans QUALITY_JOB ; jamais un push du schéma.
     expect(workflow).not.toContain("pnpm db:push");
     expect(pnpmVersion).toBeTruthy();
     expect(packageManager).toMatch(/^pnpm@[0-9.]+\+sha512\./);
@@ -611,6 +919,16 @@ describe("intégration continue GitHub", () => {
       ["trap 'exit 0' EXIT\npnpm test:ci", ["eval, trap or sh -c"]],
       ["pnpm knip --no-exit-code", ["knip --no-exit-code or --max-issues"]],
       ["pnpm knip --max-issues=50", ["knip --no-exit-code or --max-issues"]],
+      // A command name that runs another program than its own: pnpm, node, npx or tsc as : or true.
+      ["pnpm() { :; }\npnpm check", ["a function, an alias, hash -p or source"]],
+      ["function node { :; }\nnode scripts/smoke-built-server.mjs", ["a function, an alias, hash -p or source"]],
+      ["function npx() { true; }\nnpx tsc --noEmit", ["a function, an alias, hash -p or source"]],
+      ["shopt -s expand_aliases\nalias pnpm=true\npnpm check", ["a function, an alias, hash -p or source"]],
+      ["hash -p /bin/true tsc\npnpm check", ["a function, an alias, hash -p or source"]],
+      ["source ./ci-functions.sh\npnpm check", ["a function, an alias, hash -p or source"]],
+      [". ./ci-functions.sh\npnpm check", ["a function, an alias, hash -p or source"]],
+      // A script run by its path, and `hash` that only forgets the paths it found.
+      ["./scripts/ci-check.sh\nhash -r\npnpm check", []],
       // What `$(…)` runs is read, even within double quotes, and a line carried on by `\` is the same command.
       ['typed="$(pnpm check || true)"', ["||", "$(…) outside an assignment"]],
       ["pnpm check \\\n  || true", ["||"]],
@@ -693,7 +1011,7 @@ describe("intégration continue GitHub", () => {
     expect(verify(changed("        id: build\n", `        id: build\n        if: ${AFTER_BUILD}\n`))).toThrow(/^Verify production build: /);
     expect(verify(changed("        id: build\n", ""))).toThrow(/^Start the built server: /);
     // A required command that only appears as text, a comment or with other arguments is never run;
-    // nor may it be, within an `if`, a loop, a `case` or a function never called.
+    // nor may it be, within an `if`, a loop or a `case` (a function, called or not, is refused itself).
     for (const run of [
       "echo pnpm check",
       "true # pnpm check",
@@ -703,11 +1021,12 @@ describe("intégration continue GitHub", () => {
       '|\n          if [ -n "$NEVER" ]; then pnpm check; fi',
       "|\n          for x in; do pnpm check; done",
       "|\n          case x in y) pnpm check;; esac",
-      "|\n          f() { pnpm check; }",
-      "|\n          function f {\n            pnpm check\n          }",
     ]) {
       expect(verify(changed(check, `        run: ${run}\n`)), run).toThrow(/^pnpm check: /);
     }
+    // What a function's body runs is not counted as run.
+    expect(simpleCommands("f() { pnpm check; }")).toEqual([]);
+    expect(simpleCommands("function f {\n  pnpm check\n}\necho done")).toEqual(["echo done"]);
     expect(verify(changed("          git diff --exit-code -- drizzle/pg\n", "          echo git diff --exit-code -- drizzle/pg\n"))).toThrow(/^git diff --exit-code -- drizzle\/pg: /);
     // Followed by a comment or a redirection, one of several commands, in a group or after an `if`, it is run.
     for (const run of [
@@ -771,6 +1090,214 @@ describe("intégration continue GitHub", () => {
     expect(verify({ "test:ci": `${real["test:ci"]} --passWithNoTests` })).toThrow(/^script "test:ci": /);
     expect(verify({ "test:ci": `${real["test:ci"]} || true` })).toThrow(/^script "test:ci": /);
   });
+
+  it("refuse un réglage de pnpm qui change le shell des scripts ou les saute, une fonction, un alias ou un fichier lu avant une commande, et ce qui change l'environnement des étapes suivantes (CODE-14)", () => {
+    const check = "        run: pnpm check\n";
+    const env = "      CI_DUMMY_KEY: dummy\n";
+    const verify = (workflow: string, scripts: Record<string, string> = {}, configs?: Record<string, string>) => () =>
+      expectNoNeutralizedStep(workflow, fixturePackageJson(scripts), undefined, configs);
+    // script-shell=/bin/true runs no script and passes; shell-emulator runs them in another
+    // shell; ignore-scripts skips them: in pnpm's configuration files, any case.
+    for (const setting of ["script-shell=/bin/true", "shell-emulator=true", "ignore-scripts=true", "SCRIPT_SHELL=/bin/true"]) {
+      expect(verify(FIXTURE_WORKFLOW, {}, { ".npmrc": `engine-strict=true\n${setting}\n` }), setting).toThrow(/^\.npmrc: /);
+    }
+    for (const setting of ["scriptShell: /bin/true", "shellEmulator: true", "ignoreScripts: true"]) {
+      expect(verify(FIXTURE_WORKFLOW, {}, { "pnpm-workspace.yaml": `packages:\n  - "."\n${setting}\n` }), setting).toThrow(/^pnpm-workspace\.yaml: /);
+    }
+    // As an npm_config_ variable, any case, of the workflow, the job or a step; set by a command or in a script.
+    for (const variable of ["npm_config_script_shell: /bin/true", "NPM_CONFIG_SCRIPT_SHELL: /bin/true", "Npm_Config_Ignore_Scripts: \"true\"", "npm_config_userconfig: ./ci.npmrc", "pnpm_config_shell_emulator: \"true\""]) {
+      expect(verify(changed(env, `${env}      ${variable}\n`)), variable).toThrow(/^script settings: /);
+    }
+    expect(verify(changed("jobs:\n", "env:\n  npm_config_script_shell: /bin/true\n\njobs:\n"))).toThrow(/^script settings: /);
+    expect(verify(changed(check, `${check}        env:\n          npm_config_script_shell: /bin/true\n`))).toThrow(/^script settings: /);
+    expect(verify(changed(check, "        run: |\n          pnpm config set script-shell /bin/true\n          pnpm check\n"))).toThrow(/^script settings: /);
+    expect(verify(FIXTURE_WORKFLOW, { "test:ci": "npm_config_script_shell=/bin/true vitest run" })).toThrow(/^script "test:ci": /);
+    // pnpm, node, npx or tsc made into a function, an alias, a path of bash's own, or by a file sourced first.
+    for (const run of [
+      "|\n          pnpm() { :; }\n          pnpm check",
+      "|\n          function pnpm {\n            :\n          }\n          pnpm check",
+      "|\n          shopt -s expand_aliases\n          alias pnpm=true\n          pnpm check",
+      "|\n          hash -p /bin/true pnpm\n          pnpm check",
+      "|\n          source ./ci-functions.sh\n          pnpm check",
+    ]) {
+      expect(verify(changed(check, `        run: ${run}\n`)), run).toThrow(/^Verify TypeScript: /);
+    }
+    // Lines written to $GITHUB_ENV or $GITHUB_PATH change the variables and the PATH of the next
+    // steps, as did ::set-env and ::add-path; within a step, a PATH or a BASH_ENV of its own.
+    for (const run of [
+      '|\n          echo "PATH=$PWD/ci-bin:$PATH" >> "$GITHUB_ENV"',
+      "|\n          echo \"$PWD/ci-bin\" >> $GITHUB_PATH",
+      "|\n          echo \"::add-path::$PWD/ci-bin\"",
+      '|\n          export PATH="$PWD/ci-bin:$PATH"\n          pnpm check',
+      "PATH=./ci-bin:/usr/bin pnpm check",
+    ]) {
+      expect(verify(changed(check, `        run: ${run}\n${check}`)), run).toThrow(/^environment changes: /);
+    }
+    for (const variable of ["PATH: ./ci-bin:/usr/bin", "BASH_ENV: ./ci-functions.sh", "ACTIONS_ALLOW_UNSECURE_COMMANDS: \"true\""]) {
+      expect(verify(changed(env, `${env}      ${variable}\n`)), variable).toThrow(/^environment changes: /);
+    }
+    expect(verify(FIXTURE_WORKFLOW, { check: "PATH=./ci-bin:$PATH tsc --noEmit" })).toThrow(/^script "check": /);
+    // Reading the PATH, or a setting that changes no script, is no change.
+    expect(verify(changed(check, '        run: |\n          echo "$PATH"\n          pnpm check\n'))).not.toThrow();
+    expect(verify(FIXTURE_WORKFLOW, {}, { ".npmrc": "engine-strict=true\nauto-install-peers=true\n" })).not.toThrow();
+  });
+
+  it("ne lance dans le job quality que les étapes listées, chacune telle quelle, et de package.json que les scripts listés, aucun lancé par pnpm de lui-même (CODE-14)", async () => {
+    const [workflow, packageJson] = await Promise.all([read(".github/workflows/ci.yml"), read("package.json")]);
+    expectQualityJobAsListed(workflow, packageJson);
+  });
+
+  it("refuse dans le job quality toute autre commande, variable ou clé, et tout autre script qu'il lance, là où la liste de refus ne voit rien (CODE-14)", async () => {
+    const [workflow, packageJson] = await Promise.all([read(".github/workflows/ci.yml"), read("package.json")]);
+    const check = "        run: pnpm check\n";
+    const variable = '      RUN_EXTERNAL_SECURITY_TESTS: "false"\n';
+    const edit = (from: string, to: string) => {
+      expect(workflow).toContain(from);
+      return workflow.replace(from, to);
+    };
+    const verify = (changedWorkflow: string, scripts: Record<string, string> = {}) => () => {
+      const manifest = JSON.parse(packageJson) as { scripts: Record<string, string> };
+      expectQualityJobAsListed(changedWorkflow, JSON.stringify({ ...manifest, scripts: { ...manifest.scripts, ...scripts } }));
+    };
+    expect(verify(workflow)).not.toThrow();
+    // Before `pnpm check`, pnpm or tsc made into true by a builtin, an array of bash, a PATH or
+    // a link of the step's own, a pnpm configuration in the home directory, another package.
+    for (const line of [
+      "shopt -s expand_aliases; builtin alias pnpm=true",
+      "command alias pnpm=true",
+      "BASH_ALIASES[pnpm]=true",
+      "BASH_CMDS[pnpm]=/bin/true",
+      "builtin hash -p /bin/true pnpm",
+      'printf -v PATH %s "$PWD/ci-bin:$PATH"',
+      'read -r PATH <<< "$PWD/ci-bin:$PATH"',
+      "ln -sf /bin/true node_modules/.bin/tsc",
+      'mkdir -p ~/.config/pnpm; echo "script""-shell=/bin/true" > ~/.config/pnpm/rc',
+      "cd docs",
+    ]) {
+      expect(verify(edit(check, `        run: |\n          ${line}\n          pnpm check\n`)), line).toThrow(/^ci\.yml: steps of the quality job: /);
+    }
+    // A step's env, another with: (another commit checked out), another step, this check's step weakened.
+    for (const changedWorkflow of [
+      edit(check, `${check}        env:\n          FORCE_COLOR: "0"\n`),
+      edit("        uses: actions/checkout@v4\n", "        uses: actions/checkout@v4\n        with:\n          ref: main\n"),
+      edit(check, `${check}      - name: Prepare\n        run: ln -sf /bin/true node_modules/.bin/knip\n`),
+      edit(`        run: ${GUARD_COMMAND}\n`, "        run: pnpm vitest run server/ciWorkflow.test.ts\n"),
+    ]) {
+      expect(verify(changedWorkflow)).toThrow(/^ci\.yml: steps of the quality job: /);
+    }
+    // A variable of the job added, changed or removed; another key of the job.
+    for (const changedWorkflow of [
+      edit(variable, `${variable}      npm_config_script_shell: /bin/true\n`),
+      edit(variable, '      RUN_EXTERNAL_SECURITY_TESTS: "true"\n'),
+      edit(variable, ""),
+      edit("    timeout-minutes: 20\n", "    timeout-minutes: 20\n    container: node:22\n"),
+      edit("    timeout-minutes: 20\n", "    timeout-minutes: 20\n    defaults:\n      run:\n        shell: bash {0}\n"),
+    ]) {
+      expect(verify(changedWorkflow)).toThrow(/^ci\.yml: keys of the quality job: /);
+    }
+    // Variables or defaults of the whole workflow.
+    for (const changedWorkflow of [edit("\njobs:\n", "\nenv:\n  npm_config_script_shell: /bin/true\n\njobs:\n"), edit("\njobs:\n", "\ndefaults:\n  run:\n    shell: bash {0}\n\njobs:\n")]) {
+      expect(verify(changedWorkflow)).toThrow(/^ci\.yml: keys of the workflow: /);
+    }
+    // A script the steps run changed, one `pnpm vitest` would run instead of vitest, or one pnpm runs by itself.
+    for (const scripts of [{ check: "ln -sf /bin/true node_modules/.bin/tsc && tsc --noEmit" }, { build: "vite build" }, { vitest: "true" }]) {
+      expect(verify(workflow, scripts), JSON.stringify(scripts)).toThrow(/^package\.json: scripts the quality job runs: /);
+    }
+    for (const hook of ["pnpm:devPreinstall", "postinstall", "prepare", "precheck", "posttest:ci"]) {
+      expect(verify(workflow, { [hook]: "ln -sf /bin/true node_modules/.bin/tsc" }), hook).toThrow(/^package\.json: scripts pnpm runs by itself: /);
+    }
+    // A script no step runs is not read.
+    expect(verify(workflow, { dev: "tsx watch server/_core/index.ts || true" })).not.toThrow();
+  });
+
+  it("ne laisse vitest.config.ts, tsconfig.json ni knip.json écarter un fichier de test ou un fichier source du dépôt (CODE-14)", async () => {
+    const [tsconfig, knip, packageJson] = await Promise.all([read("tsconfig.json"), read("knip.json"), read("package.json")]);
+    // The files these checks look for are there: tests of the client and the server, sources of all three.
+    expect(repositoryTests()).toEqual(expect.arrayContaining(["server/ciWorkflow.test.ts", "server/recruitmentLanguages.test.ts", "client/src/components/RecruitmentTab.actions.test.ts"]));
+    expect(repositorySources()).toEqual(expect.arrayContaining(["client/src/main.tsx", "server/_core/index.ts", "server/routers/admin/recruitment.ts", "shared/recruitmentLanguages.ts"]));
+    await expectVitestRunsEveryTest();
+    await expect(guardStepRun(), "Check this workflow").resolves.toEqual({ files: ["server/ciWorkflow.test.ts"], passWithNoTests: false });
+    expectTypeScriptChecksEverySource(tsconfig);
+    expectKnipReadsEverySource(knip, (JSON.parse(packageJson) as { knip?: Record<string, unknown> }).knip);
+  }, 30_000);
+
+  it("refuse une configuration de vitest, de TypeScript ou de knip qui écarte des tests ou des sources : exclude '**', include vide, ce contrôle écarté, ignore '**', entrées élargies, ignoreIssues (CODE-14)", async () => {
+    // vitest: a configuration of plain values beside the project, with its include, then weakened.
+    const directory = await mkdtemp(path.join(os.tmpdir(), "ci-vitest-config-"));
+    try {
+      const vitestConfig = async (name: string, test: Record<string, unknown>) => {
+        const file = path.join(directory, `${name}.config.mjs`);
+        await writeFile(file, `export default ${JSON.stringify({ test })};\n`);
+        return file;
+      };
+      const include = ["server/**/*.test.ts", "client/**/*.test.ts"];
+      await expect(expectVitestRunsEveryTest(await vitestConfig("project", { include }))).resolves.toBeUndefined();
+      for (const [name, test] of [
+        ["exclude-all", { include, exclude: ["**"] }],
+        ["include-none", { include: [] }],
+        ["server-only", { include: ["server/**/*.test.ts"] }],
+        ["client-excluded", { include, exclude: ["client/**"] }],
+        ["no-test-name", { include, testNamePattern: "^$" }],
+        ["pass-with-no-tests", { include, passWithNoTests: true }],
+      ] as const) {
+        await expect(expectVitestRunsEveryTest(await vitestConfig(name, test)), name).rejects.toThrow(/^vitest: /);
+      }
+      // This check alone left out, told to pass with none: never run in the suite, its own step finds
+      // no test file and fails, as the step does not let vitest pass with none.
+      const withoutGuard = await vitestConfig("without-guard", { include, exclude: ["**/node_modules/**", "server/ciWorkflow.test.ts"], passWithNoTests: true });
+      await expect(expectVitestRunsEveryTest(withoutGuard)).rejects.toThrow(/^vitest: test files left out/);
+      await expect(guardStepRun(withoutGuard)).resolves.toEqual({ files: [], passWithNoTests: false });
+      await expect(guardStepRun(await vitestConfig("project-with-guard", { include }))).resolves.toEqual({ files: ["server/ciWorkflow.test.ts"], passWithNoTests: false });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+
+    // TypeScript: the project's tsconfig.json with one of its keys changed.
+    const tsconfig = readJsonWithComments("tsconfig.json", await read("tsconfig.json"));
+    const tsconfigWith = (changes: Record<string, unknown>, compilerOptions: Record<string, unknown> = {}) =>
+      JSON.stringify({ ...tsconfig, ...changes, compilerOptions: { ...(tsconfig.compilerOptions as object), ...compilerOptions } });
+    expect(() => expectTypeScriptChecksEverySource(tsconfigWith({}))).not.toThrow();
+    for (const [what, changes, compilerOptions] of [
+      ["include []", { include: [] }, {}],
+      ["files [] and include []", { files: [], include: [] }, {}],
+      ["client/src only", { include: ["client/src/**/*"] }, {}],
+      ["server excluded", { exclude: [...(tsconfig.exclude as string[]), "server/**"] }, {}],
+      ["noCheck", {}, { noCheck: true }],
+    ] as const) {
+      expect(() => expectTypeScriptChecksEverySource(tsconfigWith(changes, compilerOptions)), what).toThrow(/^tsconfig\.json: /);
+    }
+
+    // knip: the project's knip.json with one of its keys changed; an ignore of files that are no sources passes.
+    const knip = readJsonWithComments("knip.json", await read("knip.json"));
+    const knipWith = (changes: Record<string, unknown>) => JSON.stringify({ ...knip, ...changes });
+    expect(() => expectKnipReadsEverySource(knipWith({ ignore: ["**/*.generated.mjs", "dist/**"] }))).not.toThrow();
+    for (const [what, changes] of [
+      ["ignore **", { ignore: ["**"] }],
+      ["ignore server", { ignore: ["server/**"] }],
+      ["ignoreFiles client/src", { ignoreFiles: ["client/src/**"] }],
+      ["project without shared", { project: ["client/src/**/*.{ts,tsx,css}", "server/**/*.ts"] }],
+      ["root workspace's project", { workspaces: { ".": { project: ["scripts/**/*.mjs"] } } }],
+      ["root workspace ignored", { ignoreWorkspaces: ["."] }],
+      ["files off", { rules: { ...(knip.rules as object), files: "off" } }],
+      ["dependencies as warnings", { rules: { ...(knip.rules as object), dependencies: "warn" } }],
+      ["files and dependencies excluded", { exclude: ["files", "dependencies"] }],
+      ["exports only", { include: ["exports"] }],
+      ["files ignored in server", { ignoreIssues: { "server/**": ["files"] } }],
+      ["dependencies ignored in the root workspace", { workspaces: { ".": { ignoreIssues: { "package.json": ["dependencies"] } } } }],
+      ["entry of every source", { entry: ["server/**/*.ts", "client/src/**/*.{ts,tsx}", "shared/**/*.ts"] }],
+      ["entry of the server in production mode", { entry: [...(knip.entry as string[]), "server/**/*.ts!"] }],
+      ["a plugin's own entries", { vitest: { entry: ["server/**/*.ts"] } }],
+      ["paths", { paths: { "@/*": ["client/src/*"] } }],
+      ["every dependency ignored", { ignoreDependencies: [".*"] }],
+      ["every import left unresolved ignored", { ignoreUnresolved: ["^.+$"] }],
+      ["another workspace", { workspaces: { server: { project: ["**/*.ts"] } } }],
+    ] as const) {
+      expect(() => expectKnipReadsEverySource(knipWith(changes)), what).toThrow(/^knip\.json: /);
+    }
+    // An ignoreIssues of other issue types, the ignore of a dependency by its name, and the same as package.json's `knip`.
+    expect(() => expectKnipReadsEverySource(knipWith({ ignoreIssues: { "client/src/generated/**": ["exports", "types"] }, ignoreDependencies: ["@fontsource/playfair-display", "@types/node"] }))).not.toThrow();
+    expect(() => expectKnipReadsEverySource(knipWith({}), { ignoreIssues: { "server/**": ["files"] } })).toThrow(/^knip\.json: issue types ignored/);
+  }, 30_000);
 
   it("borne la durée de chaque job et annule la vérification dépassée d'une pull request", async () => {
     const workflow = await read(".github/workflows/ci.yml");

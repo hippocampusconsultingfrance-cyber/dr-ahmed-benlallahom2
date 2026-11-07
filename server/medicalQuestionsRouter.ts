@@ -1,12 +1,13 @@
 import { randomInt, randomUUID } from "node:crypto";
 import { TRPCError } from "@trpc/server";
 import { and, asc, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import type { BatchItem } from "drizzle-orm/batch";
 import { z } from "zod";
 import { medicalQuestionAuditLogs, medicalQuestions } from "../drizzle/schema";
 import { adminProcedure, publicProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { mutationRowCount } from "./dbMutation";
-import { enforcePersistentRateLimit, hashSecurityValue, logSecurityEvent, requestIpHash } from "./candidateSecurity";
+import { enforcePersistentRateLimit, hashSecurityValue, logSecurityEvent, requestIpHash, securityEventInsert } from "./candidateSecurity";
 import { verifyCandidateTurnstile } from "./candidateTurnstile";
 import { countPublicFormDailyVolume, enforcePublicEmailIpRateLimit, releasePublicEmailIpRateLimit } from "./publicFormRateLimit";
 import { isAdminMfaVerified } from "./adminMfa";
@@ -56,14 +57,29 @@ async function requireDb() {
   return db;
 }
 
-async function auditQuestion(input: { questionId: number; actorOpenId?: string | null; action: string; metadata?: Record<string, unknown> }) {
-  const db = await requireDb();
-  await db.insert(medicalQuestionAuditLogs).values({
+type QuestionAudit = { questionId: number; actorOpenId?: string | null; action: string; metadata?: Record<string, unknown> };
+
+function questionAuditInsert(db: Awaited<ReturnType<typeof requireDb>>, input: QuestionAudit) {
+  return db.insert(medicalQuestionAuditLogs).values({
     medicalQuestionId: input.questionId,
     actorOpenId: input.actorOpenId ?? null,
     action: input.action,
     metadata: input.metadata ? JSON.stringify(input.metadata) : null,
   });
+}
+
+async function auditQuestion(input: QuestionAudit) {
+  await questionAuditInsert(await requireDb(), input);
+}
+
+/**
+ * A change to a question and its journal entry in one batch, both or neither
+ * (DATA-01): when the database refuses the entry, the change is not recorded
+ * either, and the screen rightly says that nothing was changed. The batch's
+ * results, the change's first.
+ */
+function recordWithQuestionAudit(db: Awaited<ReturnType<typeof requireDb>>, change: BatchItem<"pg">, audit: QuestionAudit) {
+  return db.batch([change, questionAuditInsert(db, audit)]);
 }
 
 /**
@@ -243,8 +259,8 @@ export const medicalQuestionsRouter = router({
       const db = await requireDb();
       const [question] = await db.select().from(medicalQuestions).where(eq(medicalQuestions.id, input.id)).limit(1);
       if (!question) throw new TRPCError({ code: "NOT_FOUND", message: "Question introuvable." });
-      await db.update(medicalQuestions).set({ adminResponse: input.adminResponse, publicQuestion: input.publicQuestion || null, publicResponse: input.publicResponse || null, status: "drafting", respondedByOpenId: ctx.user.openId }).where(eq(medicalQuestions.id, input.id));
-      await auditQuestion({ questionId: input.id, actorOpenId: ctx.user.openId, action: "draft_saved" });
+      await recordWithQuestionAudit(db, db.update(medicalQuestions).set({ adminResponse: input.adminResponse, publicQuestion: input.publicQuestion || null, publicResponse: input.publicResponse || null, status: "drafting", respondedByOpenId: ctx.user.openId }).where(eq(medicalQuestions.id, input.id)),
+        { questionId: input.id, actorOpenId: ctx.user.openId, action: "draft_saved" });
       return { success: true };
     }),
     improveDraft: adminProcedure.input(z.object({ adminResponse: z.string().trim().min(20).max(5000) })).mutation(async ({ input, ctx }) => {
@@ -334,8 +350,8 @@ export const medicalQuestionsRouter = router({
       if (!question.responseSentAt) throw new TRPCError({ code: "BAD_REQUEST", message: "Envoyez d’abord la réponse privée avant de publier." });
       if (question.publicationConsent !== 1) throw new TRPCError({ code: "BAD_REQUEST", message: "La publication exige l’accord explicite de la personne." });
       const now = new Date();
-      await db.update(medicalQuestions).set({ publicQuestion: input.publicQuestion, publicResponse: input.publicResponse, status: "published", publishedAt: question.publishedAt ?? now }).where(eq(medicalQuestions.id, input.id));
-      await auditQuestion({ questionId: input.id, actorOpenId: ctx.user.openId, action: question.status === "published" ? "publication_updated" : "published" });
+      await recordWithQuestionAudit(db, db.update(medicalQuestions).set({ publicQuestion: input.publicQuestion, publicResponse: input.publicResponse, status: "published", publishedAt: question.publishedAt ?? now }).where(eq(medicalQuestions.id, input.id)),
+        { questionId: input.id, actorOpenId: ctx.user.openId, action: question.status === "published" ? "publication_updated" : "published" });
       return { success: true };
     }),
     unpublish: adminProcedure.input(questionIdInput).mutation(async ({ input, ctx }) => {
@@ -345,13 +361,12 @@ export const medicalQuestionsRouter = router({
       if (!question) throw new TRPCError({ code: "NOT_FOUND", message: "Question introuvable." });
       if (question.status !== "published") throw new TRPCError({ code: "BAD_REQUEST", message: "Cette question n’est pas publiée." });
 
-      await db.update(medicalQuestions).set({
+      await recordWithQuestionAudit(db, db.update(medicalQuestions).set({
         status: "answered",
         publicQuestion: null,
         publicResponse: null,
         publishedAt: null,
-      }).where(eq(medicalQuestions.id, input.id));
-      await auditQuestion({ questionId: input.id, actorOpenId: ctx.user.openId, action: "unpublished", metadata: { retainedPrivateRecord: true } });
+      }).where(eq(medicalQuestions.id, input.id)), { questionId: input.id, actorOpenId: ctx.user.openId, action: "unpublished", metadata: { retainedPrivateRecord: true } });
       return { success: true };
     }),
     /**
@@ -376,7 +391,14 @@ export const medicalQuestionsRouter = router({
         if (current?.responseSentAt) throw new TRPCError({ code: "BAD_REQUEST", message: alreadyAnswered });
         return { success: true };
       }
-      await auditQuestion({ questionId: input.id, actorOpenId: ctx.user.openId, action: "rejected", metadata: { previousStatus: question.status, ...(input.reason ? { reason: input.reason } : {}) } });
+      // The entry is written only once the question is filed (a batch would
+      // write it for a question answered in between): when the database
+      // refuses it, the question is put back as it was read, so that nothing
+      // was changed, as the screen then says (DATA-01).
+      await auditQuestion({ questionId: input.id, actorOpenId: ctx.user.openId, action: "rejected", metadata: { previousStatus: question.status, ...(input.reason ? { reason: input.reason } : {}) } }).catch(async (error: unknown) => {
+        await db.update(medicalQuestions).set({ status: question.status }).where(and(eq(medicalQuestions.id, input.id), eq(medicalQuestions.status, "rejected"), isNull(medicalQuestions.responseSentAt)));
+        throw error;
+      });
       return { success: true };
     }),
     /**
@@ -387,10 +409,16 @@ export const medicalQuestionsRouter = router({
     delete: adminProcedure.input(questionIdInput).mutation(async ({ input, ctx }) => {
       await requireMfa(ctx);
       const db = await requireDb();
-      await db.delete(medicalQuestionAuditLogs).where(eq(medicalQuestionAuditLogs.medicalQuestionId, input.id));
-      const deleted = mutationRowCount(await db.delete(medicalQuestions).where(eq(medicalQuestions.id, input.id)));
-      if (deleted === 0) throw new TRPCError({ code: "NOT_FOUND", message: "Question introuvable : elle a peut-être déjà été supprimée." });
-      await logSecurityEvent({ actorKind: "admin", actorReference: ctx.user.openId, category: "admin_medical_question_deleted", outcome: "allowed", metadata: { deleted } });
+      const notFound = () => new TRPCError({ code: "NOT_FOUND", message: "Question introuvable : elle a peut-être déjà été supprimée." });
+      const [question] = await db.select({ id: medicalQuestions.id }).from(medicalQuestions).where(eq(medicalQuestions.id, input.id)).limit(1);
+      if (!question) throw notFound();
+      // Deleted with its trace, both or neither (DATA-01).
+      const [, deletion] = await db.batch([
+        db.delete(medicalQuestionAuditLogs).where(eq(medicalQuestionAuditLogs.medicalQuestionId, input.id)),
+        db.delete(medicalQuestions).where(eq(medicalQuestions.id, input.id)),
+        securityEventInsert(db, { actorKind: "admin", actorReference: ctx.user.openId, category: "admin_medical_question_deleted", outcome: "allowed", metadata: { deleted: 1 } }),
+      ]);
+      if (mutationRowCount(deletion) === 0) throw notFound();
       return { success: true };
     }),
   }),

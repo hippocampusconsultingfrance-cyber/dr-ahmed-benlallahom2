@@ -5,7 +5,6 @@ import { getDb } from "../../db";
 import { appointments } from "../../../drizzle/schema";
 import { isLastingStorageError } from "../../storage";
 import { eq, and, sql, desc, gte, inArray, isNotNull, lt, ne, or } from "drizzle-orm";
-import { logSecurityEvent } from "../../candidateSecurity";
 import { adminSearchCondition, adminSearchInput } from "../../adminSearch";
 import { getStripeClient, bookingCustomerEmail } from "../appointments";
 import { calendarDateInput, getParisDateRange } from "../parisTime";
@@ -154,11 +153,8 @@ export const adminAppointmentsRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: "Adresse email invalide : saisissez une adresse complète, par exemple prenom.nom@exemple.fr." });
       }
       const { updateAppointmentCustomerEmailByAdmin } = await import("../../appointmentAdminActions");
-      const result = await updateAppointmentCustomerEmailByAdmin({ trackingId: input.trackingId, customerEmail });
-      if (!result.unchanged) {
-        await logSecurityEvent({ actorKind: "admin", actorReference: ctx.user.openId, category: "admin_appointment_email_corrected", outcome: "allowed", metadata: { trackingId: input.trackingId } });
-      }
-      return result;
+      // The correction is traced with it, both or neither (DATA-01).
+      return updateAppointmentCustomerEmailByAdmin({ trackingId: input.trackingId, customerEmail, actorOpenId: ctx.user.openId });
     }),
 
   /** Facture déjà émise : la copie archivée à son émission, celle envoyée au patient ; n’attribue jamais de numéro (EXPL-02). */

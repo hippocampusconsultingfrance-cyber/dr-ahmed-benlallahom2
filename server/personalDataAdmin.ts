@@ -3,10 +3,9 @@ import type { PgColumn, PgSelect, PgTable } from "drizzle-orm/pg-core";
 import { appointments, candidateAccounts, contactMessages, cvApplications, gdprRequests, medicalQuestionAuditLogs, medicalQuestions } from "../drizzle/schema";
 import { HIPPOCAMPUS_LEGAL } from "../shared/legalIdentity";
 import { getDb } from "./db";
-import { mutationRowCount } from "./dbMutation";
 import { isUnconfirmedPaidAppointment } from "./appointmentAdminActions";
 import { closeErasedPatientFulfillment } from "./appointmentFulfillment";
-import { logSecurityEvent } from "./candidateSecurity";
+import { logSecurityEvent, securityEventInsert } from "./candidateSecurity";
 import { anonymisedAppointmentFields } from "./personalDataRetention";
 
 /**
@@ -226,13 +225,8 @@ function isActiveUpcomingBooking(booking: BookingToErase, now: Date) {
 export async function erasePersonalData(input: { email: string; actorOpenId: string; now?: Date }) {
   const db = await requireDb();
   const now = input.now ?? new Date();
-  const contactMessagesDeleted = mutationRowCount(await db.delete(contactMessages).where(sameEmail(contactMessages.email, input.email)));
+  const messageIds = (await db.select({ id: contactMessages.id }).from(contactMessages).where(sameEmail(contactMessages.email, input.email))).map(row => row.id);
   const questionIds = (await db.select({ id: medicalQuestions.id }).from(medicalQuestions).where(sameEmail(medicalQuestions.email, input.email))).map(row => row.id);
-  let medicalQuestionsDeleted = 0;
-  if (questionIds.length) {
-    await db.delete(medicalQuestionAuditLogs).where(inArray(medicalQuestionAuditLogs.medicalQuestionId, questionIds));
-    medicalQuestionsDeleted = mutationRowCount(await db.delete(medicalQuestions).where(inArray(medicalQuestions.id, questionIds)));
-  }
   const bookings = await db.select({
     id: appointments.id,
     trackingId: appointments.trackingId,
@@ -243,36 +237,37 @@ export async function erasePersonalData(input: { email: string; actorOpenId: str
   }).from(appointments).where(sameEmail(appointments.customerEmail, input.email));
   const upcoming = bookings.filter(booking => isActiveUpcomingBooking(booking, now));
   const ended = bookings.filter(booking => !isActiveUpcomingBooking(booking, now));
-  const appointmentsAnonymised = ended.length
-    ? mutationRowCount(await db.update(appointments).set(anonymisedAppointmentFields(now)).where(inArray(appointments.id, ended.map(booking => booking.id))))
-    : 0;
-  // Their patient emails still waiting have no address left; the queue would skip them anyway.
-  await closeErasedPatientFulfillment(ended.map(booking => booking.id), now)
-    .catch(error => console.error("[PersonalData] Pending patient emails could not be closed", error instanceof Error ? error.name : "UnknownError"));
+  const endedIds = ended.map(booking => booking.id);
   const [gdprRequestsKept] = await db.select({ count: sql<number>`COUNT(*)` }).from(gdprRequests).where(sameEmail(gdprRequests.email, input.email));
   const applications = await db.select({ id: cvApplications.id, trackingId: cvApplications.trackingId }).from(cvApplications).where(sameEmail(cvApplications.email, input.email));
-  const report = {
-    contactMessagesDeleted,
-    medicalQuestionsDeleted,
-    appointmentsAnonymised,
+  // The trace of the erasure and the rows found, deleted or anonymised, in
+  // one batch, all or none (DATA-01): when the database refuses the trace,
+  // nothing is erased, as the screen then says.
+  const counts = { contactMessagesDeleted: messageIds.length, medicalQuestionsDeleted: questionIds.length, appointmentsAnonymised: endedIds.length };
+  await db.batch([
+    securityEventInsert(db, {
+      actorKind: "admin",
+      actorReference: input.actorOpenId,
+      category: "admin_personal_data_erased",
+      outcome: "allowed",
+      metadata: { ...counts, upcomingAppointmentsKept: upcoming.length, recruitmentApplicationsLeft: applications.length },
+    }),
+    ...(messageIds.length ? [db.delete(contactMessages).where(inArray(contactMessages.id, messageIds))] : []),
+    ...(questionIds.length ? [
+      db.delete(medicalQuestionAuditLogs).where(inArray(medicalQuestionAuditLogs.medicalQuestionId, questionIds)),
+      db.delete(medicalQuestions).where(inArray(medicalQuestions.id, questionIds)),
+    ] : []),
+    ...(endedIds.length ? [db.update(appointments).set(anonymisedAppointmentFields(now)).where(inArray(appointments.id, endedIds))] : []),
+  ]);
+  // Their patient emails still waiting have no address left; the queue would skip them anyway.
+  await closeErasedPatientFulfillment(endedIds, now)
+    .catch(error => console.error("[PersonalData] Pending patient emails could not be closed", error instanceof Error ? error.name : "UnknownError"));
+  return {
+    ...counts,
     upcomingAppointments: upcoming.map(booking => booking.trackingId),
     gdprRequestsKept: Number(gdprRequestsKept?.count ?? 0),
     recruitmentApplications: applications.map(application => application.trackingId),
   };
-  await logSecurityEvent({
-    actorKind: "admin",
-    actorReference: input.actorOpenId,
-    category: "admin_personal_data_erased",
-    outcome: "allowed",
-    metadata: {
-      contactMessagesDeleted,
-      medicalQuestionsDeleted,
-      appointmentsAnonymised,
-      upcomingAppointmentsKept: upcoming.length,
-      recruitmentApplicationsLeft: applications.length,
-    },
-  });
-  return report;
 }
 
 /** Traces of the administrator's actions on a person's data, which hold row counts only. */

@@ -229,6 +229,8 @@ describe("confirmation des certifications par l’admin (IA-02)", () => {
     // Without its day, or for any other error, the server's message.
     await refuse("renewal_date_too_far", undefined, "La nouvelle date d’expiration est à plus de 15 ans : vérifiez-la sur le justificatif (le 26/10/2041 au plus tard).");
     await refuse(undefined, undefined, "Cette certification ne figure pas dans le dossier.");
+    // A write the database refused (DATA-01), by its reason.
+    await refuse("related_record_invalid", undefined, "Message du serveur.");
     expect(state.errors).toEqual([
       "Cette certification a expiré : confirmez son renouvellement, avec la nouvelle date d’expiration lue sur le justificatif, ou cochez qu’il n’en porte pas.",
       "La nouvelle date d’expiration est à plus de 15 ans : vérifiez-la sur le justificatif (le 26/10/2041 au plus tard).",
@@ -236,6 +238,7 @@ describe("confirmation des certifications par l’admin (IA-02)", () => {
       "Nouvelle date d’expiration invalide.",
       "La nouvelle date d’expiration est à plus de 15 ans : vérifiez-la sur le justificatif (le 26/10/2041 au plus tard).",
       "Cette certification ne figure pas dans le dossier.",
+      "Cette opération vise un élément qui n’existe plus, ou qui est encore utilisé ailleurs : rechargez la page, puis réessayez.",
     ]);
   });
 
@@ -270,6 +273,7 @@ describe("confirmation des certifications par l’admin (IA-02)", () => {
       labels: ["Confirm the renewal of ACLS", "New expiry date — ACLS", "The certificate of ACLS has no expiry date", "Confirm Licence DHA", "Withdraw the confirmation of BLS"],
       toasts: ["Certification confirmed: Licence DHA", "Confirmation withdrawn: BLS", "Confirmation withdrawn: Licence DHA. The latest analysis of the CV does not retain it: it no longer counts as read from the CV.", "Renewal confirmed: ACLS, expires on 30/06/2028", "Renewal confirmed: ACLS, no expiry date"],
       errors: ["This certification has expired: confirm its renewal, with the new expiry date read on the certificate, or tick that it has none.", "The new expiry date is more than 15 years ahead: check it on the certificate (26/10/2041 at the latest).", "The new expiry date has already passed: the certification would remain expired.", "Invalid new expiry date."],
+      database: ["This value is not accepted for this record: nothing was changed. Reload the page, then try again.", "This operation concerns an item that no longer exists, or that is still used elsewhere: reload the page, then try again.", "This record already exists: reload the page to see its current state."],
       none: "No certification declared or read in the CV.",
     }],
     ["de", {
@@ -278,6 +282,7 @@ describe("confirmation des certifications par l’admin (IA-02)", () => {
       labels: ["Erneuerung von ACLS bestätigen", "Neues Ablaufdatum — ACLS", "Der Nachweis für ACLS trägt kein Ablaufdatum", "Licence DHA bestätigen", "Bestätigung von BLS zurücknehmen"],
       toasts: ["Zertifikat bestätigt: Licence DHA", "Bestätigung zurückgenommen: BLS", "Bestätigung zurückgenommen: Licence DHA. Die letzte Analyse des Lebenslaufs übernimmt es nicht: Es gilt nicht mehr als aus dem Lebenslauf gelesen.", "Erneuerung bestätigt: ACLS, gültig bis 30.06.2028", "Erneuerung bestätigt: ACLS, ohne Ablaufdatum"],
       errors: ["Dieses Zertifikat ist abgelaufen: Bestätigen Sie seine Erneuerung mit dem neuen Ablaufdatum auf dem Nachweis oder kreuzen Sie an, dass er keines trägt.", "Das neue Ablaufdatum liegt mehr als 15 Jahre in der Zukunft: Prüfen Sie es auf dem Nachweis (spätestens am 26.10.2041).", "Das neue Ablaufdatum ist bereits vergangen: Das Zertifikat bliebe abgelaufen.", "Ungültiges neues Ablaufdatum."],
+      database: ["Dieser Wert ist für diesen Eintrag nicht zulässig: Es wurde nichts geändert. Laden Sie die Seite neu und versuchen Sie es erneut.", "Dieser Vorgang betrifft ein Element, das nicht mehr existiert oder noch anderweitig verwendet wird: Laden Sie die Seite neu und versuchen Sie es erneut.", "Dieser Eintrag existiert bereits: Laden Sie die Seite neu, um seinen aktuellen Stand zu sehen."],
       none: "Kein Zertifikat angegeben oder im Lebenslauf gelesen.",
     }],
     ["zh", {
@@ -286,6 +291,7 @@ describe("confirmation des certifications par l’admin (IA-02)", () => {
       labels: ["确认 ACLS 的续期", "新的到期日期 — ACLS", "ACLS 的证书上没有到期日期", "确认 Licence DHA", "撤销对 BLS 的确认"],
       toasts: ["已确认证书：Licence DHA", "已撤销确认：BLS", "已撤销确认：Licence DHA。最近一次简历分析未保留该证书：它不再被视为从简历中提取。", "已确认续期：ACLS，有效期至 2028/06/30", "已确认续期：ACLS，无到期日期"],
       errors: ["该证书已过期：请确认其续期，填写证书上的新到期日期，或勾选证书上没有到期日期。", "新的到期日期晚于 15 年之后：请在证书上核对（最晚为 2041/10/26）。", "新的到期日期已过：该证书仍将处于过期状态。", "新的到期日期无效。"],
+      database: ["此记录不接受该值：未作任何更改。请刷新页面后重试。", "此操作涉及的项目已不存在，或仍在其他地方使用：请刷新页面后重试。", "该记录已存在：请刷新页面查看其当前状态。"],
       none: "未申报证书，简历中也未读到证书。",
     }],
   ] as const)("écrit les certifications, leur renouvellement, les toasts et les refus du serveur dans la langue que l’écran mission lui donne, celle de l’administration (%s, IA-02)", async (language, expected) => {
@@ -319,8 +325,11 @@ describe("confirmation des certifications par l’admin (IA-02)", () => {
     await refuse("renewal_date_too_far", "2041-10-26");
     await refuse("renewal_date_past");
     await refuse("renewal_date_invalid");
+    // A write the database refused (DATA-01), sent with the server's French message, worded as the mission screen words it.
+    for (const reason of ["value_not_allowed", "related_record_invalid", "duplicate_record"]) await refuse(reason, undefined, "Cette valeur n’est pas acceptée pour cet enregistrement : rien n’a été modifié. Rechargez la page, puis réessayez.");
     await refuse(undefined, undefined, "Une erreur interne est survenue. Veuillez réessayer dans quelques instants. (réf. 1a2b3c4d)");
-    expect(state.errors).toEqual([...expected.errors, "Une erreur interne est survenue. Veuillez réessayer dans quelques instants. (réf. 1a2b3c4d)"]);
+    expect(state.errors).toEqual([...expected.errors, ...expected.database, "Une erreur interne est survenue. Veuillez réessayer dans quelques instants. (réf. 1a2b3c4d)"]);
+    expect(state.errors.join("\n")).not.toMatch(/rien n’a été modifié|rechargez/);
 
     expect(renderToStaticMarkup(CertificationReview({ applicationId: 5, certifications: [], language }))).toContain(expected.none);
   });
