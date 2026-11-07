@@ -1,5 +1,6 @@
-import { and, eq, gt, gte, isNull, lt, lte, notInArray, or, sql } from "drizzle-orm";
-import { appointmentFulfillmentJobs, appointments, candidateAccounts, candidateSecurityRateLimits, contactMessages, cvApplications, gdprRequests, medicalQuestions, securityEvents } from "../drizzle/schema";
+import { and, eq, gt, gte, inArray, isNull, lt, lte, ne, notInArray, or, sql } from "drizzle-orm";
+import { appointmentFulfillmentJobs, appointments, candidateAccounts, candidateDocumentProcessingJobs, candidateDocuments, candidateSecurityRateLimits, candidateSessions, contactMessages, cvApplications, cvGoogleDriveExportJobs, cvProcessingJobs, gdprRequests, medicalQuestions, securityEvents } from "../drizzle/schema";
+import { CANDIDATE_DOCUMENT_ACTIVE_JOB_STATUSES } from "../shared/candidateDocumentReanalysis";
 import { getDb } from "./db";
 import { mutationRowCount } from "./dbMutation";
 import { emailLanguageFor } from "./emailLanguage";
@@ -269,15 +270,98 @@ export async function runSecurityPostureReview(now = new Date()) {
   const quotaEvents = recentAlerts.filter(event => event.category === "resend_quota_exceeded");
   const busyPublicForms = await publicFormsAboveDailyThreshold(db, since);
   const pending = await ownerActionsPending();
+  const dataIntegrity = await dataIntegrityPending(db, now);
+  const integrityFinding = dataIntegrityFinding(dataIntegrity);
   const findings = [
     ...(recentAlerts.length > 0 ? [`${recentAlerts.length} événement(s) de sécurité à gravité élevée ont été détectés sur les dernières 24 heures. Consultez le journal administrateur.`] : []),
     ...(quotaEvents.length > 0 ? [`Quota Resend épuisé (${resendQuotaLabel(quotaEvents)}) : ${quotaEvents.length} email(s) refusé(s) faute de quota sur les dernières 24 heures. Tant que le quota reste épuisé, aucun email ne part : codes de connexion administrateur, emails aux patients après paiement, alertes. Vérifiez la limite de votre offre dans Resend.`] : []),
     ...busyPublicForms.map(kind => `Seuil quotidien dépassé pour les ${PUBLIC_FORM_VOLUME_LABELS[kind]} : plus de ${PUBLIC_FORM_DAILY_VOLUME_THRESHOLDS[kind]} enregistrements sur les dernières 24 heures. Vérifiez dans l’administration qu’il ne s’agit pas d’envois automatisés.`),
     ...(pending.googleDriveReconnectRequired ? ["Google Drive à reconnecter : Google refuse l’autorisation utilisée pour copier les CV, les copies sont suspendues. Onglet Candidatures, bouton « Reconnexion Google Drive requise » ; les copies repartiront après la reconnexion."] : []),
     ...(pending.cvAnalysesAwaitingAiCredit > 0 ? [`Analyse IA des CV indisponible (facturation du fournisseur) : ${pending.cvAnalysesAwaitingAiCredit >= AWAITING_AI_CREDIT_CAP ? "au moins " : ""}${pending.cvAnalysesAwaitingAiCredit} dossier(s) attendent leur analyse. Rétablissez le moyen de paiement ou le crédit dans Vercel > AI Gateway, puis cliquez sur « Mettre à jour / reprendre l’IA » dans l’onglet Candidatures.`] : []),
+    ...(integrityFinding ? [integrityFinding] : []),
   ];
   if (findings.length > 0) await notifyOwner({ title: "Bilan quotidien de sécurité", content: findings.join("\n\n") });
-  return { available: true as const, highSeverityEvents24h: recentAlerts.length, resendQuotaEvents24h: quotaEvents.length, busyPublicForms, ...pending };
+  return { available: true as const, highSeverityEvents24h: recentAlerts.length, resendQuotaEvents24h: quotaEvents.length, busyPublicForms, ...pending, dataIntegrity };
+}
+
+/** Each data-integrity count stops past this many (« au moins »). */
+const DATA_INTEGRITY_CAP = 100;
+/**
+ * DATA-14: a state the scheduled runs repair by themselves (a missing or
+ * interrupted job) is reported once a whole day of runs has gone by without
+ * repairing it, never while a run may still be about to.
+ */
+const DATA_INTEGRITY_REPAIR_DELAY_MS = 48 * HOUR_MS;
+const QUEUE_JOB_STATUSES = ["queued", "running", "retry", "completed", "failed"] as const;
+
+type DataIntegrityCounts = Record<keyof typeof DATA_INTEGRITY_LABELS, number | null>;
+
+const DATA_INTEGRITY_LABELS = {
+  paidAppointmentsWithoutJobs: "rendez-vous payé(s) depuis plus de 2 jours sans confirmation ou facture en file",
+  documentsWithoutJob: "document(s) du coffre en attente d’analyse depuis plus de 2 jours sans tâche pour l’analyser",
+  interruptedJobs: "tâche(s) restée(s) « en cours » depuis plus de 2 jours (paiements, CV, coffre, copies Drive)",
+  jobsWithUnknownStatus: "tâche(s) dont le statut ne fait pas partie de la liste : aucun passage ne les traitera",
+  sessionsOfClosedAccounts: "session(s) candidat encore ouverte(s) sur un compte fermé ou effacé",
+  sessionsWithoutAccount: "session(s) candidat dont le compte n’existe plus",
+} as const;
+
+/**
+ * DATA-14: the checks of scripts/db-invariants.sql that no normal state
+ * triggers, reported every day while they last, like the owner's other
+ * pending actions. Each count stops past DATA_INTEGRITY_CAP; a check that
+ * fails is null, and the others are still reported.
+ */
+async function dataIntegrityPending(db: Database, now: Date): Promise<DataIntegrityCounts> {
+  const repairedBefore = new Date(now.getTime() - DATA_INTEGRITY_REPAIR_DELAY_MS);
+  const limit = DATA_INTEGRITY_CAP + 1;
+  const counted = (check: string, queries: () => Array<PromiseLike<unknown[]>>) => Promise.all(queries())
+    .then(results => Math.min(limit, results.reduce((total, rows) => total + rows.length, 0)))
+    .catch(error => {
+      console.error(`[SecurityReview] Data integrity check ${check} failed:`, safeErrorName(error));
+      return null;
+    });
+  const activeDocumentJobs = db.select({ documentId: candidateDocumentProcessingJobs.documentId }).from(candidateDocumentProcessingJobs)
+    .where(inArray(candidateDocumentProcessingJobs.status, [...CANDIDATE_DOCUMENT_ACTIVE_JOB_STATUSES]));
+  const [paidAppointmentsWithoutJobs, documentsWithoutJob, interruptedJobs, jobsWithUnknownStatus, sessionsOfClosedAccounts, sessionsWithoutAccount] = await Promise.all([
+    counted("paid_appointments_without_jobs", () => [paidAppointmentsWithoutFulfillment(db, repairedBefore).limit(limit)]),
+    counted("documents_without_job", () => [db.select({ id: candidateDocuments.id }).from(candidateDocuments).where(and(
+      eq(candidateDocuments.analysisStatus, "queued"),
+      inArray(candidateDocuments.status, ["uploaded", "validating"]),
+      ne(candidateDocuments.validationStatus, "rejected"),
+      lt(candidateDocuments.createdAt, repairedBefore),
+      notInArray(candidateDocuments.id, activeDocumentJobs),
+    )).limit(limit)]),
+    // Each worker takes back the jobs a stopped run left "running" for 15 min.
+    counted("interrupted_jobs", () => [
+      db.select({ id: appointmentFulfillmentJobs.id }).from(appointmentFulfillmentJobs).where(and(eq(appointmentFulfillmentJobs.status, "running"), lt(appointmentFulfillmentJobs.startedAt, repairedBefore))).limit(limit),
+      db.select({ id: cvProcessingJobs.id }).from(cvProcessingJobs).where(and(eq(cvProcessingJobs.status, "running"), lt(cvProcessingJobs.startedAt, repairedBefore))).limit(limit),
+      db.select({ id: candidateDocumentProcessingJobs.id }).from(candidateDocumentProcessingJobs).where(and(eq(candidateDocumentProcessingJobs.status, "running"), lt(candidateDocumentProcessingJobs.startedAt, repairedBefore))).limit(limit),
+      db.select({ id: cvGoogleDriveExportJobs.id }).from(cvGoogleDriveExportJobs).where(and(eq(cvGoogleDriveExportJobs.status, "running"), lt(cvGoogleDriveExportJobs.startedAt, repairedBefore))).limit(limit),
+    ]),
+    // A job put back by hand in SQL with a misspelt status ('queue', 'pending').
+    counted("jobs_with_unknown_status", () => [
+      db.select({ id: appointmentFulfillmentJobs.id }).from(appointmentFulfillmentJobs).where(notInArray(appointmentFulfillmentJobs.status, [...QUEUE_JOB_STATUSES])).limit(limit),
+      db.select({ id: cvProcessingJobs.id }).from(cvProcessingJobs).where(notInArray(cvProcessingJobs.status, [...QUEUE_JOB_STATUSES])).limit(limit),
+      db.select({ id: candidateDocumentProcessingJobs.id }).from(candidateDocumentProcessingJobs).where(notInArray(candidateDocumentProcessingJobs.status, [...QUEUE_JOB_STATUSES])).limit(limit),
+      db.select({ id: cvGoogleDriveExportJobs.id }).from(cvGoogleDriveExportJobs).where(notInArray(cvGoogleDriveExportJobs.status, [...QUEUE_JOB_STATUSES])).limit(limit),
+    ]),
+    counted("sessions_of_closed_accounts", () => [db.select({ id: candidateSessions.id }).from(candidateSessions).where(and(
+      isNull(candidateSessions.revokedAt),
+      gt(candidateSessions.expiresAt, now),
+      inArray(candidateSessions.candidateId, db.select({ id: candidateAccounts.id }).from(candidateAccounts).where(ne(candidateAccounts.status, "active"))),
+    )).limit(limit)]),
+    counted("sessions_without_account", () => [db.select({ id: candidateSessions.id }).from(candidateSessions)
+      .where(notInArray(candidateSessions.candidateId, db.select({ id: candidateAccounts.id }).from(candidateAccounts))).limit(limit)]),
+  ]);
+  return { paidAppointmentsWithoutJobs, documentsWithoutJob, interruptedJobs, jobsWithUnknownStatus, sessionsOfClosedAccounts, sessionsWithoutAccount };
+}
+
+function dataIntegrityFinding(counts: DataIntegrityCounts) {
+  const found = (Object.keys(DATA_INTEGRITY_LABELS) as Array<keyof DataIntegrityCounts>)
+    .filter(check => (counts[check] ?? 0) > 0)
+    .map(check => `${counts[check]! > DATA_INTEGRITY_CAP ? `au moins ${DATA_INTEGRITY_CAP}` : counts[check]} ${DATA_INTEGRITY_LABELS[check]}`);
+  if (found.length === 0) return null;
+  return `Contrôle de cohérence de la base : ${found.join(" ; ")}. Les passages automatiques ne les ont pas réparés : collez scripts/db-invariants.sql dans l’éditeur SQL de Neon pour les retrouver.`;
 }
 
 function resendQuotaLabel(events: Array<{ metadata: string | null }>) {
