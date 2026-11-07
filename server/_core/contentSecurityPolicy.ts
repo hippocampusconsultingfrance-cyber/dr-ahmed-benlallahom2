@@ -10,7 +10,9 @@ export const CSP_REPORT_ROUTE = "/api/csp-report";
 const CSP_REPORTING_ENDPOINT = "csp-endpoint";
 
 // Origins are restricted to the application and the third parties genuinely
-// required for checkout, sign-in and bot protection.
+// required for checkout, sign-in and bot protection. img-src keeps https: for
+// the article covers, external URLs entered in the administration; ws: and
+// wss: serve only Vite's hot reload, so development alone adds them (SECU-03).
 const CONTENT_SECURITY_POLICY_DIRECTIVES = [
   "default-src 'self'",
   "base-uri 'self'",
@@ -21,7 +23,7 @@ const CONTENT_SECURITY_POLICY_DIRECTIVES = [
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self' data:",
   "img-src 'self' data: blob: https:",
-  "connect-src 'self' ws: wss: https://api.stripe.com https://challenges.cloudflare.com https://clerk.drahmedbenlallahom.com https://*.clerk.accounts.dev https://*.clerk.com",
+  "connect-src 'self' https://api.stripe.com https://challenges.cloudflare.com https://clerk.drahmedbenlallahom.com https://*.clerk.accounts.dev https://*.clerk.com",
   "frame-src https://js.stripe.com https://hooks.stripe.com https://challenges.cloudflare.com https://clerk.drahmedbenlallahom.com https://*.clerk.accounts.dev https://*.clerk.com",
   "worker-src 'self' blob:",
   "upgrade-insecure-requests",
@@ -73,14 +75,25 @@ export function withInlineScripts(policy: string) {
   }).join("; ");
 }
 
+/** The policy with a connect-src that also lets Vite's hot reload open its WebSocket: ws: and wss: after 'self'. */
+function withHotReloadSocket(policy: string) {
+  return policy.split("; ").map(directive => {
+    const [name, ...sources] = directive.split(" ");
+    if (name !== "connect-src") return directive;
+    const kept = sources.filter(source => source !== "ws:" && source !== "wss:");
+    kept.splice(kept.indexOf("'self'") + 1, 0, "ws:", "wss:");
+    return [name, ...kept].join(" ");
+  }).join("; ");
+}
+
 /**
  * The CSP headers Express sends in this environment. Development keeps inline
- * scripts allowed whatever the enforced policy, and observes nothing: Vite's
- * page has an inline script (the React refresh preamble of
- * @vitejs/plugin-react) without which no component loads.
+ * scripts allowed whatever the enforced policy, lets Vite's hot reload connect
+ * (ws:, wss:) and observes nothing: Vite's page has an inline script (the React
+ * refresh preamble of @vitejs/plugin-react) without which no component loads.
  */
 export function contentSecurityPolicyHeaders(nodeEnv = process.env.NODE_ENV): Record<string, string> {
-  if (nodeEnv === "development") return { "Content-Security-Policy": withInlineScripts(CONTENT_SECURITY_POLICY) };
+  if (nodeEnv === "development") return { "Content-Security-Policy": withHotReloadSocket(withInlineScripts(CONTENT_SECURITY_POLICY)) };
   return {
     "Content-Security-Policy": CONTENT_SECURITY_POLICY,
     "Content-Security-Policy-Report-Only": CONTENT_SECURITY_POLICY_REPORT_ONLY,

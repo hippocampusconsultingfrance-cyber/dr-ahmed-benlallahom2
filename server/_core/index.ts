@@ -45,6 +45,8 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
  */
 export async function createApp() {
   const app = express();
+  // No "X-Powered-By: Express" on the responses: the stack is not advertised (SECU-04).
+  app.disable("x-powered-by");
   app.set("trust proxy", 1);
   const server = createServer(app);
 

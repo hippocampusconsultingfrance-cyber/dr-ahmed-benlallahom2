@@ -97,6 +97,27 @@ describe("en-têtes de défense HTTP", () => {
     expect(response.headers.get("reporting-endpoints")).toBe(`${reportTo}="/api/csp-report"`);
   });
 
+  it("n'autorise ni WebSocket ni autre connexion hors des hôtes listés, et garde les images https: des couvertures (SECU-03)", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const response = await postReport();
+    for (const header of ["content-security-policy", "content-security-policy-report-only"]) {
+      const policy = directives(response.headers.get(header) ?? "");
+      expect(policy["connect-src"].split(" "), header).toEqual(["'self'", "https://api.stripe.com", "https://challenges.cloudflare.com", "https://clerk.drahmedbenlallahom.com", "https://*.clerk.accounts.dev", "https://*.clerk.com"]);
+      expect(policy["img-src"], header).toBe("'self' data: blob: https:");
+    }
+  });
+
+  it("n'annonce pas Express dans X-Powered-By, ni sur la sonde ni sur l'API (SECU-04)", async () => {
+    // The probe's SELECT 1 is not answered by the in-memory database: it answers 503.
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    for (const response of [await fetch(`${baseUrl}/api/health`), await fetch(`${baseUrl}/api/trpc/auth.me`)]) {
+      expect(response.headers.get("x-powered-by"), response.url).toBeNull();
+      // Still the application's response, with its own headers.
+      expect(response.headers.get("x-content-type-options"), response.url).toBe("nosniff");
+    }
+    expect(vercelPageHeaders.some(header => header.key.toLowerCase() === "x-powered-by")).toBe(false);
+  });
+
   it("reçoit les rapports avant clerkMiddleware : 204 même quand Clerk fait échouer les autres routes", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const response = await postReport();
