@@ -527,7 +527,18 @@ Les corrections de code peuvent être faites **par lots testés**, comme pour la
   - dans un cadre de taille fixe, un texte n'est lu qu'après ce que la vérification sait borner (refus par défaut) ;
   - la vérification de bout en bout a validé la sécurité : aucun piège n'obtient de score ni de certification, et aucune consigne cachée n'atteint l'IA.
 
-  Le prix de cette prudence : du texte honnête est mis de côté dans les cadres fixes. C'est le cas de l'arabe, de l'hébreu et du persan, des symboles et emojis en cellule étroite, et des polices Aptos, Calibri Light et Garamond. Un 12e tour, en cours, vise ces faux positifs et les constructions de Word qui ne sont encore traitées nulle part.
+  Le prix de cette prudence : du texte honnête est mis de côté dans les cadres fixes. C'est le cas de l'arabe, de l'hébreu et du persan, des symboles et emojis en cellule étroite, et des polices Aptos, Calibri Light et Garamond.
+- **IA-01, 12e tour (fusionné le 7 novembre)** :
+  - l'arabe, l'hébreu et le persan sont lus quand ils tiennent dans leur cadre. Chaque caractère a pour borne sa forme la plus large dans une quarantaine de polices libres, plus un quart pour couvrir les polices de Windows sans métriques publiées (Simplified Arabic, Traditional Arabic, Arabic Typesetting, Sakkal Majalla, David, Miriam, Dubai) ;
+  - les symboles de contact et les emojis aussi, y compris dans une course en Segoe UI Symbol ou Segoe UI Emoji : bornés par la police de symboles la plus large et par Noto Color Emoji, plus un quart ;
+  - le crénage est borné police par police, par sa paire positive la plus large ;
+  - les constructions de Word qui n'étaient traitées nulle part le sont : texte ajusté (fitText), grille du document, équations, documents importés, contrôles liés à des données, ruby, accents d'emphase, caractères combinés et justification arabe (kashida). Ce qu'elles peuvent déplacer sans borne rend la suite du cadre non vérifiable ;
+  - un nom « famille + mot qui élargit » (Arial Black, Segoe UI Black…) ne prend jamais la borne de la famille ;
+  - faux positifs, sur 354 CV honnêtes construits par trois personnes différentes avec LibreOffice pour témoin : le texte visible mis de côté passe de 126 documents et 13 798 caractères à 34 documents et 1 693 caractères. 14 documents (510 caractères) que la version précédente lisait sont maintenant mis de côté, surtout par la borne de crénage d'Aptos, de Garamond et de Segoe UI, et par la grille de caractères ;
+  - sécurité : 1 305 pièges rejoués, aucun n'atteint le texte lu par l'IA. Un relecteur a construit 34 pièges qui mêlent les nouvelles règles aux anciennes : tous sont écartés ;
+  - temps : le plus lourd des documents de stress reste sous 7,5 s.
+
+  À vous : sur un poste Windows avec Office, lancez `scripts/check-windows-fonts.mjs` (mode d'emploi en tête du fichier). Il compare les bornes aux vraies polices de Windows. Si Aptos et Segoe UI ont un crénage plus étroit que la borne actuelle, un tour suivant leur donnera leur propre borne, ce qui rendra la plupart de ces textes. Simplified Arabic Fixed et Miriam Fixed restent sans borne, et un texte arabe justifié rend la suite de son cadre non vérifiable.
 
 ### Lot 6 — constats restés hors des cinq lots
 Les 169 constats restants ont été triés dans le code actuel. Pour chacun, la partie qui dépend d'une de vos décisions reste hors code. Le plan est dans `AUDIT_AMELIORATIONS_2026-10-24.lot6.json` : 6 vagues, 28 unités, les fichiers prévus et les décisions connues. Chaque vague est relue par un relecteur chargé d'y trouver des défauts, corrigée, fusionnée, validée, puis poussée.
