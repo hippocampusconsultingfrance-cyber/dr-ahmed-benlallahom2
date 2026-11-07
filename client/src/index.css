@@ -517,6 +517,12 @@ html[lang="zh"] .font-display,
     background: linear-gradient(90deg, var(--primary), transparent);
   }
 
+  /* Sur-titre de l'accueil, sur deux lignes au téléphone : un interligne normal les sépare (PUB-18).
+     Hors couche comme .eyebrow-label, qu'un utilitaire leading-* ne surclasserait pas. */
+  .hero-panel .eyebrow-label {
+    line-height: 1.5;
+  }
+
   .hero-panel {
     position: relative;
     overflow: hidden;
@@ -1051,6 +1057,15 @@ body {
 .recruitment-country-option[aria-selected="true"] {
   background: color-mix(in oklch, var(--primary) 14%, transparent);
   color: var(--primary);
+}
+
+/* L'option active ne prend pas le focus (aria-activedescendant) et les couleurs forcées effacent
+   son fond et sa couleur : un contour système la désigne (A11Y-11). */
+@media (forced-colors: active) {
+  .recruitment-country-option[aria-selected="true"] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
 }
 
 .mobile-navigation {

@@ -59,9 +59,9 @@ export default function HeroSection() {
       <div className="container relative z-10 pt-28 pb-16 sm:pt-32 sm:pb-24">
         <div className="hero-panel max-w-3xl p-6 sm:p-8 lg:p-12">
           <div className="max-w-2xl">
-          {/* Kicker on its own line above the badge (PUB-18); balanced lines when it wraps on a phone. */}
+          {/* Kicker on its own line above the badge (PUB-18); balanced lines when it wraps on a phone, spaced by .hero-panel .eyebrow-label in index.css. */}
           <div className="flex flex-col items-start">
-            <span className="eyebrow-label mb-6 leading-normal text-balance">Hippocampus Consulting · France</span>
+            <span className="eyebrow-label mb-6 text-balance">Hippocampus Consulting · France</span>
 
             {/* Credentials badge with gold */}
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-gold/30 bg-gold/5 mb-8">

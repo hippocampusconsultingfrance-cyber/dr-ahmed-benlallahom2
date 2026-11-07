@@ -243,7 +243,20 @@ describe.skipIf(!executablePath)("nom du CV choisi dans les formulaires de candi
           warningBottom: warning ? warning.getBoundingClientRect().bottom + window.scrollY : null,
           firstFieldTop: top(document.getElementById("recruitment-firstName")),
           columns: grids.map((grid) => getComputedStyle(grid).gridTemplateColumns.split(" ").length),
-          overflowing: [...form.querySelectorAll("fieldset label")].filter((label) => label.scrollWidth > label.clientWidth + 1).map((label) => label.textContent),
+          // A country or language name may wrap at a space or a hyphen (« Saudi-/Arabien »), never inside a word.
+          splitWords: [...form.querySelectorAll("fieldset label")].flatMap((label) => {
+            const split: string[] = [];
+            const walker = document.createTreeWalker(label, NodeFilter.SHOW_TEXT);
+            for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+              for (const word of node.textContent!.matchAll(/[^\s-]+/g)) {
+                const range = document.createRange();
+                range.setStart(node, word.index);
+                range.setEnd(node, word.index + word[0].length);
+                if (new Set([...range.getClientRects()].filter((rect) => rect.width > 0).map((rect) => Math.round(rect.top))).size > 1) split.push(word[0]);
+              }
+            }
+            return split;
+          }),
           pageWidth: document.documentElement.scrollWidth,
         };
       });
@@ -258,7 +271,7 @@ describe.skipIf(!executablePath)("nom du CV choisi dans les formulaires de candi
       expect(layout.warningBottom, where).not.toBeNull();
       expect(layout.warningBottom!, where).toBeLessThanOrEqual(layout.firstFieldTop);
       expect(layout.columns, where).toEqual([columns, columns]);
-      expect(layout.overflowing, where).toEqual([]);
+      expect(layout.splitWords, where).toEqual([]);
       expect(layout.pageWidth, where).toBeLessThanOrEqual(width);
       await page.context().close();
     }
@@ -332,11 +345,13 @@ describe.skipIf(!executablePath)("nom du CV choisi dans les formulaires de candi
   it("parcourt la liste des pays du diplôme aux flèches, sans la mettre dans l’ordre de tabulation, et la ferme quand le focus la quitte (A11Y-11)", async () => {
     const page = await openStandard(1366, { language: "en" });
     const input = page.locator("#recruitment-diploma-country-search");
-    const state = () => page.evaluate(() => {
+    const read = () => page.evaluate(() => {
       const field = document.getElementById("recruitment-diploma-country-search")!;
       const active = field.getAttribute("aria-activedescendant");
       const options = [...document.querySelectorAll("#recruitment-diploma-country-options [role=option]")];
       return {
+        // A field that says it is open points at a list that exists.
+        controlsMissing: field.getAttribute("aria-expanded") === "true" && !document.getElementById(field.getAttribute("aria-controls") ?? ""),
         expanded: field.getAttribute("aria-expanded"),
         active: active ? document.getElementById(active)?.firstElementChild?.textContent ?? `missing ${active}` : null,
         selected: options.filter((option) => option.getAttribute("aria-selected") === "true").map((option) => option.firstElementChild?.textContent),
@@ -346,6 +361,11 @@ describe.skipIf(!executablePath)("nom du CV choisi dans les formulaires de candi
         focused: document.activeElement?.id || document.activeElement?.getAttribute("aria-label") || document.activeElement?.tagName,
       };
     });
+    const state = async () => {
+      const current = await read();
+      expect(current.controlsMissing, "aria-expanded=true sans liste").toBe(false);
+      return current;
+    };
 
     await input.focus();
     expect(await state()).toMatchObject({ expanded: "true", active: null, selected: [], tabbable: 0 });
@@ -383,8 +403,39 @@ describe.skipIf(!executablePath)("nom du CV choisi dans les formulaires de candi
     await input.fill("Tunis");
     await page.getByRole("option", { name: /Tunisia/ }).click();
     expect(await state()).toMatchObject({ expanded: "false", value: "Tunisia", focused: "recruitment-diploma-country-search" });
+
+    // No match: the field no longer says it is open, and the message lands in a live region that
+    // was already there, so that screen readers announce it.
+    const status = page.locator("div:has(> #recruitment-diploma-country-label) > [role=status]");
+    expect(await status.textContent()).toBe("");
+    await status.evaluate((region) => region.setAttribute("data-probe", "before"));
     await input.fill("zzz");
-    expect(await page.getByText("No country matches your search.").isVisible()).toBe(true);
+    expect(await state()).toMatchObject({ expanded: "false", options: [], active: null });
+    expect(await status.getAttribute("data-probe")).toBe("before");
+    expect(await status.textContent()).toBe("No country matches your search.");
+    expect(await status.isVisible()).toBe(true);
+    await input.fill("Tun");
+    expect(await state()).toMatchObject({ expanded: "true" });
+    expect(await status.textContent()).toBe("");
+    await page.context().close();
+  }, 60_000);
+
+  it("désigne l’option active de la liste des pays par un contour en couleurs forcées (A11Y-11)", async () => {
+    const page = await openStandard(1366, { language: "en", forcedColors: "active" });
+    await page.locator("#recruitment-diploma-country-search").fill("al");
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("ArrowDown");
+    // Forced colors drop the background that marks it otherwise; the focus stays in the field.
+    const outlines = await page.locator("#recruitment-diploma-country-options [role=option]").evaluateAll((options) => options.map((option) => {
+      const style = getComputedStyle(option);
+      return { active: option.getAttribute("aria-selected") === "true", style: style.outlineStyle, width: parseFloat(style.outlineWidth), color: style.outlineColor };
+    }));
+    const [active, ...others] = [outlines[1], ...outlines.filter((_, index) => index !== 1)];
+    expect(active).toMatchObject({ active: true, style: "solid" });
+    expect(active.width).toBeGreaterThanOrEqual(2);
+    expect(active.color).not.toBe("rgba(0, 0, 0, 0)");
+    expect(others.length).toBeGreaterThan(0);
+    expect(others.filter((option) => option.active || option.style !== "none")).toEqual([]);
     await page.context().close();
   }, 60_000);
 

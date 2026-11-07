@@ -367,6 +367,10 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
       expect(code, `/maintenance à ${width} px`).toEqual({ inside: true, pageWidth: width });
       await page.context().close();
     }
+    // /error: « 500 » fits as it is and keeps its size on a phone.
+    const error = await open("/error", { width: 390, height: 844, consent: true });
+    expect(await error.locator("main p", { hasText: /^500$/ }).evaluate((code) => getComputedStyle(code).fontSize)).toBe("48px");
+    await error.context().close();
 
     // Home: the kicker sits on its own line above the credentials badge, never touching it; on a
     // phone its two lines are balanced, not « HIPPOCAMPUS CONSULTING · » over « FRANCE ».
@@ -380,11 +384,25 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
         const lines = new Map<number, number>();
         for (const rect of range.getClientRects()) lines.set(Math.round(rect.top), (lines.get(Math.round(rect.top)) ?? 0) + rect.width);
         const widths = [...lines.values()];
-        return { gap: badge.top - kicker.getBoundingClientRect().bottom, lines: widths.length, balance: Math.min(...widths) / Math.max(...widths) };
+        const rects = [...range.getClientRects()].filter((rect) => rect.width > 0).sort((a, b) => a.top - b.top);
+        const style = getComputedStyle(kicker);
+        return {
+          gap: badge.top - kicker.getBoundingClientRect().bottom,
+          lines: widths.length,
+          balance: Math.min(...widths) / Math.max(...widths),
+          lineHeight: parseFloat(style.lineHeight) / parseFloat(style.fontSize),
+          // Room between the glyphs of one line and those of the next (negative: they overlap).
+          lineGap: rects.at(-1)!.top - rects[0].bottom,
+        };
       });
       expect(hero.gap, `${width} px`).toBeGreaterThanOrEqual(16);
       expect(hero.lines, `${width} px`).toBeLessThanOrEqual(2);
-      if (hero.lines === 2) expect(hero.balance, `${width} px`).toBeGreaterThan(0.4);
+      // A normal line height, not the 1 of .eyebrow-label, so that two lines do not touch.
+      expect(hero.lineHeight, `${width} px`).toBeGreaterThanOrEqual(1.4);
+      if (hero.lines === 2) {
+        expect(hero.balance, `${width} px`).toBeGreaterThan(0.4);
+        expect(hero.lineGap, `${width} px`).toBeGreaterThanOrEqual(0);
+      }
       await page.context().close();
     }
 

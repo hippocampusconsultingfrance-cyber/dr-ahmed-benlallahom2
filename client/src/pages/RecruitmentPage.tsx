@@ -367,6 +367,9 @@ export default function RecruitmentPage() {
   const selectedCountryLabels = useMemo(() => countryOptions.filter(country => form.targetCountries.includes(country.value)).map(country => country.labels[lang]).join(", "), [form.targetCountries, lang]);
   const worldwideCountries = useMemo(() => getWorldwideCountries(lang), [lang]);
   const filteredDiplomaCountries = useMemo(() => filterWorldwideCountries(worldwideCountries, diplomaCountryQuery, lang).slice(0, 30), [worldwideCountries, diplomaCountryQuery, lang]);
+  // Liste rendue seulement quand elle a des options : aria-expanded ne désigne jamais une liste absente (A11Y-11).
+  const diplomaCountryListShown = diplomaCountryOpen && filteredDiplomaCountries.length > 0;
+  const diplomaCountryNoMatch = diplomaCountryOpen && filteredDiplomaCountries.length === 0;
   // Option active de la liste des pays (A11Y-11) : le focus reste dans le champ, qui l’annonce par aria-activedescendant.
   const activeDiplomaCountry = diplomaCountryOpen ? filteredDiplomaCountries[diplomaCountryActiveIndex] : undefined;
   const activeDiplomaCountryOptionId = activeDiplomaCountry ? diplomaCountryOptionId(activeDiplomaCountry.code) : undefined;
@@ -617,7 +620,7 @@ export default function RecruitmentPage() {
                         aria-invalid={isInvalid("diplomaCountry")}
                         className={`recruitment-field site-search-input ${diplomaCountryQuery ? "site-search-input-with-clear" : ""} ${isInvalid("diplomaCountry") ? "form-field-invalid" : ""}`}
                         role="combobox"
-                        aria-expanded={diplomaCountryOpen}
+                        aria-expanded={diplomaCountryListShown}
                         aria-controls="recruitment-diploma-country-options"
                         aria-autocomplete="list"
                         aria-activedescendant={activeDiplomaCountryOptionId}
@@ -625,7 +628,7 @@ export default function RecruitmentPage() {
                       {diplomaCountryQuery && <button type="button" onClick={() => { setDiplomaCountryQuery(""); setDiplomaCountryActiveIndex(-1); setDiplomaCountryOpen(true); diplomaCountryInputRef.current?.focus(); }} className="site-search-clear" aria-label={diplomaCopy.clear}><X className="h-4 w-4" /></button>}
                     </div>
                     {form.diplomaCountry && <p className="text-xs font-medium text-primary">{diplomaCopy.label} : {form.diplomaCountry}</p>}
-                    {diplomaCountryOpen && (filteredDiplomaCountries.length > 0 ? (
+                    {diplomaCountryListShown && (
                       // Options hors de l’ordre de tabulation ; mousedown annulé pour garder le focus dans le champ.
                       <ul id="recruitment-diploma-country-options" role="listbox" aria-label={diplomaCopy.label} className="recruitment-country-options" onMouseDown={event => event.preventDefault()}>
                         {filteredDiplomaCountries.map((country, index) => (
@@ -634,7 +637,9 @@ export default function RecruitmentPage() {
                           </li>
                         ))}
                       </ul>
-                    ) : <p className="recruitment-country-options px-4 py-3 text-sm text-muted-foreground">{diplomaCopy.noMatch}</p>)}
+                    )}
+                    {/* Présent dès le premier rendu (vide sinon) pour que « aucun pays » soit annoncé ; le champ ne se dit alors pas ouvert (A11Y-11). */}
+                    <p role="status" className={diplomaCountryNoMatch ? "recruitment-country-options px-4 py-3 text-sm text-muted-foreground" : "sr-only"}>{diplomaCountryNoMatch ? diplomaCopy.noMatch : ""}</p>
                   </div>
 
                   {/* Pays et langues sur deux colonnes dès 360 px pour raccourcir le formulaire (REC-22) ; une seule en dessous, où les mots longs se couperaient. */}
