@@ -218,6 +218,16 @@ async function assertAcceptableNewPassword(password: string) {
   }
 }
 
+/** Whether the NFKC form of a password, which a new hash would open the account with, is known to be absent from the breach list. */
+async function isSafeToRehash(password: string) {
+  try {
+    return !(await isCompromisedPassword(normalizeCandidatePassword(password)));
+  } catch {
+    console.error("candidate_password_rehash_breach_check_unavailable");
+    return false;
+  }
+}
+
 const activationLinkInput = z.object({ email: z.string().email().max(320), token: z.string().min(20).max(200) });
 const invalidActivationLinkMessage = "Ce lien d’activation est invalide ou expiré. Demandez un nouveau lien depuis l’espace candidat.";
 const invalidActivationLink = () => candidateRefusal("BAD_REQUEST", invalidActivationLinkMessage, "candidate_activation_link_invalid");
@@ -599,8 +609,11 @@ export const candidatePortalRouter = router({
       throw genericError;
     }
     const signedIn = candidate!;
-    // INTL-12: a password hashed as typed before its NFKC normalisation is stored again in that form.
-    const rehashed = valid === "as_typed" && !validateCandidatePassword(input.password) ? { passwordHash: await hashCandidatePassword(input.password) } : {};
+    // INTL-12: a password hashed as typed before its NFKC normalisation is stored again in that form,
+    // which then opens the account for every form NFKC folds to: never when that form is a breached
+    // password (a full-width copy of one, which its ASCII form would then open), nor while the breach
+    // list cannot be read. The old hash is kept, and the sign-in goes on.
+    const rehashed = valid === "as_typed" && !validateCandidatePassword(input.password) && await isSafeToRehash(input.password) ? { passwordHash: await hashCandidatePassword(input.password) } : {};
     await db.update(candidateAccounts).set({ failedLoginCount: 0, lockedUntil: null, lastLoginAt: new Date(), ...rehashed }).where(eq(candidateAccounts.id, signedIn.id));
     await clearPersistentRateLimit({ action: CANDIDATE_LOGIN_POLICY.emailNetwork.action, subject: pairSubject });
     await clearPersistentRateLimit({ action: CANDIDATE_LOGIN_POLICY.email.action, subject: email });

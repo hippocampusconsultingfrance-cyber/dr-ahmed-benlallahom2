@@ -12,11 +12,19 @@ import { CandidateClient, TEST_PEPPER, accountByEmail, freshCandidateDb } from "
 
 process.env.CANDIDATE_AUTH_PEPPER ||= TEST_PEPPER;
 
-const state = vi.hoisted(() => ({ db: null as unknown }));
+const state = vi.hoisted(() => ({ db: null as unknown, breached: new Set<string>(), breachListDown: false }));
 
 vi.mock("./db", () => ({ getDb: async () => state.db }));
 vi.mock("./_core/notification", () => ({ notifyOwner: vi.fn(async () => true) }));
 vi.mock("./candidateTurnstile", () => ({ verifyCandidateTurnstile: vi.fn(async () => undefined), candidateRequestIp: () => "203.0.113.1" }));
+// The breach list is answered locally: the passwords of state.breached, or no answer at all.
+vi.mock("./candidateSecurity", async importOriginal => ({
+  ...await importOriginal<typeof import("./candidateSecurity")>(),
+  isCompromisedPassword: vi.fn(async (password: string) => {
+    if (state.breachListDown) throw new Error("candidate_password_breach_check_unavailable");
+    return state.breached.has(password);
+  }),
+}));
 
 const { hashCandidatePassword, matchCandidatePassword, verifyCandidatePassword } = await import("./candidateAuth");
 const { candidatePortalRouter } = await import("./candidatePortalRouter");
@@ -60,6 +68,8 @@ describe("INTL-12 — mot de passe candidat normalisé en NFKC", () => {
 
     beforeEach(() => {
       state.db = freshCandidateDb();
+      state.breached.clear();
+      state.breachListDown = false;
     });
 
     it("enregistre de nouveau sous sa forme NFKC un mot de passe haché tel que saisi, qui ouvre ensuite l’espace sous toutes ses formes", async () => {
@@ -72,6 +82,32 @@ describe("INTL-12 — mot de passe candidat normalisé en NFKC", () => {
       await expect(matchCandidatePassword(composed, rehashed)).resolves.toBe("normalized");
       await expect(client().api.login({ email, password: composed })).resolves.toEqual({ success: true });
       await expect(client().api.login({ email, password: fullWidth })).resolves.toEqual({ success: true });
+    }, 30_000);
+
+    it("garde le hachage tel que saisi d’une copie en pleine chasse d’un mot de passe compromis, que sa forme ASCII n’ouvre donc jamais", async () => {
+      const breached = "password1234567890";
+      const fullWidthBreached = [...breached].map(character => String.fromCodePoint(character.codePointAt(0)! + 0xfee0)).join("");
+      expect(fullWidthBreached.normalize("NFKC")).toBe(breached);
+      state.breached.add(breached);
+      const legacy = hashAsTyped(fullWidthBreached);
+      seed(legacy);
+
+      await expect(client().api.login({ email, password: breached })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+      await expect(client().api.login({ email, password: fullWidthBreached })).resolves.toEqual({ success: true });
+      expect(accountByEmail(db(), email)!.passwordHash).toBe(legacy);
+      await expect(client().api.login({ email, password: breached })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    }, 30_000);
+
+    it("garde le hachage tel que saisi tant que la liste des mots de passe compromis ne répond pas, et le remplace ensuite", async () => {
+      const legacy = hashAsTyped(decomposed);
+      seed(legacy);
+
+      state.breachListDown = true;
+      await expect(client().api.login({ email, password: decomposed })).resolves.toEqual({ success: true });
+      expect(accountByEmail(db(), email)!.passwordHash).toBe(legacy);
+      state.breachListDown = false;
+      await expect(client().api.login({ email, password: decomposed })).resolves.toEqual({ success: true });
+      await expect(matchCandidatePassword(composed, accountByEmail(db(), email)!.passwordHash)).resolves.toBe("normalized");
     }, 30_000);
 
     it("garde le hachage d’un mot de passe déjà normalisé, et refuse un mauvais mot de passe sans y toucher", async () => {
