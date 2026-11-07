@@ -9,9 +9,9 @@
  *    base letter and its accents;
  * 2. removal of ADMIN_SEARCH_IGNORED_CHARACTERS (accents, Arabic harakat,
  *    invisible characters);
- * 3. the letters NFD leaves whole replaced by their base letter
- *    (ADMIN_SEARCH_LETTER_FOLDS), then the ligatures by two letters
- *    (ADMIN_SEARCH_LIGATURE_FOLDS).
+ * 3. the letters NFD leaves whole replaced by their base letter, and the
+ *    typographic apostrophes by the keyboard's (ADMIN_SEARCH_LETTER_FOLDS),
+ *    then the ligatures by two letters (ADMIN_SEARCH_LIGATURE_FOLDS).
  * The case is ignored by ILIKE.
  */
 
@@ -32,9 +32,15 @@ const INVISIBLE_CHARACTERS = "\u00ad\u061c\u180e" + range(0x200b, 0x200f) + rang
  */
 export const ADMIN_SEARCH_IGNORED_CHARACTERS = range(0x300, 0x36f) + range(0x64b, 0x655) + "\u0670" + INVISIBLE_CHARACTERS;
 
-/** Letters without decomposition, searched as their base letter (Ø, Ł, Đ, dotless ı, alef wasla ٱ). */
+/**
+ * Letters without decomposition, searched as their base letter (Ø, Ł, Đ,
+ * dotless ı, alef wasla ٱ); and the apostrophes a text is written with (’ of
+ * the form's specialties, « Médecine d’urgence », ‘, the letter ʼ, the prime ′),
+ * searched as the keyboard's ' (INTL-12), as the public specialty search does.
+ */
 export const ADMIN_SEARCH_LETTER_FOLDS: ReadonlyArray<readonly [string, string]> = [
   ["ø", "o"], ["Ø", "O"], ["ł", "l"], ["Ł", "L"], ["đ", "d"], ["Đ", "D"], ["ı", "i"], ["ٱ", "ا"],
+  ["\u2019", "'"], ["\u2018", "'"], ["\u02bc", "'"], ["\u2032", "'"],
 ];
 
 /** Letters written as two (ß, Æ, Œ), searched as those two letters. */

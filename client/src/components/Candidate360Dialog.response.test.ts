@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // ADM-13 — la fiche 360° note qu’un candidat a répondu : sa dernière réponse
 // est datée et compte dans le taux de réponse du pilotage recrutement.
 
-type MutationOptions = { onSuccess?: () => unknown; onError?: (error: { message: string }) => unknown };
+type MutationOptions = { onSuccess?: (result?: { closedFollowUps: number }) => unknown; onError?: (error: { message: string }) => unknown };
 
 const state = vi.hoisted(() => ({
   markResponse: vi.fn(),
@@ -23,6 +23,7 @@ vi.mock("@/lib/trpc", () => ({
         recruitment: {
           candidate: { detail: { invalidate: (input: unknown) => state.invalidated.push(["candidate.detail", input]) } },
           dashboard: { invalidate: () => state.invalidated.push("dashboard") },
+          followUps: { list: { invalidate: () => state.invalidated.push("followUps.list") } },
         },
       },
     }),
@@ -72,6 +73,13 @@ describe("ADM-13 — « Le candidat a répondu » dans la fiche 360°", () => {
     await state.markResponseOptions!.onSuccess!();
     expect(state.toasts).toEqual(["Réponse du candidat enregistrée"]);
     expect(state.invalidated).toEqual([["candidate.detail", { id: 5 }], "dashboard"]);
+  });
+
+  it("dit combien de relances en attente la réponse a closes, et relit alors « Relances à faire »", async () => {
+    await state.markResponseOptions!.onSuccess!({ closedFollowUps: 2 });
+    await state.markResponseOptions!.onSuccess!({ closedFollowUps: 1 });
+    expect(state.toasts).toEqual(["Réponse du candidat enregistrée ; ses 2 relances en attente sont closes", "Réponse du candidat enregistrée ; sa relance en attente est close"]);
+    expect(state.invalidated.filter(entry => entry === "followUps.list")).toHaveLength(2);
   });
 
   it("dit pourquoi le serveur a refusé", async () => {

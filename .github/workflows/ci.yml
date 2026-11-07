@@ -43,14 +43,26 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: pnpm
+      # No code of the repository runs before the next step has checked this workflow: neither the
+      # project's install scripts nor a pnpmfile, which would run before any check and could change
+      # what every next step runs (node_modules, their variables). esbuild and @tailwindcss/oxide find
+      # their binary in their platform package without their install script.
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile
+      # The check of this workflow, before any other, run alone as well, with a configuration of its
+      # own: neither a vitest.config.ts that leaves it out of the suite nor one that runs code before
+      # the tests keeps it from running, and it then refuses that vitest.config.ts. The step compares
+      # the digests of what it runs before vitest, listed here, then checks that every package
+      # installed is the registry's, and runs vitest by its file: neither a script of package.json
+      # nor what pnpm's configuration loads into node runs first. Changing any of it changes this file.
+      - name: Check this workflow
+        run: |
+          sha256sum --check --strict <<< "41962c528cbe7d98c223389ee5dd56d2a2d4dbd312bae87f328dd72953fd9e34  scripts/check-locked-packages.mjs"
+          sha256sum --check --strict <<< "9374c665ca5c554485eabc770dbe2d79502aef1a66651ba412c81b4a6e94d30a  scripts/ci-workflow.vitest.config.mjs"
+          node scripts/check-locked-packages.mjs
+          node node_modules/vitest/vitest.mjs run server/ciWorkflow.test.ts --config scripts/ci-workflow.vitest.config.mjs --passWithNoTests=false
       - name: Verify TypeScript
         run: pnpm check
-      # The check of this workflow, run alone as well: a vitest configuration that leaves it out
-      # of the suite finds no test file here, which fails even with passWithNoTests.
-      - name: Check this workflow
-        run: pnpm vitest run server/ciWorkflow.test.ts --passWithNoTests=false
       - name: Run test suite
         run: pnpm test:ci
       - name: Verify production build

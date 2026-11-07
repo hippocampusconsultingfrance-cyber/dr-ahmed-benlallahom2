@@ -85,9 +85,25 @@ export function revealQuestionDetail(detail: Pick<HTMLElement, "focus" | "scroll
   detail.scrollIntoView({ block: "start" });
 }
 
-/** `initialSearch`: the reference the dashboard's address names (ADM-09), searched at once. */
+/**
+ * ADM-09: a question opened from a notification's link. Its detail takes the
+ * focus, on a desktop too (nothing else has it when the page opens), and comes
+ * on screen below lg, where it sits under the list.
+ */
+function revealLinkedQuestionDetail(detail: HTMLElement | null) {
+  if (!detail) return;
+  detail.focus({ preventScroll: true });
+  if (!window.matchMedia("(min-width: 64rem)").matches) detail.scrollIntoView({ block: "start" });
+}
+
+/**
+ * `initialSearch`: the reference the dashboard's address names (ADM-09),
+ * searched at once in « Toutes », since the question it names may have been
+ * answered or set aside since its notification; that question is opened once
+ * the list shows it.
+ */
 export default function MedicalQuestionsAdminTab({ initialSearch = "" }: { initialSearch?: string } = {}) {
-  const [queue, setQueue] = useState<MedicalQuestionQueue>("todo");
+  const [queue, setQueue] = useState<MedicalQuestionQueue>(initialSearch ? "all" : "todo");
   // ADM-02: patient name, email or the QMED-… reference of the notification email, searched by the server.
   const { text: searchText, search, setText: setSearchText, clear: clearSearch } = useAdminSearch(initialSearch);
   const { pageCount, loadMore } = useAdminPageCount(JSON.stringify({ queue, search }));
@@ -96,6 +112,15 @@ export default function MedicalQuestionsAdminTab({ initialSearch = "" }: { initi
   const { items, total, isLoading, isLoadingMore, error, loadMoreError, retryLoadMore, retry, retrying } = mergeAdminPages(pages);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const detailRef = useRef<HTMLDivElement>(null);
+  // ADM-09: the question a notification's link names, selected once (another one chosen afterwards stays chosen).
+  const linkedQuestionId = initialSearch ? items.find(question => question.trackingId === initialSearch)?.id ?? null : null;
+  const linkedQuestionOpened = useRef(false);
+  useEffect(() => {
+    if (linkedQuestionId === null || linkedQuestionOpened.current) return;
+    linkedQuestionOpened.current = true;
+    setSelectedId(linkedQuestionId);
+    revealLinkedQuestionDetail(detailRef.current);
+  }, [linkedQuestionId]);
   const [adminResponse, setAdminResponse] = useState("");
   const [publicQuestion, setPublicQuestion] = useState("");
   const [publicResponse, setPublicResponse] = useState("");
@@ -266,6 +291,7 @@ export default function MedicalQuestionsAdminTab({ initialSearch = "" }: { initi
                 <button
                   type="button"
                   key={question.id}
+                  aria-current={selectedId === question.id ? "true" : undefined}
                   onClick={() => {
                     setSelectedId(question.id);
                     revealQuestionDetail(detailRef.current);

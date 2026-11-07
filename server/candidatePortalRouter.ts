@@ -23,6 +23,7 @@ import {
   hashCandidatePassword,
   hashCandidateToken,
   normalizeCandidateEmail,
+  normalizeCandidatePassword,
   validateCandidatePassword,
   verifyCandidatePasswordInConstantTime,
   waitForCandidateResponseFloor,
@@ -202,11 +203,28 @@ async function recordCandidateActivationDelivery(
 async function assertAcceptableNewPassword(password: string) {
   const passwordError = validateCandidatePassword(password);
   if (passwordError) throw candidateRefusal("BAD_REQUEST", "Choisissez un mot de passe d’au moins 15 caractères.", "candidate_password_too_short");
+  // INTL-12: the hash is computed on the NFKC form, which then opens the account
+  // for every form NFKC folds to (a full-width copy of a breached password opens
+  // it with the ASCII one): that form is checked, and the typed one when it differs.
+  const hashedForm = normalizeCandidatePassword(password);
+  const checkedForms = hashedForm === password ? [password] : [hashedForm, password];
   try {
-    if (await isCompromisedPassword(password)) throw candidateRefusal("BAD_REQUEST", "Ce mot de passe a déjà été compromis. Choisissez-en un autre, long et unique.", "candidate_password_compromised");
+    for (const form of checkedForms) {
+      if (await isCompromisedPassword(form)) throw candidateRefusal("BAD_REQUEST", "Ce mot de passe a déjà été compromis. Choisissez-en un autre, long et unique.", "candidate_password_compromised");
+    }
   } catch (error) {
     if (error instanceof TRPCError) throw error;
     throw candidateRefusal("SERVICE_UNAVAILABLE", "Le contrôle de sécurité du mot de passe est temporairement indisponible.", "candidate_password_check_unavailable");
+  }
+}
+
+/** Whether the NFKC form of a password, which a new hash would open the account with, is known to be absent from the breach list. */
+async function isSafeToRehash(password: string) {
+  try {
+    return !(await isCompromisedPassword(normalizeCandidatePassword(password)));
+  } catch {
+    console.error("candidate_password_rehash_breach_check_unavailable");
+    return false;
   }
 }
 
@@ -591,8 +609,11 @@ export const candidatePortalRouter = router({
       throw genericError;
     }
     const signedIn = candidate!;
-    // INTL-12: a password hashed as typed before its NFKC normalisation is stored again in that form.
-    const rehashed = valid === "as_typed" && !validateCandidatePassword(input.password) ? { passwordHash: await hashCandidatePassword(input.password) } : {};
+    // INTL-12: a password hashed as typed before its NFKC normalisation is stored again in that form,
+    // which then opens the account for every form NFKC folds to: never when that form is a breached
+    // password (a full-width copy of one, which its ASCII form would then open), nor while the breach
+    // list cannot be read. The old hash is kept, and the sign-in goes on.
+    const rehashed = valid === "as_typed" && !validateCandidatePassword(input.password) && await isSafeToRehash(input.password) ? { passwordHash: await hashCandidatePassword(input.password) } : {};
     await db.update(candidateAccounts).set({ failedLoginCount: 0, lockedUntil: null, lastLoginAt: new Date(), ...rehashed }).where(eq(candidateAccounts.id, signedIn.id));
     await clearPersistentRateLimit({ action: CANDIDATE_LOGIN_POLICY.emailNetwork.action, subject: pairSubject });
     await clearPersistentRateLimit({ action: CANDIDATE_LOGIN_POLICY.email.action, subject: email });
@@ -669,7 +690,7 @@ export const candidatePortalRouter = router({
   }),
 
   resetPassword: publicProcedure.input(z.object({ email: z.string().email().max(320), token: z.string().min(20).max(200), password: passwordInput })).mutation(async ({ input, ctx }) => {
-    // Length and known-breach checks (isCompromisedPassword(input.password)) run before any change.
+    // Length and known-breach checks (assertAcceptableNewPassword) run before any change.
     await assertAcceptableNewPassword(input.password);
     const db = databaseOrThrow(await getDb());
     const candidate = (await db.select().from(candidateAccounts).where(and(

@@ -278,6 +278,110 @@ describe("actions d’administration du recrutement", () => {
     expect(cells(shortlist.csv, "c2@test.local", "Téléphone")).toBe("\"00 21651000010\"");
   });
 
+  it("exporte en texte un numéro saisi sans « + » qu’un tableur lirait comme un nombre ou une date, zéros de tête compris (ADM-26)", async () => {
+    // Calc in French reads each of these as a number (612345678, 21651000010, 51000010) or a date (12/06/34).
+    const typed = {
+      "0612345678": "06 12 34 56 78",
+      "0021651000010": "00 21651000010",
+      "21651000010": "2 16 51 00 00 10",
+      "51 000 010": "51 00 00 10",
+      "06-12-34": "06 12 34",
+      // Already text: left as typed, a « + » aside.
+      "+1-202-555-0143": "001-202-555-0143",
+      "07911 123456": "07911 123456",
+      "(0)6 12 34 56 78": "(0)6 12 34 56 78",
+    };
+    const candidates = Object.keys(typed).map((phone, index) => seedCandidate(index + 1, { phone }));
+    const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-PHONE-2", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Qatar" }]);
+    memory.seed(clientBriefCandidates, candidates.map(candidate => ({ brief_id: brief!.id, application_id: candidate.id, association_status: "shortlisted", candidate_consent_at: consentAt })));
+    const phones = (csv: string) => {
+      const [header, ...rows] = csv.split("\n");
+      const column = header!.split(";").indexOf("\"Téléphone\"");
+      return Object.fromEntries(rows.map(row => [row.split(";")[2], row.split(";")[column]]));
+    };
+    const expected = Object.fromEntries(Object.values(typed).map((phone, index) => [`"c${index + 1}@test.local"`, `"${phone}"`]));
+
+    expect(phones((await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: candidates.map(candidate => candidate.id as number) })).csv)).toEqual(expected);
+    expect(phones((await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number })).csv)).toEqual(expected);
+  });
+
+  it("exporte en texte tout numéro de chiffres et de signes que Calc lirait comme un nombre, en français, anglais ou allemand, « 00 » compris (ADM-26)", async () => {
+    // Read as numbers by LibreOffice Calc before: in French, a first group of any length then groups of three
+    // (34612345678, its « 00 » lost); in all three, parentheses (-612345678), a final dot in English, a fraction.
+    const typed = {
+      "+34 612 345 678": "00 34612345678",
+      "+351 912 345 678": "00 351912345678",
+      "+971 501 234 567": "00 971501234567",
+      "0033 612 345 678": "00 33612345678",
+      "0612 345 678": "06 12 34 56 78",
+      "0661 234 567": "06 61 23 45 67",
+      "(0612345678)": "06 12 34 56 78",
+      "0612345678.": "06 12 34 56 78",
+      "0612345678-": "06 12 34 56 78",
+      "0612 34/56": "06 12 34 56",
+      "126,465/103": "1 26 46 51 03",
+      "+123": "0 01 23",
+      "06": "'06",
+      "6E12": "'6E12",
+      // Text already, left as typed: groups Calc does not read as thousands, two numbers, a « (0) ».
+      "+216 51 000 010": "00216 51 000 010",
+      "+33 (0)6 12 34 56 78": "0033 (0)6 12 34 56 78",
+      "0612345678 / 0698765432": "0612345678 / 0698765432",
+      "0612345678/0698765432": "0612345678/0698765432",
+      "+1-202-555-0143": "001-202-555-0143",
+    };
+    const candidates = Object.keys(typed).map((phone, index) => seedCandidate(index + 1, { phone }));
+    const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-PHONE-3", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Qatar" }]);
+    memory.seed(clientBriefCandidates, candidates.map(candidate => ({ brief_id: brief!.id, application_id: candidate.id, association_status: "shortlisted", candidate_consent_at: consentAt })));
+    const phones = (csv: string) => {
+      const [header, ...rows] = csv.split("\n");
+      const column = header!.split(";").indexOf("\"Téléphone\"");
+      return Object.fromEntries(rows.map(row => [row.split(";")[2], row.split(";")[column]]));
+    };
+    const expected = Object.fromEntries(Object.values(typed).map((phone, index) => [`"c${index + 1}@test.local"`, `"${phone}"`]));
+
+    expect(phones((await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: candidates.map(candidate => candidate.id as number) })).csv)).toEqual(expected);
+    expect(phones((await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number })).csv)).toEqual(expected);
+  });
+
+  it("garde séparés plusieurs numéros saisis dans le même champ quand leurs chiffres sont mis à part, « / » ou « , » entre eux (ADM-26)", async () => {
+    // Set apart as a whole, « 06.12.34.56.78 / 06.98.76.54.32 » gave « 06 12 34 56 78 06 98 76 54 32 », one number of twenty
+    // digits, and « 6.71.23.45.67 / 6.71.23.45.69 » a pair astride the two (« … 76 71 … »). Each number is now set apart on its own.
+    const typed = {
+      "06.12.34.56.78 / 06.98.76.54.32": "06 12 34 56 78 / 06 98 76 54 32",
+      "06.12.34.56.78/06.98.76.54.32": "06 12 34 56 78 / 06 98 76 54 32",
+      "0471.23.45.67 / 0498.76.54.32": "04 71 23 45 67 / 04 98 76 54 32",
+      "079.123.45.67 / 076.987.65.43": "07 91 23 45 67 / 07 69 87 65 43",
+      "0661.234567 / 0698.765432": "06 61 23 45 67 / 06 98 76 54 32",
+      "0612.345.678 / 0698.765.432": "06 12 34 56 78 / 06 98 76 54 32",
+      "6.71.23.45.67 / 6.71.23.45.69": "6 71 23 45 67 / 6 71 23 45 69",
+      // A comma between numbers, which Calc reads as a decimal or grouping sign.
+      "0612345678,0698765432": "06 12 34 56 78, 06 98 76 54 32",
+      "+33612345678,0033698765432": "00 33612345678, 00 33698765432",
+      "0612345678,0698765432,0123456789": "06 12 34 56 78, 06 98 76 54 32, 01 23 45 67 89",
+      // Text already, left as typed.
+      "0612345678 / 0698765432": "0612345678 / 0698765432",
+      "06 12 34 56 78 / 06 98 76 54 32": "06 12 34 56 78 / 06 98 76 54 32",
+      "06.12.34.56.78, 06.98.76.54.32": "06.12.34.56.78, 06.98.76.54.32",
+      "06.12.34.56.78 / 06.98.76.54.32 / 01.23.45.67.89": "06.12.34.56.78 / 06.98.76.54.32 / 01.23.45.67.89",
+      // Not two numbers: a fraction and a decimal, too short for a phone number on one side.
+      "0612 34/56": "06 12 34 56",
+      "126,465/103": "1 26 46 51 03",
+    };
+    const candidates = Object.keys(typed).map((phone, index) => seedCandidate(index + 1, { phone }));
+    const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-PHONE-4", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Qatar" }]);
+    memory.seed(clientBriefCandidates, candidates.map(candidate => ({ brief_id: brief!.id, application_id: candidate.id, association_status: "shortlisted", candidate_consent_at: consentAt })));
+    const phones = (csv: string) => {
+      const [header, ...rows] = csv.split("\n");
+      const column = header!.split(";").indexOf("\"Téléphone\"");
+      return Object.fromEntries(rows.map(row => [row.split(";")[2], row.split(";")[column]]));
+    };
+    const expected = Object.fromEntries(Object.values(typed).map((phone, index) => [`"c${index + 1}@test.local"`, `"${phone}"`]));
+
+    expect(phones((await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: candidates.map(candidate => candidate.id as number) })).csv)).toEqual(expected);
+    expect(phones((await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number })).csv)).toEqual(expected);
+  });
+
   it("écrit dans l’export du vivier les pays et les langues en clair, et le statut en mots (INTL-10)", async () => {
     const candidate = seedCandidate(1, { target_countries: JSON.stringify(["Émirats arabes unis", "Qatar"]), languages: JSON.stringify(["Arabic", "French"]), status: "shortlisted" });
     const pool = await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: [candidate.id as number] });
@@ -330,6 +434,39 @@ describe("actions d’administration du recrutement", () => {
     const dashboard = await admin().admin.recruitment.dashboard();
     expect(dashboard!.candidateStats).toMatchObject({ total: 3, contacted: 2, responded: 1 });
     expect(memory.rows(cvApplications).filter(row => row.last_candidate_response_at !== null)).toHaveLength(2);
+  });
+
+  it("« Le candidat a répondu » clôt ses relances en attente, pas celles des autres ni celles déjà tranchées, et refuse un dossier inexistant sans écrire de ligne d’audit (ADM-13)", async () => {
+    const answered = seedCandidate(1, { last_contacted_at: "2026-10-01 09:00:00.000" });
+    const other = seedCandidate(2, { last_contacted_at: "2026-10-01 09:00:00.000" });
+    const due = (day: number) => new Date(Date.UTC(2026, 9, day));
+    const [day7, day14, dismissed, othersTask] = memory.seed(recruitmentFollowUpTasks, [
+      { application_id: answered.id, kind: "follow_up_7", due_at: due(8), status: "suggested", notes: "Relance après campagne" },
+      { application_id: answered.id, kind: "follow_up_14", due_at: due(15), status: "suggested" },
+      { application_id: answered.id, kind: "follow_up_7", due_at: due(1), status: "dismissed", completed_by_open_id: "earlier_admin" },
+      { application_id: other.id, kind: "follow_up_7", due_at: due(8), status: "suggested" },
+    ]);
+
+    await expect(admin().admin.recruitment.candidate.markResponse({ id: answered.id as number })).resolves.toMatchObject({ success: true, closedFollowUps: 2 });
+    const byId = new Map(memory.rows(recruitmentFollowUpTasks).map(row => [row.id, row]));
+    expect(byId.get(day7!.id)).toMatchObject({ status: "completed", completed_by_open_id: "user_owner", notes: "Relance après campagne" });
+    expect(byId.get(day14!.id)).toMatchObject({ status: "completed", completed_by_open_id: "user_owner" });
+    expect(byId.get(dismissed!.id)).toMatchObject({ status: "dismissed", completed_by_open_id: "earlier_admin" });
+    expect(byId.get(othersTask!.id)).toMatchObject({ status: "suggested", completed_at: null });
+    // The dashboard's « relances manuelles à examiner » counts the other candidate's alone.
+    expect(Number((await admin().admin.recruitment.dashboard())!.followUpStats!.pending)).toBe(1);
+    const audits = memory.rows(recruitmentAuditLogs).map(row => ({ applicationId: row.application_id, metadata: JSON.parse(String(row.metadata)) }));
+    expect(audits).toEqual([
+      { applicationId: answered.id, metadata: { event: "candidate_response", note: null } },
+      { applicationId: answered.id, metadata: { event: "follow_up", taskId: day7!.id, status: "completed", reason: "candidate_response" } },
+      { applicationId: answered.id, metadata: { event: "follow_up", taskId: day14!.id, status: "completed", reason: "candidate_response" } },
+    ]);
+
+    // Another answer later closes nothing more.
+    await expect(admin().admin.recruitment.candidate.markResponse({ id: answered.id as number })).resolves.toMatchObject({ closedFollowUps: 0 });
+    // A dossier that does not exist (erased meanwhile): refused, nothing logged.
+    await expect(admin().admin.recruitment.candidate.markResponse({ id: 99_999_999 })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(memory.rows(recruitmentAuditLogs).filter(row => row.application_id === 99_999_999)).toEqual([]);
   });
 
   it("refuse un export du vivier dont plus aucun candidat sélectionné n’est exportable, au lieu d’un fichier vide (REC-01)", async () => {

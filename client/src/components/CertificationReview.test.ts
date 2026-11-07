@@ -26,6 +26,12 @@ vi.mock("react", async importOriginal => {
     // without cleanup, enough for the typing delay of the search box and the
     // filters (ADM-02, ADM-20), whose timer a test then lets elapse (typed()).
     useEffect: (effect: () => void) => { effect(); },
+    // Kept between two renders like useState (the card a notification's link opens, ADM-09).
+    useRef: (initial: unknown) => {
+      const slot = hooks.index++;
+      if (!(slot in hooks.values)) hooks.values[slot] = { current: initial };
+      return hooks.values[slot];
+    },
   };
 });
 

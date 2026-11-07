@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { BrainCircuit, ClipboardList, Download, FileSearch, Loader2, Mail, RefreshCw, Settings2, Sparkles, Trash2, UserRound, UserRoundPlus } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -162,7 +162,11 @@ function describeErasureReport(report: { storageObjectsDeleted: number; googleDr
   return parts.join(" · ");
 }
 
-/** `initialSearch`: the reference the dashboard's address names (ADM-09), searched at once. */
+/**
+ * `initialSearch`: the reference the dashboard's address names (ADM-09),
+ * searched at once; the application it names is opened, brought on screen and
+ * focused once the list shows it.
+ */
 export default function RecruitmentTab({ initialSearch = "" }: { initialSearch?: string } = {}) {
   const [statusFilter, setStatusFilter] = useState<Status | "">("");
   const [countryFilter, setCountryFilter] = useState("");
@@ -216,6 +220,17 @@ export default function RecruitmentTab({ initialSearch = "" }: { initialSearch?:
   const scoreThreshold = Math.max(Number(appliedMinimumScore) || 0, profilesQuery.data?.find(profile => String(profile.id) === selectedProfileId)?.minimumScore ?? 0);
   // ADM-20: the CV analysis of the open card, which the list leaves out.
   const analysisQuery = trpc.admin.recruitment.detail.useQuery({ id: expandedId || 1 }, { enabled: Boolean(applications.find(item => item.id === expandedId)?.hasAiSummary) });
+  // ADM-09: the application a notification's link names, opened once (closing it afterwards keeps it closed).
+  const linkedApplicationId = initialSearch ? applications.find(item => item.trackingId === initialSearch)?.id ?? null : null;
+  const linkedApplicationRef = useRef<HTMLElement | null>(null);
+  const linkedApplicationOpened = useRef(false);
+  useEffect(() => {
+    if (linkedApplicationId === null || linkedApplicationOpened.current) return;
+    linkedApplicationOpened.current = true;
+    setExpandedId(linkedApplicationId);
+    linkedApplicationRef.current?.scrollIntoView({ block: "start" });
+    linkedApplicationRef.current?.focus({ preventScroll: true });
+  }, [linkedApplicationId]);
   const listedApplications = scoreThreshold > 0
     ? scoredApplicationsFirst(applications, item => item.analysisPromptVersion === VERIFIED_ANALYSIS_VERSION ? item.aiScore : null)
     : { items: applications, firstUnscored: -1 };
@@ -504,6 +519,7 @@ export default function RecruitmentTab({ initialSearch = "" }: { initialSearch?:
             const countries = parseJsonList(application.targetCountries);
             const languages = parseJsonList(application.languages);
             const expanded = expandedId === application.id;
+            const linked = application.id === linkedApplicationId;
             // Loaded once the card is open (ADM-20).
             const analysis = expanded && analysisQuery.data?.id === application.id ? analysisQuery.data : null;
             const strengths = parseJsonList(analysis?.aiStrengths ?? null);
@@ -526,9 +542,15 @@ export default function RecruitmentTab({ initialSearch = "" }: { initialSearch?:
                   <p className="text-xs text-muted-foreground">{SCORE_UNAVAILABLE_EXPLANATION}</p>
                 </div>
               ) : null}
-              <article className="rounded-xl border border-border bg-card p-4 shadow-sm">
+              {/* scroll-mt: room for the sticky admin header (two rows below sm) when a link brings the card on screen. */}
+              <article
+                ref={linked ? linkedApplicationRef : undefined}
+                tabIndex={linked ? -1 : undefined}
+                aria-current={linked ? "true" : undefined}
+                className={`scroll-mt-28 rounded-xl border bg-card p-4 shadow-sm sm:scroll-mt-20 ${linked ? "border-primary ring-2 ring-primary/40 focus:outline-none" : "border-border"}`}
+              >
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <button type="button" onClick={() => setExpandedId(expanded ? null : application.id)} className="min-w-0 text-left">
+                  <button type="button" aria-expanded={expanded} onClick={() => setExpandedId(expanded ? null : application.id)} className="min-w-0 text-left">
                     <div className="flex items-start gap-3">
                       <span className="mt-1 rounded-full bg-primary/10 p-2 text-primary"><UserRound className="h-4 w-4" /></span>
                       <div className="min-w-0 wrap-anywhere">

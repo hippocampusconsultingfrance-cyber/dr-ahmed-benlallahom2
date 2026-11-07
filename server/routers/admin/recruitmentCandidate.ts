@@ -14,7 +14,7 @@ import {
   recruitmentFollowUpTasks,
 } from "../../../drizzle/schema";
 import { and, eq, sql, desc, getTableColumns, inArray } from "drizzle-orm";
-import { sendCandidatePortalAccessEmail, candidatePortalAccessEmailFailureCode } from "../../_core/notifications";
+import { sendCandidatePortalAccessEmail, candidatePortalAccessEmailFailureCode, isConcurrentCandidatePortalAccessEmail } from "../../_core/notifications";
 import { recordWithRecruitmentAudit, recruitmentAuditInsert, traceRecruitmentActionDone } from "../../recruitmentAudit";
 import { analysedCertificationNames, CERTIFICATION_NAME_MAX_LENGTH, certificationFacts, declaredCertificationNames, sameRecruitmentFact } from "../../clientBriefMatching";
 import { certificationDateIsCurrent, latestCertificationRenewalDay, CERTIFICATION_RENEWAL_MAX_YEARS } from "../../../shared/recruitmentFactOrigins";
@@ -76,6 +76,11 @@ export const adminRecruitmentCandidateRouter = router({
         idempotencyKey: `candidate-portal-invitation-${application.trackingId}-attempt-${invitationAttempt}`,
       });
     } catch (error) {
+      // REC-14: the same attempt sent at the same time from another tab, still in progress: no
+      // uncertain attempt recorded for it, the other request records what becomes of it.
+      if (isConcurrentCandidatePortalAccessEmail(error)) {
+        throw new TRPCError({ code: "CONFLICT", message: "Une autre demande d’envoi de cette invitation est en cours (autre onglet ou autre administrateur) : le service d’envoi ne la délivre qu’une fois. Son résultat s’affiche dans le suivi de la candidature." });
+      }
       const failureCode = candidatePortalAccessEmailFailureCode(error);
       await db.insert(recruitmentEmailEvents).values(buildCandidatePortalInvitationEmailEvent({
         applicationId: application.id,
@@ -236,14 +241,27 @@ export const adminRecruitmentCandidateRouter = router({
     ]);
     return { success: true, changed: true, ...(dropped.length ? { notRetainedByAnalysis: true } : {}) };
   }),
+  // ADM-13: « Le candidat a répondu ». Dated for the response rate, and the candidate's
+  // follow-ups still to review closed as handled, so that « Relances à faire » no longer
+  // lists someone who answered. A dossier that does not exist is refused, with no audit line.
   markResponse: adminProcedure.input(z.object({ id: z.number().int().positive(), note: z.string().trim().max(1000).optional() })).mutation(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) throw new Error("Database connection failed");
+    const [application] = await db.select({ id: cvApplications.id }).from(cvApplications).where(eq(cvApplications.id, input.id)).limit(1);
+    if (!application) throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable." });
+    const pendingFollowUp = and(eq(recruitmentFollowUpTasks.applicationId, input.id), eq(recruitmentFollowUpTasks.status, "suggested"));
+    const closed = await db.select({ id: recruitmentFollowUpTasks.id }).from(recruitmentFollowUpTasks).where(pendingFollowUp);
     const responseAt = new Date();
-    // With its audit line, both or neither (DATA-01).
-    await recordWithRecruitmentAudit(db, db.update(cvApplications).set({ lastCandidateResponseAt: responseAt, updatedAt: responseAt }).where(eq(cvApplications.id, input.id)),
-      [{ applicationId: input.id, adminOpenId: ctx.user.openId, action: "status_update", metadata: { event: "candidate_response", note: input.note || null } }]);
-    return { success: true, responseAt };
+    // The response, the follow-ups closed and their audit lines in one batch, all or none (DATA-01).
+    await db.batch([
+      db.update(cvApplications).set({ lastCandidateResponseAt: responseAt, updatedAt: responseAt }).where(eq(cvApplications.id, input.id)),
+      db.update(recruitmentFollowUpTasks).set({ status: "completed", completedAt: responseAt, completedByOpenId: ctx.user.openId, updatedAt: responseAt }).where(pendingFollowUp),
+      recruitmentAuditInsert(db, [
+        { applicationId: input.id, adminOpenId: ctx.user.openId, action: "status_update", metadata: { event: "candidate_response", note: input.note || null } },
+        ...closed.map(task => ({ applicationId: input.id, adminOpenId: ctx.user.openId, action: "status_update" as const, metadata: { event: "follow_up", taskId: task.id, status: "completed", reason: "candidate_response" } })),
+      ]),
+    ]);
+    return { success: true, responseAt, closedFollowUps: closed.length };
   }),
 });
 

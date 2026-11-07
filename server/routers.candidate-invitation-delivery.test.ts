@@ -5,14 +5,20 @@ import type { TrpcContext } from "./_core/context";
 const mocks = vi.hoisted(() => ({
   getDb: vi.fn(),
   sendCandidatePortalAccessEmail: vi.fn(),
+  realSendCandidatePortalAccessEmail: null as null | ((input: never) => Promise<{ id: string }>),
   traceRecruitmentActionDone: vi.fn(),
+  resendSend: vi.fn(),
 }));
 
+// The Resend client, for the tests that send through the real sender.
+vi.mock("resend", () => ({ Resend: vi.fn(() => ({ emails: { send: mocks.resendSend } })) }));
+
 vi.mock("./db", () => ({ getDb: mocks.getDb }));
-vi.mock("./_core/notifications", async importOriginal => ({
-  ...await importOriginal<typeof import("./_core/notifications")>(),
-  sendCandidatePortalAccessEmail: mocks.sendCandidatePortalAccessEmail,
-}));
+vi.mock("./_core/notifications", async importOriginal => {
+  const actual = await importOriginal<typeof import("./_core/notifications")>();
+  mocks.realSendCandidatePortalAccessEmail = actual.sendCandidatePortalAccessEmail as never;
+  return { ...actual, sendCandidatePortalAccessEmail: mocks.sendCandidatePortalAccessEmail };
+});
 vi.mock("./recruitmentAudit", async importOriginal => ({
   ...await importOriginal<typeof import("./recruitmentAudit")>(),
   traceRecruitmentActionDone: mocks.traceRecruitmentActionDone,
@@ -141,6 +147,29 @@ describe("invitation administrateur et livraison incertaine", () => {
       expect(db.insertedEvents[0]).toMatchObject({ eventType: "email.sent", providerEmailId: "email_forced" });
       expect(JSON.parse(String(db.insertedEvents[0]!.payload))).toMatchObject({ kind: "candidate_portal_invitation", outcome: "sent", attempt: 2 });
       expect(mocks.traceRecruitmentActionDone).toHaveBeenCalledWith([expect.objectContaining({ metadata: expect.objectContaining({ attempt: 2, forced: true, resendId: "email_forced" }) })], "L’invitation est envoyée.");
+    });
+
+    it("forcé dans deux onglets à la fois : le second dit qu’un envoi est en cours, sans tentative incertaine ni ligne d’audit (409 de Resend)", async () => {
+      process.env.RESEND_API_KEY ||= "re_test_dummy_key_12345678";
+      const db = fakeDb([uncertainAttempt(11)]);
+      mocks.getDb.mockResolvedValue(db);
+      // Through the real sender: Resend still sending this attempt for the other tab, under the same key.
+      mocks.sendCandidatePortalAccessEmail.mockImplementation(input => mocks.realSendCandidatePortalAccessEmail!(input as never));
+      mocks.resendSend.mockResolvedValue({ data: null, error: { name: "concurrent_idempotent_requests", statusCode: 409, message: "Same idempotency key used while original request is still in progress." }, headers: null });
+
+      await expect(appRouter.createCaller(adminContext()).admin.recruitment.candidate.sendPortalInvitation({ id: 7, force: true }))
+        .rejects.toMatchObject({ code: "CONFLICT", message: expect.stringContaining("Une autre demande d’envoi de cette invitation est en cours") });
+      expect(mocks.resendSend.mock.calls.map(([, options]) => options)).toContainEqual({ idempotencyKey: "candidate-portal-invitation-CV-TEST-7-attempt-2" });
+      expect(db.insertedEvents).toEqual([]);
+      expect(mocks.traceRecruitmentActionDone).not.toHaveBeenCalled();
+
+      // Any other uncertain answer of Resend is still recorded as such.
+      mocks.resendSend.mockResolvedValue({ data: null, error: { name: "application_error", statusCode: 503, message: "Unavailable" }, headers: null });
+      const after = fakeDb([uncertainAttempt(11)]);
+      mocks.getDb.mockResolvedValue(after);
+      await expect(appRouter.createCaller(adminContext()).admin.recruitment.candidate.sendPortalInvitation({ id: 7, force: true }))
+        .rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR", message: expect.stringContaining("incertaine") });
+      expect(after.insertedEvents).toEqual([expect.objectContaining({ eventType: "email.delivery_unknown" })]);
     });
   });
 });

@@ -56,6 +56,17 @@ describe("INTL-12 — filtres Spécialité et Disponibilité sans accents ni cas
     expect(await found("m_decine")).toEqual([]);
   });
 
+  it("trouve « Médecine d’urgence » (apostrophe typographique du formulaire) tapé avec l’apostrophe du clavier, et l’inverse", async () => {
+    const found = async (specialty: string) => lastNames((await caller().admin.recruitment.list({ specialty })).items);
+    for (const typed of ["medecine d'urgence", "Médecine d’urgence", "MEDECINE D‘URGENCE", "medecine dʼurgence", "medecine d′urgence"]) expect(await found(typed), typed).toEqual(["Candidat3"]);
+    expect(lastNames(await caller().admin.recruitment.pool.list({ specialty: "d'urgence" }))).toEqual(["Candidat3"]);
+    seed(4, { specialty: "Médecine d'urgence", last_name: "Candidat4" });
+    expect(await found("d’urgence")).toEqual(["Candidat3", "Candidat4"]);
+    // The search box folds them the same way (« O'Brien » finds « O’Brien »).
+    seed(5, { last_name: "O’Brien" });
+    expect(lastNames((await caller().admin.recruitment.list({ search: "o'brien" })).items)).toEqual(["O’Brien"]);
+  });
+
   it("par un profil de matching dont la spécialité est saisie sans accent", async () => {
     const [profile] = memory.seed(recruitmentMatchProfiles, [{ name: "Anesthésie", minimum_score: 0, specialty: "anesthesie", active: 1 }]);
     const { items, total } = await caller().admin.recruitment.list({ profileId: profile!.id as number });
