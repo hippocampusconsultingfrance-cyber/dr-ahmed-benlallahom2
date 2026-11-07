@@ -382,6 +382,50 @@ describe("actions d’administration du recrutement", () => {
     expect(phones((await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number })).csv)).toEqual(expected);
   });
 
+  it("garde le « / » ou la « , » d’un séparateur en trop et la variante courte d’un numéro, sans couper un numéro unique après son indicatif de zone (ADM-26)", async () => {
+    const typed = {
+      // A separator typed at the end, at the start or twice separated nothing: the two numbers were run into one.
+      "06.12.34.56.78 / 06.98.76.54.32 /": "06 12 34 56 78 / 06 98 76 54 32",
+      "0612.345.678/0698.765.432/": "06 12 34 56 78 / 06 98 76 54 32",
+      "0612345678,0698765432,": "06 12 34 56 78, 06 98 76 54 32",
+      ",0612345678,0698765432": "06 12 34 56 78, 06 98 76 54 32",
+      "06.12.34.56.78,,06.98.76.54.32": "06 12 34 56 78, 06 98 76 54 32",
+      // A number and its variant, the end of the line that follows: run into the number, or its pairs shifted (« 0 61 23 45 67 89 »).
+      "06.12.34.56.78/79": "06 12 34 56 78 / 79",
+      "06.12.34.56.78/9": "06 12 34 56 78 / 9",
+      "0471.23.45.67/68": "04 71 23 45 67 / 68",
+      "05.55.12.34.56 / 57": "05 55 12 34 56 / 57",
+      "06.12.34.56.78 / 6.98.76": "06 12 34 56 78 / 6 98 76",
+      // Calc reads these as fractions, and would read « 00 33612345678 / 02 » as one too.
+      "0661 234567/91": "06 61 23 45 67 / 91",
+      "0033.6.12.34.56.78 / 02": "0033612345678 / 02",
+      // One number, « / » after its area code: country and area codes are not a number of their own.
+      "+49 151/23456789": "00 4915123456789",
+      "+43 664/1234567": "00 436641234567",
+      "+49 33203/12345": "00 493320312345",
+      "+961 312345/6": "00 9613123456",
+      // Text already, left as typed: no date has a part of seven digits.
+      "06 12 34 56 78/79": "06 12 34 56 78/79",
+      "0612345678-79": "0612345678-79",
+      "01/5123456": "01/5123456",
+      // Read by Calc as a number, spaces inside its parentheses, or as a date of a negative year.
+      "( 0612345678 )": "06 12 34 56 78",
+      "6/8/-72": "68 72",
+    };
+    const candidates = Object.keys(typed).map((phone, index) => seedCandidate(index + 1, { phone }));
+    const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-PHONE-5", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Qatar" }]);
+    memory.seed(clientBriefCandidates, candidates.map(candidate => ({ brief_id: brief!.id, application_id: candidate.id, association_status: "shortlisted", candidate_consent_at: consentAt })));
+    const phones = (csv: string) => {
+      const [header, ...rows] = csv.split("\n");
+      const column = header!.split(";").indexOf("\"Téléphone\"");
+      return Object.fromEntries(rows.map(row => [row.split(";")[2], row.split(";")[column]]));
+    };
+    const expected = Object.fromEntries(Object.values(typed).map((phone, index) => [`"c${index + 1}@test.local"`, `"${phone}"`]));
+
+    expect(phones((await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: candidates.map(candidate => candidate.id as number) })).csv)).toEqual(expected);
+    expect(phones((await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number })).csv)).toEqual(expected);
+  });
+
   it("écrit dans l’export du vivier les pays et les langues en clair, et le statut en mots (INTL-10)", async () => {
     const candidate = seedCandidate(1, { target_countries: JSON.stringify(["Émirats arabes unis", "Qatar"]), languages: JSON.stringify(["Arabic", "French"]), status: "shortlisted" });
     const pool = await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: [candidate.id as number] });
