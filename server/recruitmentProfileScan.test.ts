@@ -219,6 +219,10 @@ describe("Candidatures — profil de matching et filtres de la liste (IA-02)", (
       ["英语 – 必须", ["Anglaisseul", "Cvarabisch", "Enarboth", "Polished"]], ["Deutsch – erforderlich", ["Deutschdecl"]],
       ["Arabe – Golfe", ["Cvarabisch", "Enarboth"]], ["Anglais – obligatoire, Arabe – souhaité", ["Cvarabisch", "Enarboth"]],
       ["Wolof – Anglais", []], ["Serbo-croate – Anglais", []], ["Wolof – Français", ["Wolofcourant"]],
+      // Also a language outside the table under its usual name, which Intl.DisplayNames gives otherwise
+      // (Twi: « Akan », Luganda: « Ganda ») or has no ISO 639-1 code (Cantonese, Dari): before, it qualified English.
+      ["Cantonais – Anglais", []], ["粤语 – 英语", []], ["Twi – English", []], ["Luganda – English", []], ["Sotho – English", []],
+      ["Dari – Anglais", []], ["Créole – Français", []], ["Cantonais / Anglais", []],
     ];
     for (const [language, names] of expected) {
       expect(await filtered(language), `filtre ${language}`).toEqual(names);

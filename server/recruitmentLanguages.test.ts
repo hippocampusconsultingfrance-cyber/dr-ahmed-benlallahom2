@@ -158,6 +158,23 @@ describe("langues du recrutement comparées par code (IA-02)", () => {
     for (const required of ["Serbo-croate – Anglais", "Wolof – Anglais", "Anglais – Wolof", "Serbo-croate / Anglais", "Anglais- Arabe"]) {
       expect(recruitmentLanguageRequirements(required).map(requirement => meetsRequiredLanguage(["English"], requirement)).sort(), required).toEqual([false, true]);
     }
+    // A language outside the table under its usual name, which Intl.DisplayNames gives otherwise (Twi: « Akan »,
+    // Kirundi: « roundi », Sotho: « sotho du Sud », créole: « créole haïtien ») or has no ISO 639-1 code for
+    // (Cantonese, Dari, Cebuano, Pulaar, Dioula, Sorani, Tigré): before, it qualified the language beside it.
+    for (const [required, texts] of [
+      ["Cantonais – Anglais", ["Cantonais", "Anglais"]], ["Cantonese – English", ["Cantonese", "English"]], ["粤语 – 英语", ["粤语", "英语"]],
+      ["中文 – 粤语", ["中文", "粤语"]], ["广东话 – 英语", ["广东话", "英语"]], ["Twi – English", ["Twi", "English"]], ["Luganda – English", ["Luganda", "English"]],
+      ["Kirundi – Français", ["Kirundi", "Français"]], ["Sotho – English", ["Sotho", "English"]], ["Ndebele – English", ["Ndebele", "English"]],
+      ["Créole – Français", ["Créole", "Français"]], ["Gaelic – English", ["Gaelic", "English"]], ["Frison – Néerlandais", ["Frison", "Néerlandais"]],
+      ["Gaélique – Anglais", ["Gaélique", "Anglais"]], ["Dari – Anglais", ["Dari", "Anglais"]], ["Cebuano – English", ["Cebuano", "English"]],
+      ["Pulaar – Français", ["Pulaar", "Français"]], ["Dioula – Français", ["Dioula", "Français"]], ["Sorani – Arabe", ["Sorani", "Arabe"]],
+      ["Tigré – Arabe", ["Tigré", "Arabe"]], ["Tshiluba – Français", ["Tshiluba", "Français"]], ["English – isiZulu", ["English", "isiZulu"]],
+    ] as const) {
+      expect(recruitmentLanguageRequirements(required).map(requirement => requirement.text), required).toEqual(texts);
+      expect(recruitmentLanguageRequirements(required).filter(requirement => meetsRequiredLanguage(["English", "French", "Arabic", "Dutch", "Chinese"], requirement)), required).toHaveLength(1);
+    }
+    // Not a word that only reads, accents aside, as a language's name (« moré », Mooré: « more »).
+    expect(recruitmentLanguageRequirements("English – more than B2").map(requirement => requirement.text)).toEqual(["English – more than B2"]);
     const [wolof] = recruitmentLanguageRequirements("Wolof – Anglais");
     expect(wolof).toEqual({ text: "Wolof", codes: [], anyOf: [] });
     expect(meetsRequiredLanguage(["Wolof (courant)"], wolof!)).toBe(true);
@@ -190,6 +207,8 @@ describe("langues du recrutement comparées par code (IA-02)", () => {
       expect(languages.recruitmentLanguageRequirements("Serbo-croate – Anglais").map(requirement => requirement.text)).toEqual(["Serbo-croate", "Anglais"]);
       expect(languages.recruitmentLanguageRequirements("Berbère – Arabe").map(requirement => requirement.text)).toEqual(["Berbère", "Arabe"]);
       expect(languages.recruitmentLanguageRequirements("Anglais – obligatoire").map(requirement => requirement.text)).toEqual(["Anglais – obligatoire"]);
+      expect(languages.recruitmentLanguageRequirements("Cantonais – Anglais").map(requirement => requirement.text)).toEqual(["Cantonais", "Anglais"]);
+      expect(languages.recruitmentLanguageRequirements("Twi – English").map(requirement => requirement.text)).toEqual(["Twi", "English"]);
       // Kabyle is only named by Intl.DisplayNames: without it, the part qualifies Arabic, as before.
       expect(languages.recruitmentLanguageRequirements("Arabe – Kabyle").map(requirement => requirement.text)).toEqual(["Arabe – Kabyle"]);
     } finally {

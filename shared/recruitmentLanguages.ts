@@ -222,9 +222,22 @@ const READ_REQUIREMENTS = new Map<string, readonly RecruitmentLanguageRequiremen
  * their names make a part beside a dash a language of its own (« Wolof –
  * Anglais »), where any other part qualifies the language beside it
  * (« Anglais – obligatoire », « Arabe – Golfe », « Portugais – Brésil »).
- * Not the table's, nor the constructed or ancient languages, whose names
- * also qualify a language or a place (« Amérique latine », « 世界语言 »):
- * Latin, Sanskrit, Pali, Avestan, Church Slavic, Esperanto, Ido, Interlingua,
+ * Then, by their ISO 639-2 or 639-3 code, the other languages of the
+ * countries the candidates and the missions come from, which ISO 639-1 has
+ * no code for: Cantonese, Hakka and Min Nan, Dari, Sorani and Kurmanji, Tigre;
+ * Cebuano, Hiligaynon, Ilocano, Waray, Bikol and Pangasinan; Pulaar, Dioula,
+ * Tshiluba, Northern Sotho, Soninke, Fon, Krio, Nigerian Pidgin, Luo,
+ * Kamba, Kalenjin, Bemba, Nyankole, Kiga, Tumbuka, Lozi, Kimbundu, Umbundu,
+ * Susu, Mende, Temne, Tiv, Efik, Ibibio, Edo and Ewondo; the creoles of
+ * Mauritius, the Seychelles, Jamaica and Cape Verde, Papiamento, Sranan;
+ * Hmong; Bhojpuri, Maithili, Konkani, Santali, Manipuri, Rajasthani, Awadhi,
+ * Magahi, Dogri, Bodo and Mizo; Minangkabau, Balinese, Madurese, Buginese,
+ * Sasak, Tetum and Tok Pisin. Not those whose name is mostly a place's
+ * (Douala, Bassa, Lunda, Aceh, Banjar, Pampanga) or, accents aside, a word
+ * (« moré », Mooré: « more »), nor Swiss German, a variety of German. Not
+ * the table's, nor the constructed or ancient languages, whose names also
+ * qualify a language or a place (« Amérique latine », « 世界语言 »): Latin,
+ * Sanskrit, Pali, Avestan, Church Slavic, Esperanto, Ido, Interlingua,
  * Interlingue, Volapük.
  */
 const OTHER_LANGUAGE_CODES = [
@@ -232,13 +245,31 @@ const OTHER_LANGUAGE_CODES = [
   "id ig ii ik is iu jv ka kg ki kj kk kl km kn kr ks ku kv kw ky lb lg li ln lo lt lu lv mg mh mi mk ml mn mr ms mt my na nb nd ne ng nn no nr nv ny oc oj om",
   "or os pa ps qu rm rn rw sc sd se sg si sk sl sm sn so sq sr ss st su sv sw ta te tg th ti tk tl tn to ts tt tw ty ug uk uz ve vi wa wo xh yi yo za zu",
   "kab zgh tzm shi fil",
+  "yue hak nan prs ckb kmr tig ceb hil ilo war bik pag fuc dyu lua nso snk fon kri pcm luo kam kln bem nyn cgg tum loz kmb umb sus men tem tiv efi ibb bin ewo",
+  "mfe crs jam kea pap srn hmn bho mai kok sat mni raj awa mag doi brx lus min ban mad bug sas tet tpi",
 ].join(" ").split(" ");
 /** The languages their names are read in, from Intl.DisplayNames: the table's four. */
 const OTHER_LANGUAGE_LOCALES = ["fr", "en", "de", "zh"];
-/** The names it gives none of, or other names than its: serbo-croate (« serbe (latin) »), berbère, amazigh, tagalog (« filipino »)… */
+/**
+ * The names it gives none of, or other names than its: serbo-croate (« serbe
+ * (latin) »), berbère, amazigh, tagalog (« filipino »); and the names these
+ * languages are written under, which it gives in full or under another name:
+ * Twi and Fante (« akan »), Luganda (« ganda »), Kirundi (« roundi »), Sotho
+ * and Ndebele (« sotho du Sud », « North Ndebele »), créole (« créole
+ * haïtien »), frison (« frison occidental »), gaélique (« gaélique écossais »),
+ * Pulaar and Fulfulde (« peul »), Jula (« dioula »), Tshiluba (« luba-kasaï »),
+ * Sorani (« Central Kurdish »), Kurmanji, Kapampangan, Bisaya, Mooré, the languages
+ * of southern Africa under their own names (Setswana, isiZulu…), Hokkien,
+ * and Cantonese, also where Intl.DisplayNames is missing, and as 广东话 or 粵語.
+ */
 const OTHER_LANGUAGE_NAMES = [
   "Serbo-croate", "Serbo-Croatian", "Serbokroatisch", "塞尔维亚-克罗地亚语", "Berbère", "Berber", "Berberisch", "柏柏尔语", "Amazigh", "Amazighe", "Tamazight",
   "Tagalog", "他加禄语", "Kiswahili", "Sinhalese",
+  "Twi", "Asante Twi", "契维语", "Fante", "Fanti", "Luganda", "Kirundi", "Kiroundi", "Ikirundi", "Sotho", "Sesotho", "索托语", "Ndebele", "Ndébélé", "isiNdebele", "恩德贝勒语",
+  "Créole", "Creole", "Kreyòl", "Kreol", "Kreolisch", "克里奥尔语", "Frison", "Frisian", "Friesisch", "弗里西亚语", "Gaélique", "Gaelic", "Gälisch", "盖尔语",
+  "Pulaar", "Poular", "Fulfulde", "Peulh", "Jula", "Tshiluba", "Ciluba", "Sorani", "Kurmanji", "Kurmandji", "Kurmancî", "Kapampangan", "Bisaya", "Visayan",
+  "Setswana", "Siswati", "isiZulu", "isiXhosa", "Tshivenda", "Xitsonga", "Chichewa", "Kikongo", "Kinyarwanda", "Mooré", "Mossi",
+  "Cantonais", "Cantonese", "Kantonesisch", "粤语", "广东话", "廣東話", "粵語", "Hokkien",
 ];
 
 let otherLanguageNames: readonly string[] | undefined;
