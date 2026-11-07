@@ -110,6 +110,22 @@ function awaitsAnalysis(document: Pick<CandidateDocument, "status" | "analysisSt
     && document.validationStatus !== "rejected";
 }
 
+/** The same test in SQL, on the document's write: an admin decision taken meanwhile stands. */
+function stillAwaitsAnalysis(documentId: number) {
+  return and(
+    eq(candidateDocuments.id, documentId),
+    inArray(candidateDocuments.analysisStatus, [...ANALYSIS_IN_PROGRESS_STATUSES]),
+    inArray(candidateDocuments.status, [...AWAITING_ANALYSIS_DOCUMENT_STATUSES]),
+    ne(candidateDocuments.validationStatus, "rejected"),
+  );
+}
+
+/**
+ * Last error of a job whose document no longer waits for it: approved,
+ * rejected or archived by the admin, or analysed through another job.
+ */
+const DOCUMENT_SETTLED = "document_settled";
+
 /**
  * EXPL-12: a job left "running" by a run that stopped (function limit, frozen
  * instance) goes back to the queue, due at once, its interrupted attempt
@@ -151,12 +167,7 @@ export async function recoverStaleCandidateDocumentJobs(staleAfterMs = CANDIDATE
       continue;
     }
     // Written only while the document still waits: an admin decision taken meanwhile stands.
-    const analysing = and(
-      eq(candidateDocuments.id, job.documentId),
-      inArray(candidateDocuments.analysisStatus, [...ANALYSIS_IN_PROGRESS_STATUSES]),
-      inArray(candidateDocuments.status, [...AWAITING_ANALYSIS_DOCUMENT_STATUSES]),
-      ne(candidateDocuments.validationStatus, "rejected"),
-    );
+    const analysing = stillAwaitsAnalysis(job.documentId);
     if (!terminal) {
       recovered += 1;
       await db.update(candidateDocuments).set({ status: "uploaded", analysisStatus: "queued", analysisAttempts: job.attempts, analysisLastError: lastError }).where(analysing);
@@ -194,24 +205,43 @@ export async function processDueCandidateDocumentAnalysisJobs(limit = 1) {
     ));
     if (mutationRowCount(claim) !== 1) continue;
     processed += 1;
+    const closeJob = (lastError: string | null) => db.update(candidateDocumentProcessingJobs).set({ status: "completed", finishedAt: new Date(), lastError }).where(eq(candidateDocumentProcessingJobs.id, job.id));
     const document = (await db.select().from(candidateDocuments).where(eq(candidateDocuments.id, job.documentId)).limit(1))[0];
     if (!document || document.validationStatus === "rejected") {
-      await db.update(candidateDocumentProcessingJobs).set({ status: "completed", finishedAt: new Date(), lastError: "document_unavailable_or_rejected" }).where(eq(candidateDocumentProcessingJobs.id, job.id));
+      await closeJob("document_unavailable_or_rejected");
       continue;
     }
+    // EXPL-12: a document approved, rejected or archived by the admin while
+    // its job waited in the queue (a new one, or one a stopped run left and
+    // the recovery queued again) keeps the admin's decision: its job is
+    // closed, and the AI never reads it. Each later write of the document is
+    // made only while it still waits, for a decision taken during the analysis.
+    if (!awaitsAnalysis(document)) {
+      await closeJob(DOCUMENT_SETTLED);
+      continue;
+    }
+    const awaiting = stillAwaitsAnalysis(document.id);
+    // Taken off the queue in one write: of two jobs of one document (« Relancer
+    // l’analyse » while the daily run recreates its missing job, DATA-06), the
+    // one that finds it already « en cours » is closed, and the AI reads it once.
+    const takenOffQueue = and(awaiting, eq(candidateDocuments.analysisStatus, "queued"));
     if (!candidateDocumentAllowsAiAnalysis(document.category)) {
       // Identity documents, proofs of address, free-form files and retired sensitive
       // categories are never read for, nor sent to, an AI service (LEGAL-12).
-      await db.update(candidateDocuments).set(candidateHumanReviewOnlyFields()).where(eq(candidateDocuments.id, document.id));
-      await db.update(candidateDocumentProcessingJobs).set({ status: "completed", finishedAt: new Date(), lastError: "human_review_only" }).where(eq(candidateDocumentProcessingJobs.id, job.id));
+      const settled = mutationRowCount(await db.update(candidateDocuments).set(candidateHumanReviewOnlyFields()).where(takenOffQueue)) !== 1;
+      await closeJob(settled ? DOCUMENT_SETTLED : "human_review_only");
+      if (settled) continue;
       await db.insert(candidateDocumentAuditLogs).values({ candidateId: document.candidateId, documentId: document.id, actorType: "system", action: "analysis_completed", metadata: JSON.stringify({ outcome: "human_review_only", category: document.category }) });
       needsReview += 1;
       continue;
     }
     try {
-      await db.update(candidateDocuments).set({ status: "analyzing", analysisStatus: "analyzing", analysisAttempts: attempts }).where(eq(candidateDocuments.id, document.id));
+      if (mutationRowCount(await db.update(candidateDocuments).set({ status: "analyzing", analysisStatus: "analyzing", analysisAttempts: attempts }).where(takenOffQueue)) !== 1) {
+        await closeJob(DOCUMENT_SETTLED);
+        continue;
+      }
       const result = await analyzeCandidateDocument({ buffer: await privateDocumentBytes(document), mimeType: document.mimeType, declaredCategory: document.categoryOtherLabel || document.category, attempt: attempts });
-      await db.update(candidateDocuments).set({
+      const recorded = mutationRowCount(await db.update(candidateDocuments).set({
         validationStatus: "accepted",
         status: "needs_review",
         analysisStatus: "completed",
@@ -222,10 +252,11 @@ export async function processDueCandidateDocumentAnalysisJobs(limit = 1) {
         aiModel: result.model,
         analyzedAt: new Date(),
         analysisLastError: null,
-      }).where(eq(candidateDocuments.id, document.id));
-      await db.update(candidateDocumentProcessingJobs).set({ status: "completed", finishedAt: new Date() }).where(eq(candidateDocumentProcessingJobs.id, job.id));
-      await db.insert(candidateDocumentAuditLogs).values({ candidateId: document.candidateId, documentId: document.id, actorType: "system", action: "analysis_completed", metadata: JSON.stringify({ model: result.model, confidence: result.analysis.confidence }) });
-      completed += 1;
+      }).where(awaiting)) === 1;
+      await closeJob(recorded ? null : DOCUMENT_SETTLED);
+      // The AI read the document either way; its result is dropped when the admin decided during the analysis.
+      await db.insert(candidateDocumentAuditLogs).values({ candidateId: document.candidateId, documentId: document.id, actorType: "system", action: "analysis_completed", metadata: JSON.stringify(recorded ? { model: result.model, confidence: result.analysis.confidence } : { model: result.model, outcome: "result_dropped_document_settled" }) });
+      if (recorded) completed += 1;
     } catch (error) {
       const message = error instanceof Error ? error.message : "candidate_document_analysis_failed";
       if (isProcessingDeadlineError(error)) {
@@ -234,19 +265,20 @@ export async function processDueCandidateDocumentAnalysisJobs(limit = 1) {
         // for the next run, without counting this attempt, and this run
         // starts no other analysis.
         await db.update(candidateDocumentProcessingJobs).set({ status: job.status, attempts: job.attempts, startedAt: null, lastError: message }).where(eq(candidateDocumentProcessingJobs.id, job.id));
-        await db.update(candidateDocuments).set({ status: "uploaded", analysisStatus: "queued", analysisAttempts: job.attempts }).where(eq(candidateDocuments.id, document.id));
+        await db.update(candidateDocuments).set({ status: "uploaded", analysisStatus: "queued", analysisAttempts: job.attempts }).where(awaiting);
         released += 1;
         break;
       }
       // Another attempt would read the same text: only what may fail once (download, AI) is tried again.
       if (attempts < job.maxAttempts && !(error instanceof CandidateDocumentTextSetAsideError)) {
         await db.update(candidateDocumentProcessingJobs).set({ status: "retry", scheduledFor: retryTime(attempts), lastError: message }).where(eq(candidateDocumentProcessingJobs.id, job.id));
-        await db.update(candidateDocuments).set({ status: "uploaded", analysisStatus: "queued", analysisAttempts: attempts, analysisLastError: message }).where(eq(candidateDocuments.id, document.id));
+        await db.update(candidateDocuments).set({ status: "uploaded", analysisStatus: "queued", analysisAttempts: attempts, analysisLastError: message }).where(awaiting);
         retried += 1;
       } else {
         const fallback = humanReviewFallback(error);
-        await db.update(candidateDocuments).set({ validationStatus: "accepted", status: "needs_review", analysisStatus: "needs_review", analysisAttempts: attempts, analysisLastError: message, analyzedAt: new Date(), ...fallback }).where(eq(candidateDocuments.id, document.id));
-        await db.update(candidateDocumentProcessingJobs).set({ status: "completed", finishedAt: new Date(), lastError: message }).where(eq(candidateDocumentProcessingJobs.id, job.id));
+        const settled = mutationRowCount(await db.update(candidateDocuments).set({ validationStatus: "accepted", status: "needs_review", analysisStatus: "needs_review", analysisAttempts: attempts, analysisLastError: message, analyzedAt: new Date(), ...fallback }).where(awaiting)) !== 1;
+        await closeJob(settled ? DOCUMENT_SETTLED : message);
+        if (settled) continue;
         await db.insert(candidateDocumentAuditLogs).values({ candidateId: document.candidateId, documentId: document.id, actorType: "system", action: "analysis_completed", metadata: JSON.stringify({ outcome: "human_review_fallback", error: message }) });
         needsReview += 1;
       }

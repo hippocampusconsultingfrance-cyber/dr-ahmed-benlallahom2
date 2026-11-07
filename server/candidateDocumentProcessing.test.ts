@@ -126,6 +126,62 @@ describe("EXPL-12 — document interrompu en cours d’analyse", () => {
     expect(db().rows(candidateDocumentAuditLogs)).toHaveLength(0);
   });
 
+  it("garde la décision de l’admin prise après la remise en file d’une tâche interrompue : le passage suivant ferme la tâche sans appel à l’IA", async () => {
+    const document = seedDiploma({ status: "analyzing", analysisStatus: "analyzing", analysisAttempts: 1 }, { status: "running", attempts: 1, startedAt: new Date(Date.now() - 16 * MINUTE) });
+    await expect(recoverStaleCandidateDocumentJobs()).resolves.toMatchObject({ recovered: 1 });
+    expect(jobs()).toMatchObject([{ status: "retry" }]);
+
+    await admin().review({ id: Number(document.id), status: "rejected", notes: "Document falsifié" });
+    await expect(worker()).resolves.toMatchObject({ processed: 1, completed: 0, needsReview: 0 });
+
+    expect(state.analyses).toEqual([]);
+    expect(jobs()).toMatchObject([{ status: "completed", lastError: "document_settled" }]);
+    expect(document).toMatchObject({ status: "rejected", reviewNotes: "Document falsifié", analysisStatus: "queued", aiSummary: null, aiModel: null });
+    expect(db().rows(candidateDocumentAuditLogs).map(log => log.action)).toEqual(["reviewed"]);
+  });
+
+  it.each(["reviewed", "archived"] as const)("garde la décision « %s » de l’admin sur un document neuf encore en file, et ne l’envoie pas à l’IA", async decision => {
+    const document = seedDiploma();
+
+    await admin().review({ id: Number(document.id), status: decision, notes: "Original vérifié" });
+    await worker();
+
+    expect(state.analyses).toEqual([]);
+    expect(jobs()).toMatchObject([{ status: "completed", lastError: "document_settled" }]);
+    expect(document).toMatchObject({ status: decision, reviewNotes: "Original vérifié", validationStatus: "quarantined", aiSummary: null });
+  });
+
+  it("garde la décision de l’admin prise pendant l’analyse : le résultat de l’IA n’écrase ni le statut ni la note", async () => {
+    const document = seedDiploma();
+    vi.mocked(analyzeCandidateDocument).mockImplementationOnce(async () => {
+      await admin().review({ id: Number(document.id), status: "rejected", notes: "Refusé pendant l’analyse" });
+      return { model: "test-model", analysis: { documentKind: "Diplôme", summary: "Synthèse de test", issuingOrganization: null, issueDate: null, expiryDate: null, confidence: 80, flags: [], missingInformation: [] } };
+    });
+
+    await expect(processDueCandidateDocumentAnalysisJobs(1)).resolves.toMatchObject({ processed: 1, completed: 0 });
+
+    expect(jobs()).toMatchObject([{ status: "completed", lastError: "document_settled" }]);
+    expect(document).toMatchObject({ status: "rejected", reviewNotes: "Refusé pendant l’analyse", aiSummary: null, aiModel: null });
+    expect(db().rows(candidateDocumentAuditLogs).find(log => log.action === "analysis_completed")).toMatchObject({ metadata: JSON.stringify({ model: "test-model", outcome: "result_dropped_document_settled" }) });
+  });
+
+  it("une analyse qui échoue après la décision de l’admin ne remet pas le document refusé « en attente »", async () => {
+    const document = seedDiploma();
+    vi.mocked(analyzeCandidateDocument).mockImplementationOnce(async () => {
+      await admin().review({ id: Number(document.id), status: "rejected", notes: "Refusé pendant l’analyse" });
+      throw new Error("candidate_document_ai_unavailable_test");
+    });
+
+    await expect(processDueCandidateDocumentAnalysisJobs(1)).resolves.toMatchObject({ processed: 1, retried: 1 });
+    expect(document).toMatchObject({ status: "rejected", reviewNotes: "Refusé pendant l’analyse" });
+
+    // Its retry is closed at the next run, without the AI.
+    jobs()[0]!.scheduledFor = new Date(Date.now() - MINUTE);
+    await processDueCandidateDocumentAnalysisJobs(1);
+    expect(jobs()).toMatchObject([{ status: "completed", lastError: "document_settled" }]);
+    expect(vi.mocked(analyzeCandidateDocument)).toHaveBeenCalledTimes(1);
+  });
+
   it("deux passages simultanés ne prennent la tâche qu’une fois : le document est analysé une seule fois", async () => {
     const document = seedDiploma();
 
@@ -216,6 +272,27 @@ describe("DATA-06 — « Relancer l’analyse » d’un document resté sans tâ
     await expect(worker()).resolves.toMatchObject({ jobsRecovered: 0, processed: 1, completed: 1 });
     expect(state.analyses).toEqual([1]);
     expect(stuck).toMatchObject({ status: "needs_review", analysisStatus: "completed" });
+  });
+
+  it("« Relancer l’analyse » pendant que le passage quotidien recrée la tâche manquante : l’IA ne lit le document qu’une fois", async () => {
+    const document = seedDiploma({ createdAt: new Date(Date.now() - 16 * MINUTE) }, null);
+    await expect(admin().reanalyze({ id: Number(document.id) })).resolves.toEqual({ success: true, queued: true });
+    db().seed(candidateDocumentProcessingJobs, { documentId: document.id, status: "queued", maxAttempts: 3, scheduledFor: new Date() });
+    let concurrent: unknown;
+    vi.mocked(analyzeCandidateDocument).mockImplementationOnce(async input => {
+      state.analyses.push(input.attempt);
+      // A second run takes the other job while the first one is being analysed.
+      concurrent = await processDueCandidateDocumentAnalysisJobs(1);
+      return { model: "test-model", analysis: { documentKind: "Diplôme", summary: "Synthèse de test", issuingOrganization: null, issueDate: null, expiryDate: null, confidence: 80, flags: [], missingInformation: [] } };
+    });
+
+    await expect(processDueCandidateDocumentAnalysisJobs(1)).resolves.toMatchObject({ processed: 1, completed: 1 });
+
+    expect(concurrent).toMatchObject({ processed: 1, completed: 0 });
+    expect(state.analyses).toEqual([1]);
+    expect(jobs()).toMatchObject([{ status: "completed", lastError: null }, { status: "completed", lastError: "document_settled" }]);
+    expect(document).toMatchObject({ status: "needs_review", analysisStatus: "completed" });
+    expect(db().rows(candidateDocumentAuditLogs).filter(log => log.action === "analysis_completed")).toHaveLength(1);
   });
 
   it("relance un document resté « en cours » dont la tâche s’est terminée sans le mettre à jour", async () => {
