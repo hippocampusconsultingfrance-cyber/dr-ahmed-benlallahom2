@@ -60,13 +60,51 @@ function csvListCell(value: string | null) {
   return value?.trim().startsWith("[") ? parseRecruitmentJsonArray(value).join(" ; ") : value;
 }
 
+/** A value made of digits and of the signs a phone number is typed with: spaces, . , - / ( ) +. */
+const DIGITS_AND_PHONE_SIGNS = /^[\d\s.,\-/()+]+$/;
+
+/** Digits with the decimal and grouping signs of English, French or German (« 1,234.5 », « 1.234,5 »). */
+const SPREADSHEET_DECIMAL = String.raw`[\d.,]*\d[\d.,]*`;
+
+/** A number, spaces aside: a sign or parentheses (a negative number) around it, before or after. */
+const SPREADSHEET_NUMBER = new RegExp(String.raw`^[+\-(]*${SPREADSHEET_DECIMAL}[+\-)]*$`);
+
+/** A group of a number after a space, as Calc in French reads « 0034 612 345 678 »: three digits, then anything but a digit. */
+const SPREADSHEET_THOUSANDS = /^[+\-(]*\d{3}(?!\d)|^[+\-)]+$/;
+
+/** A date of two or three parts, spaces aside (« 06-12-34 », « 12/06 », « 06.12.2034 »). */
+const SPREADSHEET_DATE = /^[+\-(.,]*(\d+)[-/.](\d+)(?:[-/.](\d+))?[-/.,+)]*$/;
+
+/** A fraction, after an integer or not (« 0612 34/56 », « 126,465/103 »). */
+const SPREADSHEET_FRACTION = new RegExp(String.raw`^[+\-(.,]*(?:(${SPREADSHEET_DECIMAL}(?:\s+\d{3}(?!\d)[\d.,]*)*)\s+)?(${SPREADSHEET_DECIMAL})\/${SPREADSHEET_DECIMAL}[-/.,+)]*$`);
+
+/** A number in scientific notation (« 6E12 »). */
+const SPREADSHEET_SCIENTIFIC = /^\d+(?:[.,]\d+)?[eE][+-]?\d+$/;
+
 /**
- * What a spreadsheet opening the file (Calc or Excel, in French as in English
- * or German) reads as a number or a date rather than text: digits alone, digits
- * grouped by three like thousands (« 51 000 010 »), a decimal number, a date
- * (« 06-12-34 »).
+ * Whether a spreadsheet opening the file (Calc or Excel, in English, French or
+ * German) may read a value of digits and phone signs as a number or a date
+ * rather than text. Calc reads them leniently: a first group of any length
+ * followed by groups of three, in French (« 0034 612 345 678 »), a sign or
+ * parentheses before or after (« (0612345678) », « 0612345678- »), a decimal
+ * sign at the end (« 0612345678. »), a date, a fraction (« 06 12/34 »). This
+ * answers yes to all of these and to some values Calc keeps as text, never no
+ * to one it reads as a number: checked in LibreOffice Calc 24.2, in English
+ * (1033), French (1036) and German (1031), on 40 000 values of digits and
+ * these signs (ADM-26).
  */
-const SPREADSHEET_NUMBER_OR_DATE = /^(?:\d+|\d{1,3}(?:[ ,.\u00a0\u202f]\d{3})+|\d+[.,]\d+|\d{1,4}[-/.]\d{1,2}(?:[-/.]\d{1,4})?)$/;
+function spreadsheetMayReadAsNumberOrDate(value: string) {
+  if (!DIGITS_AND_PHONE_SIGNS.test(value) || !/\d/.test(value)) return false;
+  const compact = value.replace(/\s+/g, "");
+  const [, ...groups] = value.split(/\s+/);
+  if (SPREADSHEET_NUMBER.test(compact) && groups.every(group => SPREADSHEET_THOUSANDS.test(group))) return true;
+  const date = SPREADSHEET_DATE.exec(compact);
+  // A date has a day and a month of one or two digits: at most one of its parts is longer.
+  if (date && date.slice(1).filter(part => part !== undefined && part.length > 2).length <= 1) return true;
+  const fraction = SPREADSHEET_FRACTION.exec(value.replace(/\s*\/\s*/g, "/"));
+  // « 0612345678/0698765432 », two numbers, stays text: a fraction alone is read only with a decimal or grouping sign.
+  return fraction !== null && (fraction[1] !== undefined || /[.,]/.test(fraction[2]!));
+}
 
 /**
  * ADM-26: a phone number as the exports write it, so that a spreadsheet keeps
@@ -74,20 +112,28 @@ const SPREADSHEET_NUMBER_OR_DATE = /^(?:\d+|\d{1,3}(?:[ ,.\u00a0\u202f]\d{3})+|\
  * is passed on. An international number leaves with « 00 » instead of its
  * « + », the same number dialled from abroad (« +216 51 000 010 » gives
  * « 00216 51 000 010 »): a « + » is read as a formula, so csvCell would show
- * it behind an apostrophe. A number a spreadsheet would read as a number or a
- * date (SPREADSHEET_NUMBER_OR_DATE) leaves with its digits set apart: its
- * « 00 » by one space (« +21651000010 » and « 0021651000010 » give
- * « 00 21651000010 »), the others by two from the end (« 0612345678 » gives
- * « 06 12 34 56 78 »). Any other number leaves as typed. The other columns
- * keep the protection.
+ * it behind an apostrophe. A number a spreadsheet may read as a number or a
+ * date (spreadsheetMayReadAsNumberOrDate) leaves with its digits set apart:
+ * its « 00 » by one space (« +34 612 345 678 », « +21651000010 » and
+ * « 0021651000010 » give « 00 34612345678 » and « 00 21651000010 »), the
+ * others by two from the end (« 0612345678 », « (0612345678) » and
+ * « 0612 345 678 » give « 06 12 34 56 78 »), which no spreadsheet reads as a
+ * number; one of two digits, which spreadsheets always read as a number, and
+ * a number in scientific notation, leave behind an apostrophe. Any other
+ * number leaves as typed (« 0033 (0)6 12 34 56 78 », « 0612345678 /
+ * 0698765432 »). The other columns keep the protection.
  */
 function csvPhoneValue(phone: string | null) {
   if (!phone) return phone;
   const typed = phone.trim();
   const written = typed.startsWith("+") ? `00${typed.slice(1)}` : typed;
-  if (!SPREADSHEET_NUMBER_OR_DATE.test(written)) return written;
+  if (SPREADSHEET_SCIENTIFIC.test(written)) return `'${written}`;
+  if (!spreadsheetMayReadAsNumberOrDate(written)) return written;
   const digits = written.replace(/\D/g, "");
-  return digits.startsWith("00") ? `00 ${digits.slice(2)}` : digits.replace(/\B(?=(?:\d{2})+$)/g, " ");
+  // « 00 » before three digits would read as thousands in French (« 00 123 »).
+  if (digits.startsWith("00") && digits.length >= 6) return `00 ${digits.slice(2)}`;
+  if (digits.length >= 3) return digits.replace(/\B(?=(?:\d{2})+$)/g, " ");
+  return `'${written}`;
 }
 
 /** What really happened to a manual CV re-analysis (ADM-REC-02). */

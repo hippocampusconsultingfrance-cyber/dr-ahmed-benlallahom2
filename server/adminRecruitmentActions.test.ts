@@ -305,6 +305,45 @@ describe("actions d’administration du recrutement", () => {
     expect(phones((await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number })).csv)).toEqual(expected);
   });
 
+  it("exporte en texte tout numéro de chiffres et de signes que Calc lirait comme un nombre, en français, anglais ou allemand, « 00 » compris (ADM-26)", async () => {
+    // Read as numbers by LibreOffice Calc before: in French, a first group of any length then groups of three
+    // (34612345678, its « 00 » lost); in all three, parentheses (-612345678), a final dot in English, a fraction.
+    const typed = {
+      "+34 612 345 678": "00 34612345678",
+      "+351 912 345 678": "00 351912345678",
+      "+971 501 234 567": "00 971501234567",
+      "0033 612 345 678": "00 33612345678",
+      "0612 345 678": "06 12 34 56 78",
+      "0661 234 567": "06 61 23 45 67",
+      "(0612345678)": "06 12 34 56 78",
+      "0612345678.": "06 12 34 56 78",
+      "0612345678-": "06 12 34 56 78",
+      "0612 34/56": "06 12 34 56",
+      "126,465/103": "1 26 46 51 03",
+      "+123": "0 01 23",
+      "06": "'06",
+      "6E12": "'6E12",
+      // Text already, left as typed: groups Calc does not read as thousands, two numbers, a « (0) ».
+      "+216 51 000 010": "00216 51 000 010",
+      "+33 (0)6 12 34 56 78": "0033 (0)6 12 34 56 78",
+      "0612345678 / 0698765432": "0612345678 / 0698765432",
+      "0612345678/0698765432": "0612345678/0698765432",
+      "+1-202-555-0143": "001-202-555-0143",
+    };
+    const candidates = Object.keys(typed).map((phone, index) => seedCandidate(index + 1, { phone }));
+    const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-PHONE-3", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Qatar" }]);
+    memory.seed(clientBriefCandidates, candidates.map(candidate => ({ brief_id: brief!.id, application_id: candidate.id, association_status: "shortlisted", candidate_consent_at: consentAt })));
+    const phones = (csv: string) => {
+      const [header, ...rows] = csv.split("\n");
+      const column = header!.split(";").indexOf("\"Téléphone\"");
+      return Object.fromEntries(rows.map(row => [row.split(";")[2], row.split(";")[column]]));
+    };
+    const expected = Object.fromEntries(Object.values(typed).map((phone, index) => [`"c${index + 1}@test.local"`, `"${phone}"`]));
+
+    expect(phones((await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: candidates.map(candidate => candidate.id as number) })).csv)).toEqual(expected);
+    expect(phones((await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number })).csv)).toEqual(expected);
+  });
+
   it("écrit dans l’export du vivier les pays et les langues en clair, et le statut en mots (INTL-10)", async () => {
     const candidate = seedCandidate(1, { target_countries: JSON.stringify(["Émirats arabes unis", "Qatar"]), languages: JSON.stringify(["Arabic", "French"]), status: "shortlisted" });
     const pool = await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: [candidate.id as number] });
