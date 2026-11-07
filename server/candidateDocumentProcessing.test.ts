@@ -121,8 +121,9 @@ describe("EXPL-12 — document interrompu en cours d’analyse", () => {
 
     expect(state.analyses).toEqual([]);
     expect(jobs()).toMatchObject([{ status: "completed", lastError: "worker_interrupted_document_settled" }, { status: "completed", lastError: "worker_interrupted_document_settled" }]);
-    expect(rejected).toMatchObject({ status: "rejected", reviewNotes: "Document illisible" });
-    expect(archived).toMatchObject({ status: "archived", analysisAttempts: 3, aiSummary: null });
+    // Their analysis no longer says « en cours » once no job is left (EXPL-12).
+    expect(rejected).toMatchObject({ status: "rejected", reviewNotes: "Document illisible", analysisStatus: "needs_review", analysisLastError: "document_settled" });
+    expect(archived).toMatchObject({ status: "archived", analysisAttempts: 3, aiSummary: null, analysisStatus: "needs_review", analysisLastError: "document_settled" });
     expect(db().rows(candidateDocumentAuditLogs)).toHaveLength(0);
   });
 
@@ -136,7 +137,7 @@ describe("EXPL-12 — document interrompu en cours d’analyse", () => {
 
     expect(state.analyses).toEqual([]);
     expect(jobs()).toMatchObject([{ status: "completed", lastError: "document_settled" }]);
-    expect(document).toMatchObject({ status: "rejected", reviewNotes: "Document falsifié", analysisStatus: "queued", aiSummary: null, aiModel: null });
+    expect(document).toMatchObject({ status: "rejected", reviewNotes: "Document falsifié", analysisStatus: "needs_review", analysisLastError: "document_settled", aiSummary: null, aiModel: null });
     expect(db().rows(candidateDocumentAuditLogs).map(log => log.action)).toEqual(["reviewed"]);
   });
 
@@ -148,7 +149,7 @@ describe("EXPL-12 — document interrompu en cours d’analyse", () => {
 
     expect(state.analyses).toEqual([]);
     expect(jobs()).toMatchObject([{ status: "completed", lastError: "document_settled" }]);
-    expect(document).toMatchObject({ status: decision, reviewNotes: "Original vérifié", validationStatus: "quarantined", aiSummary: null });
+    expect(document).toMatchObject({ status: decision, reviewNotes: "Original vérifié", validationStatus: "quarantined", aiSummary: null, analysisStatus: "needs_review", analysisLastError: "document_settled" });
   });
 
   it("garde la décision de l’admin prise pendant l’analyse : le résultat de l’IA n’écrase ni le statut ni la note", async () => {
@@ -161,25 +162,52 @@ describe("EXPL-12 — document interrompu en cours d’analyse", () => {
     await expect(processDueCandidateDocumentAnalysisJobs(1)).resolves.toMatchObject({ processed: 1, completed: 0 });
 
     expect(jobs()).toMatchObject([{ status: "completed", lastError: "document_settled" }]);
-    expect(document).toMatchObject({ status: "rejected", reviewNotes: "Refusé pendant l’analyse", aiSummary: null, aiModel: null });
+    expect(document).toMatchObject({ status: "rejected", reviewNotes: "Refusé pendant l’analyse", aiSummary: null, aiModel: null, analysisStatus: "needs_review", analysisLastError: "document_settled" });
     expect(db().rows(candidateDocumentAuditLogs).find(log => log.action === "analysis_completed")).toMatchObject({ metadata: JSON.stringify({ model: "test-model", outcome: "result_dropped_document_settled" }) });
   });
 
-  it("une analyse qui échoue après la décision de l’admin ne remet pas le document refusé « en attente »", async () => {
+  it.each([
+    ["une erreur de l’IA", () => new Error("candidate_document_ai_unavailable_test")],
+    ["la fin de la fonction", () => new ProcessingDeadlineError("llm")],
+  ])("une analyse arrêtée par %s après la décision de l’admin ne remet pas le document refusé « en attente » : sa tâche est fermée sans nouvel essai", async (_cause, failure) => {
     const document = seedDiploma();
     vi.mocked(analyzeCandidateDocument).mockImplementationOnce(async () => {
       await admin().review({ id: Number(document.id), status: "rejected", notes: "Refusé pendant l’analyse" });
-      throw new Error("candidate_document_ai_unavailable_test");
+      throw failure();
     });
 
-    await expect(processDueCandidateDocumentAnalysisJobs(1)).resolves.toMatchObject({ processed: 1, retried: 1 });
-    expect(document).toMatchObject({ status: "rejected", reviewNotes: "Refusé pendant l’analyse" });
+    await expect(processDueCandidateDocumentAnalysisJobs(1)).resolves.toMatchObject({ processed: 1, retried: 0, released: 0, needsReview: 0 });
 
-    // Its retry is closed at the next run, without the AI.
-    jobs()[0]!.scheduledFor = new Date(Date.now() - MINUTE);
-    await processDueCandidateDocumentAnalysisJobs(1);
     expect(jobs()).toMatchObject([{ status: "completed", lastError: "document_settled" }]);
+    expect(document).toMatchObject({ status: "rejected", reviewNotes: "Refusé pendant l’analyse", analysisStatus: "needs_review", analysisLastError: "document_settled", aiSummary: null });
+    await worker();
     expect(vi.mocked(analyzeCandidateDocument)).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["avant le passage quotidien", "reviewed", false],
+    ["pendant l’appel à l’IA", "reviewed", true],
+    ["pendant l’appel à l’IA", "archived", true],
+  ] as const)("un document tranché par l’admin %s (%s) n’est plus listé « en file » ni « en cours » une fois sa tâche fermée", async (_moment, decision, duringAnalysis) => {
+    const document = seedDiploma();
+    const decide = () => admin().review({ id: Number(document.id), status: decision, notes: "Original vérifié" });
+    if (duringAnalysis) {
+      vi.mocked(analyzeCandidateDocument).mockImplementationOnce(async () => {
+        await decide();
+        return { model: "test-model", analysis: { documentKind: "Diplôme", summary: "Synthèse de test", issuingOrganization: null, issueDate: null, expiryDate: null, confidence: 80, flags: [], missingInformation: [] } };
+      });
+    } else {
+      await decide();
+    }
+
+    await worker();
+
+    expect(await admin().list({ status: decision })).toMatchObject([{ status: decision, analysisStatus: "needs_review", hasActiveAnalysisJob: false, aiSummary: null, aiModel: null }]);
+    // « Relancer l’analyse » then queues it again, and only then is it analysed.
+    await admin().reanalyze({ id: Number(document.id) });
+    expect(document).toMatchObject({ status: "validating", analysisStatus: "queued" });
+    await worker();
+    expect(document).toMatchObject({ status: "needs_review", analysisStatus: "completed", analysisLastError: null, aiSummary: "Synthèse de test" });
   });
 
   it("deux passages simultanés ne prennent la tâche qu’une fois : le document est analysé une seule fois", async () => {
