@@ -266,10 +266,10 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
       .then(() => page.evaluate(() => Promise.all(document.getAnimations().filter((animation) => (animation as CSSAnimation).animationName === "page-transition-enter").map((animation) => animation.finished))))
       .then(() => page.evaluate(scrollSettled));
     const state = (page: Page) => page.evaluate(() => {
-      const tabs = document.querySelector('[role="tablist"]')?.getBoundingClientRect();
+      const tabs = document.querySelector('[role="group"][aria-label="Sections juridiques"]')?.getBoundingClientRect();
       return {
         scrollY: Math.round(window.scrollY),
-        tab: document.querySelector('[role="tab"][aria-selected="true"]')?.textContent?.trim() ?? null,
+        tab: document.querySelector('[aria-label="Sections juridiques"] [aria-current="page"]')?.textContent?.trim() ?? null,
         // The tabs are seen when they sit between the bottom of the fixed header and the bottom of the screen.
         tabsSeen: tabs ? tabs.top >= document.querySelector("header.site-nav")!.getBoundingClientRect().bottom - 1 && tabs.bottom <= innerHeight : false,
         entries: history.length,
@@ -291,10 +291,10 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
 
       // A tab chosen on the page replaces the address and leaves the page where it is (the tabs well
       // below the header, so that the focus the click gives them moves nothing either).
-      const tabsAt = await page.evaluate(() => Math.round(document.querySelector('[role="tablist"]')!.getBoundingClientRect().top + window.scrollY - document.querySelector("header.site-nav")!.getBoundingClientRect().bottom - 120));
+      const tabsAt = await page.evaluate(() => Math.round(document.querySelector('[role="group"][aria-label="Sections juridiques"]')!.getBoundingClientRect().top + window.scrollY - document.querySelector("header.site-nav")!.getBoundingClientRect().bottom - 120));
       await page.evaluate((top) => window.scrollTo({ top, behavior: "instant" }), tabsAt);
       const before = await state(page);
-      await page.getByRole("tab", { name: "Conditions Générales" }).click();
+      await page.getByRole("button", { name: "Conditions Générales" }).click();
       await settled(page, "/legal?tab=terms");
       expect(await state(page), where).toMatchObject({ scrollY: before.scrollY, tab: "Conditions Générales", entries: before.entries });
       expect(before.scrollY, where).toBeGreaterThan(0);

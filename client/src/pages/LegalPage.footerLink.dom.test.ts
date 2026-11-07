@@ -24,7 +24,8 @@ const pages = {
   zh: { content: contentZh, legal: "法律信息", privacy: "隐私政策", terms: "使用条款" },
 } as const;
 
-const selectedTab = () => screen.getAllByRole("tab").find(tab => tab.getAttribute("aria-selected") === "true")?.textContent?.trim();
+/** The section button marked as the current page (A11Y-11: buttons, not tabs). */
+const selectedTab = () => screen.getAllByRole("button").find(button => button.getAttribute("aria-current") === "page")?.textContent?.trim();
 /** The heading of the section shown under the tabs. */
 const shownSection = () => document.querySelector("main h2")?.textContent?.trim();
 const footerLink = (name: string) => screen.getByRole("contentinfo").querySelector(`a[href="${name}"]`) as HTMLAnchorElement;
@@ -44,7 +45,7 @@ describe("onglets de /legal et liens du pied de page (PUB-01)", () => {
 
     // Another tab chosen by hand: written in the address, without a new history entry.
     const entries = window.history.length;
-    fireEvent.click(screen.getByRole("tab", { name: page.legal }));
+    fireEvent.click(screen.getByRole("button", { name: page.legal }));
     expect(selectedTab()).toBe(page.legal);
     expect(shownSection()).toBe(page.legal);
     expect(window.location.search).toBe("");
@@ -59,11 +60,11 @@ describe("onglets de /legal et liens du pied de page (PUB-01)", () => {
     expect(window.location.search).toBe("?tab=privacy");
 
     // The same with the conditions, then the legal notice.
-    fireEvent.click(screen.getByRole("tab", { name: page.terms }));
+    fireEvent.click(screen.getByRole("button", { name: page.terms }));
     expect(window.location.search).toBe("?tab=terms");
     fireEvent.click(footerLink("/legal"));
     await waitFor(() => expect(selectedTab()).toBe(page.legal));
-    fireEvent.click(screen.getByRole("tab", { name: page.privacy }));
+    fireEvent.click(screen.getByRole("button", { name: page.privacy }));
     fireEvent.click(footerLink("/legal?tab=terms"));
     await waitFor(() => expect(selectedTab()).toBe(page.terms));
   });

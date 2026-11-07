@@ -49,13 +49,12 @@ function LegalPageFr() {
             Mentions Légales
           </h1>
 
-          {/* Onglets interactifs */}
+          {/* Boutons de section (A11Y-11) : sans rôles tab, faute de panneaux et de flèches ; la section affichée, écrite dans ?tab=, porte aria-current. */}
           <div className="mb-12">
-            <div role="tablist" aria-label="Sections juridiques" className="legal-tabs flex gap-4 mb-8 border-b border-border overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+            <div role="group" aria-label="Sections juridiques" className="legal-tabs flex gap-4 mb-8 border-b border-border overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
               <button
                 type="button"
-                role="tab"
-                aria-selected={activeTab === "legal"}
+                aria-current={activeTab === "legal" ? "page" : undefined}
                 onClick={() => setActiveTab("legal")}
                 className={`shrink-0 pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "legal"
@@ -67,8 +66,7 @@ function LegalPageFr() {
               </button>
               <button
                 type="button"
-                role="tab"
-                aria-selected={activeTab === "privacy"}
+                aria-current={activeTab === "privacy" ? "page" : undefined}
                 onClick={() => setActiveTab("privacy")}
                 className={`shrink-0 pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "privacy"
@@ -80,8 +78,7 @@ function LegalPageFr() {
               </button>
               <button
                 type="button"
-                role="tab"
-                aria-selected={activeTab === "terms"}
+                aria-current={activeTab === "terms" ? "page" : undefined}
                 onClick={() => setActiveTab("terms")}
                 className={`shrink-0 pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "terms"
@@ -337,13 +334,12 @@ function LegalPageEn() {
             Legal Notice
           </h1>
 
-          {/* Interactive Tabs */}
+          {/* Section buttons (A11Y-11): see the French page. */}
           <div className="mb-12">
-            <div role="tablist" aria-label="Legal sections" className="legal-tabs flex gap-4 mb-8 border-b border-border overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+            <div role="group" aria-label="Legal sections" className="legal-tabs flex gap-4 mb-8 border-b border-border overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
               <button
                 type="button"
-                role="tab"
-                aria-selected={activeTab === "legal"}
+                aria-current={activeTab === "legal" ? "page" : undefined}
                 onClick={() => setActiveTab("legal")}
                 className={`shrink-0 pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "legal"
@@ -355,8 +351,7 @@ function LegalPageEn() {
               </button>
               <button
                 type="button"
-                role="tab"
-                aria-selected={activeTab === "privacy"}
+                aria-current={activeTab === "privacy" ? "page" : undefined}
                 onClick={() => setActiveTab("privacy")}
                 className={`shrink-0 pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "privacy"
@@ -368,8 +363,7 @@ function LegalPageEn() {
               </button>
               <button
                 type="button"
-                role="tab"
-                aria-selected={activeTab === "terms"}
+                aria-current={activeTab === "terms" ? "page" : undefined}
                 onClick={() => setActiveTab("terms")}
                 className={`shrink-0 pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "terms"
@@ -626,13 +620,12 @@ function LegalPageDe() {
             Rechtliche Hinweise
           </h1>
 
-          {/* Interactive Tabs */}
+          {/* Section buttons (A11Y-11): see the French page. */}
           <div className="mb-12">
-            <div role="tablist" aria-label="Rechtliche Bereiche" className="legal-tabs flex gap-4 mb-8 border-b border-border overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+            <div role="group" aria-label="Rechtliche Bereiche" className="legal-tabs flex gap-4 mb-8 border-b border-border overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
               <button
                 type="button"
-                role="tab"
-                aria-selected={activeTab === "legal"}
+                aria-current={activeTab === "legal" ? "page" : undefined}
                 onClick={() => setActiveTab("legal")}
                 className={`shrink-0 pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "legal"
@@ -644,8 +637,7 @@ function LegalPageDe() {
               </button>
               <button
                 type="button"
-                role="tab"
-                aria-selected={activeTab === "privacy"}
+                aria-current={activeTab === "privacy" ? "page" : undefined}
                 onClick={() => setActiveTab("privacy")}
                 className={`shrink-0 pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "privacy"
@@ -657,8 +649,7 @@ function LegalPageDe() {
               </button>
               <button
                 type="button"
-                role="tab"
-                aria-selected={activeTab === "terms"}
+                aria-current={activeTab === "terms" ? "page" : undefined}
                 onClick={() => setActiveTab("terms")}
                 className={`shrink-0 pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "terms"
@@ -888,13 +879,12 @@ function LegalPageZh() {
             法律声明
           </h1>
 
-          {/* Interactive Tabs */}
+          {/* Section buttons (A11Y-11): see the French page. */}
           <div className="mb-12">
-            <div role="tablist" aria-label="法律栏目" className="legal-tabs flex gap-4 mb-8 border-b border-border overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+            <div role="group" aria-label="法律栏目" className="legal-tabs flex gap-4 mb-8 border-b border-border overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
               <button
                 type="button"
-                role="tab"
-                aria-selected={activeTab === "legal"}
+                aria-current={activeTab === "legal" ? "page" : undefined}
                 onClick={() => setActiveTab("legal")}
                 className={`shrink-0 pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "legal"
@@ -906,8 +896,7 @@ function LegalPageZh() {
               </button>
               <button
                 type="button"
-                role="tab"
-                aria-selected={activeTab === "privacy"}
+                aria-current={activeTab === "privacy" ? "page" : undefined}
                 onClick={() => setActiveTab("privacy")}
                 className={`shrink-0 pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "privacy"
@@ -919,8 +908,7 @@ function LegalPageZh() {
               </button>
               <button
                 type="button"
-                role="tab"
-                aria-selected={activeTab === "terms"}
+                aria-current={activeTab === "terms" ? "page" : undefined}
                 onClick={() => setActiveTab("terms")}
                 className={`shrink-0 pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "terms"
