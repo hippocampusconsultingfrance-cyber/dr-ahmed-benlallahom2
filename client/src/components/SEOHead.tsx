@@ -3,6 +3,9 @@ import { useLocation } from "wouter";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { resolveClientSeo } from "@shared/routeMetadata";
 
+/** og:locale of the language shown, fr_FR in the prerendered page (server/routeSeo.ts); the English texts are British. */
+export const OG_LOCALES: Record<string, string> = { fr: "fr_FR", en: "en_GB", de: "de_DE", zh: "zh_CN" };
+
 interface SEOHeadProps {
   title: string;
   description: string;
@@ -74,6 +77,7 @@ export function SEOHead({
     updateMeta("og:image:alt", seo.image.alt, true);
     updateMeta("og:url", seo.ogUrl, true);
     updateMeta("og:type", "website", true);
+    updateMeta("og:locale", OG_LOCALES[language] ?? OG_LOCALES.fr, true);
 
     // Twitter tags
     updateMeta("twitter:card", "summary_large_image");

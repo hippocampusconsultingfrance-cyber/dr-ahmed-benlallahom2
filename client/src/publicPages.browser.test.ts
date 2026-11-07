@@ -7,6 +7,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { COOKIE_CONSENT_STORAGE_KEY, createCookieConsent } from "@/components/cookieConsentState";
 import { contentDe } from "@/data/content-de";
 import { contentFr } from "@/data/content-fr";
+import { homeSeo } from "@/pages/Home";
+import { STATIC_ROUTE_METADATA } from "@shared/routeMetadata";
 
 /**
  * Pages publiques dans un vrai navigateur : le client est servi par Vite et tRPC répond par des
@@ -536,6 +538,29 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
     expect(await manage.evaluate((element) => element === document.activeElement)).toBe(true);
     await home.context().close();
   }, 120_000);
+
+  it("donne à l'accueil passé en anglais son titre, sa description et og:locale anglais, et rend en français ceux de la page pré-rendue (EN-10)", async () => {
+    const page = await open("/", { consent: true });
+    const head = () => page.evaluate(() => ({
+      lang: document.documentElement.lang,
+      title: document.title,
+      description: document.querySelector<HTMLMetaElement>('meta[name="description"]')?.content,
+      ogLocale: document.querySelector<HTMLMetaElement>('meta[property="og:locale"]')?.content,
+    }));
+    const french = await head();
+    expect(french).toMatchObject({ lang: "fr", title: STATIC_ROUTE_METADATA["/"].title, description: STATIC_ROUTE_METADATA["/"].description, ogLocale: "fr_FR" });
+
+    await page.getByRole("button", { name: "FR — Changer de langue" }).click();
+    await page.getByRole("menuitem", { name: "English" }).click();
+    await page.waitForFunction(() => document.documentElement.lang === "en");
+    expect(await head()).toEqual({ lang: "en", title: homeSeo.en.title, description: homeSeo.en.description, ogLocale: "en_GB" });
+
+    await page.getByRole("button", { name: "EN — Change language" }).click();
+    await page.getByRole("menuitem", { name: "Français" }).click();
+    await page.waitForFunction(() => document.documentElement.lang === "fr");
+    expect(await head()).toEqual(french);
+    await page.context().close();
+  }, 60_000);
 
   it("propose l'anglais à un navigateur sans français, sans changer la page tant que le visiteur ne choisit pas (EN-08)", async () => {
     for (const width of [320, 360, 1440]) {
