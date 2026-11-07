@@ -29,9 +29,9 @@ export const adminRecruitmentPoolRouter = router({
         isNull(cvApplications.marketingSuppressedAt),
         sql`${cvApplications.status} NOT IN ('rejected', 'archived')`,
       ];
-      if (input?.specialty) conditions.push(sql`LOWER(${cvApplications.specialty}) LIKE LOWER(${`%${input.specialty}%`})`);
+      if (input?.specialty) conditions.push(adminFilterContains(cvApplications.specialty, input.specialty));
       if (input?.country) conditions.push(adminFilterContains(cvApplications.targetCountries, input.country));
-      if (input?.availability) conditions.push(sql`LOWER(COALESCE(${cvApplications.availability}, '')) LIKE LOWER(${`%${input.availability}%`})`);
+      if (input?.availability) conditions.push(adminFilterContains(cvApplications.availability, input.availability));
       // Mobility reads the target countries too, accents aside as under « Pays ciblé ».
       if (input?.mobility) conditions.push(sql`(${adminFilterContains(cvApplications.mobility, input.mobility)} OR ${adminFilterContains(cvApplications.targetCountries, input.mobility)})`);
       if (input?.certification) conditions.push(await certificationFilterCondition(db, input.certification, sql`(${adminFilterContains(cvApplications.certifications, input.certification)} OR (${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND ${adminFilterContains(cvApplications.normalizedCertifications, input.certification)}))`));

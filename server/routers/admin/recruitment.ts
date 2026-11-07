@@ -60,6 +60,21 @@ function csvListCell(value: string | null) {
   return value?.trim().startsWith("[") ? parseRecruitmentJsonArray(value).join(" ; ") : value;
 }
 
+/**
+ * ADM-26: a phone number as the exports write it. An international number
+ * leaves with « 00 » instead of its « + », the same number dialled from
+ * abroad (« +216 51 000 010 » gives « 00216 51 000 010 »): a « + » is read as
+ * a formula, so csvCell would show it behind an apostrophe to clean by hand.
+ * Written without spaces, its « 00 » is set apart by one (« 00 21651000010 »),
+ * so that a spreadsheet keeps it as text, leading zeros included. The other
+ * columns keep the protection.
+ */
+export function csvPhoneValue(phone: string | null) {
+  if (!phone?.startsWith("+")) return phone;
+  const number = phone.slice(1);
+  return /\s/.test(number) ? `00${number}` : `00 ${number}`;
+}
+
 /** What really happened to a manual CV re-analysis (ADM-REC-02). */
 export function reanalysisOutcome(
   queue: { alreadyRunning: boolean },
@@ -174,9 +189,10 @@ export const adminRecruitmentRouter = router({
       if (input.status) conditions.push(eq(cvApplications.status, input.status));
       const search = adminSearchCondition(input.search, [cvApplications.firstName, cvApplications.lastName, cvApplications.email, cvApplications.trackingId], { firstName: cvApplications.firstName, lastName: cvApplications.lastName });
       if (search) conditions.push(search);
-      if (input.specialty) conditions.push(sql`LOWER(${cvApplications.specialty}) LIKE LOWER(${`%${input.specialty}%`})`);
-      // Country, language and certification, case and accents aside, like the pool and a campaign's
-      // filtered audience: « dha » finds « Licence DHA », « emirats » « Émirats arabes unis ».
+      // Specialty, country, language and certification, case and accents aside, like the pool and a
+      // campaign's filtered audience: « anesthesie » finds « Anesthésie » (INTL-12), « dha » « Licence DHA »,
+      // « emirats » « Émirats arabes unis »; a % or _ typed matches itself.
+      if (input.specialty) conditions.push(adminFilterContains(cvApplications.specialty, input.specialty));
       if (input.country) conditions.push(adminFilterContains(cvApplications.targetCountries, input.country));
       // A language by any of its names (IA-02): « arabe » finds « Arabic » too.
       if (input.language) conditions.push(await languageFilterCondition(db, input.language));
@@ -189,7 +205,7 @@ export const adminRecruitmentRouter = router({
           .limit(1);
         if (!selectedProfile) throw new TRPCError({ code: "NOT_FOUND", message: "Profil de matching introuvable" });
         profile = selectedProfile;
-        if (selectedProfile.specialty) conditions.push(sql`LOWER(${cvApplications.specialty}) LIKE LOWER(${`%${selectedProfile.specialty}%`})`);
+        if (selectedProfile.specialty) conditions.push(adminFilterContains(cvApplications.specialty, selectedProfile.specialty));
         if (selectedProfile.targetCountry) conditions.push(adminFilterContains(cvApplications.targetCountries, selectedProfile.targetCountry));
       }
       const minimumScore = Math.max(input.minimumScore ?? 0, profile?.minimumScore ?? 0);
@@ -452,10 +468,11 @@ export const adminRecruitmentRouter = router({
       // certification's expiry, the application's status in words.
       const facts = <T extends RecruitmentFact>(list: T[] | undefined, label: (fact: T) => string = recruitmentFactLabel) => (list ?? []).map(label).join(" ; ");
       const header = ["Prénom", "Nom", "Email", "Téléphone", "Spécialité", "Pays ciblés", "Langues (origine)", "Expérience (ans)", "Disponibilité", "Mobilité", "Certifications (origine)", "Accord du candidat", "Statut"];
-      csv = [header.map(csvCell).join(";"), ...rows.map(row => [row.firstName, row.lastName, row.email, row.phone, row.specialty, csvListCell(row.targetCountries), facts(languagesByApplication.get(row.id)), row.yearsExperience, row.availability, row.mobility, facts(certificationsByApplication.get(row.id), certificationFactLabel), consentByApplication.get(row.id)?.toLocaleDateString("fr-FR", { timeZone: "Europe/Paris" }), recruitmentApplicationStatusLabel(row.status)].map(csvCell).join(";"))].join("\n");
+      csv = [header.map(csvCell).join(";"), ...rows.map(row => [row.firstName, row.lastName, row.email, csvPhoneValue(row.phone), row.specialty, csvListCell(row.targetCountries), facts(languagesByApplication.get(row.id)), row.yearsExperience, row.availability, row.mobility, facts(certificationsByApplication.get(row.id), certificationFactLabel), consentByApplication.get(row.id)?.toLocaleDateString("fr-FR", { timeZone: "Europe/Paris" }), recruitmentApplicationStatusLabel(row.status)].map(csvCell).join(";"))].join("\n");
     } else {
+      // The countries and languages listed, the status in words, as in the shortlist (INTL-10).
       const header = ["Prénom", "Nom", "Email", "Téléphone", "Spécialité", "Pays ciblés", "Langues", "Expérience (ans)", "Disponibilité", "Mobilité", "Certifications", "Score IA", "Statut"];
-      csv = [header.map(csvCell).join(";"), ...rows.map(row => [row.firstName, row.lastName, row.email, row.phone, row.specialty, row.targetCountries, row.languages, row.yearsExperience, row.availability, row.mobility, row.certifications, row.aiScore, row.status].map(csvCell).join(";"))].join("\n");
+      csv = [header.map(csvCell).join(";"), ...rows.map(row => [row.firstName, row.lastName, row.email, csvPhoneValue(row.phone), row.specialty, csvListCell(row.targetCountries), csvListCell(row.languages), row.yearsExperience, row.availability, row.mobility, row.certifications, row.aiScore, recruitmentApplicationStatusLabel(row.status)].map(csvCell).join(";"))].join("\n");
     }
     // One audit line per candidate, in one statement: all of them or, when
     // the database refuses one, none and no file (DATA-01).
