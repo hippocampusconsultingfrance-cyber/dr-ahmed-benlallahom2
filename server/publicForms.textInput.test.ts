@@ -239,3 +239,20 @@ describe("formulaires publics — adresses email collées (INTL-05)", () => {
     }
   });
 });
+
+describe("réservation — téléphone avec un caractère de contrôle (INTL-05)", () => {
+  it("le refuse avec le motif invalid_characters et son message, jamais avec le JSON de la validation", async () => {
+    for (const phone of [`+33 6 12 34 56 78${NUL}`, "+33 6 12 34\r\n56 78", `+33\t612345678`, `+33 6 12 34 56 78${character(0x85)}`]) {
+      const refused = await trpc("appointments.create", { ...forms.appointments("Jeanne Martin"), customerPhone: phone }, "198.51.100.150");
+      expect(refused.status, JSON.stringify(phone)).toBe(400);
+      expect(refused.error, JSON.stringify(phone)).toMatchObject({ message: TEXT_INPUT_INVALID_CHARACTERS_MESSAGE, data: { reason: TEXT_INPUT_INVALID_CHARACTERS } });
+    }
+    expectNothingKept();
+  });
+
+  it("lit toujours un numéro collé avec ses marques de direction, comme la page (INTL-09)", async () => {
+    // A name left empty once cleaned is refused after the input is read: the phone went through.
+    const read = await trpc("appointments.create", { ...forms.appointments(" "), customerPhone: `${RLM}+33 6 12 34 56 78${LRM}` }, "198.51.100.151");
+    expect(read.error?.data.reason).toBe("invalid_name");
+  });
+});

@@ -24,7 +24,7 @@ import {
   toE164PhoneNumber,
   type BookingRefusalReason,
 } from "../../shared/bookingPolicy";
-import { cleanTextInput, emailText, multiLineText, singleLineText } from "../../shared/textInput";
+import { cleanTextInput, emailText, multiLineText, singleLineText, TEXT_INPUT_INVALID_CHARACTERS } from "../../shared/textInput";
 import { getSafeCheckoutOrigin } from "./publicOrigin";
 import { enforcePublicFormRateLimit, givePublicFormAttemptBack, withinBookingGiveBackCap } from "./publicForms";
 import { parisDateKey, parseAppointmentDate, isNightRateForParis, isBookableAppointmentTime } from "./parisTime";
@@ -100,6 +100,14 @@ export function occupiesSlot() {
  */
 export const bookingCustomerEmail = emailText(z.string().max(320).refine(isBookingEmailAddress, "Adresse email invalide"));
 
+/**
+ * Caractères de contrôle d’un numéro (NUL, saut de ligne, tabulation, C1) :
+ * refusés avec le motif invalid_characters (INTL-05), et non avec le JSON de
+ * la validation ; les marques de direction d’un numéro collé, elles, sont
+ * retirées par normalizePhoneInput (INTL-09).
+ */
+const PHONE_CONTROL_CHARACTERS = new RegExp("[\\u0000-\\u001F\\u007F-\\u009F\\u2028\\u2029]");
+
 /** Libellé de la ligne Stripe Checkout, visible sur la page de paiement et le reçu. */
 export function consultationCheckoutProductData(trackingId: string) {
   return { name: CONSULTATION_CHECKOUT_PRODUCT_NAME, description: `Rendez-vous : ${trackingId}` };
@@ -149,7 +157,7 @@ export const appointmentsRouter = router({
         // Lu comme la page le vérifie (chiffres arabes, persans ou pleine
         // chasse en 0-9, sans marques de direction), puis enregistré au format
         // E.164 : « + », l’indicatif et les chiffres seuls (INTL-09).
-        customerPhone: z.string().transform(normalizePhoneInput).pipe(z.string().min(1).max(50).refine(isPlausiblePhoneNumber, BOOKING_INVALID_PHONE_MESSAGE)).transform(phone => toE164PhoneNumber(phone) ?? phone),
+        customerPhone: z.string().refine(phone => !PHONE_CONTROL_CHARACTERS.test(phone), TEXT_INPUT_INVALID_CHARACTERS).transform(normalizePhoneInput).pipe(z.string().min(1).max(50).refine(isPlausiblePhoneNumber, BOOKING_INVALID_PHONE_MESSAGE)).transform(phone => toE164PhoneNumber(phone) ?? phone),
         appointmentDate: appointmentDateInput,
         // Objet de la demande, sans information médicale (minimisation) :
         // conservé pour le tableau de bord, jamais recopié dans un email.
