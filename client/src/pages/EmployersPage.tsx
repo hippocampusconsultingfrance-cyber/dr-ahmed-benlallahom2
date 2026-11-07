@@ -8,6 +8,8 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { siteConfig } from "@/data/site-config";
 import { resolveCountryForSubmission } from "@/lib/countrySubmission";
 import { reportFieldsToCorrect, type FieldToCorrect } from "@/lib/formFieldsToCorrect";
+import { getInvalidCharactersCopy } from "@/lib/publicFormCopy";
+import { INVALID_CHARACTERS_REASON } from "@shared/publicFormRefusalReasons";
 
 export const employerCopy = {
   fr: {
@@ -260,13 +262,15 @@ export function employerInvalidFields(form: BriefFormState, submittedCountry: st
 /**
  * Message of a brief the server refused (REC-12): the limits reached or a
  * service unavailable, from their stable code, in the language of the page
- * and with the contact email; any other failure keeps the generic message.
- * The French text of the server is never shown.
+ * and with the contact email, or a field refused for its characters
+ * (INTL-05); any other failure keeps the generic message. The French text of
+ * the server is never shown.
  */
 function employerSubmissionError(code: unknown, language: Language): string {
   const t = employerCopy[language];
   if (code === "rate_limited") return t.rateLimited.replace("{email}", siteConfig.email);
   if (code === "service_unavailable") return t.serviceUnavailable.replace("{email}", siteConfig.email);
+  if (code === INVALID_CHARACTERS_REASON) return getInvalidCharactersCopy(language);
   return t.genericError;
 }
 

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { INVALID_CHARACTERS_REASON } from "./publicFormRefusalReasons";
 
 /**
  * INTL-05: the text a public form takes, on one line (names, phones,
@@ -18,10 +19,14 @@ import { z } from "zod";
  * letters, and the direction marks and isolates inside the text, which
  * mixed Arabic, Hebrew and Latin text uses, are kept.
  */
-export const TEXT_INPUT_INVALID_CHARACTERS = "invalid_characters";
+export const TEXT_INPUT_INVALID_CHARACTERS = INVALID_CHARACTERS_REASON;
 
-/** French message of that refusal, for a client that does not translate its reason. */
-export const TEXT_INPUT_INVALID_CHARACTERS_MESSAGE = "Un champ contient un caractère de contrôle ou d’inversion du sens du texte qui n’est pas accepté : retapez-le sans le copier-coller, puis renvoyez le formulaire.";
+/**
+ * French message of that refusal, the one the pages show in French
+ * (client/src/lib/publicFormCopy.ts), for a client that does not translate
+ * its reason.
+ */
+export const TEXT_INPUT_INVALID_CHARACTERS_MESSAGE = "Un champ contient un saut de ligne ou un caractère invisible qui n’y est pas accepté, souvent laissé par un copier-coller : retapez ce texte au clavier, puis renvoyez le formulaire.";
 
 // Written as escapes: none of these characters appears as such in the source.
 const EDGE_MARKS = "\\s\\u200B\\u200E\\u200F\\u202A-\\u202E\\u2066-\\u2069\\uFEFF";

@@ -49,6 +49,9 @@ describe("booking day and time choice", () => {
       expect(getBookingErrorMessage({ message: "Ce créneau n’est plus réservable", data: { code: "UNPROCESSABLE_CONTENT", reason: "too_soon" } }, copy)).toBe(copy.refusals.too_soon);
       // Saisie refusée avec un motif (nom sans lettre ni chiffre) : son message, pas la consigne générale.
       expect(getBookingErrorMessage({ message: "Saisissez votre nom complet", data: { code: "BAD_REQUEST", reason: "invalid_name" } }, copy)).toBe(copy.refusals.invalid_name);
+      // Champ refusé pour ses caractères (INTL-05) : à retaper, pas la consigne générale de saisie.
+      expect(getBookingErrorMessage({ message: "Un champ contient un saut de ligne", data: { code: "BAD_REQUEST", reason: "invalid_characters" } }, copy)).toBe(copy.refusals.invalid_characters);
+      expect(copy.refusals.invalid_characters).not.toBe(copy.invalidInput);
       // Vérification anti-robot impossible (ABUS-02) : le service est indisponible, pas « refaites la vérification ».
       expect(getBookingErrorMessage({ message: "La vérification anti-robot est momentanément indisponible.", data: { code: "SERVICE_UNAVAILABLE", reason: "security_check_unavailable" } }, copy)).toBe(copy.refusals.security_check_unavailable);
       expect(copy.refusals.security_check_unavailable).not.toBe(copy.refusals.security_check_required);
@@ -65,6 +68,7 @@ describe("booking day and time choice", () => {
     }
     expect(bookingContent.en.refusals.too_many_holds).not.toMatch(/réservation|attente/);
     expect(bookingContent.de.refusals.payment_unavailable).toContain("Zahlungsdienst");
+    expect(bookingContent.en.refusals.invalid_characters).toBe("A field contains a line break or an invisible character that is not accepted there, often left by copying and pasting: type that text again on the keyboard, then send the form again.");
   });
 
   it("applique côté client le délai minimal, l’horizon et le contrôle du téléphone, avec un libellé dans chaque langue", () => {

@@ -41,6 +41,13 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: toastError } }));
 const { default: ContactSection, contactCopy } = await import("./ContactSection");
 
 const SERVER_MESSAGE = "Texte français écrit par le serveur.";
+/** Alert of a field refused for its characters, as the pages show it in each language. */
+const INVALID_CHARACTERS = {
+  fr: "Un champ contient un saut de ligne ou un caractère invisible qui n’y est pas accepté, souvent laissé par un copier-coller : retapez ce texte au clavier, puis renvoyez le formulaire.",
+  en: "A field contains a line break or an invisible character that is not accepted there, often left by copying and pasting: type that text again on the keyboard, then send the form again.",
+  de: "Ein Feld enthält einen Zeilenumbruch oder ein unsichtbares Zeichen, das dort nicht zulässig ist, oft ein Rest vom Kopieren und Einfügen: Geben Sie diesen Text erneut über die Tastatur ein und senden Sie das Formular dann erneut.",
+  zh: "某个字段包含此处不允许的换行符或不可见字符，通常由复制粘贴带入：请用键盘重新输入该内容，然后重新提交表单。",
+} as const;
 /** Error of a refused tRPC call as the client receives it: French message, code and stable reason in `data`. */
 const refusal = (code: string, reason?: string) => ({ message: SERVER_MESSAGE, data: { code, ...(reason ? { reason } : {}) } });
 
@@ -84,6 +91,16 @@ describe("ContactSection — refus traduits (ABUS-01)", () => {
       expect(alert, language).toBe(contactCopy[language].refusals.security_check_unavailable);
       expect(alert, language).not.toBe(contactCopy[language].refusals.security_check_failed);
     }
+  });
+
+  it("dit de retaper le texte d'un champ refusé pour ses caractères (INTL-05), dans la langue de la page", () => {
+    for (const language of ["fr", "en", "de", "zh"] as const) {
+      const alert = renderAlert(language, refusal("BAD_REQUEST", "invalid_characters"));
+      expect(alert, language).toBe(INVALID_CHARACTERS[language]);
+      expect(alert, language).not.toBe(contactCopy[language].sendError);
+    }
+    view.onError?.(refusal("BAD_REQUEST", "invalid_characters"));
+    expect(toastError).toHaveBeenLastCalledWith(INVALID_CHARACTERS.zh);
   });
 
   it("garde l'échec générique sans motif connu, et n'affiche jamais le texte français du serveur", () => {

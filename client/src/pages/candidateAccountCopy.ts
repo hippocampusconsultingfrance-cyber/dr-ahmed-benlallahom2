@@ -1,4 +1,6 @@
 import { isCandidateAccessReason, type CandidateAccessReason } from "@shared/candidateAccessReasons";
+import { INVALID_CHARACTERS_REASON } from "@shared/publicFormRefusalReasons";
+import { publicFormCopy } from "@/lib/publicFormCopy";
 
 export const candidateAccountCopy = {
   fr: {
@@ -32,6 +34,7 @@ export const candidateAccountCopy = {
     passwordCompromised: "Ce mot de passe a déjà été compromis. Choisissez-en un autre, long et unique.",
     passwordCheckUnavailable: "Le contrôle de sécurité du mot de passe est temporairement indisponible. Réessayez dans quelques instants.",
     serviceUnavailable: "Le service candidat est temporairement indisponible. Veuillez réessayer dans quelques instants.",
+    invalidCharacters: publicFormCopy.invalidCharacters.fr,
   },
   en: {
     verifyMetaTitle: "Account verification | Hippocampus Consulting",
@@ -64,6 +67,7 @@ export const candidateAccountCopy = {
     passwordCompromised: "This password has already appeared in a data breach. Choose another one, long and unique.",
     passwordCheckUnavailable: "The password security check is temporarily unavailable. Please try again in a few moments.",
     serviceUnavailable: "The candidate service is temporarily unavailable. Please try again in a few moments.",
+    invalidCharacters: publicFormCopy.invalidCharacters.en,
   },
   de: {
     verifyMetaTitle: "Kontobestätigung | Hippocampus Consulting",
@@ -96,6 +100,7 @@ export const candidateAccountCopy = {
     passwordCompromised: "Dieses Passwort ist bereits in einem Datenleck aufgetaucht. Wählen Sie ein anderes, langes und eindeutiges Passwort.",
     passwordCheckUnavailable: "Die Sicherheitsprüfung des Passworts ist vorübergehend nicht verfügbar. Bitte versuchen Sie es in wenigen Augenblicken erneut.",
     serviceUnavailable: "Der Kandidatendienst ist vorübergehend nicht verfügbar. Bitte versuchen Sie es in wenigen Augenblicken erneut.",
+    invalidCharacters: publicFormCopy.invalidCharacters.de,
   },
   zh: {
     verifyMetaTitle: "账户验证 | Hippocampus Consulting",
@@ -128,6 +133,7 @@ export const candidateAccountCopy = {
     passwordCompromised: "该密码已在数据泄露中出现过。请另选一个长且唯一的密码。",
     passwordCheckUnavailable: "密码安全检查暂时不可用。请稍后重试。",
     serviceUnavailable: "候选人服务暂时不可用。请稍后重试。",
+    invalidCharacters: publicFormCopy.invalidCharacters.zh,
   },
 } as const;
 
@@ -136,11 +142,13 @@ type CandidateAccountCopy = (typeof candidateAccountCopy)[CandidateAccountLangua
 
 /**
  * Refusal of the activation or password reset page, translated from the stable
- * reason sent by the server (EN-06). Without a known reason, the French page
- * keeps the server's message and the other languages show the generic one.
+ * reason sent by the server (EN-06), a name refused for its characters
+ * (INTL-05) included. Without a known reason, the French page keeps the
+ * server's message and the other languages show the generic one.
  */
 export function candidateAccountNotice(error: { message: string; data?: { reason?: string } | null }, copy: CandidateAccountCopy, language: string): string {
   const reason = error.data?.reason;
+  if (reason === INVALID_CHARACTERS_REASON) return copy.invalidCharacters;
   if (isCandidateAccessReason(reason)) {
     const byReason: Partial<Record<CandidateAccessReason, string>> = {
       candidate_password_too_short: copy.passwordTooShort,

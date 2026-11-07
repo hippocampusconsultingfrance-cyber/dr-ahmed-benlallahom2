@@ -162,6 +162,23 @@ describe("activation de l’espace candidat", () => {
     expect(view.navigations).toEqual([]);
   });
 
+  it.each([
+    ["fr", "Un champ contient un saut de ligne ou un caractère invisible qui n’y est pas accepté, souvent laissé par un copier-coller : retapez ce texte au clavier, puis renvoyez le formulaire."],
+    ["en", "A field contains a line break or an invisible character that is not accepted there, often left by copying and pasting: type that text again on the keyboard, then send the form again."],
+    ["zh", "某个字段包含此处不允许的换行符或不可见字符，通常由复制粘贴带入：请用键盘重新输入该内容，然后重新提交表单。"],
+  ] as const)("dit de retaper un nom refusé pour ses caractères, sans quitter le formulaire (%s, INTL-05)", (language, expected) => {
+    view.language = language;
+    render();
+    type("candidate-activation-password", "correct horse battery staple");
+    type("candidate-activation-password-confirmation", "correct horse battery staple");
+    (elementsOf(render()).find(element => element.type === "form")!.props.onSubmit as (event: { preventDefault: () => void }) => void)({ preventDefault: vi.fn() });
+
+    view.options.onError!({ message: "Texte français écrit par le serveur.", data: { reason: "invalid_characters" } });
+    const tree = render();
+    expect(elementsOf(tree).find(element => element.props.role === "status")!.props.children).toBe(expected);
+    expect(elementsOf(tree).some(element => element.type === "form")).toBe(true);
+  });
+
   it.each(["fr", "en", "de", "zh"] as const)("propose un nouveau lien quand le lien expire pendant la saisie du formulaire (%s, REC-17)", language => {
     view.language = language;
     const copy = candidateAccountCopy[language];

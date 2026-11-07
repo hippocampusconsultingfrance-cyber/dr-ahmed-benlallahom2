@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { multiLineText, refusesTextInputCharacters, singleLineText, TEXT_INPUT_INVALID_CHARACTERS } from "../shared/textInput";
+import { multiLineText, refusesTextInputCharacters, singleLineText, TEXT_INPUT_INVALID_CHARACTERS, TEXT_INPUT_INVALID_CHARACTERS_MESSAGE } from "../shared/textInput";
+import { PUBLIC_FORM_REFUSAL_REASONS } from "../shared/publicFormRefusalReasons";
+import { BOOKING_REFUSAL_REASONS } from "../shared/bookingPolicy";
+import { publicFormCopy } from "../client/src/lib/publicFormCopy";
 
 // INTL-05 — the text the public forms take (shared/textInput.ts): cleaned of
 // what a paste leaves at either end, refused with a stable reason for a
@@ -103,5 +106,14 @@ describe("multiLineText — messages et notes", () => {
     for (const forged of [`Bonjour${NUL}`, `Montant : ${RLO}001${PDF} €`, `Bonjour${character(0x1b)}[31m`, `a${character(0x9b)}b`]) {
       expect(refusesTextInputCharacters(refusal(message, forged)), JSON.stringify(forged)).toBe(true);
     }
+  });
+});
+
+describe("motif invalid_characters — traduit par les pages", () => {
+  it("est un motif connu des formulaires publics et de la réservation, et son message français est celui des pages", () => {
+    expect(PUBLIC_FORM_REFUSAL_REASONS).toContain(TEXT_INPUT_INVALID_CHARACTERS);
+    expect(BOOKING_REFUSAL_REASONS).toContain(TEXT_INPUT_INVALID_CHARACTERS);
+    // The recruitment and candidate pages show the server's French message as is.
+    expect(TEXT_INPUT_INVALID_CHARACTERS_MESSAGE).toBe(publicFormCopy.invalidCharacters.fr);
   });
 });

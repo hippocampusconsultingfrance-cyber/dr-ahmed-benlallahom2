@@ -13,6 +13,8 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import CandidateLegalFooter, { candidateLegalLinks } from "@/components/CandidateLegalFooter";
 import LanguageMenu from "@/components/LanguageMenu";
 import { isCandidateAccessReason, type CandidateAccessReason } from "@shared/candidateAccessReasons";
+import { INVALID_CHARACTERS_REASON } from "@shared/publicFormRefusalReasons";
+import { publicFormCopy } from "@/lib/publicFormCopy";
 
 type Mode = "login" | "register" | "forgot" | "activation";
 
@@ -76,6 +78,7 @@ export const candidateAccessCopy = {
     invitationMismatch: "Cette invitation ne correspond pas à cette adresse email. Utilisez l’adresse de votre candidature.",
     invalidCredentials: "Email ou mot de passe incorrect.",
     serviceUnavailable: "Le service candidat est temporairement indisponible. Veuillez réessayer dans quelques instants.",
+    invalidCharacters: publicFormCopy.invalidCharacters.fr,
   },
   en: {
     metaTitle: "Secure candidate portal | Hippocampus Consulting",
@@ -132,6 +135,7 @@ export const candidateAccessCopy = {
     invitationMismatch: "This invitation does not match this email address. Use the address of your application.",
     invalidCredentials: "Incorrect email or password.",
     serviceUnavailable: "The candidate service is temporarily unavailable. Please try again in a few moments.",
+    invalidCharacters: publicFormCopy.invalidCharacters.en,
   },
   de: {
     metaTitle: "Sicheres Kandidatenportal | Hippocampus Consulting",
@@ -188,6 +192,7 @@ export const candidateAccessCopy = {
     invitationMismatch: "Diese Einladung passt nicht zu dieser E-Mail-Adresse. Verwenden Sie die Adresse Ihrer Bewerbung.",
     invalidCredentials: "E-Mail oder Passwort ist falsch.",
     serviceUnavailable: "Der Kandidatendienst ist vorübergehend nicht verfügbar. Bitte versuchen Sie es in wenigen Augenblicken erneut.",
+    invalidCharacters: publicFormCopy.invalidCharacters.de,
   },
   zh: {
     metaTitle: "安全候选人门户 | Hippocampus Consulting",
@@ -244,6 +249,7 @@ export const candidateAccessCopy = {
     invitationMismatch: "此邀请与该电子邮件地址不匹配。请使用您申请时填写的地址。",
     invalidCredentials: "电子邮件或密码不正确。",
     serviceUnavailable: "候选人服务暂时不可用。请稍后重试。",
+    invalidCharacters: publicFormCopy.invalidCharacters.zh,
   },
 } as const;
 
@@ -252,9 +258,11 @@ type CandidateCopy = (typeof candidateAccessCopy)[CandidateLanguage];
 
 /**
  * Message shown for a refusal. The stable reason sent by the server comes first
- * (EN-06); the tRPC code and the input-validation fields cover the rest.
+ * (EN-06), a name refused for its characters (INTL-05) included; the tRPC code
+ * and the input-validation fields cover the rest.
  */
 export function candidateNotice(message: string, copy: CandidateCopy, code?: string, reason?: string) {
+  if (reason === INVALID_CHARACTERS_REASON) return copy.invalidCharacters;
   if (isCandidateAccessReason(reason)) {
     const byReason: Partial<Record<CandidateAccessReason, string>> = {
       candidate_rate_limited: copy.tooManyRequests,

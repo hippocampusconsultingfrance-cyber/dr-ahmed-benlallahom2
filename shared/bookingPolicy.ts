@@ -3,6 +3,8 @@
  * change it everywhere (client checks, server checks, emails).
  */
 
+import { INVALID_CHARACTERS_REASON } from "./publicFormRefusalReasons";
+
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 
@@ -49,7 +51,8 @@ export function getBookingWindowIssue(appointmentStart: Date, now: number = Date
  * the payment service being unavailable, a name without any visible letter
  * or digit, and the anti-robot check asked only when unpaid holds pile up
  * (ABUS-02): the page then shows the check and the patient pays as usual,
- * unless the check service itself is down (the patient retries later).
+ * unless the check service itself is down (the patient retries later). Last,
+ * a field refused for its characters (INTL-05), as on every public form.
  */
 export const BOOKING_REFUSAL_REASONS = [
   "slot_taken",
@@ -64,6 +67,7 @@ export const BOOKING_REFUSAL_REASONS = [
   "invalid_name",
   "security_check_required",
   "security_check_unavailable",
+  INVALID_CHARACTERS_REASON,
 ] as const;
 export type BookingRefusalReason = (typeof BOOKING_REFUSAL_REASONS)[number];
 
