@@ -140,19 +140,18 @@ async function sendSecurityAlertEmail(input: SecurityAlertInput, options: { queu
  * is tried again later.
  */
 export async function sendQueuedSecurityAlert(category: string): Promise<"sent" | "covered" | false> {
-  let tried = false;
-  const delivered = await sendOwnerAlertOncePerWindow(securityAlertWindow(category), () => {
-    tried = true;
-    return sendSecurityAlertEmail({ actorKind: "system", category, outcome: "failed", severity: "high" }, { queued: true });
-  });
-  if (delivered) return "sent";
-  if (tried) return false;
-  // Held: only a delivered alert holds the window longer than the new try after a failure.
+  // Read before this attempt: made while another alert of the window is still
+  // being sent, it holds the window as long as a delivered alert would, and
+  // that send may still fail. Only a delivered alert holds it longer than the
+  // new try after a failure.
   const db = await getDb();
   const [slot] = db ? await db.select({ blockedUntil: candidateSecurityRateLimits.blockedUntil }).from(candidateSecurityRateLimits)
     .where(and(eq(candidateSecurityRateLimits.action, "security_alert_email"), eq(candidateSecurityRateLimits.subjectHash, hashSecurityValue(category)))).limit(1) : [];
   const blockedUntil = asDate(slot?.blockedUntil);
-  return blockedUntil && blockedUntil.getTime() - Date.now() > OWNER_ALERT_RETRY_AFTER_FAILURE_MS ? "covered" : false;
+  if (blockedUntil && blockedUntil.getTime() - Date.now() > OWNER_ALERT_RETRY_AFTER_FAILURE_MS) return "covered";
+  const delivered = await sendOwnerAlertOncePerWindow(securityAlertWindow(category), () =>
+    sendSecurityAlertEmail({ actorKind: "system", category, outcome: "failed", severity: "high" }, { queued: true }));
+  return delivered ? "sent" : false;
 }
 
 /**

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { appointmentFulfillmentJobs, appointments, candidateSecurityRateLimits, securityEvents } from "../drizzle/schema";
-import { createMemoryPg, type MemoryPg } from "./testing/memoryPgProxy";
+import { createMemoryPg, pgTimestamp, type MemoryPg } from "./testing/memoryPgProxy";
 import { TEST_PEPPER } from "./testSupport/candidatePortal";
 
 // ABUS-03 — quota Resend épuisé pendant les envois qui suivent un paiement :
@@ -68,6 +68,8 @@ function seedRefusedConfirmation(trackingId: string) {
 const sent = (subject: string) => resend.calls.filter(call => call.subject.startsWith(subject));
 const quotaEvents = () => memory.rows(securityEvents).filter(event => event.category === "resend_quota_exceeded");
 const quotaAlertJobs = () => memory.rows(appointmentFulfillmentJobs).filter(row => row.job_type === "quota_alert");
+/** The window of the security alerts of a used-up quota: one alert email per period (sendOwnerAlertOncePerWindow). */
+const alertWindow = () => memory.rows(candidateSecurityRateLimits).find(row => row.action === "security_alert_email")!;
 /** Room for the confirmation and its failure alert, a pause later, not for one more pause: the security alert misses its slot. */
 const tightBudget = () => ({ deadlineAt: Date.now() + PAUSE_MS * 1.5 });
 
@@ -180,5 +182,28 @@ describe("ABUS-03 — l’alerte « quota Resend épuisé » levée pendant les 
 
     expect(sent(SECURITY_ALERT)).toHaveLength(1);
     expect(quotaAlertJobs()).toEqual([expect.objectContaining({ status: "completed", last_error: "quota_alert_covered" })]);
+  }, 10_000);
+
+  it("ne se croit pas couverte par une alerte de la période encore en cours d’envoi : elle part au passage suivant si celle-ci échoue", async () => {
+    const id = seedRefusedConfirmation("APTQUOTA0007");
+    await processAppointmentFulfillmentNow(id, tightBudget());
+    expect(quotaAlertJobs()).toEqual([expect.objectContaining({ status: "queued" })]);
+
+    // Another processing has just taken the window for its own alert, which Resend has not answered yet.
+    const now = pgTimestamp(new Date());
+    Object.assign(alertWindow(), { attempt_count: 1, blocked_until: null, window_started_at: now, last_attempt_at: now });
+    resend.quotaUsedUp = false;
+    await processDueAppointmentFulfillmentJobs();
+
+    expect(sent(SECURITY_ALERT)).toEqual([]);
+    expect(quotaAlertJobs()).toEqual([expect.objectContaining({ status: "retry", attempts: 1, last_error: "quota_alert_not_sent" })]);
+
+    // That alert failed: once the new try after a failure is due, the queued one leaves.
+    Object.assign(alertWindow(), { attempt_count: 2, blocked_until: pgTimestamp(new Date(Date.now() - 1000)) });
+    quotaAlertJobs()[0]!.scheduled_for = pgTimestamp(new Date(Date.now() - 1000));
+    await processDueAppointmentFulfillmentJobs();
+
+    expect(sent(SECURITY_ALERT)).toHaveLength(1);
+    expect(quotaAlertJobs()).toEqual([expect.objectContaining({ status: "completed", attempts: 2, last_error: null })]);
   }, 10_000);
 });
