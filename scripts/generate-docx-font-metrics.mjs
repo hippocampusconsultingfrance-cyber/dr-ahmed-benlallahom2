@@ -44,6 +44,20 @@
  * and characters as wide as the one before them (those a font lacks, of 0) in
  * a sign and their count.
  *
+ * And, measured apart (round 12), what Word draws in fonts of no metrics
+ * published: the characters of Hebrew and Arabic (Persian's among them) in a
+ * run's complex script font, each as wide as its widest form (its glyph, its
+ * Arabic Presentation Forms, what GSUB's substitutions make of them) in some
+ * forty fonts that hold them, a quarter more (FALLBACK_SHARE), for the
+ * complex script fonts of Word of COMPLEX_FONTS (DOCX_COMPLEX_METRICS); the
+ * signs a font lacks, as wide as the widest of the fonts of signs measured a
+ * quarter more (`signs`); emoji, as Noto Color Emoji's a quarter more
+ * (DOCX_EMOJI_METRICS); what kerning may add to a character, the widest
+ * positive pair of the fonts measured a quarter more (DOCX_KERNING_MOST).
+ * These only add to the file: run on the folder of the round 11's sources
+ * without its subfolder `complex`, the script stops; with it, every value
+ * written before is written again the same, to the byte.
+ *
  * Run again after changing the fonts or the characters:
  *   node scripts/generate-docx-font-metrics.mjs [fonts folder]
  * The fonts are taken from the folder when it holds their family (fc-scan,
@@ -73,6 +87,17 @@
  *   @capsizecss/metrics@4.4.0 (copied in VERTICAL)
  *   installed (Debian): fonts-crosextra-carlito 20230309, fonts-crosextra-caladea
  *     20200211, fonts-liberation2 2.1.5, fonts-dejavu-core 2.37.
+ * And, for round 12's measures, in the folder's subfolder `complex`: the WOFF of
+ * the arabic, hebrew, symbols and math subsets (400 and 700, normal and italic)
+ * of @fontsource/{amiri,scheherazade-new,noto-naskh-arabic,noto-sans-arabic,
+ *   noto-kufi-arabic,cairo,tajawal,vazirmatn,ibm-plex-sans-arabic,harmattan,
+ *   lateef,markazi-text,el-messiri,almarai,readex-pro,mada,noto-sans-hebrew,
+ *   noto-serif-hebrew,frank-ruhl-libre,david-libre,miriam-libre,alef,heebo,
+ *   assistant,rubik,arimo,tinos,noto-sans-symbols,noto-sans-symbols-2,
+ *   noto-sans-math}@5.3.0 (SIL Open Font License, Apache License for Arimo and
+ *   Tinos), each in a folder of its own;
+ *   installed (Ubuntu 24.04): fonts-freefont-ttf 20211204, fonts-opensymbol
+ *     102.12, fonts-noto-color-emoji 2.047, and those above.
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -536,6 +561,8 @@ const publishedLine = name => {
 
 /** Of each font, its advances in each style (STYLES), in thousandths of its size, and its line; the names it stands for. */
 const fonts = {};
+/** The files of the fonts measured (FONTS), for their kerning (positiveKerning). */
+const measuredFiles = [];
 const aliases = {};
 /** What is written of each font measured, standing in or substitute (DOCX_FONT_METRICS). */
 const metrics = {};
@@ -544,6 +571,7 @@ for (const { key, family, names, ownLine, published, styles, synthetic, rounding
     // A font of styles of no bold face is not looked for its bold (fontconfig would give another font's).
     if (synthetic && /bold/i.test(name)) return [];
     const files = fontFiles(family, { style: style.style, names: styles?.[name] ?? style.names });
+    measuredFiles.push(...files);
     return files.length ? [[name, files.map(readFont)]] : [];
   }));
   if (!found.regular || (!found.bold && !synthetic)) throw new Error(`${family}: no Regular or Bold`);
@@ -619,6 +647,280 @@ for (const name of WORD_FONTS) aliases[name] ??= "listed";
 for (const name of UNBOUNDED) aliases[name] = "unbounded";
 const wordFonts = new Set([...WORD_FONTS, ...SYMBOL, ...UNBOUNDED, ...[...HALF_WIDTH, ...EAST_ASIAN, ...EITHER_WIDTH].map(name => name.toLowerCase())]);
 
+/**
+ * The substitutions of a font's GSUB that make a glyph another one or several (IA-01, round 12): of each glyph, those single,
+ * alternate and reverse chaining substitutions make of it, and the sequences multiple substitutions make of it, in any lookup
+ * (those contextual lookups apply among them), through extension lookups; ligatures (several glyphs to one) are left out, each
+ * narrower than its parts in the fonts measured (checked as written, `ligatures`).
+ */
+function substitutions(gsub) {
+  const single = new Map();
+  const multiple = new Map();
+  const ligatures = [];
+  if (!gsub) return { single, multiple, ligatures };
+  const add = (map, from, to) => (map.get(from) ?? map.set(from, []).get(from)).push(to);
+  const covered = at => {
+    const glyphs = [];
+    if (gsub.readUInt16BE(at) === 1) for (let index = 0, count = gsub.readUInt16BE(at + 2); index < count; index += 1) glyphs.push(gsub.readUInt16BE(at + 4 + index * 2));
+    else for (let index = 0, count = gsub.readUInt16BE(at + 2); index < count; index += 1) {
+      const range = at + 4 + index * 6;
+      for (let glyph = gsub.readUInt16BE(range); glyph <= gsub.readUInt16BE(range + 2); glyph += 1) glyphs.push(glyph);
+    }
+    return glyphs;
+  };
+  const subtable = (type, at) => {
+    if (type === 7) return subtable(gsub.readUInt16BE(at + 2), at + gsub.readUInt32BE(at + 4));
+    const glyphs = type >= 1 && type <= 4 || type === 8 ? covered(at + gsub.readUInt16BE(at + 2)) : [];
+    glyphs.forEach((glyph, index) => {
+      if (type === 1) add(single, glyph, gsub.readUInt16BE(at) === 1 ? (glyph + gsub.readInt16BE(at + 4)) & 0xffff : gsub.readUInt16BE(at + 6 + index * 2));
+      if (type === 2 || type === 3) {
+        const set = at + gsub.readUInt16BE(at + 6 + index * 2);
+        const sequence = Array.from({ length: gsub.readUInt16BE(set) }, (_, item) => gsub.readUInt16BE(set + 2 + item * 2));
+        if (type === 2) add(multiple, glyph, sequence);
+        else for (const to of sequence) add(single, glyph, to);
+      }
+      if (type === 4) {
+        const set = at + gsub.readUInt16BE(at + 6 + index * 2);
+        for (let item = 0, count = gsub.readUInt16BE(set); item < count; item += 1) {
+          const ligature = set + gsub.readUInt16BE(set + 2 + item * 2);
+          ligatures.push({ glyph: gsub.readUInt16BE(ligature), components: [glyph, ...Array.from({ length: gsub.readUInt16BE(ligature + 2) - 1 }, (_, part) => gsub.readUInt16BE(ligature + 4 + part * 2))] });
+        }
+      }
+      if (type === 8) {
+        const backtrack = gsub.readUInt16BE(at + 4);
+        const lookahead = gsub.readUInt16BE(at + 6 + backtrack * 2);
+        add(single, glyph, gsub.readUInt16BE(at + 10 + (backtrack + lookahead) * 2 + index * 2));
+      }
+    });
+  };
+  const list = gsub.readUInt16BE(8);
+  for (let index = 0, count = gsub.readUInt16BE(list); index < count; index += 1) {
+    const lookup = list + gsub.readUInt16BE(list + 2 + index * 2);
+    for (let item = 0, subtables = gsub.readUInt16BE(lookup + 4); item < subtables; item += 1) subtable(gsub.readUInt16BE(lookup), lookup + gsub.readUInt16BE(lookup + 6 + item * 2));
+  }
+  return { single, multiple, ligatures };
+}
+
+/**
+ * A font of right-to-left scripts or signs (shapedFont): of each glyph, the widest it may be drawn (`widest`, in its units):
+ * itself, or any glyph single substitutions may make of it (relaxed until none grows, as they only take the widest); a sequence
+ * a multiple substitution makes of it as wide as its glyphs so bounded, twice over (a lookup applies once at a place: a glyph
+ * of the sequence that is the glyph itself is not expanded again), single substitutions followed again after each.
+ */
+const widened = [];
+function shapedFont(path) {
+  const tables = fontTables(path);
+  const font = readFont(path);
+  const { single, multiple, ligatures } = substitutions(tables.get("GSUB"));
+  const widest = new Map();
+  const bound = glyph => widest.get(glyph) ?? font.advance(glyph);
+  const relax = () => {
+    for (let changed = true; changed; ) {
+      changed = false;
+      for (const [glyph, targets] of single) {
+        const width = Math.max(bound(glyph), ...targets.map(bound));
+        if (width !== bound(glyph)) {
+          widest.set(glyph, width);
+          changed = true;
+        }
+      }
+    }
+  };
+  relax();
+  for (let round = 0; round < 2; round += 1) {
+    const grown = Array.from(multiple, ([glyph, sequences]) => [glyph, Math.max(bound(glyph), ...sequences.map(sequence => sequence.reduce((sum, item) => sum + (item === glyph ? font.advance(item) : bound(item)), 0)))]);
+    for (const [glyph, width] of grown) widest.set(glyph, width);
+    relax();
+  }
+  // A ligature wider than its parts so bounded (of DejaVu Sans Bold, 5): its first part is as much wider, so that its characters'
+  // bounds together hold it.
+  for (const { glyph, components } of ligatures) {
+    const excess = bound(glyph) - components.reduce((sum, item) => sum + bound(item), 0);
+    if (excess > 0) {
+      widest.set(components[0], bound(components[0]) + excess);
+      widened.push(glyph);
+    }
+  }
+  relax();
+  return { ...font, path, widest: bound, bold: (tables.get("OS/2").readUInt16BE(4) >= 600) || /bold/i.test(path) };
+}
+
+/**
+ * The fonts of right-to-left scripts and signs Word may draw text in that the check measures through others, those installed here
+ * (fc-match: DejaVu Sans and Serif, FreeSans and FreeSerif, Liberation Sans and Serif in each style, OpenSymbol; DejaVu Serif and
+ * OpenSymbol hold no Arabic nor Hebrew, FreeSans no Arabic, as fc-list :lang=ar and :lang=he say) and those of the folder's
+ * subfolder `complex` (its subfolders too): the WOFF of the arabic, hebrew, symbols and math subsets, 400 and 700, normal and
+ * italic, of @fontsource's Amiri, Scheherazade New, Noto Naskh, Sans and Kufi Arabic, Cairo, Tajawal, Vazirmatn (Persian), IBM
+ * Plex Sans Arabic, Harmattan, Lateef, Markazi Text, El Messiri, Almarai, Readex Pro, Mada (Naskh, Kufi and sans designs, as
+ * Word's), Noto Sans and Serif Hebrew, Frank Ruhl Libre, David Libre, Miriam Libre (the free fonts of Windows' FrankRuehl, David
+ * and Miriam), Alef, Heebo, Assistant, Rubik, Arimo, Tinos, Noto Sans Symbols, Symbols 2 and Math, at the versions of
+ * FALLBACK_VERSIONS.
+ */
+const FALLBACK_INSTALLED = [
+  ["DejaVu Sans", ["Book", "Bold"]], ["DejaVu Serif", ["Book", "Bold"]], ["FreeSans", ["Regular", "Bold", "Oblique", "Bold Oblique"]],
+  ["FreeSerif", ["Regular", "Bold", "Italic", "Bold Italic"]], ["Liberation Sans", ["Regular", "Bold", "Italic", "Bold Italic"]],
+  ["Liberation Serif", ["Regular", "Bold", "Italic", "Bold Italic"]], ["OpenSymbol", ["Regular"]],
+];
+const FALLBACK_VERSIONS = "5.3.0";
+/**
+ * The characters of Hebrew (U+0590 to U+05FF, U+FB1D to U+FB4F) and Arabic (U+0600 to U+06FF, its Supplement and Extended-A,
+ * U+0870 to U+08FF, its Presentation Forms A and B), Persian's among them, Word draws in a run's complex script font: those
+ * Unicode assigns but the controls (U+0600 to U+0605, U+061C, U+08E2, U+06DD: of no width or drawn over the figures they go with),
+ * of no bound (0) when no font measured holds them.
+ */
+const COMPLEX_CHARACTERS = [[0x0590, 0x05ff], [0x0600, 0x06ff], [0x0750, 0x077f], [0x0870, 0x08ff], [0xfb1d, 0xfb4f], [0xfb50, 0xfdff], [0xfe70, 0xfeff]]
+  .flatMap(([from, to]) => range(from, to)).filter(code => !/[\p{Cn}\p{Cc}\p{Cf}]/u.test(String.fromCodePoint(code)));
+/**
+ * Of a character of these scripts or a sign, how much wider than the widest of the fonts measured Word's fonts may draw it, in
+ * thousandths more: a quarter, as Word's fonts of these scripts (Arial, Times New Roman, Segoe UI, Tahoma; Simplified Arabic,
+ * Traditional Arabic, Arabic Typesetting and Sakkal Majalla; Segoe UI Symbol for signs) are of the Naskh, Kufi and sans designs
+ * measured, of no metrics published: the bound of each character already the widest form of it in the widest font of some forty,
+ * bold ones included (س, ص, ڪ up to 1.5 and 1.9 em, Amiri's swash ڪ), a quarter covers a font of them that drew all its letters a
+ * quarter wider than the widest measured, which none of these does; and what Word adds to each advance of a font it emboldens
+ * (SYNTHETIC_BOLD) to a bold one.
+ */
+const FALLBACK_SHARE = 250;
+/**
+ * The fonts of Word the margin (FALLBACK_SHARE) is taken for, by the names Word writes (lower case), and the font measured whose
+ * line they set: Arial, Times New Roman, Segoe UI and Tahoma, as measured or published (Liberation Sans and Serif, Selawik,
+ * Tahoma's line: Word sets a line in the font's ascent and descent for Windows, the same for all its scripts), the four Arabic
+ * fonts of Office of a line as tall as the tallest measured (complexLine). Any other complex script font (Andalus, Aldhabi, Urdu
+ * Typesetting, Dubai, David, Miriam…), embedded or of no metrics here, draws them of no bound.
+ */
+const COMPLEX_FONTS = {
+  "arial": "liberation-sans", "times new roman": "liberation-serif", "segoe ui": "selawik", "tahoma": "tahoma",
+  "simplified arabic": "complex", "traditional arabic": "complex", "arabic typesetting": "complex", "sakkal majalla": "complex",
+};
+const fallbackFonts = [
+  ...FALLBACK_INSTALLED.flatMap(([family, styles]) => styles.flatMap(style => fontFiles(family, { style, names: [style] }))),
+  ...(folder ? execFileSync("fc-scan", ["--format", "%{file}\\n", resolve(folder, "complex")], { encoding: "utf8" }).split("\n").filter(line => /\.(ttf|otf|woff)$/i.test(line)).sort() : []),
+].map(shapedFont);
+if (!fallbackFonts.some(font => /complex/.test(font.path))) throw new Error("no fonts in the folder's subfolder complex: give a folder that holds them");
+/** Of each code point, in each weight (regular, bold), the widest its forms are in the fonts measured, in thousandths of the size, rounded up; 0 when none holds it. */
+function widestForms(codes, fonts = fallbackFonts) {
+  // A letter's isolated, initial, medial and final presentation forms (Arabic Presentation Forms, NFKC to it alone).
+  const forms = new Map();
+  for (const code of range(0xfb50, 0xfeff)) {
+    const base = String.fromCodePoint(code).normalize("NFKC");
+    if (!/\p{Cn}/u.test(String.fromCodePoint(code)) && Array.from(base).length === 1 && base.codePointAt(0) !== code) (forms.get(base.codePointAt(0)) ?? forms.set(base.codePointAt(0), []).get(base.codePointAt(0))).push(code);
+  }
+  return ["regular", "bold"].map(weight => codes.map(code => {
+    let widest = 0;
+    for (const font of fonts) {
+      if (weight === "regular" && font.bold) continue;
+      for (const each of [code, ...(forms.get(code) ?? [])]) {
+        const glyph = font.glyphOf(each);
+        if (glyph) widest = Math.max(widest, Math.ceil(font.widest(glyph) * 1000 / font.unitsPerEm));
+      }
+    }
+    return widest;
+  }));
+}
+/** A width bounded so (FALLBACK_SHARE), a bold one also as an emboldened regular one; 0 (no bound) when unmeasured or too wide to write (4096 thousandths). */
+const fallbackBound = (regular, bold) => {
+  const bounds = [regular, Math.max(bold, regular)].map((width, index) => (width ? Math.ceil(width * (1000 + FALLBACK_SHARE) / 1000) + (index ? SYNTHETIC_BOLD : 0) : 0));
+  return bounds.map(width => (width < DIGITS.length ** 2 ? width : 0));
+};
+/** The fonts of these scripts: all but those of signs and mathematics (Noto Sans Math holds Arabic letters of mathematics, of a line of 5.7 em). */
+const textFonts = fallbackFonts.filter(font => !/symbol|math/i.test(font.path));
+const [complexRegular, complexBold] = widestForms(COMPLEX_CHARACTERS, textFonts);
+const complexBounds = COMPLEX_CHARACTERS.map((_, at) => fallbackBound(complexRegular[at], complexBold[at]));
+/**
+ * The height of a line of a font of these scripts Word has of no metrics published (Simplified Arabic, Traditional Arabic, Arabic
+ * Typesetting, Sakkal Majalla): the tallest of the fonts measured that hold Arabic (Amiri's, of Windows' ascent and descent, which
+ * hold the marks stacked above and below its letters that Windows must not clip).
+ */
+const complexLine = Math.ceil(Math.max(...textFonts.filter(font => font.glyphOf(0x0628)).map(font => font.line / font.unitsPerEm)) * 1000);
+/**
+ * The emoji Word draws in Segoe UI Emoji, of no metrics published: as wide as Noto Color Emoji draws its widest (installed here,
+ * fonts-noto-color-emoji 2.047), a quarter more, and its bold so emboldened; of a line as tall as the tallest of the fonts measured
+ * (`tallest`). A sequence (ZWJ, a flag, a skin tone) is as wide as its parts so bounded, which a sequence Word draws as one emoji is
+ * not wider than.
+ */
+const emojiFont = readFont(execFileSync("fc-match", ["-f", "%{file}", "Noto Color Emoji"], { encoding: "utf8" }));
+const emojiWidest = Math.ceil(Math.max(...range(0, 0xffff).map(glyph => emojiFont.advance(glyph))) * 1000 / emojiFont.unitsPerEm);
+const [emojiRegular, emojiBold] = fallbackBound(emojiWidest, emojiWidest);
+/**
+ * Of each character measured (CHARACTERS), as wide as Word may draw it in a font of signs when the run's font lacks it (`signs`):
+ * the widest of the fonts measured that hold it (fallbackFonts), a quarter more, never narrower than an East Asian font draws it (a
+ * full em for one of an ambiguous width, `east-asian`) nor, of one Word may draw as an emoji (Emoji), than an emoji; 0 when no font
+ * measured holds it. Of a line as tall as the tallest of the fonts measured.
+ */
+const signsMeasured = widestForms(Array.from(CHARACTERS, character => character.codePointAt(0)));
+metrics.signs = {
+  line: tallest,
+  advances: Object.fromEntries(Object.keys(STYLES).map(style => [style, Array.from(CHARACTERS, (character, at) => {
+    const bold = /bold/i.test(style);
+    const width = fallbackBound(signsMeasured[0][at], signsMeasured[1][at])[bold ? 1 : 0];
+    if (!width) return 0;
+    return Math.max(width, metrics["east-asian"].advances[style][at], /\p{Emoji}/u.test(character) && !/[\p{Nd}#*]/u.test(character) ? (bold ? emojiBold : emojiRegular) : 0);
+  })])),
+};
+
+/**
+ * Kerning (w:kern): Word adjusts the space between two characters by the font's kerning pairs (GPOS pair adjustments, the kern
+ * table) when a run asks for it, which widens some pairs (Liberation Sans, Carlito, Inter, Montserrat… hold pairs a tenth of an em
+ * wider and more). Of a font's file, the largest positive horizontal adjustment of a pair, in its units.
+ */
+function positiveKerning(path) {
+  const tables = fontTables(path);
+  const valueSize = format => [0, 1, 2, 3, 4, 5, 6, 7].reduce((size, bit) => size + ((format >> bit) & 1) * 2, 0);
+  // The x advance of a value record (after its x and y placements, when given).
+  const xAdvance = (table, at, format) => (format & 4 ? table.readInt16BE(at + (format & 1 ? 2 : 0) + (format & 2 ? 2 : 0)) : 0);
+  let most = 0;
+  const gpos = tables.get("GPOS");
+  if (gpos) {
+    const subtable = (type, at) => {
+      if (type === 9) return subtable(gpos.readUInt16BE(at + 2), at + gpos.readUInt32BE(at + 4));
+      if (type !== 2) return;
+      const [first, second] = [gpos.readUInt16BE(at + 4), gpos.readUInt16BE(at + 6)];
+      const size = valueSize(first) + valueSize(second);
+      const pair = record => xAdvance(gpos, record, first) + xAdvance(gpos, record + valueSize(first), second);
+      if (gpos.readUInt16BE(at) === 1) {
+        for (let set = 0, sets = gpos.readUInt16BE(at + 8); set < sets; set += 1) {
+          const pairs = at + gpos.readUInt16BE(at + 10 + set * 2);
+          for (let item = 0, count = gpos.readUInt16BE(pairs); item < count; item += 1) most = Math.max(most, pair(pairs + 4 + item * (2 + size)));
+        }
+      } else if (gpos.readUInt16BE(at) === 2) {
+        const [classes1, classes2] = [gpos.readUInt16BE(at + 12), gpos.readUInt16BE(at + 14)];
+        for (let record = 0; record < classes1 * classes2; record += 1) most = Math.max(most, pair(at + 16 + record * size));
+      }
+    };
+    const list = gpos.readUInt16BE(8);
+    for (let index = 0, count = gpos.readUInt16BE(list); index < count; index += 1) {
+      const lookup = list + gpos.readUInt16BE(list + 2 + index * 2);
+      for (let item = 0, subtables = gpos.readUInt16BE(lookup + 4); item < subtables; item += 1) subtable(gpos.readUInt16BE(lookup), lookup + gpos.readUInt16BE(lookup + 6 + item * 2));
+    }
+  }
+  const kern = tables.get("kern");
+  if (kern && kern.readUInt16BE(0) === 0) {
+    for (let index = 0, at = 4, count = kern.readUInt16BE(2); index < count; index += 1, at += kern.readUInt16BE(at + 2)) {
+      if (kern.readUInt16BE(at + 4) >> 8 === 0) for (let item = 0, pairs = kern.readUInt16BE(at + 6); item < pairs; item += 1) most = Math.max(most, kern.readInt16BE(at + 18 + item * 6));
+    }
+  }
+  return Math.ceil(most * 1000 / tables.get("head").readUInt16BE(18));
+}
+/**
+ * What kerning may add to each character of a run that asks for it, in thousandths of its size: the largest positive adjustment of a
+ * pair of the fonts measured (FONTS), a quarter more (FALLBACK_SHARE), as fonts of Word not measured, or whose stand-in does not
+ * share their kerning, may kern so too.
+ */
+const kerningBound = Math.ceil(Math.max(...measuredFiles.map(positiveKerning)) * (1000 + FALLBACK_SHARE) / 1000);
+
+/** Widths written two digits each, but AS_BEFORE for two or more as wide as the one before them (of characters not of CHARACTERS: no base letter, no upright style). */
+function plainDigitsOf(advances) {
+  let digits = "";
+  for (let at = 0; at < advances.length; at += 1) {
+    let same = 0;
+    while (at > 0 && same < DIGITS.length && advances[at + same] !== undefined && advances[at + same] === advances[at - 1]) same += 1;
+    if (same >= 2) {
+      digits += AS_BEFORE + DIGITS[same - 1];
+      at += same - 1;
+    } else digits += DIGITS[Math.floor(advances[at] / DIGITS.length)] + DIGITS[advances[at] % DIGITS.length];
+  }
+  return digits;
+}
+
 /** A font's styles written (digitsOf): its slanted ones only where not as wide as their upright one, as Word draws a slanted style it has. */
 function written({ line, advances }) {
   const styles = Object.entries(STYLES).flatMap(([name, { fallback }]) => {
@@ -683,6 +985,33 @@ export const DOCX_FONT_ALIASES: Record<string, string> = ${JSON.stringify(aliase
  * included), by the names Word writes (lower case). A font of another name it does not have: it draws it in its substitute.
  */
 export const DOCX_WORD_FONTS: ReadonlySet<string> = new Set(${JSON.stringify(Array.from(wordFonts).sort(), null, 2).replace(/\n]$/, ",\n]")});
+
+/** The key of DOCX_FONT_METRICS of the widths Word may draw a sign in when the run's font lacks it, in a font of signs (0: of no bound). */
+export const DOCX_SIGN_FALLBACK = "signs";
+
+/** The characters of Hebrew and Arabic (Persian's among them) the check bounds in a run's complex script font, in order. */
+export const DOCX_COMPLEX_CHARACTERS = ${JSON.stringify(COMPLEX_CHARACTERS.map(code => String.fromCodePoint(code)).join(""))};
+
+/**
+ * Of each character of DOCX_COMPLEX_CHARACTERS, the widest any of its forms is in the fonts measured that hold it, a quarter more, in
+ * regular and bold, in thousandths of the size (DOCX_FONT_WIDTH_DIGITS, DOCX_FONT_AS_BEFORE; 0: of no bound); the height of a line
+ * of a font of these scripts of Word of no metrics published.
+ */
+export const DOCX_COMPLEX_METRICS = { line: ${complexLine}, regular: ${JSON.stringify(plainDigitsOf(complexBounds.map(([regular]) => regular)))}, bold: ${JSON.stringify(plainDigitsOf(complexBounds.map(([, bold]) => bold)))} };
+
+/**
+ * The complex script fonts of Word (w:rFonts w:cs, its theme's) whose letters of Hebrew and Arabic DOCX_COMPLEX_METRICS bounds,
+ * in lower case, and the font of DOCX_FONT_METRICS whose line they set (\`complex\`: DOCX_COMPLEX_METRICS's). Any other draws
+ * them of no bound.
+ */
+export const DOCX_COMPLEX_FONTS: Record<string, string> = ${JSON.stringify(COMPLEX_FONTS, null, 2).replace(/\n}$/, ",\n}")};
+
+/** An emoji, in thousandths of the size, in regular and bold, and the height of its line. */
+export const DOCX_EMOJI_METRICS = { line: ${tallest}, regular: ${emojiRegular}, bold: ${emojiBold} };
+
+/** What kerning (w:kern) may add to each character of a run that asks for it, in thousandths of its size. */
+export const DOCX_KERNING_MOST = ${kerningBound};
 `;
 writeFileSync(fileURLToPath(new URL("../server/docxFontMetrics.ts", import.meta.url)), output);
 console.log(`server/docxFontMetrics.ts: ${FONTS.length} fonts measured, ${PUBLISHED.length} published, ${Array.from(CHARACTERS).length} characters, ${output.length} bytes`);
+console.log(`  ${fallbackFonts.length} font files of right-to-left scripts and signs; ${complexBounds.filter(([regular]) => regular).length} of ${COMPLEX_CHARACTERS.length} Hebrew and Arabic characters bounded; ${metrics.signs.advances.regular.filter(Boolean).length} signs; emoji ${emojiRegular}; kerning ${kerningBound}; ligatures wider than their parts, their first part widened: ${widened.length}`);
