@@ -103,6 +103,7 @@ export async function sendDueAppointmentReminders(window: ReminderWindow, now = 
   console.log(`[Reminder] Found ${upcoming.length} appointments to remind`);
 
   const { sendReminderEmail } = await import("./_core/notifications");
+  const { patientEmailIdempotencyKey } = await import("./appointmentFulfillment");
   let sent = 0;
   let failed = 0;
   for (const apt of upcoming) {
@@ -113,7 +114,9 @@ export async function sendDueAppointmentReminders(window: ReminderWindow, now = 
       .where(and(eq(appointments.id, apt.id), apt.reminderSent === 0 ? eq(appointments.reminderSent, 0) : staleReservation));
     if (mutationRowCount(claim) !== 1) continue;
     try {
-      await sendReminderEmail(apt.customerEmail, apt.customerName, apt.trackingId, apt.appointmentDate, { language: emailLanguageFor(apt.language) });
+      // Keyed on the address as written, like the other patient emails: a reminder tried again after the
+      // address was corrected (EXPL-02) leaves under a new key, which Resend does not refuse (409, ABUS-03).
+      await sendReminderEmail(apt.customerEmail, apt.customerName, apt.trackingId, apt.appointmentDate, { language: emailLanguageFor(apt.language), idempotencyKey: patientEmailIdempotencyKey(`appointment-reminder-${apt.trackingId}`, apt.customerEmail) });
     } catch (e) {
       failed += 1;
       console.error("[Reminder] Delivery failed:", safeErrorName(e));

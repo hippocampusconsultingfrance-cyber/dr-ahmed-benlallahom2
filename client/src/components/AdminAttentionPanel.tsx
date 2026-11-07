@@ -60,7 +60,7 @@ type AttentionItem = { trackingId: string; customerName: string; appointmentDate
 
 function AttentionList({ id, title, description, items, total }: { id: string; title: string; description: string; items: AttentionItem[]; total: number }) {
   return (
-    <div className="rounded-xl border border-border bg-card p-4">
+    <div className="min-w-0 rounded-xl border border-border bg-card p-4 wrap-anywhere">
       <h3 id={id} className="font-semibold text-foreground">{title} ({total})</h3>
       <p className="mt-1 text-sm text-muted-foreground">{description}</p>
       <ul aria-labelledby={id} className="mt-3 space-y-2">

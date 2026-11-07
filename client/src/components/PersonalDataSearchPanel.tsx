@@ -208,7 +208,7 @@ export default function PersonalDataSearchPanel({ requestedEmail = "", reveal = 
   useEffect(() => setAnnouncement(summary), [summary]);
 
   return (
-    <section ref={sectionRef} id="personal-data-search" aria-labelledby="personal-data-search-title" className="scroll-mt-28 rounded-2xl border border-primary/25 bg-primary/5 p-5 sm:scroll-mt-20 sm:p-6">
+    <section ref={sectionRef} id="personal-data-search" aria-labelledby="personal-data-search-title" className="scroll-mt-28 rounded-2xl border border-primary/25 bg-primary/5 p-5 wrap-anywhere sm:scroll-mt-20 sm:p-6">
       {/* scroll-mt: room for the sticky admin header (two rows below sm). */}
       <h3 ref={titleRef} tabIndex={-1} id="personal-data-search-title" className="text-lg font-semibold text-foreground">Rechercher une personne par email</h3>
       <p role="status" className="sr-only">{announcement}</p>

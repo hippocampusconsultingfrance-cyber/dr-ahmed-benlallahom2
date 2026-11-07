@@ -12,7 +12,11 @@ const fulfillment = vi.hoisted(() => ({
   processDueAppointmentFulfillmentJobs: vi.fn(async () => ({ processed: 0, results: [] })),
   enqueueAppointmentFulfillment: vi.fn(async (_appointmentId: number) => undefined),
 }));
-vi.mock("./appointmentFulfillment", () => fulfillment);
+vi.mock("./appointmentFulfillment", async importOriginal => ({
+  ...fulfillment,
+  // The reminder takes its key from the real helper of the patient emails.
+  patientEmailIdempotencyKey: (await importOriginal<typeof import("./appointmentFulfillment")>()).patientEmailIdempotencyKey,
+}));
 const documentJobs = vi.hoisted(() => ({
   recoverStaleCandidateDocumentJobs: vi.fn(async () => ({ recovered: 0, exhausted: 0, closed: 0 })),
   recreateMissingCandidateDocumentAnalysisJobs: vi.fn(async () => ({ recreated: 0 })),
@@ -20,6 +24,7 @@ const documentJobs = vi.hoisted(() => ({
 }));
 vi.mock("./candidateDocumentProcessing", () => documentJobs);
 
+import { patientEmailIdempotencyKey } from "./appointmentFulfillment";
 import {
   DAILY_REMINDER_WINDOW,
   drainInBatches,
@@ -85,7 +90,7 @@ describe("envoi des rappels", () => {
 
     expect(first.sent + second.sent).toBe(2);
     expect(remindedTrackingIds().sort()).toEqual(["APT-1", "APT-2"]);
-    expect(notifications.sendReminderEmail).toHaveBeenCalledWith("p1@example.com", "Patient 1", "APT-1", expect.any(Date), { language: "fr" });
+    expect(notifications.sendReminderEmail).toHaveBeenCalledWith("p1@example.com", "Patient 1", "APT-1", expect.any(Date), { language: "fr", idempotencyKey: patientEmailIdempotencyKey("appointment-reminder-APT-1", "p1@example.com") });
     expect(memory.rows(appointments).map(row => row.reminder_sent)).toEqual([1, 1, 1, 0]);
   });
 
@@ -122,7 +127,7 @@ describe("envoi des rappels", () => {
 
     await sendDueAppointmentReminders(DAILY_REMINDER_WINDOW, NOW);
 
-    expect(notifications.sendReminderEmail).toHaveBeenCalledWith("p4@example.com", "Patient 4", "APT-4", expect.any(Date), { language: "en" });
+    expect(notifications.sendReminderEmail).toHaveBeenCalledWith("p4@example.com", "Patient 4", "APT-4", expect.any(Date), { language: "en", idempotencyKey: patientEmailIdempotencyKey("appointment-reminder-APT-4", "p4@example.com") });
   });
 
   it("libère la réservation quand l’email échoue, pour un nouvel essai", async () => {
@@ -135,6 +140,25 @@ describe("envoi des rappels", () => {
 
     expect(await sendDueAppointmentReminders(DAILY_REMINDER_WINDOW, new Date(NOW.getTime() + 60_000))).toEqual({ reminded: 1, sent: 1, failed: 0 });
     expect(memory.rows(appointments)[0]).toMatchObject({ reminder_sent: 1 });
+  });
+
+  it("essaie de nouveau un rappel refusé sous une autre clé une fois l’adresse corrigée, même de sa seule casse : Resend refuserait sinon la clé réutilisée avec un autre destinataire (409, ABUS-03)", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    notifications.sendReminderEmail.mockRejectedValueOnce(new Error("reminder_email_failed"));
+    seedAppointment(5, { customer_email: "Patient.Cinq@Example.com" });
+    await sendDueAppointmentReminders(DAILY_REMINDER_WINDOW, NOW);
+
+    // « Corriger l’email du patient » after a refused confirmation: the same mailbox in lower case.
+    memory.rows(appointments)[0]!.customer_email = "patient.cinq@example.com";
+    await sendDueAppointmentReminders(DAILY_REMINDER_WINDOW, new Date(NOW.getTime() + 60_000));
+    // Run again with the same address: the same key, which Resend recognises.
+    memory.rows(appointments)[0]!.reminder_sent = 0;
+    await sendDueAppointmentReminders(DAILY_REMINDER_WINDOW, new Date(NOW.getTime() + 120_000));
+
+    const sends = notifications.sendReminderEmail.mock.calls.map(call => ({ to: call[0], key: (call[4] as { idempotencyKey: string }).idempotencyKey }));
+    expect(sends.map(send => send.to)).toEqual(["Patient.Cinq@Example.com", "patient.cinq@example.com", "patient.cinq@example.com"]);
+    expect(sends[1]!.key).not.toBe(sends[0]!.key);
+    expect(sends[2]!.key).toBe(sends[1]!.key);
   });
 
   it("un rappel parti dont l’enregistrement échoue reste réservé : un passage rapproché ne le renvoie pas, le travail d’après-paiement le reprend dans les 24 h (DATA-02)", async () => {

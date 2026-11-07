@@ -296,7 +296,7 @@ export default function MedicalQuestionsAdminTab({ initialSearch = "" }: { initi
         screen tall, so that revealQuestionDetail can bring its top under the header even at the end of the
         page: the cookie banner's room at the bottom no longer lengthens the admin's pages (ADM-16).
       */}
-      <div ref={detailRef} tabIndex={-1} role="region" aria-label="Question sélectionnée" className="min-w-0 scroll-mt-28 rounded-3xl border border-border bg-card/50 p-6 max-lg:min-h-[calc(100dvh-7rem)] sm:scroll-mt-20">
+      <div ref={detailRef} tabIndex={-1} role="region" aria-label="Question sélectionnée" className="min-w-0 scroll-mt-28 rounded-3xl border border-border bg-card/50 p-6 wrap-anywhere max-lg:min-h-[calc(100dvh-7rem)] sm:scroll-mt-20">
         {selected.isLoading ? (
           <PublicContentSkeleton cards={1} label="Chargement de la demande" />
         ) : selected.error ? (

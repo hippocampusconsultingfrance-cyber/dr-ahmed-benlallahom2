@@ -74,7 +74,8 @@ export default function ContactsTab({ initialSearch = "" }: { initialSearch?: st
         {items.map((msg) => (
           <div key={msg.id} className={`bg-card border rounded-lg p-4 ${msg.read === 0 ? "border-primary/50" : "border-border"}`}>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div className="flex-1 min-w-0">
+              {/* EXPL-02: what the sender typed (name, phone, a link without a space in the message) wraps inside the card. */}
+              <div className="flex-1 min-w-0 wrap-anywhere">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1">
                   <span className="font-semibold text-foreground">{msg.name}</span>
                   {msg.read === 0 && <span className="w-2 h-2 rounded-full bg-primary" />}
@@ -85,7 +86,7 @@ export default function ContactsTab({ initialSearch = "" }: { initialSearch?: st
                   {msg.phone && <span>{msg.phone}</span>}
                   <span>{new Date(msg.createdAt).toLocaleString("fr-FR")}</span>
                 </div>
-                <p className="text-sm text-foreground">{msg.message}</p>
+                <p className="whitespace-pre-line text-sm text-foreground">{msg.message}</p>
               </div>
               <div className="flex flex-wrap gap-2 self-start">
                 {msg.read === 0 && (

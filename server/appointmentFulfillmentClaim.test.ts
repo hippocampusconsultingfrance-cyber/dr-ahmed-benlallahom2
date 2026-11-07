@@ -204,7 +204,8 @@ describe("revendication atomique des envois post-paiement", () => {
     const result = await processDueAppointmentFulfillmentJobs();
 
     expect(result.results).toEqual([{ completed: false, retry: false }]);
-    expect(writes.at(-1)?.values).toMatchObject({ status: "failed" });
+    // The last change of status; an alert still waiting in the queue may then take the address tried.
+    expect(writes.filter(write => "status" in write.values).at(-1)?.values).toMatchObject({ status: "failed" });
     expect(owner.notifyOwner).toHaveBeenCalledWith(expect.objectContaining({ title: expect.stringContaining("APT-42") }), expect.anything());
   });
 
@@ -275,7 +276,7 @@ describe("revendication atomique des envois post-paiement", () => {
     });
     await processDueAppointmentFulfillmentJobs();
     // The owner sees the language of the booking page itself.
-    expect(notifications.sendOwnerNotificationEmail).toHaveBeenCalledWith("Patient Test", "patient@example.com", "+33600000000", "APT-42", expect.any(Date), 100, { idempotencyKey: "appointment-owner-APT-42", language: "de" });
+    expect(notifications.sendOwnerNotificationEmail).toHaveBeenCalledWith("Patient Test", "patient@example.com", "+33600000000", "APT-42", expect.any(Date), 100, { idempotencyKey: patientEmailIdempotencyKey("appointment-owner-APT-42", "patient@example.com"), language: "de" });
   });
 
   it("remet en file un job interrompu (instance gelée après la réponse à Stripe)", async () => {

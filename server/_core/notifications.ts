@@ -737,13 +737,13 @@ export async function sendReminderEmail(
   customerName: string,
   trackingId: string,
   appointmentDate: Date,
-  options: { language?: EmailLanguage } = {},
+  options: { language?: EmailLanguage; idempotencyKey?: string } = {},
 ) {
   try {
     const email = buildBookingReminderEmail({ customerName, trackingId, appointmentDate, language: options.language });
-    // One reminder per appointment: the key makes a retried claim harmless.
+    // One reminder per appointment (and address, for the scheduled runs): the key makes a retried claim harmless.
     await sendPatientEmail({ rejected: "reminder_email_rejected", failed: "reminder_email_failed" }, customerEmail, email, {
-      idempotencyKey: `appointment-reminder-${trackingId}`,
+      idempotencyKey: options.idempotencyKey ?? `appointment-reminder-${trackingId}`,
       tags: buildResendAppointmentTags(trackingId, "reminder"),
     });
     console.log("Reminder email sent successfully");

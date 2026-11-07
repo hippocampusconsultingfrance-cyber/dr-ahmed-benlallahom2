@@ -171,7 +171,7 @@ export default function MailingTab({ initialSelectedIds }: MailingTabProps) {
           </fieldset>
         </div>
 
-        <aside className="h-fit rounded-2xl border border-primary/20 bg-primary/5 p-5">
+        <aside className="h-fit min-w-0 rounded-2xl border border-primary/20 bg-primary/5 p-5 wrap-anywhere">
           <div className="flex items-start gap-3">
             <span className="rounded-lg bg-primary/10 p-2 text-primary"><UsersRound className="h-5 w-5" /></span>
             <div>
@@ -202,7 +202,7 @@ export default function MailingTab({ initialSelectedIds }: MailingTabProps) {
               const failed = Number(delivery.failed || 0);
               const delayed = Number(delivery.delayed || 0);
               const total = Number(delivery.total || campaign.recipientCount || 0);
-              return <article key={campaign.id} className="flex flex-col gap-4 rounded-xl border border-border p-4">
+              return <article key={campaign.id} className="flex flex-col gap-4 rounded-xl border border-border p-4 wrap-anywhere">
                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                   <div><h4 className="font-semibold text-foreground">{campaign.title}</h4><p className="mt-1 text-sm text-muted-foreground">{campaign.subject} · {campaign.language.toUpperCase()} · {campaign.recipientCount} {copy.recipients}</p><p className="mt-1 text-xs text-muted-foreground">{copy.createdOn} {new Date(campaign.createdAt).toLocaleString(interfaceLanguage === "zh" ? "zh-CN" : interfaceLanguage === "de" ? "de-DE" : interfaceLanguage === "en" ? "en-GB" : "fr-FR", { timeZone: "Europe/Paris" })}</p></div>
                   <span className={`w-fit rounded-full border px-2.5 py-1 text-xs font-medium ${campaignStatusTone(campaign.status)}`}>{campaignStatusLabel(campaign.status, copy.statuses)}</span>

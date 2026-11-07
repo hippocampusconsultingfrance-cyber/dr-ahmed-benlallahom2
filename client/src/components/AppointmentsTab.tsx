@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { AdminEmptyState, AdminErrorState } from "@/components/AdminStatePanel";
 import AdminLoadMore from "@/components/AdminLoadMore";
 import AdminSearchField from "@/components/AdminSearchField";
+import AdminClampedText from "@/components/AdminClampedText";
 import AppointmentDeliveries, { refundEmailWarning, type AppointmentDeliveryState } from "@/components/AppointmentDeliveries";
 import { adminListCount, adminPageOffsets, ADMIN_PAGE_SIZE, mergeAdminPages, useAdminPageCount } from "@/components/adminPagination";
 import { adminSearchStatus, useAdminSearch } from "@/components/adminSearch";
@@ -250,7 +251,8 @@ export default function AppointmentsTab({ initialSearch = "" }: { initialSearch?
         {items.map((apt) => (
           <div key={apt.id} className="bg-card border border-border rounded-lg p-4">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-              <div className="flex-1 min-w-0">
+              {/* EXPL-02: what the patient typed (name, phone) wraps inside the card. */}
+              <div className="flex-1 min-w-0 wrap-anywhere">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1">
                   <span className="font-semibold text-foreground">{apt.customerName}</span>
                   <span className="max-w-full break-all text-xs text-muted-foreground font-mono">{apt.trackingId}</span>
@@ -347,8 +349,9 @@ export default function AppointmentsTab({ initialSearch = "" }: { initialSearch?
                 })()}
               </div>
             </div>
+            {/* A long link wraps; « Voir tout » shows the whole request (EXPL-02). */}
             {apt.requestDetails && (
-              <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{apt.requestDetails}</p>
+              <AdminClampedText text={apt.requestDetails} about={`demande de ${apt.customerName}`} className="text-sm text-muted-foreground mt-2" />
             )}
             {cancellationDetails(apt).length > 0 && (
               <p className="mt-2 text-sm text-muted-foreground wrap-anywhere">{cancellationDetails(apt).join(" · ")}</p>

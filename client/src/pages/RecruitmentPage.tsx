@@ -12,6 +12,7 @@ import { fieldsToCorrectMessage, reportFieldsToCorrect, type FieldToCorrect } fr
 import { getTurnstileWidgetCopy } from "@/lib/publicFormCopy";
 import { TurnstileWidget } from "@/components/TurnstileWidget";
 import FileNameLabel from "@/components/FileNameLabel";
+import { fileSizeLabel } from "@/lib/fileSizeLabel";
 import { filterRecruitmentSpecialties, recruitmentSpecialtyCategories, recruitmentSpecialtyLabel } from "./recruitmentSpecialties";
 
 export const countryOptions = [
@@ -157,15 +158,10 @@ export function standardInvalidFields(form: FormState, file: Pick<File, "name" |
  * Size of the chosen CV in the page's language: « 120 Ko » or « 1,5 Mo » in French, « 120 KB » or
  * « 1.5 MB » in English, not « 0.00 MB »; two decimals at most. A CV over the limit is rounded up,
  * so that one refused for a few bytes too many reads « 4,01 Mo », not the limit itself; an empty
- * one, refused too, reads « 0 Ko ».
+ * one, refused too, reads « 0 Ko ». The candidate's vault gives its documents' sizes the same way.
  */
 function cvSizeLabel(bytes: number, language: Language) {
-  const t = copy[language];
-  const kilobytes = bytes > 0 ? Math.max(1, Math.round(bytes / 1024)) : 0;
-  if (kilobytes < 1024) return `${kilobytes.toLocaleString(language)}\u00a0${t.kilobytes}`;
-  const megabytes = bytes / (1024 * 1024);
-  const shown = bytes > RECRUITMENT_CV_MAX_BYTES ? Math.ceil(megabytes * 100) / 100 : megabytes;
-  return `${shown.toLocaleString(language, { maximumFractionDigits: 2 })}\u00a0${t.megabytes}`;
+  return fileSizeLabel(bytes, language, copy[language], RECRUITMENT_CV_MAX_BYTES);
 }
 
 /**
