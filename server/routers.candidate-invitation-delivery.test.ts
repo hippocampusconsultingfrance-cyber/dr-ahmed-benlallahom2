@@ -140,7 +140,7 @@ describe("invitation administrateur et livraison incertaine", () => {
       expect(db.insertedEvents).toHaveLength(1);
       expect(db.insertedEvents[0]).toMatchObject({ eventType: "email.sent", providerEmailId: "email_forced" });
       expect(JSON.parse(String(db.insertedEvents[0]!.payload))).toMatchObject({ kind: "candidate_portal_invitation", outcome: "sent", attempt: 2 });
-      expect(mocks.logRecruitmentAction).toHaveBeenCalledWith(expect.objectContaining({ metadata: expect.objectContaining({ attempt: 2, forced: true, resendId: "email_forced" }) }));
+      expect(mocks.traceRecruitmentActionDone).toHaveBeenCalledWith([expect.objectContaining({ metadata: expect.objectContaining({ attempt: 2, forced: true, resendId: "email_forced" }) })], "L’invitation est envoyée.");
     });
   });
 });
