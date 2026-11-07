@@ -326,8 +326,12 @@ export const appointmentsRouter = router({
           if (challenge !== "passed") throw await challengeRefusal(challenge);
           bookingChallengePassed = true;
         }
+        // DATA-13 : la fin du maintien part en chaîne ISO-8601 UTC, comme dans
+        // invoiceNumbering.ts. Une Date serait envoyée à l’heure locale du
+        // processus, avec un décalage que PostgreSQL ignore pour une colonne
+        // `timestamp` : en TZ=Europe/Paris, le maintien finirait 1 à 2 h trop tard.
         await db.execute(
-          sql`INSERT INTO appointments (tracking_id, customer_name, customer_email, customer_phone, consultation_type, request_details, appointment_date, slot_key, duration, base_price, final_price, is_night_rate, payment_status, appointment_status, hold_expires_at, language) VALUES (${trackingId}, ${input.customerName}, ${input.customerEmail}, ${input.customerPhone}, ${'health_advice'}, ${input.requestDetails}, ${appointmentDateFormatted}, ${slotKey}, ${30}, ${basePrice}, ${finalPrice}, ${isNightRate ? 1 : 0}, ${'pending'}, ${'held'}, ${holdExpiresAt}, ${input.language})`
+          sql`INSERT INTO appointments (tracking_id, customer_name, customer_email, customer_phone, consultation_type, request_details, appointment_date, slot_key, duration, base_price, final_price, is_night_rate, payment_status, appointment_status, hold_expires_at, language) VALUES (${trackingId}, ${input.customerName}, ${input.customerEmail}, ${input.customerPhone}, ${'health_advice'}, ${input.requestDetails}, ${appointmentDateFormatted}, ${slotKey}, ${30}, ${basePrice}, ${finalPrice}, ${isNightRate ? 1 : 0}, ${'pending'}, ${'held'}, ${holdExpiresAt.toISOString()}, ${input.language})`
         );
         await recordBookingHold(bookingIpHash, trackingId).catch(error => console.error("Booking hold record failed:", error instanceof Error ? error.name : "UnknownError"));
         // Réservations simultanées : chacune a pu lire l’état d’avant les

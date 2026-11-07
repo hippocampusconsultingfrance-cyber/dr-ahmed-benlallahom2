@@ -146,7 +146,8 @@ export function registerRecruitmentApplyRoute(app: Express) {
         const clientIp = req.ip || "unknown";
         const ipHash = hashSecurityValue(clientIp);
         const refuseProtection = async (protectionError: unknown) => {
-          await logSecurityEvent({ actorKind: "anonymous", actorReference: parsed.data.email, category: "public_recruitment_apply_protection", outcome: "blocked", severity: "warning", ipHash })
+          // RGPD-17: the candidate's email is pseudonymised, as in the other security events.
+          await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(parsed.data.email), category: "public_recruitment_apply_protection", outcome: "blocked", severity: "warning", ipHash })
             .catch(securityLogError => console.error("Recruitment protection log error:", safeErrorName(securityLogError)));
           console.warn("Recruitment protection rejected:", safeErrorName(protectionError));
           const rateLimited = protectionError instanceof Error && protectionError.message === "candidate_security_rate_limited";
@@ -229,7 +230,7 @@ export function registerRecruitmentApplyRoute(app: Express) {
           }
           // This application keeps its place in the per-IP cap (its confirmation may be skipped beyond the day's volume).
           releaseIpAttempt = null;
-          await logSecurityEvent({ actorKind: "anonymous", actorReference: parsed.data.email, category: "public_recruitment_apply_duplicate_file", outcome: "allowed", severity: "info", ipHash });
+          await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(parsed.data.email), category: "public_recruitment_apply_duplicate_file", outcome: "allowed", severity: "info", ipHash });
           res.status(200).json({ success: true, duplicate: true, trackingId: duplicate.trackingId });
         };
 
@@ -262,6 +263,9 @@ export function registerRecruitmentApplyRoute(app: Express) {
         releaseIpAttempt = null;
         const retentionUntil = new Date();
         retentionUntil.setFullYear(retentionUntil.getFullYear() + 2);
+        // DATA-13: passed to the raw INSERT below as an ISO-8601 UTC string, as
+        // invoiceNumbering.ts does: a Date would be sent in the process's local
+        // time with an offset PostgreSQL drops for a `timestamp` column.
 
         recruitmentStage = "application-insert";
         const storedTargetCountries = JSON.stringify(parsed.data.targetCountries);
@@ -280,7 +284,7 @@ export function registerRecruitmentApplyRoute(app: Express) {
             ${parsed.data.availability || null}, ${parsed.data.mobility || null}, ${parsed.data.certifications || null},
             ${parsed.data.message || null}, ${storageResult.key}, ${originalName}, ${file.mimetype}, ${file.size},
             'quarantined', ${fileValidation.checksum}, ${fileValidation.notes}, 1,
-            ${parsed.data.marketingConsent === "1" ? 1 : 0}, 'new', NOW(), ${retentionUntil}, ${parsed.data.language}
+            ${parsed.data.marketingConsent === "1" ? 1 : 0}, 'new', NOW(), ${retentionUntil.toISOString()}, ${parsed.data.language}
           ) RETURNING id`);
         } catch (insertError) {
           // DATA-11: a simultaneous sending of the same application was stored

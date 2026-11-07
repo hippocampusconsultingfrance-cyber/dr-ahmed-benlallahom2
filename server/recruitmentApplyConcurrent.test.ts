@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
 import type { SQL } from "drizzle-orm";
 import { TEST_PEPPER } from "./testSupport/candidatePortal";
@@ -201,5 +201,33 @@ describe("/api/recruitment/apply — envois simultanés du même dossier (DATA-1
     expect(response).toEqual({ status: 500, body: { error: "La candidature n’a pas pu être enregistrée." } });
     expect(state.confirmations).toEqual([]);
     expect(state.deletedKeys).toEqual([]);
+  });
+});
+
+// DATA-13 — a Date passed to the raw INSERT would be sent in the process's
+// local time with an offset PostgreSQL drops for a `timestamp` column: from a
+// process at Paris time, the end of retention would be stored 1 to 2 hours
+// late. It is passed as an ISO-8601 UTC string, as invoiceNumbering.ts does.
+describe("/api/recruitment/apply — date de fin de conservation en UTC (DATA-13)", () => {
+  const timeZone = process.env.TZ;
+  afterEach(() => {
+    if (timeZone === undefined) delete process.env.TZ;
+    else process.env.TZ = timeZone;
+  });
+
+  it("passe retention_until en chaîne ISO UTC, deux ans après le dépôt, même quand le processus est à l’heure de Paris", async () => {
+    process.env.TZ = "Europe/Paris";
+    // The process is indeed at Paris time (UTC+1 or UTC+2).
+    expect(new Date().getTimezoneOffset()).toBeLessThan(0);
+    state.duplicateChecks = 3;
+    const before = Date.now();
+    expect((await apply()).status).toBe(201);
+
+    const [stored] = state.applications;
+    expect(stored!.retention_until).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    const retention = new Date(String(stored!.retention_until));
+    const twoYearsLater = new Date(before);
+    twoYearsLater.setFullYear(twoYearsLater.getFullYear() + 2);
+    expect(Math.abs(retention.getTime() - twoYearsLater.getTime())).toBeLessThan(60_000);
   });
 });

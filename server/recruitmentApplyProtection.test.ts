@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { cvApplications, securityEvents } from "../drizzle/schema";
 import { createInMemoryDrizzle, type InMemoryDrizzle } from "./testSupport/inMemoryDrizzle";
+import { hashSecurityValue } from "./candidateSecurity";
 import { TEST_PEPPER, seedApplication } from "./testSupport/candidatePortal";
 import { listen, validPdfBuffer } from "./testSupport/candidateUploadApp";
 import { RECRUITMENT_CUSTOM_SPECIALTY_MAX_LENGTH, standardSubmissionErrorMessage } from "../client/src/pages/RecruitmentPage";
@@ -134,6 +135,10 @@ describe("/api/recruitment/apply — confirmation vers une adresse non vérifié
     const blocked = await apply({ email: "cible11@test.local", ip: "198.51.100.64" });
     expect(blocked).toMatchObject({ status: 400, body: { error: "Trop de tentatives ont été effectuées. Patientez une heure avant de réessayer.", code: "recruitment_rate_limited" } });
     expect(state.sent.map(email => email.to[0])).toEqual(Array.from({ length: 10 }, (_, index) => `cible${index + 1}@test.local`));
+    // RGPD-17: the refused candidate's email is pseudonymised in the security log.
+    const refusals = db().rows(securityEvents).filter(event => event.category === "public_recruitment_apply_protection");
+    expect(refusals.map(event => event.actorReference)).toEqual([hashSecurityValue("cible11@test.local")]);
+    expect(JSON.stringify(refusals)).not.toContain("cible11");
     // The standard form now translates the refusal like the VVIP page.
     expect(standardSubmissionErrorMessage(blocked.body, "en", blocked.status)).toBe("Too many attempts have been made. Wait one hour before trying again.");
     expect(standardSubmissionErrorMessage(blocked.body, "fr", blocked.status)).toBe(blocked.body.error);

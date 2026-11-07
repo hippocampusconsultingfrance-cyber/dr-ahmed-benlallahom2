@@ -165,7 +165,8 @@ describe("appointments.create — maintien avant paiement et session Checkout (P
     const [insert] = db.execute.mock.calls[0] as unknown as [SQL];
     const { sql, params } = dialect.sqlToQuery(insert);
     expect(sql).toMatch(/payment_status, appointment_status, hold_expires_at, language\) VALUES/);
-    expect(params.slice(-4)).toEqual(["pending", "held", new Date(result.holdExpiresAt), "fr"]);
+    // DATA-13: the end of the hold as an ISO-8601 UTC string, not a Date.
+    expect(params.slice(-4)).toEqual(["pending", "held", result.holdExpiresAt, "fr"]);
 
     const [stripeParams] = mocks.stripeCreate.mock.calls[0];
     expect(stripeParams.expires_at).toBe(Math.floor(Date.parse(result.holdExpiresAt) / 1000));
@@ -307,5 +308,37 @@ describe("appointments.create — limitation de débit persistante", () => {
     await expect(appRouter.createCaller(publicContext()).appointments.create(bookingInput())).rejects.toThrow();
     expect(mocks.enforcePersistentRateLimit).toHaveBeenCalledTimes(1);
     expect(mocks.enforcePersistentRateLimit.mock.calls[0][0]).toMatchObject({ action: "public_booking_create_email" });
+  });
+});
+
+// DATA-13 — a Date passed to the raw INSERT would be sent in the process's
+// local time with an offset PostgreSQL drops for a `timestamp` column: from a
+// process at Paris time, the hold would end 1 to 2 hours late, and the cap of
+// holds per email (hold_expires_at > NOW()) would count expired ones.
+describe("appointments.create — fin du maintien en UTC (DATA-13)", () => {
+  const timeZone = process.env.TZ;
+  afterEach(() => {
+    if (timeZone === undefined) delete process.env.TZ;
+    else process.env.TZ = timeZone;
+  });
+
+  it("passe hold_expires_at en chaîne ISO UTC, même quand le processus est à l’heure de Paris", async () => {
+    process.env.TZ = "Europe/Paris";
+    // The process is indeed at Paris time (UTC+1 or UTC+2).
+    expect(new Date().getTimezoneOffset()).toBeLessThan(0);
+    const db = fakeDb(0);
+    mocks.getDb.mockResolvedValue(db);
+
+    const before = Date.now();
+    const result = await appRouter.createCaller(publicContext()).appointments.create(bookingInput());
+
+    const [insert] = db.execute.mock.calls[0] as unknown as [SQL];
+    const holdExpiresAt = dialect.sqlToQuery(insert).params.at(-2);
+    expect(holdExpiresAt).toBe(result.holdExpiresAt);
+    expect(holdExpiresAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    // Some thirty minutes from now in UTC, not one or two hours more.
+    const minutesAhead = (Date.parse(String(holdExpiresAt)) - before) / 60_000;
+    expect(minutesAhead).toBeGreaterThan(0);
+    expect(minutesAhead).toBeLessThanOrEqual(60);
   });
 });

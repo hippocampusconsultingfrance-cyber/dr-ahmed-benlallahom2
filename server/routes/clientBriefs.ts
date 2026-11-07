@@ -54,7 +54,8 @@ export function registerClientBriefRoute(app: Express) {
           res.status(503).json({ error: "Service temporairement indisponible.", code: "service_unavailable" });
           return;
         }
-        await logSecurityEvent({ actorKind: "anonymous", actorReference: parsed.data.email, category: "public_client_brief_rate_limited", outcome: "blocked", severity: "warning", ipHash: hashSecurityValue(clientIp) })
+        // RGPD-17: the employer's email is pseudonymised, as in the other security events.
+        await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(parsed.data.email), category: "public_client_brief_rate_limited", outcome: "blocked", severity: "warning", ipHash: hashSecurityValue(clientIp) })
           .catch(securityLogError => console.error("Client brief protection log error:", safeErrorName(securityLogError)));
         res.status(429).json({ error: "Trop de demandes ont été envoyées. Veuillez patienter avant de soumettre un nouveau brief.", code: "rate_limited" });
         return;

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { candidateSecurityRateLimits, recruitmentEmailEvents, securityEvents } from "../drizzle/schema";
 import { createInMemoryDrizzle, type InMemoryDrizzle } from "./testSupport/inMemoryDrizzle";
+import { hashSecurityValue } from "./candidateSecurity";
 import { TEST_PEPPER, seedApplication } from "./testSupport/candidatePortal";
 import { listen, validPdfBuffer } from "./testSupport/candidateUploadApp";
 import { buildStandardApplicationFormData, countryOptions, initialForm } from "../client/src/pages/RecruitmentPage";
@@ -180,6 +181,9 @@ describe("fiabilité du dépôt de candidature", () => {
 
     expect(await apply("camille.doublon@test.local", "198.51.100.75")).toEqual({ status: 200, body: { success: true, duplicate: true, trackingId: "CVDUPLICATE0071" } });
     expect(db().rows(securityEvents).map(event => [event.category, event.outcome])).toEqual([["public_recruitment_apply_duplicate_file", "allowed"]]);
+    // RGPD-17: the candidate's email is pseudonymised in the security log.
+    expect(db().rows(securityEvents)[0]!.actorReference).toBe(hashSecurityValue("camille.doublon@test.local"));
+    expect(JSON.stringify(db().rows(securityEvents))).not.toContain("camille.doublon");
   });
 
   it("journalise l’étape technique sans inclure le message potentiellement sensible", async () => {
