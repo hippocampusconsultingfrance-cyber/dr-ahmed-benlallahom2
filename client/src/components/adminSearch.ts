@@ -33,6 +33,21 @@ export function useAdminSearch() {
 }
 
 /**
+ * ADM-20: the value of a typed filter of an admin list (spécialité, pays,
+ * score…) once typing pauses for ADMIN_SEARCH_DELAY_MS, like the search box:
+ * « anesthésie » typed letter by letter loads the list once, not ten times.
+ */
+export function useAdminFilterDelay<T extends string>(value: T): T {
+  const [delayed, setDelayed] = useState(value);
+  useEffect(() => {
+    if (value === delayed) return;
+    const timer = setTimeout(() => setDelayed(value), ADMIN_SEARCH_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [value, delayed]);
+  return delayed;
+}
+
+/**
  * What the search box tells screen readers once the first page of a search
  * has loaded: the list's count for the term, or that nothing matches. Empty
  * without search, and while that first page loads or fails.

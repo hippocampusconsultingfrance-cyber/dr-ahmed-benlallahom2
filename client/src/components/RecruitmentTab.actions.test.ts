@@ -19,6 +19,10 @@ const state = vi.hoisted(() => {
   return {
     applications: [] as Array<Record<string, unknown>>,
     drive: { connected: true, lastError: null as string | null, failedExports: 0 },
+    profiles: [] as Array<Record<string, unknown>>,
+    /** The analysis the open card reads (ADM-20): null while it loads. */
+    analysisLoading: false,
+    detailRequests: [] as unknown[],
     mutations,
     toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
     mutation: (path: string) => (options?: MutationOptions) => {
@@ -32,16 +36,30 @@ const state = vi.hoisted(() => {
 vi.mock("sonner", () => ({ toast: state.toast }));
 vi.mock("./Candidate360Dialog", () => ({ default: () => null }));
 vi.mock("./CertificationReview", () => ({ default: () => null }));
+// The list as the server sends it (ADM-20): without the CV analysis, which detail gives the open card.
+const ANALYSIS_FIELDS = ["aiSummary", "aiStrengths", "aiWeaknesses", "aiExtractedSkills", "aiMatchReasoning", "extractionWarnings"];
+const listed = (application: Record<string, unknown>) => ({
+  ...Object.fromEntries(Object.entries(application).filter(([field]) => !ANALYSIS_FIELDS.includes(field))),
+  hasAiSummary: Boolean(application.aiSummary),
+});
 vi.mock("@/lib/trpc", () => ({
   trpc: {
-    useUtils: () => ({ admin: { recruitment: { list: { invalidate: vi.fn(), cancel: vi.fn(), getData: vi.fn(), setData: vi.fn() } } } }),
+    useUtils: () => ({ admin: { recruitment: { list: { invalidate: vi.fn(), cancel: vi.fn(), getData: vi.fn(), setData: vi.fn() }, detail: { invalidate: vi.fn() } } } }),
     useQueries: (build: (t: unknown) => unknown[]) => {
       const t = { admin: { recruitment: { list: (input: unknown) => input } } };
-      return build(t).map(() => ({ data: { items: state.applications, total: state.applications.length }, isLoading: false, error: null, refetch: vi.fn() }));
+      return build(t).map(() => ({ data: { items: state.applications.map(listed), total: state.applications.length }, isLoading: false, error: null, refetch: vi.fn() }));
     },
     admin: {
       recruitment: {
-        profiles: { list: { useQuery: () => ({ data: [], refetch: vi.fn() }) }, create: { useMutation: state.mutation("profiles.create") } },
+        detail: {
+          useQuery: (input: { id: number }, options: { enabled: boolean }) => {
+            if (options.enabled) state.detailRequests.push(input);
+            const application = state.applications.find(item => item.id === input.id);
+            const data = options.enabled && application && !state.analysisLoading ? { id: application.id, ...Object.fromEntries(ANALYSIS_FIELDS.map(field => [field, application[field] ?? null])) } : undefined;
+            return { data, isLoading: !data, isFetching: false, error: null, refetch: vi.fn() };
+          },
+        },
+        profiles: { list: { useQuery: () => ({ data: state.profiles, refetch: vi.fn() }) }, create: { useMutation: state.mutation("profiles.create") }, delete: { useMutation: state.mutation("profiles.delete") } },
         driveExport: {
           status: { useQuery: () => ({ data: state.drive, refetch: vi.fn() }) },
           retry: { useMutation: state.mutation("driveExport.retry") },
@@ -98,6 +116,9 @@ beforeEach(() => {
   for (const key of Object.keys(state.mutations)) delete state.mutations[key];
   for (const fn of Object.values(state.toast)) fn.mockClear();
   state.drive = { connected: true, lastError: null, failedExports: 0 };
+  state.profiles = [];
+  state.analysisLoading = false;
+  state.detailRequests = [];
   confirmAnswer = false;
   confirm.mockClear();
   vi.stubGlobal("window", { confirm });
@@ -313,5 +334,106 @@ describe("lecture du CV par l’outil (IA-01)", () => {
     expect(text).toContain("Score à recalculer");
     expect(text).not.toContain("82/100");
     expect(text).not.toContain("Détail du score professionnel");
+  });
+});
+
+describe("REC-14 — invitation dont la livraison est incertaine", () => {
+  const uncertainSince = (minutes: number) => dossier(1, {
+    candidatePortalInvitation: { eventType: "email.delivery_unknown", attempts: 1, failureCode: "delivery_exception", occurredAt: new Date(Date.now() - minutes * 60_000) },
+  });
+
+  it("propose « Renvoyer quand même » 10 minutes après la tentative, confirmé, comme une nouvelle tentative forcée", () => {
+    state.applications = [uncertainSince(11)];
+    open(1);
+    expect(pageText()).toContain("Invitation à confirmer");
+
+    action("Renvoyer quand même")!.props.onClick();
+    expect(String(confirm.mock.calls[0]![0])).toContain("le candidat l’a peut-être reçue");
+    expect(mutate("candidate.sendPortalInvitation")).not.toHaveBeenCalled();
+
+    confirmAnswer = true;
+    action("Renvoyer quand même")!.props.onClick();
+    expect(mutate("candidate.sendPortalInvitation").mock.calls).toEqual([[{ id: 1, force: true }]]);
+  });
+
+  it("dit avant ces 10 minutes à quelle heure il sera possible, sans le proposer", () => {
+    const uncertain = uncertainSince(3);
+    state.applications = [uncertain];
+    open(1);
+    expect(action("Renvoyer quand même")).toBeUndefined();
+    const at = new Date(uncertain.candidatePortalInvitation.occurredAt.getTime() + 10 * 60_000)
+      .toLocaleTimeString("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit" });
+    expect(pageText()).toContain(`« Renvoyer quand même » possible à ${at}, une fois le suivi vérifié.`);
+  });
+
+  it("ne le propose ni pour une invitation envoyée ni pour un espace actif", () => {
+    state.applications = [
+      dossier(1, { candidatePortalInvitation: { eventType: "email.sent", attempts: 1, failureCode: null, occurredAt: new Date(Date.now() - 3_600_000) } }),
+      { ...uncertainSince(60), id: 2, lastName: "Candidat2", candidatePortalActive: true },
+    ];
+    open(1);
+    expect(action("Renvoyer quand même")).toBeUndefined();
+    open(2);
+    expect(action("Renvoyer quand même")).toBeUndefined();
+  });
+});
+
+describe("ADM-20 — analyse du CV chargée à l’ouverture de la carte", () => {
+  it("ne la demande que pour la carte ouverte qui en a une, et l’affiche une fois reçue", () => {
+    state.applications = [
+      dossier(1, { analysisStatus: "completed", aiSummary: "Synthèse de la lecture du CV.", aiStrengths: JSON.stringify(["Expérience au bloc"]), aiMatchReasoning: "Justification du dossier." }),
+      dossier(2),
+    ];
+    render();
+    expect(state.detailRequests).toEqual([]);
+
+    state.analysisLoading = true;
+    open(1);
+    let tree = render();
+    expect(state.detailRequests.at(-1)).toEqual({ id: 1 });
+    expect(tree.some(element => element.props.label === "Chargement de l’analyse du CV")).toBe(true);
+    expect(textOf(tree)).not.toContain("Synthèse de la lecture du CV.");
+    // The card's actions are there while its analysis loads.
+    expect(action("Analyser le CV")).toBeDefined();
+    expect(action("Effacer RGPD + preuve")).toBeDefined();
+
+    state.analysisLoading = false;
+    tree = render();
+    expect(textOf(tree)).toContain("Synthèse de la lecture du CV.");
+    expect(textOf(tree)).toContain("Expérience au bloc");
+    expect(textOf(tree)).toContain("Justification du dossier.");
+
+    // A dossier not analysed yet asks for nothing.
+    open(2);
+    state.detailRequests = [];
+    render();
+    expect(state.detailRequests).toEqual([]);
+    expect(pageText()).toContain("L’analyse sera disponible après extraction du texte.");
+  });
+});
+
+describe("ADM-13 — profils de matching", () => {
+  it("supprime un profil après confirmation et le retire du filtre s’il était choisi", () => {
+    state.applications = [];
+    state.profiles = [{ id: 7, name: "Golfe anesthésie", targetCountry: "Qatar", specialty: "Anesthésie", minimumScore: 70, requiredLanguages: JSON.stringify(["Anglais"]), requiredSkills: "[]" }];
+    const profileSelect = () => render().find(element => element.type === "select" && textOf(element.props.children).includes("Tous les profils"))!;
+    profileSelect().props.onChange({ target: { value: "7" } });
+    expect(profileSelect().props.value).toBe("7");
+
+    // Folded by default (ADM-20), behind « Gérer les profils ».
+    expect(action("Supprimer")).toBeUndefined();
+    render().find(element => element.props["aria-controls"] === "recruitment-profiles-panel")!.props.onClick();
+    expect(pageText()).toContain("Anesthésie · Qatar · Anglais");
+
+    action("Supprimer")!.props.onClick();
+    expect(String(confirm.mock.calls[0]![0])).toContain("« Golfe anesthésie »");
+    expect(mutate("profiles.delete")).not.toHaveBeenCalled();
+    confirmAnswer = true;
+    action("Supprimer")!.props.onClick();
+    expect(mutate("profiles.delete").mock.calls).toEqual([[{ id: 7 }]]);
+
+    state.mutations["profiles.delete"]!.options!.onSuccess!({ success: true }, { id: 7 });
+    expect(state.toast.success).toHaveBeenCalledWith("Profil de matching supprimé");
+    expect(profileSelect().props.value).toBe("");
   });
 });

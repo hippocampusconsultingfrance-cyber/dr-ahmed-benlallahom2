@@ -1,5 +1,9 @@
+import { useState } from "react";
 import { AlertTriangle, BarChart3, CheckCircle2, Clock3, MailCheck, Send, UserRound, UsersRound } from "lucide-react";
+import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { Button } from "@/components/ui/button";
+import { AdminErrorState } from "@/components/AdminStatePanel";
 import { nonNegativeCount, percentageLabel } from "./recruitmentDashboardMetrics";
 import PublicContentSkeleton from "./PublicContentSkeleton";
 
@@ -24,8 +28,80 @@ function MetricCard({ icon: Icon, label, value, detail, tone }: MetricCardProps)
   );
 }
 
+/**
+ * ADM-13: « Relances à faire », the manual follow-ups suggested after a
+ * campaign, nearest due date first, marked handled or dismissed several at a
+ * time. Neither sends an email. pending: how many there are in all, the list
+ * reading the first ones only.
+ */
+function RecruitmentFollowUpsList({ pending }: { pending: number }) {
+  const utils = trpc.useUtils();
+  const followUps = trpc.admin.recruitment.followUps.list.useQuery({ status: "suggested" });
+  const [selected, setSelected] = useState<number[]>([]);
+  const updateMany = trpc.admin.recruitment.followUps.updateMany.useMutation({
+    onSuccess: (result, input) => {
+      toast.success(`${result.updated} relance${result.updated > 1 ? "s" : ""} ${input.status === "completed" ? "marquée(s) traitée(s)" : "ignorée(s)"}. Aucun email n’a été envoyé.`);
+      setSelected([]);
+      void utils.admin.recruitment.followUps.list.invalidate();
+      void utils.admin.recruitment.dashboard.invalidate();
+      void utils.admin.recruitment.candidate.detail.invalidate();
+    },
+    onError: updateError => toast.error(updateError.message),
+  });
+  const tasks = followUps.data ?? [];
+  // Only the tasks still listed, once a refetch has taken some away.
+  const chosen = selected.filter(id => tasks.some(task => task.id === id));
+  const allChosen = tasks.length > 0 && chosen.length === tasks.length;
+  const now = Date.now();
+  const markChosen = (status: "completed" | "dismissed") => updateMany.mutate({ ids: chosen, status });
+
+  return (
+    <section id="recruitment-follow-ups" className="mt-5 rounded-xl border border-border bg-card p-4" aria-labelledby="recruitment-follow-ups-title">
+      <h3 id="recruitment-follow-ups-title" className="text-sm font-semibold text-foreground">Relances à faire</h3>
+      <p className="mt-1 text-xs leading-5 text-muted-foreground">L’échéance la plus proche en premier. « Marquer traitée » et « Ignorer » n’envoient aucun email : contactez le candidat depuis sa fiche ou l’espace Mailing.</p>
+      {followUps.error ? (
+        <div className="mt-3"><AdminErrorState title="Impossible de charger les relances" description={followUps.error.message} onRetry={() => void followUps.refetch()} retrying={followUps.isFetching} headingLevel={4} /></div>
+      ) : followUps.isLoading ? (
+        <div className="mt-3"><PublicContentSkeleton cards={2} columns={2} label="Chargement des relances" /></div>
+      ) : tasks.length ? (
+        <>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <label className="flex items-center gap-2 text-sm text-foreground">
+              <input type="checkbox" className="h-4 w-4" checked={allChosen} onChange={() => setSelected(allChosen ? [] : tasks.map(task => task.id))} />
+              Tout sélectionner ({tasks.length})
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" disabled={!chosen.length || updateMany.isPending} onClick={() => markChosen("completed")}>Marquer traitée{chosen.length > 1 ? "s" : ""} ({chosen.length})</Button>
+              <Button size="sm" variant="outline" disabled={!chosen.length || updateMany.isPending} onClick={() => markChosen("dismissed")}>Ignorer ({chosen.length})</Button>
+            </div>
+          </div>
+          <ul className="mt-3 space-y-2">
+            {tasks.map(task => {
+              const overdue = new Date(task.dueAt).getTime() <= now;
+              return (
+                <li key={task.id} className="rounded-lg border border-border bg-background p-3 text-sm">
+                  <label className="flex items-start gap-3">
+                    <input type="checkbox" className="mt-1 h-4 w-4" checked={chosen.includes(task.id)} onChange={event => setSelected(current => event.target.checked ? [...current, task.id] : current.filter(id => id !== task.id))} />
+                    <span className="min-w-0 wrap-anywhere">
+                      <span className="font-medium text-foreground">{task.firstName} {task.lastName}</span>
+                      <span className="text-muted-foreground"> · {task.specialty}</span>
+                      <span className="block text-xs text-muted-foreground">{task.kind === "follow_up_7" ? "Relance J+7" : "Relance J+14"} · échéance {new Date(task.dueAt).toLocaleString("fr-FR", { timeZone: "Europe/Paris" })}{overdue ? <strong className="ml-1 font-medium text-amber-700 dark:text-amber-300">· échue</strong> : null}</span>
+                    </span>
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+          {pending > tasks.length ? <p className="mt-3 text-xs text-muted-foreground">Les {tasks.length} premières des {pending} relances à faire : traitez-les pour afficher les suivantes.</p> : null}
+        </>
+      ) : <p className="mt-3 text-sm text-muted-foreground">Aucune relance à faire.</p>}
+    </section>
+  );
+}
+
 export default function RecruitmentDashboardPanel() {
   const { data, isLoading, error } = trpc.admin.recruitment.dashboard.useQuery();
+  const [followUpsOpen, setFollowUpsOpen] = useState(false);
 
   if (error) {
     return <section className="rounded-2xl border border-destructive/40 bg-destructive/10 p-5 text-sm text-destructive" aria-live="polite">Les indicateurs recrutement ne sont pas disponibles : {error.message}</section>;
@@ -61,8 +137,10 @@ export default function RecruitmentDashboardPanel() {
           <h2 id="recruitment-dashboard-title" className="mt-1 text-xl font-semibold text-foreground">Pilotage recrutement</h2>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">Vue consolidée des candidatures, consentements, analyses assistées et activités de campagnes. Les ratios sont indicatifs et n’automatisent aucune décision.</p>
         </div>
-        <div className="rounded-full border border-primary/25 bg-background/70 px-3 py-1.5 text-xs text-muted-foreground"><span className="font-semibold text-foreground">{nonNegativeCount(data.followUpStats.due)}</span> relance{nonNegativeCount(data.followUpStats.due) > 1 ? "s" : ""} manuelle{nonNegativeCount(data.followUpStats.due) > 1 ? "s" : ""} à examiner</div>
+        <button type="button" aria-expanded={followUpsOpen} aria-controls="recruitment-follow-ups" onClick={() => setFollowUpsOpen(open => !open)} className="rounded-full border border-primary/25 bg-background/70 px-3 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-primary/10"><span className="font-semibold text-foreground">{nonNegativeCount(data.followUpStats.due)}</span> relance{nonNegativeCount(data.followUpStats.due) > 1 ? "s" : ""} manuelle{nonNegativeCount(data.followUpStats.due) > 1 ? "s" : ""} à examiner</button>
       </div>
+
+      {followUpsOpen ? <RecruitmentFollowUpsList pending={nonNegativeCount(data.followUpStats.pending)} /> : null}
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard icon={UserRound} label="CV enregistrés" value={totalCandidates} detail="Volume total de candidatures conservées." tone="bg-primary/10 text-primary" />

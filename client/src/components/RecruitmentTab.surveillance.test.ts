@@ -26,15 +26,17 @@ vi.mock("./Candidate360Dialog", () => ({ default: () => null }));
 vi.mock("@/lib/trpc", () => ({
   trpc: {
     useUtils: () => ({ admin: { recruitment: { list: { invalidate: vi.fn() } } } }),
-    // The list loads its pages of 50 through useQueries (ADM-01): one page here.
+    // The list loads its pages of 50 through useQueries (ADM-01): one page here, which says
+    // whether a dossier has an analysis without carrying it (ADM-20).
     useQueries: (build: (t: unknown) => unknown[]) => {
       const t = { admin: { recruitment: { list: (input: unknown) => input } } };
-      return build(t).map(() => ({ data: { items: view.items, total: view.items.length }, isLoading: false, error: null, refetch: vi.fn() }));
+      return build(t).map(() => ({ data: { items: view.items.map(item => ({ ...item, hasAiSummary: Boolean(item.aiSummary) })), total: view.items.length }, isLoading: false, error: null, refetch: vi.fn() }));
     },
     admin: {
       recruitment: {
         list: { useQuery: () => ({ data: { items: view.items, total: view.items.length }, isLoading: false, error: null, refetch: vi.fn() }) },
-        profiles: { list: { useQuery: () => ({ data: [], refetch: vi.fn() }) }, create: { useMutation: mutation } },
+        profiles: { list: { useQuery: () => ({ data: [], refetch: vi.fn() }) }, create: { useMutation: mutation }, delete: { useMutation: mutation } },
+        detail: { useQuery: () => ({ data: undefined, isLoading: true, isFetching: false, error: null, refetch: vi.fn() }) },
         driveExport: {
           status: { useQuery: () => ({ data: view.driveStatus, refetch: vi.fn() }) },
           retry: { useMutation: mutation },

@@ -34,7 +34,8 @@ vi.mock("@/lib/trpc", () => ({
     },
     admin: {
       recruitment: {
-        profiles: { list: { useQuery: () => ({ data: [], refetch: vi.fn() }) }, create: { useMutation: mutation } },
+        profiles: { list: { useQuery: () => ({ data: [], refetch: vi.fn() }) }, create: { useMutation: mutation }, delete: { useMutation: mutation } },
+        detail: { useQuery: () => ({ data: undefined, isLoading: true, isFetching: false, error: null, refetch: vi.fn() }) },
         driveExport: {
           status: { useQuery: () => ({ data: { connected: true, lastError: null, failedExports: 0 }, refetch: vi.fn() }) },
           retry: { useMutation: mutation },
@@ -130,8 +131,50 @@ describe("ADM-02 — recherche dans les candidatures", () => {
   });
 });
 
+describe("ADM-20 — filtres saisis de la liste", () => {
+  const typeIn = (tree: ReactElement, placeholder: string, value: string) => {
+    const input = elementsOf(tree).find(element => element.type === "input" && element.props.placeholder === placeholder)!;
+    (input.props.onChange as (event: { target: { value: string } }) => void)({ target: { value } });
+  };
+
+  it("n’interroge le serveur qu’une fois la frappe en pause, pour la spécialité, le pays, la langue, la certification et le score", () => {
+    render();
+    expect(view.requests).toEqual([{ limit: 50, offset: 0 }]);
+
+    // « anesthésie » typed letter by letter: no request until typing pauses.
+    for (const typed of ["a", "an", "ane", "anesthésie"]) {
+      typeIn(render(), "Ex. anesthésie", typed);
+      render();
+      vi.advanceTimersByTime(ADMIN_SEARCH_DELAY_MS - 1);
+      expect(view.requests).toEqual([{ limit: 50, offset: 0 }]);
+    }
+    vi.advanceTimersByTime(1);
+    render();
+    expect(view.requests).toEqual([{ specialty: "anesthésie", limit: 50, offset: 0 }]);
+
+    let tree = render();
+    typeIn(tree, "Ex. Allemagne", "Qatar");
+    typeIn(tree, "Ex. anglais", "arabe");
+    typeIn(tree, "Ex. ACLS, ATLS", "ACLS");
+    typeIn(tree, "Ex. 80", "70");
+    render();
+    expect(view.requests).toEqual([{ specialty: "anesthésie", limit: 50, offset: 0 }]);
+    vi.advanceTimersByTime(ADMIN_SEARCH_DELAY_MS);
+    tree = render();
+    expect(view.requests).toEqual([{ country: "Qatar", specialty: "anesthésie", language: "arabe", certification: "ACLS", minimumScore: 70, limit: 50, offset: 0 }]);
+    // The typed values stay in their fields meanwhile.
+    expect(elementsOf(tree).find(element => element.type === "input" && element.props.placeholder === "Ex. anesthésie")!.props.value).toBe("anesthésie");
+  });
+});
+
 describe("IA-02 — aide des langues requises d’un profil de matching", () => {
   it("donne les autres noms d’une langue chacun dans sa langue, pour un lecteur d’écran", () => {
+    // ADM-20: the profiles' form is folded behind « Gérer les profils », above the list.
+    const folded = render();
+    expect(renderToStaticMarkup(folded)).not.toContain("recruitment-profile-languages-help");
+    const manage = elementsOf(folded).find(element => element.props["aria-controls"] === "recruitment-profiles-panel")!;
+    expect(manage.props["aria-expanded"]).toBe(false);
+    (manage.props.onClick as () => void)();
     const markup = renderToStaticMarkup(render());
     expect(markup).toContain('aria-describedby="recruitment-profile-languages-help"');
     expect(markup).toContain('(<span lang="en">French</span>, <span lang="de">Englisch</span>, <span lang="zh">阿拉伯语</span>…)');

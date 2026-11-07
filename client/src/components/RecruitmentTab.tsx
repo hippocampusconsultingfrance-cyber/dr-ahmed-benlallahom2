@@ -1,5 +1,5 @@
 import { Fragment, useState } from "react";
-import { BrainCircuit, ClipboardList, Download, FileSearch, Loader2, Mail, RefreshCw, Sparkles, Trash2, UserRound, UserRoundPlus } from "lucide-react";
+import { BrainCircuit, ClipboardList, Download, FileSearch, Loader2, Mail, RefreshCw, Settings2, Sparkles, Trash2, UserRound, UserRoundPlus } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
@@ -7,7 +7,7 @@ import AdminLoadMore from "@/components/AdminLoadMore";
 import AdminSearchField from "@/components/AdminSearchField";
 import { AdminErrorState } from "@/components/AdminStatePanel";
 import { adminListCount, adminPageOffsets, ADMIN_PAGE_SIZE, mergeAdminPages, updateAdminPageItem, useAdminPageCount } from "@/components/adminPagination";
-import { adminSearchStatus, useAdminSearch } from "@/components/adminSearch";
+import { adminSearchStatus, useAdminFilterDelay, useAdminSearch } from "@/components/adminSearch";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import Candidate360Dialog from "./Candidate360Dialog";
@@ -15,6 +15,7 @@ import CertificationReview from "./CertificationReview";
 import { useCvDownload } from "./useCvDownload";
 import { certificationFactLabel, recruitmentFactNameContains } from "@shared/recruitmentFactOrigins";
 import { RECRUITMENT_APPLICATION_STATUS_OPTIONS, type RecruitmentApplicationStatus } from "@shared/recruitmentApplicationStatuses";
+import { candidateInvitationForcedResendAt } from "@shared/candidatePortalInvitationResend";
 import { AI_ANALYSIS_UNAVAILABLE_LABEL, isAiAnalysisUnavailable, SCORE_UNAVAILABLE_EXPLANATION, SCORE_UNAVAILABLE_HEADING, scoredApplicationsFirst } from "./recruitmentScoreGroups";
 import { contradictionEvidenceLabel, CV_READING_LABELS, CV_REVIEW_REMINDER, cvReadingTextForDisplay, extractionWarningLabel, fieldEvidenceStatusLabel, fieldEvidenceStatusTone } from "./recruitmentEvidenceLabels";
 import {
@@ -125,6 +126,8 @@ function showAdminToast(notice: AdminToast) {
   else toast.info(notice.message);
 }
 
+const FORCED_INVITATION_CONFIRMATION = "La livraison de l’invitation précédente est incertaine : le candidat l’a peut-être reçue. Après avoir vérifié son suivi, renvoyer quand même une nouvelle invitation ? S’il avait reçu la première, il en aura deux, chacune valable.";
+
 const ERASURE_CONFIRMATION = "Effacer définitivement ce dossier ? Seront supprimés : le CV et ses copies (stockage et Google Drive), les analyses IA, les relances et historiques d’emails, la présence dans les missions, ainsi que l’espace candidat lié, ses sessions et ses documents. Seule une preuve d’effacement anonymisée est conservée. Action irréversible.";
 
 function describeErasureReport(report: { storageObjectsDeleted: number; googleDrive: { status: string; deleted: number }; candidateAccountsErased: number; candidateDocumentsDeleted: number; rowsDeleted: Record<string, number>; otherApplicationsWithSameEmail: number }) {
@@ -151,6 +154,8 @@ export default function RecruitmentTab() {
   const { text: searchText, search, setText: setSearchText, clear: clearSearch } = useAdminSearch();
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [candidate360Id, setCandidate360Id] = useState<number | null>(null);
+  // ADM-20: the matching profiles' form stays folded behind « Gérer les profils », above the list.
+  const [profilesOpen, setProfilesOpen] = useState(false);
   const [profileName, setProfileName] = useState("");
   const [profileCountry, setProfileCountry] = useState("");
   const [profileSpecialty, setProfileSpecialty] = useState("");
@@ -164,13 +169,19 @@ export default function RecruitmentTab() {
   const profilesQuery = trpc.admin.recruitment.profiles.list.useQuery();
   const driveExportStatus = trpc.admin.recruitment.driveExport.status.useQuery();
 
+  // ADM-20: the typed filters reach the list once typing pauses, like the search.
+  const country = useAdminFilterDelay(countryFilter.trim());
+  const specialty = useAdminFilterDelay(specialtyFilter.trim());
+  const language = useAdminFilterDelay(languageFilter.trim());
+  const certification = useAdminFilterDelay(certificationFilter.trim());
+  const appliedMinimumScore = useAdminFilterDelay(minimumScore);
   const filters = {
     status: statusFilter || undefined,
-    country: countryFilter.trim() || undefined,
-    specialty: specialtyFilter.trim() || undefined,
-    language: languageFilter.trim() || undefined,
-    certification: certificationFilter.trim() || undefined,
-    minimumScore: minimumScore ? Number(minimumScore) : undefined,
+    country: country || undefined,
+    specialty: specialty || undefined,
+    language: language || undefined,
+    certification: certification || undefined,
+    minimumScore: appliedMinimumScore ? Number(appliedMinimumScore) : undefined,
     profileId: selectedProfileId ? Number(selectedProfileId) : undefined,
     search,
   };
@@ -181,7 +192,9 @@ export default function RecruitmentTab() {
   // Set by the server when a matching profile could only be checked on the first dossiers of the list.
   const profileScanLimit = pages[0]?.data?.profileScanLimit;
   // With a score threshold, the dossiers without a verified score are listed apart, not dropped (INTL-02).
-  const scoreThreshold = Math.max(Number(minimumScore) || 0, profilesQuery.data?.find(profile => String(profile.id) === selectedProfileId)?.minimumScore ?? 0);
+  const scoreThreshold = Math.max(Number(appliedMinimumScore) || 0, profilesQuery.data?.find(profile => String(profile.id) === selectedProfileId)?.minimumScore ?? 0);
+  // ADM-20: the CV analysis of the open card, which the list leaves out.
+  const analysisQuery = trpc.admin.recruitment.detail.useQuery({ id: expandedId || 1 }, { enabled: Boolean(applications.find(item => item.id === expandedId)?.hasAiSummary) });
   const listedApplications = scoreThreshold > 0
     ? scoredApplicationsFirst(applications, item => item.analysisPromptVersion === VERIFIED_ANALYSIS_VERSION ? item.aiScore : null)
     : { items: applications, firstUnscored: -1 };
@@ -212,9 +225,10 @@ export default function RecruitmentTab() {
   const downloadCv = useCvDownload();
 
   const reanalyze = trpc.admin.recruitment.reanalyze.useMutation({
-    onSuccess: result => {
+    onSuccess: (result, input) => {
       showAdminToast(reanalysisToast(result));
       utils.admin.recruitment.list.invalidate();
+      utils.admin.recruitment.detail.invalidate({ id: input.id });
     },
     onError: mutationError => toast.error(mutationError.message),
   });
@@ -223,6 +237,7 @@ export default function RecruitmentTab() {
     onSuccess: result => {
       showAdminToast(reanalyzeFailedToast(result));
       utils.admin.recruitment.list.invalidate();
+      utils.admin.recruitment.detail.invalidate();
     },
     onError: mutationError => toast.error(mutationError.message),
   });
@@ -261,6 +276,16 @@ export default function RecruitmentTab() {
     onSuccess: () => {
       toast.success("Profil de matching enregistré");
       setProfileName("");
+      profilesQuery.refetch();
+    },
+    onError: mutationError => toast.error(mutationError.message),
+  });
+
+  // ADM-13: a profile no longer used leaves the Profil de matching filter; no dossier changes.
+  const deleteProfile = trpc.admin.recruitment.profiles.delete.useMutation({
+    onSuccess: (_result, input) => {
+      toast.success("Profil de matching supprimé");
+      setSelectedProfileId(current => current === String(input.id) ? "" : current);
       profilesQuery.refetch();
     },
     onError: mutationError => toast.error(mutationError.message),
@@ -381,12 +406,35 @@ export default function RecruitmentTab() {
       </div>
 
       <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
-        <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h3 className="font-semibold text-foreground">Profils de matching</h3>
             <p className="text-xs text-muted-foreground">Les profils servent à prioriser la revue humaine ; ils ne décident jamais d’un recrutement.</p>
           </div>
+          <Button size="sm" variant="outline" aria-expanded={profilesOpen} aria-controls="recruitment-profiles-panel" onClick={() => setProfilesOpen(open => !open)}>
+            <Settings2 className="mr-2 h-4 w-4" /> {profilesOpen ? "Masquer les profils" : "Gérer les profils"}
+          </Button>
         </div>
+        {profilesOpen ? (
+        <div id="recruitment-profiles-panel" className="mt-3 space-y-3">
+        {profilesQuery.data?.length ? (
+          <ul className="space-y-2" aria-label="Profils de matching enregistrés">
+            {profilesQuery.data.map(profile => {
+              const criteria = [profile.specialty, profile.targetCountry, ...parseJsonList(profile.requiredLanguages), ...parseJsonList(profile.requiredSkills)].filter(Boolean).join(" · ");
+              return (
+                <li key={profile.id} className="flex flex-col gap-2 rounded-lg border border-border bg-background/70 p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0 wrap-anywhere">
+                    <p className="font-medium text-foreground">{profile.name} · {profile.minimumScore}+</p>
+                    {criteria ? <p className="text-xs text-muted-foreground">{criteria}</p> : null}
+                  </div>
+                  <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" disabled={deleteProfile.isPending} onClick={() => { if (window.confirm(`Supprimer le profil de matching « ${profile.name} » ? Il ne sera plus proposé dans le filtre ; aucune candidature n’est modifiée.`)) deleteProfile.mutate({ id: profile.id }); }}>
+                    <Trash2 className="mr-2 h-4 w-4" /> Supprimer
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+        ) : <p className="text-xs text-muted-foreground">Aucun profil de matching enregistré.</p>}
         <div className="grid gap-2 md:grid-cols-6">
           <input value={profileName} onChange={event => setProfileName(event.target.value)} placeholder="Nom du profil" className="h-10 rounded-md border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground md:col-span-2" />
           <input value={profileCountry} onChange={event => setProfileCountry(event.target.value)} placeholder="Pays" className="h-10 rounded-md border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground" />
@@ -400,6 +448,8 @@ export default function RecruitmentTab() {
           {/* IA-02: the form records the languages in English, the CV gives them in its own language. */}
           <p id="recruitment-profile-languages-help" className="text-xs text-muted-foreground md:col-span-6">Langues : ex. français, anglais, arabe. Chaque langue est aussi retrouvée sous ses autres noms (<span lang="en">French</span>, <span lang="de">Englisch</span>, <span lang="zh">阿拉伯语</span>…), comme dans le filtre Langue.</p>
         </div>
+        </div>
+        ) : null}
       </div>
 
       {error ? (
@@ -422,13 +472,19 @@ export default function RecruitmentTab() {
           {listedApplications.items.map((application, index) => {
             const countries = parseJsonList(application.targetCountries);
             const languages = parseJsonList(application.languages);
-            const strengths = parseJsonList(application.aiStrengths);
-            const weaknesses = parseJsonList(application.aiWeaknesses);
-            const extractionWarnings = parseJsonList(application.extractionWarnings);
-            const extracted = parseJsonObject(application.aiExtractedSkills);
+            const expanded = expandedId === application.id;
+            // Loaded once the card is open (ADM-20).
+            const analysis = expanded && analysisQuery.data?.id === application.id ? analysisQuery.data : null;
+            const strengths = parseJsonList(analysis?.aiStrengths ?? null);
+            const weaknesses = parseJsonList(analysis?.aiWeaknesses ?? null);
+            const extractionWarnings = parseJsonList(analysis?.extractionWarnings ?? null);
+            const extracted = parseJsonObject(analysis?.aiExtractedSkills ?? null);
             const hasVerifiedAnalysis = application.analysisPromptVersion === VERIFIED_ANALYSIS_VERSION;
             const verifiedScore = hasVerifiedAnalysis ? application.aiScore : null;
-            const expanded = expandedId === application.id;
+            // REC-14: an invitation whose delivery is uncertain can be sent again anyway from this time on.
+            const invitationResendAt = !application.candidatePortalActive && application.candidatePortalInvitation?.eventType === "email.delivery_unknown" && application.candidatePortalInvitation.occurredAt
+              ? candidateInvitationForcedResendAt(application.candidatePortalInvitation.occurredAt)
+              : null;
             // The certification filter says where each matching certification comes from, and its expiry (IA-02).
             const searchedCertifications = filters.certification ? (application.certificationFacts ?? []).filter(fact => recruitmentFactNameContains(fact.name, filters.certification!)) : [];
             return (
@@ -455,7 +511,7 @@ export default function RecruitmentTab() {
                   </button>
                   <div className="flex flex-wrap items-center gap-2">
                     <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${scoreTone(verifiedScore)}`}>
-                      {verifiedScore === null ? (isAiAnalysisUnavailable(application) ? AI_ANALYSIS_UNAVAILABLE_LABEL : application.aiSummary ? (hasVerifiedAnalysis ? SCORE_UNAVAILABLE_HEADING : "Score à recalculer") : "IA en attente") : `Score IA ${verifiedScore}/100`}
+                      {verifiedScore === null ? (isAiAnalysisUnavailable(application) ? AI_ANALYSIS_UNAVAILABLE_LABEL : application.hasAiSummary ? (hasVerifiedAnalysis ? SCORE_UNAVAILABLE_HEADING : "Score à recalculer") : "IA en attente") : `Score IA ${verifiedScore}/100`}
                     </span>
                     <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${analysisStatusTone(application.analysisStatus)}`}>
                       {analysisStatusLabel(application.analysisStatus)}
@@ -567,6 +623,12 @@ export default function RecruitmentTab() {
                           {!application.candidatePortalActive && recruitmentEmailDeliveryErrorLabel(application.candidatePortalActivation?.failureCode) ? <p className="mt-1 text-xs opacity-90">{recruitmentEmailDeliveryErrorLabel(application.candidatePortalActivation?.failureCode)}</p> : null}
                           {!application.candidatePortalActive && application.candidatePortalInvitation?.attempts ? <p className="mt-1 text-xs opacity-80">Envoi {application.candidatePortalInvitation.attempts}</p> : null}
                           {!application.candidatePortalActive && recruitmentEmailDeliveryErrorLabel(application.candidatePortalInvitation?.failureCode) ? <p className="mt-1 text-xs opacity-90">{recruitmentEmailDeliveryErrorLabel(application.candidatePortalInvitation?.failureCode)}</p> : null}
+                          {invitationResendAt ? (invitationResendAt.getTime() <= Date.now() ? (
+                            <Button size="sm" variant="outline" className="mt-2 h-8" onClick={() => { if (window.confirm(FORCED_INVITATION_CONFIRMATION)) sendPortalInvitation.mutate({ id: application.id, force: true }); }} disabled={sendPortalInvitation.isPending}>
+                              <RefreshCw className={`mr-2 h-3.5 w-3.5 ${sendPortalInvitation.isPending ? "animate-spin" : ""}`} />
+                              Renvoyer quand même
+                            </Button>
+                          ) : <p className="mt-1 text-xs opacity-90">« Renvoyer quand même » possible à {invitationResendAt.toLocaleTimeString("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit" })}, une fois le suivi vérifié.</p>) : null}
                         </div>
                       </div>
                     </div>
@@ -603,10 +665,16 @@ export default function RecruitmentTab() {
                         </div>
                       </div>
 
-                      {application.aiSummary ? (
+                      {application.hasAiSummary && !analysis ? (
+                        <div className="mt-4">
+                          {analysisQuery.error ? (
+                            <AdminErrorState title="Impossible de charger l’analyse du CV" description={analysisQuery.error.message} onRetry={() => void analysisQuery.refetch()} retrying={analysisQuery.isFetching} headingLevel={4} />
+                          ) : <PublicContentSkeleton label="Chargement de l’analyse du CV" cards={2} columns={2} />}
+                        </div>
+                      ) : analysis?.aiSummary ? (
                         <div className="mt-4 space-y-4">
                           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{CV_READING_LABELS.summary}</p>
-                          <p className="leading-6 text-foreground/90">{cvReadingTextForDisplay(application.aiSummary)}</p>
+                          <p className="leading-6 text-foreground/90">{cvReadingTextForDisplay(analysis.aiSummary)}</p>
                           <div className="grid gap-3 md:grid-cols-2">
                             <div>
                               <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{CV_READING_LABELS.profile}</p>
@@ -676,7 +744,7 @@ export default function RecruitmentTab() {
                               <ul className="list-disc space-y-1 pl-5 text-muted-foreground">{weaknesses.length ? weaknesses.map(item => <li key={item}>{item}</li>) : <li>Non renseigné</li>}</ul>
                             </div>
                           </div>
-                          {application.aiMatchReasoning && <p className="border-t border-primary/10 pt-3 text-xs leading-5 text-muted-foreground"><strong className="text-foreground">{verifiedScore === null ? "Conclusion de l’analyse :" : "Justification du score :"}</strong> {cvReadingTextForDisplay(application.aiMatchReasoning)}</p>}
+                          {analysis.aiMatchReasoning && <p className="border-t border-primary/10 pt-3 text-xs leading-5 text-muted-foreground"><strong className="text-foreground">{verifiedScore === null ? "Conclusion de l’analyse :" : "Justification du score :"}</strong> {cvReadingTextForDisplay(analysis.aiMatchReasoning)}</p>}
                           {extractionWarnings.length > 0 && <p className="border-t border-primary/10 pt-3 text-xs leading-5 text-amber-700 dark:text-amber-300"><strong>Qualité d’extraction :</strong> {extractionWarnings.map(extractionWarningLabel).join(" · ")}</p>}
                           {application.aiAnalyzedAt && <p className="text-[11px] text-muted-foreground">Analysé le {new Date(application.aiAnalyzedAt).toLocaleString("fr-FR", { timeZone: "Europe/Paris" })}</p>}
                         </div>

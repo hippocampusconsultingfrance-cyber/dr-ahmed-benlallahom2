@@ -258,6 +258,9 @@ export const adminRecruitmentRouter = router({
         profilePage = { ids: matchedIds.slice(input.offset, input.offset + input.limit), total: matchedIds.length, scanLimited: scanned.length > RECRUITMENT_PROFILE_SCAN_LIMIT };
       }
 
+      // ADM-20: what the card shows, folded or open, but not the CV analysis (its summary,
+      // strengths, extracted skills and quotes, about 8 KB a dossier), which the open card
+      // loads through detail. The CV's own readings (normalized_*) are never sent.
       const rawItems = await db
         .select({
           id: cvApplications.id,
@@ -274,28 +277,17 @@ export const adminRecruitmentRouter = router({
           availability: cvApplications.availability,
           mobility: cvApplications.mobility,
           certifications: cvApplications.certifications,
-          normalizedCertifications: cvApplications.normalizedCertifications,
-          normalizedLanguages: cvApplications.normalizedLanguages,
-          normalizedExperiences: cvApplications.normalizedExperiences,
           message: cvApplications.message,
           cvOriginalName: cvApplications.cvOriginalName,
-          cvMimeType: cvApplications.cvMimeType,
           cvSizeBytes: cvApplications.cvSizeBytes,
           fileValidationStatus: cvApplications.fileValidationStatus,
           fileSecurityScanVersion: cvApplications.fileSecurityScanVersion,
-          fileValidationNotes: cvApplications.fileValidationNotes,
-          gdprConsent: cvApplications.gdprConsent,
-          marketingConsent: cvApplications.marketingConsent,
           status: cvApplications.status,
           adminNotes: cvApplications.adminNotes,
-          consentAt: cvApplications.consentAt,
           retentionUntil: cvApplications.retentionUntil,
+          // Read only to say whether the dossier has an analysis (hasAiSummary).
           aiSummary: cvApplications.aiSummary,
           aiScore: verifiedRecruitmentScore,
-          aiStrengths: cvApplications.aiStrengths,
-          aiWeaknesses: cvApplications.aiWeaknesses,
-          aiExtractedSkills: cvApplications.aiExtractedSkills,
-          aiMatchReasoning: cvApplications.aiMatchReasoning,
           aiAnalyzedAt: cvApplications.aiAnalyzedAt,
           analysisStatus: cvApplications.analysisStatus,
           analysisAttempts: cvApplications.analysisAttempts,
@@ -303,16 +295,12 @@ export const adminRecruitmentRouter = router({
           analysisModel: cvApplications.analysisModel,
           analysisPromptVersion: cvApplications.analysisPromptVersion,
           extractionMethod: cvApplications.extractionMethod,
-          extractionPageCount: cvApplications.extractionPageCount,
           extractionTotalPages: cvApplications.extractionTotalPages,
           ocrConfidence: cvApplications.ocrConfidence,
           ocrModelVersion: cvApplications.ocrModelVersion,
-          extractionWarnings: cvApplications.extractionWarnings,
-          analysisRequestedAt: cvApplications.analysisRequestedAt,
           // Language of the application form, preselected for manual emails (EN-02).
           language: cvApplications.language,
           createdAt: cvApplications.createdAt,
-          updatedAt: cvApplications.updatedAt,
         })
         .from(cvApplications)
         .where(profilePage ? inArray(cvApplications.id, profilePage.ids) : whereClause)
@@ -369,8 +357,9 @@ export const adminRecruitmentRouter = router({
         emailEventsByApplicationId.set(event.applicationId, current);
       }
       const items = rawItems
-        .map(item => ({
+        .map(({ aiSummary, ...item }) => ({
           ...item,
+          hasAiSummary: Boolean(aiSummary),
           candidatePortalActive: portalAccounts.some(account => candidatePortalAccountMatchesApplication(account, item)),
           candidatePortalActivation: resolveCandidatePortalActivationDelivery(emailEventsByApplicationId.get(item.id) || []),
           candidatePortalInvitation: resolveCandidatePortalInvitationDelivery(emailEventsByApplicationId.get(item.id) || []),
@@ -381,6 +370,28 @@ export const adminRecruitmentRouter = router({
       const countResult = profilePage ? [{ count: profilePage.total }] : await db.select({ count: sql<number>`COUNT(*)` }).from(cvApplications).where(whereClause);
       return { items, total: Number(countResult[0]?.count ?? 0), ...(profilePage?.scanLimited ? { profileScanLimit: RECRUITMENT_PROFILE_SCAN_LIMIT } : {}) };
     }),
+
+  /**
+   * ADM-20: the CV analysis of a dossier, which the list leaves out, loaded
+   * when its card is opened: the summary, the profile and skills read, the
+   * evidence and contradictions, the strengths, the points to check, the
+   * score's reasoning and the extraction warnings.
+   */
+  detail: adminProcedure.input(z.object({ id: z.number().int().positive() })).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) return null;
+    const [analysis] = await db.select({
+      id: cvApplications.id,
+      aiSummary: cvApplications.aiSummary,
+      aiStrengths: cvApplications.aiStrengths,
+      aiWeaknesses: cvApplications.aiWeaknesses,
+      aiExtractedSkills: cvApplications.aiExtractedSkills,
+      aiMatchReasoning: cvApplications.aiMatchReasoning,
+      extractionWarnings: cvApplications.extractionWarnings,
+    }).from(cvApplications).where(eq(cvApplications.id, input.id)).limit(1);
+    if (!analysis) throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable" });
+    return analysis;
+  }),
 
   pool: adminRecruitmentPoolRouter,
 

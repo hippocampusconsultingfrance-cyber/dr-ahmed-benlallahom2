@@ -37,7 +37,8 @@ vi.mock("@/lib/trpc", async () => {
       },
       admin: {
         recruitment: {
-          profiles: { list: { useQuery: () => ({ data: [], refetch: vi.fn() }) }, create: { useMutation: idle } },
+          profiles: { list: { useQuery: () => ({ data: [], refetch: vi.fn() }) }, create: { useMutation: idle }, delete: { useMutation: idle } },
+        detail: { useQuery: () => ({ data: undefined, isLoading: true, isFetching: false, error: null, refetch: vi.fn() }) },
           driveExport: {
             status: { useQuery: () => ({ data: { connected: true, lastError: null, failedExports: 0 }, refetch: vi.fn() }) },
             retry: { useMutation: idle },

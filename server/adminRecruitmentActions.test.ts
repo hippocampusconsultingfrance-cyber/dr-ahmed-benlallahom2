@@ -289,6 +289,35 @@ describe("actions d’administration du recrutement", () => {
     expect(row).not.toContain("[");
   });
 
+  it("marque traitées ou ignore plusieurs relances d’un coup, celles encore à examiner seulement, chacune journalisée (ADM-13)", async () => {
+    const first = seedCandidate(1);
+    const second = seedCandidate(2);
+    const [toHandle, other, alreadyDone, untouched] = memory.seed(recruitmentFollowUpTasks, [
+      { application_id: first.id, kind: "follow_up_7", due_at: "2026-10-01 09:00:00.000", status: "suggested" },
+      { application_id: second.id, kind: "follow_up_14", due_at: "2026-10-08 09:00:00.000", status: "suggested" },
+      { application_id: second.id, kind: "follow_up_7", due_at: "2026-10-01 09:00:00.000", status: "dismissed", completed_by_open_id: "earlier_admin" },
+      { application_id: first.id, kind: "follow_up_14", due_at: "2026-10-08 09:00:00.000", status: "suggested" },
+    ]);
+
+    const result = await admin().admin.recruitment.followUps.updateMany({ ids: [toHandle!.id as number, other!.id as number, alreadyDone!.id as number], status: "completed" });
+    expect(result).toEqual({ success: true, updated: 2 });
+    const byId = new Map(memory.rows(recruitmentFollowUpTasks).map(row => [row.id, row]));
+    expect(byId.get(toHandle!.id)).toMatchObject({ status: "completed", completed_by_open_id: "user_owner" });
+    expect(byId.get(toHandle!.id)!.completed_at).not.toBeNull();
+    expect(byId.get(other!.id)).toMatchObject({ status: "completed", completed_by_open_id: "user_owner" });
+    expect(byId.get(alreadyDone!.id)).toMatchObject({ status: "dismissed", completed_by_open_id: "earlier_admin" });
+    expect(byId.get(untouched!.id)).toMatchObject({ status: "suggested", completed_at: null });
+    const audits = memory.rows(recruitmentAuditLogs).map(row => ({ applicationId: row.application_id, metadata: JSON.parse(String(row.metadata)) }));
+    expect(audits).toEqual([
+      { applicationId: first.id, metadata: { event: "follow_up", taskId: toHandle!.id, status: "completed", batch: true } },
+      { applicationId: second.id, metadata: { event: "follow_up", taskId: other!.id, status: "completed", batch: true } },
+    ]);
+
+    // Nothing left to review among them: nothing changes, nothing is logged.
+    await expect(admin().admin.recruitment.followUps.updateMany({ ids: [toHandle!.id as number], status: "dismissed" })).resolves.toEqual({ success: true, updated: 0 });
+    expect(memory.rows(recruitmentAuditLogs)).toHaveLength(2);
+  });
+
   it("refuse un export du vivier dont plus aucun candidat sélectionné n’est exportable, au lieu d’un fichier vide (REC-01)", async () => {
     const refused = seedCandidate(1, { status: "rejected" });
     await expect(admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: [refused.id as number] }))

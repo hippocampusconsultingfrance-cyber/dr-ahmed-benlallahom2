@@ -1,4 +1,4 @@
-import { BadgeCheck, CalendarClock, ClipboardList, FileText, Mail, MessageSquare, UserRound } from "lucide-react";
+import { BadgeCheck, CalendarClock, ClipboardList, FileText, Mail, MessageSquare, MessageSquareReply, UserRound } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import type { UserLanguage } from "@/contexts/userPreferences";
@@ -46,6 +46,15 @@ export default function Candidate360Dialog({ applicationId, onOpenChange, certif
     },
     onError: updateError => toast.error(updateError.message),
   });
+  // ADM-13: the candidate answered (email, phone…): dated, it counts in the response rate of « Pilotage recrutement ».
+  const markResponse = trpc.admin.recruitment.candidate.markResponse.useMutation({
+    onSuccess: () => {
+      toast.success("Réponse du candidat enregistrée");
+      if (applicationId) utils.admin.recruitment.candidate.detail.invalidate({ id: applicationId });
+      utils.admin.recruitment.dashboard.invalidate();
+    },
+    onError: updateError => toast.error(updateError.message),
+  });
   const requestedDocuments = timeline.filter(event => event.detail?.startsWith("Pièces ou informations demandées :"));
 
   return (
@@ -59,7 +68,7 @@ export default function Candidate360Dialog({ applicationId, onOpenChange, certif
           <div className="space-y-6 py-2">
             <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"><div><h3 className="text-lg font-semibold text-foreground">{detail.candidate.firstName} {detail.candidate.lastName}</h3><p className="text-sm text-muted-foreground">{detail.candidate.specialty} · {detail.candidate.trackingId}</p></div><span className="rounded-full border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground">Statut : {detail.candidate.status}</span></div>
-              <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3"><div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Candidature reçue</p><p className="mt-1 text-foreground">{formatDate(detail.candidate.createdAt)}</p></div><div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Dernière réponse candidat</p><p className="mt-1 text-foreground">{formatDate(detail.candidate.lastCandidateResponseAt)}</p></div><div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Prochain suivi</p><p className="mt-1 text-foreground">{upcomingFollowUp ? formatDate(upcomingFollowUp.dueAt) : "Aucun suivi programmé"}</p></div></div>
+              <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3"><div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Candidature reçue</p><p className="mt-1 text-foreground">{formatDate(detail.candidate.createdAt)}</p></div><div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Dernière réponse candidat</p><p className="mt-1 text-foreground">{formatDate(detail.candidate.lastCandidateResponseAt)}</p><Button size="sm" variant="outline" className="mt-2" disabled={markResponse.isPending} onClick={() => markResponse.mutate({ id: detail.candidate.id })}><MessageSquareReply className="mr-2 h-4 w-4" /> Le candidat a répondu</Button></div><div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Prochain suivi</p><p className="mt-1 text-foreground">{upcomingFollowUp ? formatDate(upcomingFollowUp.dueAt) : "Aucun suivi programmé"}</p></div></div>
             </div>
 
             <div className="grid gap-4 lg:grid-cols-2">

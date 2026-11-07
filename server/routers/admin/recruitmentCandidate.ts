@@ -13,21 +13,23 @@ import {
   recruitmentEmailEvents,
   recruitmentFollowUpTasks,
 } from "../../../drizzle/schema";
-import { eq, sql, desc, getTableColumns, inArray } from "drizzle-orm";
+import { and, eq, sql, desc, getTableColumns, inArray } from "drizzle-orm";
 import { sendCandidatePortalAccessEmail, candidatePortalAccessEmailFailureCode } from "../../_core/notifications";
 import { logRecruitmentAction, recruitmentAuditInsert } from "../../recruitmentAudit";
 import { analysedCertificationNames, CERTIFICATION_NAME_MAX_LENGTH, certificationFacts, declaredCertificationNames, sameRecruitmentFact } from "../../clientBriefMatching";
 import { certificationDateIsCurrent, latestCertificationRenewalDay, CERTIFICATION_RENEWAL_MAX_YEARS } from "../../../shared/recruitmentFactOrigins";
 import { createCandidateInvitationToken } from "../../candidateAuth";
 import { emailLanguageFor } from "../../emailLanguage";
-import { buildCandidatePortalInvitationEmailEvent, resolveCandidatePortalInvitationDelivery } from "../../recruitmentEmailTrace";
+import { buildCandidatePortalInvitationEmailEvent, canForceCandidatePortalInvitation, resolveCandidatePortalInvitationDelivery } from "../../recruitmentEmailTrace";
+import { CANDIDATE_INVITATION_FORCED_RESEND_DELAY_MS, candidateInvitationForcedResendAt } from "../../../shared/candidatePortalInvitationResend";
 import { MANUAL_REVIEW_FALLBACK_MODEL, RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "../../recruitmentAnalysis";
 import { getSafeCheckoutOrigin } from "../publicOrigin";
 import { parseAdminDate, parisDateKey } from "../parisTime";
 import { missionRefusal, certificationFactsByApplication } from "./recruitmentShared";
 
 export const adminRecruitmentCandidateRouter = router({
-  sendPortalInvitation: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ input, ctx }) => {
+  // force: « Renvoyer quand même » after an uncertain attempt (REC-14).
+  sendPortalInvitation: adminProcedure.input(z.object({ id: z.number().int().positive(), force: z.boolean().optional() })).mutation(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Base de données indisponible." });
     const application = (await db.select({ id: cvApplications.id, firstName: cvApplications.firstName, email: cvApplications.email, trackingId: cvApplications.trackingId, language: cvApplications.language })
@@ -49,8 +51,15 @@ export const adminRecruitmentCandidateRouter = router({
       .where(eq(recruitmentEmailEvents.applicationId, application.id))
       .orderBy(desc(recruitmentEmailEvents.occurredAt));
     const invitationDelivery = resolveCandidatePortalInvitationDelivery(invitationEvents);
-    if (invitationDelivery.eventType === "email.delivery_unknown") {
-      throw new TRPCError({ code: "CONFLICT", message: "La livraison de l’invitation précédente est incertaine. Vérifiez son suivi avant tout nouvel envoi pour éviter un doublon." });
+    // REC-14: once its tracking is checked, an uncertain invitation is sent again anyway, at
+    // least 10 minutes after that attempt, as the next attempt under its own idempotency key.
+    const uncertain = invitationDelivery.eventType === "email.delivery_unknown";
+    if (uncertain && !input.force) {
+      throw new TRPCError({ code: "CONFLICT", message: `La livraison de l’invitation précédente est incertaine. Vérifiez son suivi avant tout nouvel envoi pour éviter un doublon ; « Renvoyer quand même » est proposé ${CANDIDATE_INVITATION_FORCED_RESEND_DELAY_MS / 60_000} minutes après cette tentative.` });
+    }
+    if (uncertain && !canForceCandidatePortalInvitation(invitationDelivery)) {
+      const resendAt = candidateInvitationForcedResendAt(invitationDelivery.occurredAt!).toLocaleTimeString("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit" });
+      throw new TRPCError({ code: "CONFLICT", message: `La tentative d’invitation incertaine date de moins de ${CANDIDATE_INVITATION_FORCED_RESEND_DELAY_MS / 60_000} minutes : elle peut encore aboutir. « Renvoyer quand même » sera possible à ${resendAt}.` });
     }
     const invitationAttempt = invitationDelivery.attempts + 1;
     const invitationToken = createCandidateInvitationToken(application.id);
@@ -78,11 +87,11 @@ export const adminRecruitmentCandidateRouter = router({
         providerEmailId: null,
         failureCode,
       }, { localEventId: randomUUID() }));
-      await logRecruitmentAction({ applicationId: application.id, adminOpenId: ctx.user.openId, action: "email", metadata: { template: "candidate_portal_invitation", outcome: failureCode === "delivery_exception" ? "unknown" : "failed", trackingId: application.trackingId, attempt: invitationAttempt } });
+      await logRecruitmentAction({ applicationId: application.id, adminOpenId: ctx.user.openId, action: "email", metadata: { template: "candidate_portal_invitation", outcome: failureCode === "delivery_exception" ? "unknown" : "failed", trackingId: application.trackingId, attempt: invitationAttempt, ...(uncertain ? { forced: true } : {}) } });
       throw new TRPCError({
         code: "INTERNAL_SERVER_ERROR",
         message: failureCode === "delivery_exception"
-          ? "La livraison de l’invitation est incertaine. Vérifiez son suivi avant tout nouvel envoi pour éviter un doublon."
+          ? `La livraison de l’invitation est incertaine. Vérifiez son suivi avant tout nouvel envoi pour éviter un doublon ; « Renvoyer quand même » sera proposé dans ${CANDIDATE_INVITATION_FORCED_RESEND_DELAY_MS / 60_000} minutes.`
           : "L’invitation a été refusée par le service d’envoi. L’échec est enregistré pour reprise.",
       });
     }
@@ -101,7 +110,7 @@ export const adminRecruitmentCandidateRouter = router({
       .where(eq(recruitmentEmailEvents.providerEventId, invitationEvent.providerEventId))
       .limit(1);
     if (!existingInvitationEvent) await db.insert(recruitmentEmailEvents).values(invitationEvent);
-    await logRecruitmentAction({ applicationId: application.id, adminOpenId: ctx.user.openId, action: "email", metadata: { template: "candidate_portal_invitation", resendId: result.id, trackingId: application.trackingId, attempt: invitationAttempt } });
+    await logRecruitmentAction({ applicationId: application.id, adminOpenId: ctx.user.openId, action: "email", metadata: { template: "candidate_portal_invitation", resendId: result.id, trackingId: application.trackingId, attempt: invitationAttempt, ...(uncertain ? { forced: true } : {}) } });
     return { success: true };
   }),
   detail: adminProcedure.input(z.object({ id: z.number().int().positive() })).query(async ({ input }) => {
@@ -272,5 +281,24 @@ export const adminRecruitmentFollowUpsRouter = router({
     }).where(eq(recruitmentFollowUpTasks.id, input.id));
     await logRecruitmentAction({ applicationId: task.applicationId, adminOpenId: ctx.user.openId, action: "status_update", metadata: { event: "follow_up", taskId: task.id, status: input.status } });
     return { success: true };
+  }),
+  // ADM-13: « Marquer traitée » or « Ignorer » for the follow-ups selected in
+  // « Relances à faire »: only those still to review, each with its audit
+  // line, in one batch (DATA-01). updated: how many changed.
+  updateMany: adminProcedure.input(z.object({ ids: z.array(z.number().int().positive()).min(1).max(200), status: z.enum(["completed", "dismissed"]) })).mutation(async ({ input, ctx }) => {
+    const db = await getDb();
+    if (!db) throw new Error("Database connection failed");
+    const tasks = await db.select({ id: recruitmentFollowUpTasks.id, applicationId: recruitmentFollowUpTasks.applicationId })
+      .from(recruitmentFollowUpTasks)
+      .where(and(inArray(recruitmentFollowUpTasks.id, input.ids), eq(recruitmentFollowUpTasks.status, "suggested")));
+    if (!tasks.length) return { success: true, updated: 0 };
+    const now = new Date();
+    await db.batch([
+      db.update(recruitmentFollowUpTasks)
+        .set({ status: input.status, completedAt: now, completedByOpenId: ctx.user.openId, updatedAt: now })
+        .where(and(inArray(recruitmentFollowUpTasks.id, tasks.map(task => task.id)), eq(recruitmentFollowUpTasks.status, "suggested"))),
+      recruitmentAuditInsert(db, tasks.map(task => ({ applicationId: task.applicationId, adminOpenId: ctx.user.openId, action: "status_update" as const, metadata: { event: "follow_up", taskId: task.id, status: input.status, batch: true } }))),
+    ]);
+    return { success: true, updated: tasks.length };
   }),
 });
