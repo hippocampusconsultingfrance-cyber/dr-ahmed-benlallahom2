@@ -2,16 +2,18 @@ import type { Express } from "express";
 import { sql } from "drizzle-orm";
 import { getDb } from "../db";
 import { isAuthorizedVercelCronRequest } from "./cronAuth";
-import { getEnvironmentConfigurationStatus, type ProductionRequiredEnvironmentVariable } from "./env";
+import { getEnvironmentConfigurationStatus, type ConfigurationWarning, type ProductionRequiredEnvironmentVariable } from "./env";
 
 /**
  * GET /api/health : sonde de disponibilité pour un service de supervision externe
  * (UptimeRobot, Better Stack, Vercel Checks…). Publique et sans aucun secret : elle
  * ne renvoie que l'état de la base (SELECT 1) et l'état « ok / incomplet » de la
- * configuration. Les NOMS des variables critiques manquantes diraient à n'importe
- * quel visiteur quelle protection est hors service : ils ne sont donnés qu'avec
- * `Authorization: Bearer <CRON_SECRET>`, dans le bandeau de /admin et dans les
- * journaux. Répond 200 si tout va bien, 503 sinon, pour qu'une sonde déclenche une
+ * configuration. Les NOMS des variables critiques manquantes, comme les codes des
+ * incohérences relevées (clé de test en production, clé live en préproduction :
+ * EXPL-20), diraient à n'importe quel visiteur quelle protection est hors service :
+ * ils ne sont donnés qu'avec `Authorization: Bearer <CRON_SECRET>`, dans le bandeau
+ * de /admin et dans les journaux, jamais les valeurs. Répond 200 si tout va bien,
+ * 503 sinon (une incohérence seule n'y change rien), pour qu'une sonde déclenche une
  * alerte sans analyser le corps. Montée avant clerkMiddleware : elle répond même
  * quand la configuration Clerk fait échouer toutes les autres routes /api.
  */
@@ -24,11 +26,11 @@ export type HealthReport = {
   timestamp: string;
   checks: {
     database: { status: DatabaseCheckStatus; latencyMs: number | null };
-    configuration: { status: "ok" | "missing"; missing: ProductionRequiredEnvironmentVariable[] };
+    configuration: { status: "ok" | "missing"; missing: ProductionRequiredEnvironmentVariable[]; warnings: ConfigurationWarning[] };
   };
 };
 
-/** What an anonymous visitor sees: the statuses, never the names of missing variables. */
+/** What an anonymous visitor sees: the statuses, never the names of missing variables nor the warning codes. */
 export type PublicHealthReport = Omit<HealthReport, "checks"> & {
   checks: { database: HealthReport["checks"]["database"]; configuration: { status: HealthReport["checks"]["configuration"]["status"] } };
 };
@@ -95,7 +97,7 @@ export async function buildHealthReport(dependencies: HealthDependencies = {}): 
     timestamp: new Date((dependencies.now ?? Date.now)()).toISOString(),
     checks: {
       database,
-      configuration: { status: configuration.ok ? "ok" : "missing", missing: configuration.missing },
+      configuration: { status: configuration.ok ? "ok" : "missing", missing: configuration.missing, warnings: configuration.warnings },
     },
   };
 }
