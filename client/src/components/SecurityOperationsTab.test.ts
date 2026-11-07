@@ -104,7 +104,7 @@ describe("RGPD-12 — traces des actions sur les données d’une personne", () 
   });
 });
 
-describe("ADM-07 / A11Y-12 — date et gravité", () => {
+describe("ADM-07 / A11Y-12 / ADM-21 — date, gravité et période bloquée", () => {
   it("date chaque évènement à l’heure de Paris, son fuseau dit dans la langue de l’administration", () => {
     view.events = [event(1, "admin_contact_message_deleted", { deleted: 1 })];
     // 07:51 UTC on 26 October 2026, winter time: 08:51 in Paris.
@@ -120,5 +120,16 @@ describe("ADM-07 / A11Y-12 — date et gravité", () => {
     expect(html).toMatch(/<span class="[^"]*text-red-700 [^"]*dark:text-red-300[^"]*">Critique<\/span>/);
     // The count of the events to review, in the same tones.
     expect(html).toMatch(/<div class="[^"]*text-orange-700 [^"]*">2 événement\(s\) à examiner<\/div>/);
+  });
+
+  it("nomme la période bloquée dans les disponibilités, dans chaque langue", () => {
+    view.events = [event(1, "admin_blocked_period_added", null)];
+    const labels = { fr: "Période bloquée dans les disponibilités", en: "Period blocked in the availability", de: "Zeitraum in den Verfügbarkeiten gesperrt", zh: "已在可预约时间中屏蔽一段时期" };
+    for (const [language, label] of Object.entries(labels)) {
+      view.language = language;
+      const html = renderToStaticMarkup(createElement(SecurityOperationsTab));
+      expect(html).toContain(label);
+      expect(html).not.toContain("admin blocked period");
+    }
   });
 });
