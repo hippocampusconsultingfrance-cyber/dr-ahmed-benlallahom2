@@ -1,9 +1,11 @@
-import { and, eq, gt, gte, isNull, lt, lte, or, sql } from "drizzle-orm";
-import { appointments, candidateAccounts, candidateSecurityRateLimits, contactMessages, cvApplications, gdprRequests, medicalQuestions, securityEvents } from "../drizzle/schema";
+import { and, eq, gt, gte, inArray, isNull, lt, lte, ne, notInArray, or, sql } from "drizzle-orm";
+import { appointmentFulfillmentJobs, appointments, candidateAccounts, candidateDocumentProcessingJobs, candidateDocuments, candidateSecurityRateLimits, candidateSessions, contactMessages, cvApplications, cvGoogleDriveExportJobs, cvProcessingJobs, gdprRequests, medicalQuestions, securityEvents } from "../drizzle/schema";
+import { CANDIDATE_DOCUMENT_ACTIVE_JOB_STATUSES } from "../shared/candidateDocumentReanalysis";
 import { getDb } from "./db";
 import { mutationRowCount } from "./dbMutation";
 import { emailLanguageFor } from "./emailLanguage";
 import { notifyOwner } from "./_core/notification";
+import { runWithProcessingDeadline } from "./processingDeadline";
 import { PUBLIC_FORM_DAILY_VOLUME_THRESHOLDS, PUBLIC_FORM_VOLUME_LABELS, type PublicFormVolumeKind } from "./publicFormRateLimit";
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -148,9 +150,72 @@ export async function drainInBatches<T extends { processed: number }>(
   return { processed: batches.reduce((total, batch) => total + batch.processed, 0), batches };
 }
 
+/**
+ * DATA-12: bookings created from this date on, and only those, get back the
+ * post-payment jobs they lack (requeuePaidAppointmentsWithoutFulfillment). An
+ * older one is never replayed: the patient may have been written to another
+ * way since; scripts/db-invariants.sql lists them for the owner.
+ */
+export const PAID_APPOINTMENT_JOB_RECOVERY_SINCE = new Date("2026-11-07T00:00:00Z");
+/**
+ * DATA-12: and only those created within this window. The retention run
+ * deletes a completed post-payment job 30 days after it ends
+ * (FULFILLMENT_JOB_RETENTION_DAYS): past that, a booking paid and served
+ * normally has no job left, and would get its emails again. A booking of the
+ * last week, paid after it was created, still has every job it got; Stripe
+ * itself stops redelivering after 3 days.
+ */
+export const PAID_APPOINTMENT_JOB_RECOVERY_WINDOW_MS = 7 * 24 * HOUR_MS;
+
+type Database = NonNullable<Awaited<ReturnType<typeof getDb>>>;
+
+/** Paid, confirmed bookings created since the recovery went live, within its window (and before `createdBefore`), without a confirmation or invoice job. */
+function paidAppointmentsWithoutFulfillment(db: Database, now: Date, createdBefore?: Date) {
+  const appointmentsWithJob = (jobType: "confirmation" | "invoice") => db.select({ appointmentId: appointmentFulfillmentJobs.appointmentId })
+    .from(appointmentFulfillmentJobs)
+    .where(eq(appointmentFulfillmentJobs.jobType, jobType));
+  const createdSince = Math.max(PAID_APPOINTMENT_JOB_RECOVERY_SINCE.getTime(), now.getTime() - PAID_APPOINTMENT_JOB_RECOVERY_WINDOW_MS);
+  return db.select({ id: appointments.id }).from(appointments).where(and(
+    eq(appointments.paymentStatus, "completed"),
+    eq(appointments.appointmentStatus, "confirmed"),
+    gte(appointments.createdAt, new Date(createdSince)),
+    ...(createdBefore ? [lt(appointments.createdAt, createdBefore)] : []),
+    or(notInArray(appointments.id, appointmentsWithJob("confirmation")), notInArray(appointments.id, appointmentsWithJob("invoice"))),
+  ));
+}
+
+/**
+ * DATA-12: a paid, confirmed booking of the last week whose confirmation or
+ * invoice job was never stored (the database refused it once the payment
+ * was recorded, and Stripe no longer redelivers the event) gets its jobs
+ * back, through the webhook's own idempotent enqueue: a job already there is
+ * kept as it is, so nothing is sent twice. The jobs run in the same pass.
+ */
+export async function requeuePaidAppointmentsWithoutFulfillment(limit = 25, now = new Date()) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const missing = await paidAppointmentsWithoutFulfillment(db, now).orderBy(appointments.id).limit(limit);
+  const { enqueueAppointmentFulfillment } = await import("./appointmentFulfillment");
+  let requeued = 0;
+  for (const appointment of missing) {
+    try {
+      await enqueueAppointmentFulfillment(appointment.id);
+      requeued += 1;
+    } catch (error) {
+      console.error("[AppointmentFulfillment] Missing post-payment jobs not queued:", safeErrorName(error));
+    }
+  }
+  return { requeued };
+}
+
 export async function runAppointmentFulfillmentWorker(options: { batchSize: number; maxBatches: number; budgetMs: number }) {
   const { processDueAppointmentFulfillmentJobs, recoverStaleAppointmentFulfillmentJobs } = await import("./appointmentFulfillment");
   const recovery = await recoverStaleAppointmentFulfillmentJobs();
+  // A failure here leaves the jobs already queued to their run.
+  const missingJobs = await requeuePaidAppointmentsWithoutFulfillment().catch(error => {
+    console.error("[AppointmentFulfillment] Recovery of paid bookings without jobs failed:", safeErrorName(error));
+    return null;
+  });
   const { processed, batches } = await drainInBatches(() => processDueAppointmentFulfillmentJobs(options.batchSize), options);
   // DATA-02: this job runs half a day after the reminder run, still within
   // the key's 24 hours: it takes back the reminders a stopped run left reserved.
@@ -158,24 +223,44 @@ export async function runAppointmentFulfillmentWorker(options: { batchSize: numb
     console.error("[Reminder] Recovery of reserved reminders failed:", safeErrorName(error));
     return null;
   });
-  return { recovery, processed, results: batches.flatMap(batch => batch.results), reminderRecovery };
+  return { recovery, missingJobs, processed, results: batches.flatMap(batch => batch.results), reminderRecovery };
 }
 
+/**
+ * End of the vault documents' analyses, from the start of their cron (EXPL-12):
+ * the 60 s function limit, less the last writes and the monitor's ping (3 s).
+ * Each slow step, the AI requests included, is cut to the time left.
+ */
+export const CANDIDATE_DOCUMENT_PROCESSING_DEADLINE_MS = 50_000;
+
 export async function runCandidateDocumentProcessingWorker(options: { batchSize: number; maxBatches: number; budgetMs: number }) {
-  const { processDueCandidateDocumentAnalysisJobs, recreateMissingCandidateDocumentAnalysisJobs } = await import("./candidateDocumentProcessing");
-  // DATA-02: a document whose upload stopped before its job gets it first;
+  const startedAt = Date.now();
+  const { processDueCandidateDocumentAnalysisJobs, recoverStaleCandidateDocumentJobs, recreateMissingCandidateDocumentAnalysisJobs } = await import("./candidateDocumentProcessing");
+  // EXPL-12: a job a stopped run left "running" goes back to the queue first;
   // a failure here leaves the documents already queued to their analysis.
+  const recovery = await recoverStaleCandidateDocumentJobs().catch(error => {
+    console.error("[CandidateDocumentProcessing] Interrupted job recovery failed:", safeErrorName(error));
+    return { recovered: 0, exhausted: 0, closed: 0 };
+  });
+  // DATA-02: a document whose upload stopped before its job gets it first.
   const { recreated } = await recreateMissingCandidateDocumentAnalysisJobs().catch(error => {
     console.error("[CandidateDocumentProcessing] Missing job recovery failed:", safeErrorName(error));
     return { recreated: 0 };
   });
-  const { processed, batches } = await drainInBatches(() => processDueCandidateDocumentAnalysisJobs(options.batchSize), options);
+  const { processed, batches } = await runWithProcessingDeadline(
+    startedAt + CANDIDATE_DOCUMENT_PROCESSING_DEADLINE_MS,
+    () => drainInBatches(() => processDueCandidateDocumentAnalysisJobs(options.batchSize), options),
+  );
   return {
+    jobsRecovered: recovery.recovered,
+    jobsExhausted: recovery.exhausted,
+    jobsClosed: recovery.closed,
     jobsRecreated: recreated,
     processed,
     completed: batches.reduce((total, batch) => total + batch.completed, 0),
     retried: batches.reduce((total, batch) => total + batch.retried, 0),
     needsReview: batches.reduce((total, batch) => total + batch.needsReview, 0),
+    released: batches.reduce((total, batch) => total + batch.released, 0),
   };
 }
 
@@ -196,15 +281,98 @@ export async function runSecurityPostureReview(now = new Date()) {
   const quotaEvents = recentAlerts.filter(event => event.category === "resend_quota_exceeded");
   const busyPublicForms = await publicFormsAboveDailyThreshold(db, since);
   const pending = await ownerActionsPending();
+  const dataIntegrity = await dataIntegrityPending(db, now);
+  const integrityFinding = dataIntegrityFinding(dataIntegrity);
   const findings = [
     ...(recentAlerts.length > 0 ? [`${recentAlerts.length} événement(s) de sécurité à gravité élevée ont été détectés sur les dernières 24 heures. Consultez le journal administrateur.`] : []),
     ...(quotaEvents.length > 0 ? [`Quota Resend épuisé (${resendQuotaLabel(quotaEvents)}) : ${quotaEvents.length} email(s) refusé(s) faute de quota sur les dernières 24 heures. Tant que le quota reste épuisé, aucun email ne part : codes de connexion administrateur, emails aux patients après paiement, alertes. Vérifiez la limite de votre offre dans Resend.`] : []),
     ...busyPublicForms.map(kind => `Seuil quotidien dépassé pour les ${PUBLIC_FORM_VOLUME_LABELS[kind]} : plus de ${PUBLIC_FORM_DAILY_VOLUME_THRESHOLDS[kind]} enregistrements sur les dernières 24 heures. Vérifiez dans l’administration qu’il ne s’agit pas d’envois automatisés.`),
     ...(pending.googleDriveReconnectRequired ? ["Google Drive à reconnecter : Google refuse l’autorisation utilisée pour copier les CV, les copies sont suspendues. Onglet Candidatures, bouton « Reconnexion Google Drive requise » ; les copies repartiront après la reconnexion."] : []),
     ...(pending.cvAnalysesAwaitingAiCredit > 0 ? [`Analyse IA des CV indisponible (facturation du fournisseur) : ${pending.cvAnalysesAwaitingAiCredit >= AWAITING_AI_CREDIT_CAP ? "au moins " : ""}${pending.cvAnalysesAwaitingAiCredit} dossier(s) attendent leur analyse. Rétablissez le moyen de paiement ou le crédit dans Vercel > AI Gateway, puis cliquez sur « Mettre à jour / reprendre l’IA » dans l’onglet Candidatures.`] : []),
+    ...(integrityFinding ? [integrityFinding] : []),
   ];
   if (findings.length > 0) await notifyOwner({ title: "Bilan quotidien de sécurité", content: findings.join("\n\n") });
-  return { available: true as const, highSeverityEvents24h: recentAlerts.length, resendQuotaEvents24h: quotaEvents.length, busyPublicForms, ...pending };
+  return { available: true as const, highSeverityEvents24h: recentAlerts.length, resendQuotaEvents24h: quotaEvents.length, busyPublicForms, ...pending, dataIntegrity };
+}
+
+/** Each data-integrity count stops past this many (« au moins »). */
+const DATA_INTEGRITY_CAP = 100;
+/**
+ * DATA-14: a state the scheduled runs repair by themselves (a missing or
+ * interrupted job) is reported once a whole day of runs has gone by without
+ * repairing it, never while a run may still be about to.
+ */
+const DATA_INTEGRITY_REPAIR_DELAY_MS = 48 * HOUR_MS;
+const QUEUE_JOB_STATUSES = ["queued", "running", "retry", "completed", "failed"] as const;
+
+type DataIntegrityCounts = Record<keyof typeof DATA_INTEGRITY_LABELS, number | null>;
+
+const DATA_INTEGRITY_LABELS = {
+  paidAppointmentsWithoutJobs: "rendez-vous payé(s) il y a 2 à 7 jours sans confirmation ou facture en file",
+  documentsWithoutJob: "document(s) du coffre en attente d’analyse depuis plus de 2 jours sans tâche pour l’analyser",
+  interruptedJobs: "tâche(s) restée(s) « en cours » depuis plus de 2 jours (paiements, CV, coffre, copies Drive)",
+  jobsWithUnknownStatus: "tâche(s) dont le statut ne fait pas partie de la liste : aucun passage ne les traitera",
+  sessionsOfClosedAccounts: "session(s) candidat encore ouverte(s) sur un compte fermé ou effacé",
+  sessionsWithoutAccount: "session(s) candidat dont le compte n’existe plus",
+} as const;
+
+/**
+ * DATA-14: the checks of scripts/db-invariants.sql that no normal state
+ * triggers, reported every day while they last, like the owner's other
+ * pending actions. Each count stops past DATA_INTEGRITY_CAP; a check that
+ * fails is null, and the others are still reported.
+ */
+async function dataIntegrityPending(db: Database, now: Date): Promise<DataIntegrityCounts> {
+  const repairedBefore = new Date(now.getTime() - DATA_INTEGRITY_REPAIR_DELAY_MS);
+  const limit = DATA_INTEGRITY_CAP + 1;
+  const counted = (check: string, queries: () => Array<PromiseLike<unknown[]>>) => Promise.all(queries())
+    .then(results => Math.min(limit, results.reduce((total, rows) => total + rows.length, 0)))
+    .catch(error => {
+      console.error(`[SecurityReview] Data integrity check ${check} failed:`, safeErrorName(error));
+      return null;
+    });
+  const activeDocumentJobs = db.select({ documentId: candidateDocumentProcessingJobs.documentId }).from(candidateDocumentProcessingJobs)
+    .where(inArray(candidateDocumentProcessingJobs.status, [...CANDIDATE_DOCUMENT_ACTIVE_JOB_STATUSES]));
+  const [paidAppointmentsWithoutJobs, documentsWithoutJob, interruptedJobs, jobsWithUnknownStatus, sessionsOfClosedAccounts, sessionsWithoutAccount] = await Promise.all([
+    counted("paid_appointments_without_jobs", () => [paidAppointmentsWithoutFulfillment(db, now, repairedBefore).limit(limit)]),
+    counted("documents_without_job", () => [db.select({ id: candidateDocuments.id }).from(candidateDocuments).where(and(
+      eq(candidateDocuments.analysisStatus, "queued"),
+      inArray(candidateDocuments.status, ["uploaded", "validating"]),
+      ne(candidateDocuments.validationStatus, "rejected"),
+      lt(candidateDocuments.createdAt, repairedBefore),
+      notInArray(candidateDocuments.id, activeDocumentJobs),
+    )).limit(limit)]),
+    // Each worker takes back the jobs a stopped run left "running" for 15 min.
+    counted("interrupted_jobs", () => [
+      db.select({ id: appointmentFulfillmentJobs.id }).from(appointmentFulfillmentJobs).where(and(eq(appointmentFulfillmentJobs.status, "running"), lt(appointmentFulfillmentJobs.startedAt, repairedBefore))).limit(limit),
+      db.select({ id: cvProcessingJobs.id }).from(cvProcessingJobs).where(and(eq(cvProcessingJobs.status, "running"), lt(cvProcessingJobs.startedAt, repairedBefore))).limit(limit),
+      db.select({ id: candidateDocumentProcessingJobs.id }).from(candidateDocumentProcessingJobs).where(and(eq(candidateDocumentProcessingJobs.status, "running"), lt(candidateDocumentProcessingJobs.startedAt, repairedBefore))).limit(limit),
+      db.select({ id: cvGoogleDriveExportJobs.id }).from(cvGoogleDriveExportJobs).where(and(eq(cvGoogleDriveExportJobs.status, "running"), lt(cvGoogleDriveExportJobs.startedAt, repairedBefore))).limit(limit),
+    ]),
+    // A job put back by hand in SQL with a misspelt status ('queue', 'pending').
+    counted("jobs_with_unknown_status", () => [
+      db.select({ id: appointmentFulfillmentJobs.id }).from(appointmentFulfillmentJobs).where(notInArray(appointmentFulfillmentJobs.status, [...QUEUE_JOB_STATUSES])).limit(limit),
+      db.select({ id: cvProcessingJobs.id }).from(cvProcessingJobs).where(notInArray(cvProcessingJobs.status, [...QUEUE_JOB_STATUSES])).limit(limit),
+      db.select({ id: candidateDocumentProcessingJobs.id }).from(candidateDocumentProcessingJobs).where(notInArray(candidateDocumentProcessingJobs.status, [...QUEUE_JOB_STATUSES])).limit(limit),
+      db.select({ id: cvGoogleDriveExportJobs.id }).from(cvGoogleDriveExportJobs).where(notInArray(cvGoogleDriveExportJobs.status, [...QUEUE_JOB_STATUSES])).limit(limit),
+    ]),
+    counted("sessions_of_closed_accounts", () => [db.select({ id: candidateSessions.id }).from(candidateSessions).where(and(
+      isNull(candidateSessions.revokedAt),
+      gt(candidateSessions.expiresAt, now),
+      inArray(candidateSessions.candidateId, db.select({ id: candidateAccounts.id }).from(candidateAccounts).where(ne(candidateAccounts.status, "active"))),
+    )).limit(limit)]),
+    counted("sessions_without_account", () => [db.select({ id: candidateSessions.id }).from(candidateSessions)
+      .where(notInArray(candidateSessions.candidateId, db.select({ id: candidateAccounts.id }).from(candidateAccounts))).limit(limit)]),
+  ]);
+  return { paidAppointmentsWithoutJobs, documentsWithoutJob, interruptedJobs, jobsWithUnknownStatus, sessionsOfClosedAccounts, sessionsWithoutAccount };
+}
+
+function dataIntegrityFinding(counts: DataIntegrityCounts) {
+  const found = (Object.keys(DATA_INTEGRITY_LABELS) as Array<keyof DataIntegrityCounts>)
+    .filter(check => (counts[check] ?? 0) > 0)
+    .map(check => `${counts[check]! > DATA_INTEGRITY_CAP ? `au moins ${DATA_INTEGRITY_CAP}` : counts[check]} ${DATA_INTEGRITY_LABELS[check]}`);
+  if (found.length === 0) return null;
+  return `Contrôle de cohérence de la base : ${found.join(" ; ")}. Les passages automatiques ne les ont pas réparés : collez scripts/db-invariants.sql dans l’éditeur SQL de Neon pour les retrouver.`;
 }
 
 function resendQuotaLabel(events: Array<{ metadata: string | null }>) {

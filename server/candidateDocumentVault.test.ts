@@ -134,8 +134,10 @@ describe("LEGAL-12 — catégories sensibles et analyse IA des documents candida
     const result = await uploadDocument(baseUrl, sessionToken, { category: "diploma", buffer: validPdfBuffer(), name: "diplome.pdf" });
     refusal.mockRestore();
     error.mockRestore();
-    expect(result.status).toBe(500);
+    // DATA-06: the document is stored and listed: the candidate is not told to send it again.
+    expect(result.status).toBe(201);
     const [document] = db().rows(candidateDocuments);
+    expect(result.body).toEqual({ success: true, documentId: document!.id });
     expect(document).toMatchObject({ category: "diploma", analysisStatus: "queued" });
     expect(db().rows(candidateDocumentProcessingJobs)).toHaveLength(0);
 
@@ -146,8 +148,23 @@ describe("LEGAL-12 — catégories sensibles et analyse IA des documents candida
     await expect(worker()).resolves.toMatchObject({ jobsRecreated: 1, processed: 1, completed: 1 });
     expect(state.analyses).toEqual(["diploma"]);
     expect(document).toMatchObject({ analysisStatus: "completed", status: "needs_review" });
-    expect(db().rows(candidateDocumentAuditLogs).map(log => log.action)).toEqual(["analysis_requested", "analysis_completed"]);
+    expect(db().rows(candidateDocumentAuditLogs).map(log => log.action)).toEqual(["upload", "analysis_requested", "analysis_completed"]);
     await expect(worker()).resolves.toMatchObject({ jobsRecreated: 0, processed: 0 });
+  });
+
+  it("un journal de dépôt refusé après l’enregistrement du document ne fait pas échouer le dépôt (DATA-06)", async () => {
+    const insert = db().insert.bind(db());
+    const refusal = vi.spyOn(db(), "insert").mockImplementation((table => table === candidateDocumentAuditLogs
+      ? { values: () => Promise.reject(new Error("Failed query: insert into \"candidate_document_audit_logs\"")) }
+      : insert(table)) as typeof insert);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const result = await uploadDocument(baseUrl, sessionToken, { category: "diploma", buffer: validPdfBuffer(), name: "diplome.pdf" });
+    refusal.mockRestore();
+    error.mockRestore();
+
+    expect(result.status).toBe(201);
+    expect(db().rows(candidateDocuments)).toHaveLength(1);
+    expect(db().rows(candidateDocumentProcessingJobs)).toMatchObject([{ documentId: result.body.documentId, status: "queued" }]);
   });
 
   it("refuse au-delà de 4 Mo avec un message clair et accepte un fichier à la limite (OPS-09 / CAND-06)", async () => {

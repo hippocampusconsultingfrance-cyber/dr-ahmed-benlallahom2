@@ -1,11 +1,30 @@
 import { adminProcedure, router } from "../../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { canRequestCandidateDocumentReanalysis } from "../../../shared/candidateDocumentReanalysis";
+import { CANDIDATE_DOCUMENT_ACTIVE_JOB_STATUSES, CANDIDATE_DOCUMENT_JOB_STALE_AFTER_MS, canRequestCandidateDocumentReanalysis } from "../../../shared/candidateDocumentReanalysis";
 import { candidateDocumentAllowsAiAnalysis } from "../../../shared/candidateDocumentCategories";
 import { getDb } from "../../db";
-import { candidateAccounts, candidateDocumentAuditLogs, candidateDocuments } from "../../../drizzle/schema";
-import { eq, desc } from "drizzle-orm";
+import { candidateAccounts, candidateDocumentAuditLogs, candidateDocumentProcessingJobs, candidateDocuments } from "../../../drizzle/schema";
+import { and, eq, desc, gt, inArray, lte, ne, or } from "drizzle-orm";
+
+type Database = NonNullable<Awaited<ReturnType<typeof getDb>>>;
+
+const staleRunningSince = () => new Date(Date.now() - CANDIDATE_DOCUMENT_JOB_STALE_AFTER_MS);
+
+/**
+ * Documents among `ids` with an analysis job queued, retried or running
+ * (DATA-06); a job "running" for 15 min was left by a run that stopped
+ * (EXPL-12) and no longer counts.
+ */
+async function documentsWithActiveAnalysisJob(db: Database, ids: number[]) {
+  if (ids.length === 0) return new Set<number>();
+  const jobs = await db.select({ documentId: candidateDocumentProcessingJobs.documentId }).from(candidateDocumentProcessingJobs).where(and(
+    inArray(candidateDocumentProcessingJobs.documentId, ids),
+    inArray(candidateDocumentProcessingJobs.status, [...CANDIDATE_DOCUMENT_ACTIVE_JOB_STATUSES]),
+    or(ne(candidateDocumentProcessingJobs.status, "running"), gt(candidateDocumentProcessingJobs.startedAt, staleRunningSince())),
+  ));
+  return new Set(jobs.map(job => job.documentId));
+}
 
 export const adminCandidateDocumentsRouter = router({
   list: adminProcedure
@@ -17,7 +36,7 @@ export const adminCandidateDocumentsRouter = router({
       const db = await getDb();
       if (!db) return [];
       const conditions = input.status ? eq(candidateDocuments.status, input.status) : undefined;
-      return db.select({
+      const documents = await db.select({
         id: candidateDocuments.id,
         candidateId: candidateDocuments.candidateId,
         candidateEmail: candidateAccounts.email,
@@ -40,6 +59,9 @@ export const adminCandidateDocumentsRouter = router({
         createdAt: candidateDocuments.createdAt,
         analyzedAt: candidateDocuments.analyzedAt,
       }).from(candidateDocuments).innerJoin(candidateAccounts, eq(candidateDocuments.candidateId, candidateAccounts.id)).where(conditions).orderBy(desc(candidateDocuments.createdAt)).limit(input.limit);
+      // « Relancer l’analyse » is offered by the job, not the document's status alone (DATA-06).
+      const active = await documentsWithActiveAnalysisJob(db, documents.map(document => document.id));
+      return documents.map(document => ({ ...document, hasActiveAnalysisJob: active.has(document.id) }));
     }),
   review: adminProcedure
     .input(z.object({ id: z.number().int().positive(), status: z.enum(["reviewed", "rejected", "archived"]), notes: z.string().trim().min(1).max(5000) }))
@@ -62,7 +84,16 @@ export const adminCandidateDocumentsRouter = router({
       if (!candidateDocumentAllowsAiAnalysis(document.category)) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Ce type de document est réservé à la revue humaine : il n’est jamais transmis à l’IA." });
       }
-      if (!canRequestCandidateDocumentReanalysis(document)) {
+      // EXPL-12: the job a stopped run left "running" is closed here rather
+      // than at the next daily run, which would otherwise queue it again.
+      await db.update(candidateDocumentProcessingJobs).set({ status: "completed", finishedAt: new Date(), lastError: "worker_interrupted_reanalysis_requested" }).where(and(
+        eq(candidateDocumentProcessingJobs.documentId, document.id),
+        eq(candidateDocumentProcessingJobs.status, "running"),
+        lte(candidateDocumentProcessingJobs.startedAt, staleRunningSince()),
+      ));
+      // A document left waiting or « en cours » with no job queued, retried or running can be analysed again (DATA-06).
+      const hasActiveAnalysisJob = (await documentsWithActiveAnalysisJob(db, [document.id])).has(document.id);
+      if (!canRequestCandidateDocumentReanalysis({ ...document, hasActiveAnalysisJob })) {
         throw new TRPCError({ code: document.status === "rejected" ? "BAD_REQUEST" : "CONFLICT", message: document.status === "rejected" ? "Un document refusé ne peut pas être relancé." : "Une analyse de ce document est déjà en cours." });
       }
       const { enqueueCandidateDocumentAnalysis } = await import("../../candidateDocumentProcessing");

@@ -784,10 +784,13 @@ export async function processDueCvGoogleDriveExports(limit = BATCH_SIZE, applica
   const results: Array<Record<string, unknown>> = [];
   for (const candidate of candidates) {
     const startedAt = new Date();
+    // Claimed on its state and attempts, like the other queues, never on an
+    // exact scheduledFor: read back to the millisecond, a date written to the
+    // microsecond (a copy requeued by hand in SQL with now()) would never
+    // match it again, and the copy would stay queued for good (EXPL-17).
     const claimed = await db.update(cvGoogleDriveExportJobs).set({ status: "running", attempts: candidate.attempts + 1, startedAt, finishedAt: null, updatedAt: startedAt }).where(and(
       eq(cvGoogleDriveExportJobs.id, candidate.id),
       eq(cvGoogleDriveExportJobs.status, candidate.status),
-      eq(cvGoogleDriveExportJobs.scheduledFor, candidate.scheduledFor),
       lte(cvGoogleDriveExportJobs.scheduledFor, startedAt),
       eq(cvGoogleDriveExportJobs.attempts, candidate.attempts),
       lt(cvGoogleDriveExportJobs.attempts, cvGoogleDriveExportJobs.maxAttempts),

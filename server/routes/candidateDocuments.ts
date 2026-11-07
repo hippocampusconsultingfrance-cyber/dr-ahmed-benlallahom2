@@ -136,7 +136,15 @@ export function registerCandidateDocumentRoutes(app: Express) {
           return;
         }
         const documentId = Number(result[0].id);
-        if (aiAnalysis) await db.insert(candidateDocumentProcessingJobs).values({ documentId, status: "queued" });
+        // DATA-06: the document is now stored and listed in the candidate's
+        // space. A job or journal entry refused from here on is logged and the
+        // upload still succeeds, so the candidate does not send it a second
+        // time: the scheduled run gives a document left without its job the
+        // missing one (recreateMissingCandidateDocumentAnalysisJobs).
+        if (aiAnalysis) {
+          await db.insert(candidateDocumentProcessingJobs).values({ documentId, status: "queued" })
+            .catch(jobError => console.error("Candidate document analysis job not queued, left to the scheduled run:", safeErrorName(jobError)));
+        }
         await db.insert(candidateDocumentAuditLogs).values({
           candidateId: candidate.id,
           documentId,
@@ -144,7 +152,7 @@ export function registerCandidateDocumentRoutes(app: Express) {
           actorReference: String(candidate.id),
           action: "upload",
           metadata: JSON.stringify({ category: parsed.data.category, mimeType: validation.mimeType, checksum: validation.checksum }),
-        });
+        }).catch(logError => console.error("Candidate document upload not journaled:", safeErrorName(logError)));
         res.status(201).json({ success: true, documentId });
       } catch (error) {
         console.error("Candidate document upload error:", safeErrorName(error));

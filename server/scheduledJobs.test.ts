@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { appointments } from "../drizzle/schema";
+import { appointmentFulfillmentJobs, appointments } from "../drizzle/schema";
 import { createMemoryPg, type MemoryPg } from "./testing/memoryPgProxy";
 
 const database = vi.hoisted(() => ({ getDb: vi.fn() }));
@@ -7,20 +7,25 @@ const notifications = vi.hoisted(() => ({ sendReminderEmail: vi.fn(async (..._ar
 vi.mock("./db", () => ({ getDb: database.getDb }));
 vi.mock("./_core/notifications", () => notifications);
 vi.mock("./_core/notification", () => ({ notifyOwner: vi.fn(async () => true) }));
-vi.mock("./appointmentFulfillment", () => ({
+const fulfillment = vi.hoisted(() => ({
   recoverStaleAppointmentFulfillmentJobs: vi.fn(async () => ({ recovered: 0 })),
   processDueAppointmentFulfillmentJobs: vi.fn(async () => ({ processed: 0, results: [] })),
+  enqueueAppointmentFulfillment: vi.fn(async (_appointmentId: number) => undefined),
 }));
+vi.mock("./appointmentFulfillment", () => fulfillment);
 const documentJobs = vi.hoisted(() => ({
+  recoverStaleCandidateDocumentJobs: vi.fn(async () => ({ recovered: 0, exhausted: 0, closed: 0 })),
   recreateMissingCandidateDocumentAnalysisJobs: vi.fn(async () => ({ recreated: 0 })),
-  processDueCandidateDocumentAnalysisJobs: vi.fn(async () => ({ processed: 0, completed: 0, retried: 0, needsReview: 0 })),
+  processDueCandidateDocumentAnalysisJobs: vi.fn(async () => ({ processed: 0, completed: 0, retried: 0, needsReview: 0, released: 0 })),
 }));
 vi.mock("./candidateDocumentProcessing", () => documentJobs);
 
 import {
   DAILY_REMINDER_WINDOW,
   drainInBatches,
+  PAID_APPOINTMENT_JOB_RECOVERY_SINCE,
   reminderWindowBounds,
+  requeuePaidAppointmentsWithoutFulfillment,
   runAppointmentFulfillmentWorker,
   runCandidateDocumentProcessingWorker,
   sendDueAppointmentReminders,
@@ -42,7 +47,7 @@ const remindedTrackingIds = () => notifications.sendReminderEmail.mock.calls.map
 
 beforeEach(() => {
   vi.clearAllMocks();
-  memory = createMemoryPg([appointments]);
+  memory = createMemoryPg([appointments, appointmentFulfillmentJobs]);
   database.getDb.mockResolvedValue(memory.db);
   vi.spyOn(console, "log").mockImplementation(() => undefined);
 });
@@ -174,15 +179,67 @@ describe("envoi des rappels", () => {
   });
 });
 
+describe("rendez-vous payés restés sans leurs envois (DATA-12)", () => {
+  // Ten days after the recovery went live.
+  const recoveryNow = new Date(PAID_APPOINTMENT_JOB_RECOVERY_SINCE.getTime() + 240 * HOUR);
+  const yesterday = new Date(recoveryNow.getTime() - 24 * HOUR);
+  const seedJob = (appointmentId: number, jobType: string) => memory.seed(appointmentFulfillmentJobs, [{ appointment_id: appointmentId, job_type: jobType, status: "completed", attempts: 1 }]);
+
+  it("remet en file les envois d’un rendez-vous payé et confirmé de la dernière semaine sans tâche de confirmation ou de facture, créé depuis la mise en service de la reprise", async () => {
+    const onlyOwner = seedAppointment(1, { createdAt: yesterday });
+    seedJob(1, "owner");
+    seedAppointment(2, { createdAt: yesterday });
+    seedAppointment(3, { createdAt: new Date(recoveryNow.getTime() - 6 * 24 * HOUR) });
+    seedJob(3, "confirmation");
+    seedAppointment(4, { createdAt: yesterday });
+    for (const jobType of ["owner", "confirmation", "invoice"]) seedJob(4, jobType);
+    // Older than the recovery, refunded, unpaid, cancelled: never replayed.
+    seedAppointment(5, { createdAt: new Date(PAID_APPOINTMENT_JOB_RECOVERY_SINCE.getTime() - HOUR) });
+    seedAppointment(6, { createdAt: yesterday, payment_status: "refunded" });
+    seedAppointment(7, { createdAt: yesterday, payment_status: "pending", appointment_status: "held" });
+    seedAppointment(8, { createdAt: yesterday, appointment_status: "cancelled" });
+    // Booked eight days ago, after the go-live: past the window, its completed jobs may already be purged.
+    seedAppointment(9, { createdAt: new Date(recoveryNow.getTime() - 8 * 24 * HOUR) });
+
+    await expect(requeuePaidAppointmentsWithoutFulfillment(25, recoveryNow)).resolves.toEqual({ requeued: 3 });
+    expect(fulfillment.enqueueAppointmentFulfillment.mock.calls.map(([id]) => id)).toEqual([onlyOwner.id, 2, 3]);
+  });
+
+  it("le travail quotidien les remet en file avant de traiter la file, et traite la file même quand la reprise échoue", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    seedAppointment(1, { createdAt: new Date(Math.max(PAID_APPOINTMENT_JOB_RECOVERY_SINCE.getTime(), Date.now() - HOUR)) });
+    const order: string[] = [];
+    fulfillment.enqueueAppointmentFulfillment.mockImplementationOnce(async () => { order.push("enqueue"); });
+    fulfillment.processDueAppointmentFulfillmentJobs.mockImplementationOnce(async () => { order.push("process"); return { processed: 0, results: [] }; });
+
+    await expect(runAppointmentFulfillmentWorker({ batchSize: 5, maxBatches: 4, budgetMs: 35_000 })).resolves.toMatchObject({ missingJobs: { requeued: 1 } });
+    expect(order).toEqual(["enqueue", "process"]);
+
+    memory.failNext(/^select "id" from "appointments"/);
+    await expect(runAppointmentFulfillmentWorker({ batchSize: 5, maxBatches: 4, budgetMs: 35_000 })).resolves.toMatchObject({ missingJobs: null });
+    expect(fulfillment.processDueAppointmentFulfillmentJobs).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe("traitement quotidien des documents du coffre", () => {
   it("analyse les documents en file même quand la recréation des tâches manquantes échoue (DATA-02)", async () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     documentJobs.recreateMissingCandidateDocumentAnalysisJobs.mockRejectedValueOnce(new Error("candidate_document_database_unavailable"));
-    documentJobs.processDueCandidateDocumentAnalysisJobs.mockResolvedValueOnce({ processed: 1, completed: 1, retried: 0, needsReview: 0 });
+    documentJobs.processDueCandidateDocumentAnalysisJobs.mockResolvedValueOnce({ processed: 1, completed: 1, retried: 0, needsReview: 0, released: 0 });
 
     await expect(runCandidateDocumentProcessingWorker({ batchSize: 1, maxBatches: 6, budgetMs: 20_000 }))
-      .resolves.toEqual({ jobsRecreated: 0, processed: 1, completed: 1, retried: 0, needsReview: 0 });
+      .resolves.toEqual({ jobsRecovered: 0, jobsExhausted: 0, jobsClosed: 0, jobsRecreated: 0, processed: 1, completed: 1, retried: 0, needsReview: 0, released: 0 });
     expect(documentJobs.processDueCandidateDocumentAnalysisJobs).toHaveBeenCalledTimes(2);
+  });
+
+  it("analyse les documents en file même quand la reprise des tâches interrompues échoue (EXPL-12)", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    documentJobs.recoverStaleCandidateDocumentJobs.mockRejectedValueOnce(new Error("candidate_document_database_unavailable"));
+    documentJobs.recreateMissingCandidateDocumentAnalysisJobs.mockResolvedValueOnce({ recreated: 1 });
+    documentJobs.processDueCandidateDocumentAnalysisJobs.mockResolvedValueOnce({ processed: 1, completed: 0, retried: 1, needsReview: 0, released: 0 });
+
+    await expect(runCandidateDocumentProcessingWorker({ batchSize: 1, maxBatches: 6, budgetMs: 20_000 }))
+      .resolves.toEqual({ jobsRecovered: 0, jobsExhausted: 0, jobsClosed: 0, jobsRecreated: 1, processed: 1, completed: 0, retried: 1, needsReview: 0, released: 0 });
   });
 });
 
