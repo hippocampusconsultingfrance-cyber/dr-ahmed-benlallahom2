@@ -977,6 +977,15 @@ export function candidatePortalAccessEmailFailureCode(error: unknown): Candidate
   return "delivery_exception";
 }
 
+/**
+ * REC-14: Resend answered 409 concurrent_idempotent_requests, another request under the same
+ * idempotency key being still in progress (« Renvoyer quand même » clicked in two tabs): this
+ * one sent nothing, and that one, which Resend sends once, records its own outcome.
+ */
+export function isConcurrentCandidatePortalAccessEmail(error: unknown): boolean {
+  return error instanceof CandidatePortalAccessEmailError && error.providerErrorName === "concurrent_idempotent_requests";
+}
+
 function resendCandidateAccessFailure(error: { name?: string; statusCode?: number | null }): CandidatePortalAccessEmailError {
   const statusCode = typeof error.statusCode === "number" ? error.statusCode : null;
   const providerErrorName = typeof error.name === "string" ? error.name : null;

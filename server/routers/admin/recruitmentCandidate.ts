@@ -14,7 +14,7 @@ import {
   recruitmentFollowUpTasks,
 } from "../../../drizzle/schema";
 import { and, eq, sql, desc, getTableColumns, inArray } from "drizzle-orm";
-import { sendCandidatePortalAccessEmail, candidatePortalAccessEmailFailureCode } from "../../_core/notifications";
+import { sendCandidatePortalAccessEmail, candidatePortalAccessEmailFailureCode, isConcurrentCandidatePortalAccessEmail } from "../../_core/notifications";
 import { recordWithRecruitmentAudit, recruitmentAuditInsert, traceRecruitmentActionDone } from "../../recruitmentAudit";
 import { analysedCertificationNames, CERTIFICATION_NAME_MAX_LENGTH, certificationFacts, declaredCertificationNames, sameRecruitmentFact } from "../../clientBriefMatching";
 import { certificationDateIsCurrent, latestCertificationRenewalDay, CERTIFICATION_RENEWAL_MAX_YEARS } from "../../../shared/recruitmentFactOrigins";
@@ -76,6 +76,11 @@ export const adminRecruitmentCandidateRouter = router({
         idempotencyKey: `candidate-portal-invitation-${application.trackingId}-attempt-${invitationAttempt}`,
       });
     } catch (error) {
+      // REC-14: the same attempt sent at the same time from another tab, still in progress: no
+      // uncertain attempt recorded for it, the other request records what becomes of it.
+      if (isConcurrentCandidatePortalAccessEmail(error)) {
+        throw new TRPCError({ code: "CONFLICT", message: "Une autre demande d’envoi de cette invitation est en cours (autre onglet ou autre administrateur) : le service d’envoi ne la délivre qu’une fois. Son résultat s’affiche dans le suivi de la candidature." });
+      }
       const failureCode = candidatePortalAccessEmailFailureCode(error);
       await db.insert(recruitmentEmailEvents).values(buildCandidatePortalInvitationEmailEvent({
         applicationId: application.id,
