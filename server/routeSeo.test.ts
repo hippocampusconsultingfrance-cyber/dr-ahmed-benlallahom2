@@ -21,7 +21,7 @@ describe("route SEO initial head", () => {
   });
 
   it("reconnaît les routes publiques profondes sans les marquer introuvables", () => {
-    for (const path of ["/faq", "/search", "/error", "/maintenance", "/vvip-offshore", "/recruitment/unsubscribe", "/questions-anesthesie"]) {
+    for (const path of ["/faq", "/search", "/error", "/maintenance", "/recruitment/vvip-offshore", "/recruitment/unsubscribe", "/questions-anesthesie"]) {
       expect(getRouteSeo(path).notFound, path).not.toBe(true);
     }
   });

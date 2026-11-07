@@ -54,7 +54,10 @@ describe("une seule source de vérité pour le <head> (SEO-02 / PUB-SEO-01)", ()
     const search = resolveClientSeo("/search", "fr", { title: "x", description: "y", noIndex: true });
     expect(search.canonicalUrl).toBe("https://drahmedbenlallahom.com/search");
     expect(search.robots).toBe("noindex, follow");
-    expect(resolveClientSeo("/vvip-offshore", "fr", { title: "x", description: "y" }).canonicalUrl).toBe("https://drahmedbenlallahom.com/recruitment/vvip-offshore");
+    // /vvip-offshore est redirigé en 308 par vercel.json et par Express (SEOP-11) ; seule une navigation
+    // côté client y affiche encore la page, qui garde alors sa canonique par son ogUrl.
+    expect(STATIC_ROUTE_METADATA["/vvip-offshore"]).toBeUndefined();
+    expect(resolveClientSeo("/vvip-offshore", "fr", { title: "x", description: "y", ogUrl: "https://drahmedbenlallahom.com/recruitment/vvip-offshore" }).canonicalUrl).toBe("https://drahmedbenlallahom.com/recruitment/vvip-offshore");
   });
 
   it("utilise les props localisées dans les autres langues", () => {

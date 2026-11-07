@@ -46,7 +46,6 @@ const VENTURE_ROUTES: Record<string, RouteMetadata> = Object.fromEntries(
     {
       title: `${venture.company} — ${venture.role} | ${SITE_NAME}`,
       description: ventureDescription(venture.description),
-      keywords: venture.tags.join(", "),
     },
   ]),
 );
@@ -70,7 +69,7 @@ const escapeHtml = (value: string) =>
 export function getRouteSeo(url: string): RouteSeo {
   const pathname = normalizePathname(url);
   const known = PUBLIC_ROUTES[pathname];
-  if (known) return { ...known, canonicalPath: known.canonicalPath ?? pathname };
+  if (known) return { ...known, canonicalPath: pathname };
 
   if (pathname === "/booking/confirmation" || PRIVATE_PREFIXES.some(prefix => pathname === prefix.slice(0, -1) || pathname.startsWith(prefix))) {
     return {
@@ -100,13 +99,14 @@ export function getPrerenderRoutes(): string[] {
 }
 
 /**
- * Routes du sitemap.xml (SEO-03) : routes pré-rendues indexables, sans les alias
- * dont la canonique pointe vers une autre URL. Généré au build, jamais à la main.
+ * Routes du sitemap.xml (SEO-03) : routes pré-rendues indexables, chacune sa
+ * propre canonique (une ancienne adresse est redirigée, jamais pré-rendue).
+ * Généré au build, jamais à la main.
  */
 export function getSitemapRoutes(): string[] {
   return getPrerenderRoutes().filter(route => {
     const seo = getRouteSeo(route);
-    return !seo.noIndex && !seo.notFound && seo.canonicalPath === route;
+    return !seo.noIndex && !seo.notFound;
   });
 }
 
@@ -129,7 +129,6 @@ export function renderSitemapXml(lastmod: string): string {
 type HeadInput = {
   title: string;
   description: string;
-  keywords?: string;
   noIndex?: boolean;
   /** Absent pour la page de repli SPA : aucune URL canonique ni og:url. */
   canonicalUrl?: string;
@@ -141,7 +140,6 @@ function renderHead(input: HeadInput): string {
   const title = escapeHtml(input.title);
   const description = escapeHtml(input.description);
   const canonical = input.canonicalUrl ? escapeHtml(input.canonicalUrl) : undefined;
-  const keywords = input.keywords ? `<meta name="keywords" content="${escapeHtml(input.keywords)}" />` : "";
   const robots = input.noIndex ? ROBOTS_NOINDEX : ROBOTS_INDEX;
   const image = input.image ?? DEFAULT_SHARE_IMAGE;
   const imageUrl = escapeHtml(image.url);
@@ -150,7 +148,6 @@ function renderHead(input: HeadInput): string {
   return [
     `<title>${title}</title>`,
     `<meta name="description" content="${description}" />`,
-    keywords,
     `<meta name="robots" content="${robots}" />`,
     `<meta property="og:type" content="website" />`,
     canonical ? `<meta property="og:url" content="${canonical}" />` : "",

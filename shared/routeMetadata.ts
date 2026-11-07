@@ -7,8 +7,9 @@ import { isPublicTestimonialsEnabled } from "./publicFeatures";
  *  - server/routeSeo.ts → <head> pré-rendu au build (scripts/prerender-route-seo.ts),
  *    servi tel quel par Vercel et lu par les robots d'aperçu (LinkedIn, WhatsApp…) ;
  *  - client/src/components/SEOHead.tsx → <head> après hydratation (lu par Google).
- * En français (langue par défaut et seule langue indexée), titre, description, mots-clés,
- * canonique, robots et image de partage sont donc identiques dans les deux cas. Les props
+ * En français (langue par défaut et seule langue indexée), titre, description, canonique,
+ * robots et image de partage sont donc identiques dans les deux cas. Ni l'un ni l'autre
+ * n'émet de balise meta keywords, que Google ignore (SEOP-05). Les props
  * de SEOHead ne servent plus qu'aux autres langues et aux routes dynamiques (/venture/*,
  * pages privées), dont les valeurs FR sont générées depuis les mêmes données.
  */
@@ -35,10 +36,7 @@ export const DEFAULT_SHARE_IMAGE: ShareImage = {
 export type RouteMetadata = {
   title: string;
   description: string;
-  keywords?: string;
   noIndex?: boolean;
-  /** URL canonique d'un alias (ex. /vvip-offshore → /recruitment/vvip-offshore). */
-  canonicalPath?: string;
 };
 
 /** Routes publiques statiques. Les pages /venture/:slug sont ajoutées par server/routeSeo.ts depuis ventures-fr.ts. */
@@ -46,27 +44,22 @@ export const STATIC_ROUTE_METADATA: Readonly<Record<string, RouteMetadata>> = {
   "/": {
     title: "Dr. Ahmed Ben Lallahom | Médecine et Conseil",
     description: "Anesthésiste-réanimateur, entrepreneur en santé et consultant médical basé en France.",
-    keywords: "anesthésiste, réanimateur, consultant médical, santé, France",
   },
   "/booking": {
     title: "Réserver une consultation | Dr. Ben Lallahom",
     description: "Réservez en ligne une consultation de conseil en santé avec le Dr. Ahmed Ben Lallahom.",
-    keywords: "réservation consultation santé, téléconsultation, conseil médical",
   },
   "/questions-anesthesie": {
     title: "Questions santé | Anesthésie et opération",
     description: "Posez une question générale sur l’anesthésie ou une opération et recevez une réponse relue par email.",
-    keywords: "questions anesthésie, information opération, information santé, préparation intervention",
   },
   "/recruitment": {
     title: "Recrutement santé international | Hippocampus",
     description: "Découvrez les opportunités internationales pour professionnels médicaux et paramédicaux.",
-    keywords: "recrutement médical international, recrutement paramédical, Hippocampus Consulting",
   },
   "/recruitment/standard": {
     title: "Candidature santé internationale | Hippocampus",
     description: "Déposez votre candidature pour des opportunités médicales et paramédicales internationales.",
-    keywords: "candidature médicale, emploi paramédical, mobilité internationale",
   },
   "/recruitment/unsubscribe": {
     title: "Préférences recrutement | Hippocampus Consulting",
@@ -76,23 +69,14 @@ export const STATIC_ROUTE_METADATA: Readonly<Record<string, RouteMetadata>> = {
   "/recruitment/vvip-offshore": {
     title: "Missions santé offshore et Moyen-Orient | Hippocampus",
     description: "Postulez pour des missions médicales spécialisées offshore, industrielles et au Moyen-Orient.",
-    keywords: "mission médicale offshore, santé Moyen-Orient, plateforme pétrolière",
-  },
-  "/vvip-offshore": {
-    title: "Missions santé offshore et Moyen-Orient | Hippocampus",
-    description: "Postulez pour des missions médicales spécialisées offshore, industrielles et au Moyen-Orient.",
-    keywords: "mission médicale offshore, santé Moyen-Orient, plateforme pétrolière",
-    canonicalPath: "/recruitment/vvip-offshore",
   },
   "/employers": {
     title: "Recruter des soignants | Hippocampus Consulting",
     description: "Confiez votre besoin de recrutement médical ou paramédical international à Hippocampus Consulting.",
-    keywords: "recrutement soignants, recrutement médical, recrutement paramédical",
   },
   "/why-hippocampus": {
     title: "Pourquoi Hippocampus Consulting | Employeurs",
     description: "Méthode, confidentialité et accompagnement pour vos recrutements médicaux internationaux.",
-    keywords: "cabinet recrutement médical, méthode recrutement santé, Hippocampus Consulting",
   },
   // Publiée uniquement si les témoignages sont réactivés (LEGAL-08, shared/publicFeatures.ts).
   ...(isPublicTestimonialsEnabled()
@@ -151,13 +135,12 @@ export function canonicalUrlFor(path: string): string {
 export function getStaticRouteMetadata(url: string): (RouteMetadata & { canonicalPath: string }) | null {
   const pathname = normalizePathname(url);
   const known = STATIC_ROUTE_METADATA[pathname];
-  return known ? { ...known, canonicalPath: known.canonicalPath ?? pathname } : null;
+  return known ? { ...known, canonicalPath: pathname } : null;
 }
 
 export type ClientSeoProps = {
   title: string;
   description: string;
-  keywords?: string;
   ogImage?: string;
   ogUrl?: string;
   noIndex?: boolean;
@@ -166,7 +149,6 @@ export type ClientSeoProps = {
 export type ResolvedSeo = {
   title: string;
   description: string;
-  keywords?: string;
   robots: string;
   /** Absente pour une page privée sans URL explicite : jamais l'accueil comme canonique. */
   canonicalUrl?: string;
@@ -187,7 +169,6 @@ export function resolveClientSeo(pathname: string, language: string, props: Clie
     return {
       title: french ? meta.title : props.title,
       description: french ? meta.description : props.description,
-      keywords: french ? meta.keywords : props.keywords,
       robots: meta.noIndex ? ROBOTS_NOINDEX : ROBOTS_INDEX,
       canonicalUrl,
       ogUrl: canonicalUrl,
@@ -198,7 +179,6 @@ export function resolveClientSeo(pathname: string, language: string, props: Clie
   return {
     title: props.title,
     description: props.description,
-    keywords: props.keywords,
     robots: props.noIndex ? ROBOTS_PRIVATE : ROBOTS_INDEX,
     canonicalUrl: props.ogUrl ?? (props.noIndex ? undefined : homeUrl),
     ogUrl: props.ogUrl ?? homeUrl,

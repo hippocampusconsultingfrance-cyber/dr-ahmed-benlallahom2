@@ -1,11 +1,11 @@
 import express from "express";
 import type { AddressInfo } from "node:net";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { ROUTE_SEO_MARKER, SPA_TEMPLATE_FILE } from "../routeSeo";
-import { readSpaTemplate, serveStatic } from "./static";
+import { PAGE_REDIRECTS, readSpaTemplate, serveStatic } from "./static";
 
 const directories: string[] = [];
 
@@ -66,6 +66,42 @@ describe("serveStatic hors Vercel", () => {
 
       expect(response.status).toBe(200);
       expect(await response.text()).toContain('<link rel="canonical" href="https://drahmedbenlallahom.com/recruitment"');
+    } finally {
+      await new Promise(resolve => server.close(resolve));
+    }
+  });
+
+  it("redirige en 308 les anciennes adresses de vercel.json vers la page principale, paramètres gardés (SEOP-11)", async () => {
+    const vercel = JSON.parse(await readFile(path.resolve(process.cwd(), "vercel.json"), "utf8")) as { redirects: unknown[] };
+    // Les mêmes redirections que Vercel, pour pnpm start et pnpm dev.
+    expect(vercel.redirects).toEqual(Object.entries(PAGE_REDIRECTS).map(([source, destination]) => ({ source, destination, permanent: true })));
+
+    const distPath = await distWith({
+      [SPA_TEMPLATE_FILE]: `<html><head>${ROUTE_SEO_MARKER}</head><body></body></html>`,
+      "recruitment/vvip-offshore.html": "<html><head><title>Pré-rendu</title></head></html>",
+    });
+    const app = express();
+    serveStatic(app, distPath);
+    const server = app.listen(0);
+    try {
+      await new Promise(resolve => server.once("listening", resolve));
+      const { port } = server.address() as AddressInfo;
+      const baseUrl = `http://127.0.0.1:${port}`;
+
+      for (const path of ["/vvip-offshore", "/vvip-offshore/"]) {
+        const redirect = await fetch(`${baseUrl}${path}`, { redirect: "manual" });
+        expect(redirect.status, path).toBe(308);
+        expect(redirect.headers.get("location"), path).toBe("/recruitment/vvip-offshore");
+      }
+      const redirect = await fetch(`${baseUrl}/vvip-offshore?utm_source=salon&ref=a%20b`, { redirect: "manual" });
+      expect(redirect.status).toBe(308);
+      expect(redirect.headers.get("location")).toBe("/recruitment/vvip-offshore?utm_source=salon&ref=a%20b");
+
+      const page = await fetch(new URL(redirect.headers.get("location")!, baseUrl), { redirect: "manual" });
+      expect(page.status).toBe(200);
+      const html = await page.text();
+      expect(html).toContain('<link rel="canonical" href="https://drahmedbenlallahom.com/recruitment/vvip-offshore"');
+      expect(html).not.toContain("noindex");
     } finally {
       await new Promise(resolve => server.close(resolve));
     }

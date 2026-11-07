@@ -210,22 +210,31 @@ describe("POST /api/csp-report — rapports de la CSP en observation (SECU-02)",
   });
 });
 
-describe("CSP envoyée par Express selon l'environnement (SECU-02)", () => {
+describe("CSP envoyée par Express selon l'environnement (SECU-02, SECU-03)", () => {
   const scriptSrc = (policy: string) => policy.split("; ").find(directive => directive.startsWith("script-src "));
+  const connectSrc = (policy: string) => policy.split("; ").find(directive => directive.startsWith("connect-src "));
 
-  it("envoie hors développement la CSP appliquée, la CSP observée et son point de rapport", () => {
+  it("envoie hors développement la CSP appliquée, la CSP observée et son point de rapport, sans WebSocket", () => {
     for (const nodeEnv of ["production", "test", undefined]) {
-      expect(Object.keys(contentSecurityPolicyHeaders(nodeEnv)), String(nodeEnv)).toEqual(["Content-Security-Policy", "Content-Security-Policy-Report-Only", "Reporting-Endpoints"]);
-      expect(contentSecurityPolicyHeaders(nodeEnv)["Content-Security-Policy"]).toBe(CONTENT_SECURITY_POLICY);
+      const headers = contentSecurityPolicyHeaders(nodeEnv);
+      expect(Object.keys(headers), String(nodeEnv)).toEqual(["Content-Security-Policy", "Content-Security-Policy-Report-Only", "Reporting-Endpoints"]);
+      expect(headers["Content-Security-Policy"]).toBe(CONTENT_SECURITY_POLICY);
+      for (const policy of [headers["Content-Security-Policy"]!, headers["Content-Security-Policy-Report-Only"]!]) {
+        expect(connectSrc(policy), String(nodeEnv)).toMatch(/^connect-src 'self' https:\/\//);
+        expect(connectSrc(policy), String(nodeEnv)).not.toMatch(/\swss?:/);
+      }
     }
   });
 
-  it("garde en développement les scripts inline de Vite autorisés, sans politique observée", () => {
+  it("garde en développement les scripts inline et le WebSocket de Vite autorisés, sans politique observée", () => {
     const headers = contentSecurityPolicyHeaders("development");
     expect(Object.keys(headers)).toEqual(["Content-Security-Policy"]);
     expect(scriptSrc(headers["Content-Security-Policy"]!)?.split(" ")).toContain("'unsafe-inline'");
-    // Only script-src may differ from the enforced policy.
-    expect(headers["Content-Security-Policy"]!.split("; ").filter(directive => !directive.startsWith("script-src "))).toEqual(CONTENT_SECURITY_POLICY.split("; ").filter(directive => !directive.startsWith("script-src ")));
+    // The hot reload connects to the dev server over ws: (wss: behind an HTTPS tunnel).
+    expect(connectSrc(headers["Content-Security-Policy"]!)).toBe(connectSrc(CONTENT_SECURITY_POLICY)!.replace("connect-src 'self'", "connect-src 'self' ws: wss:"));
+    // Only script-src and connect-src may differ from the enforced policy.
+    const others = (policy: string) => policy.split("; ").filter(directive => !directive.startsWith("script-src ") && !directive.startsWith("connect-src "));
+    expect(others(headers["Content-Security-Policy"]!)).toEqual(others(CONTENT_SECURITY_POLICY));
   });
 
   it("rend les scripts inline au développement une fois 'unsafe-inline' retiré de la CSP appliquée, empreintes comprises", () => {

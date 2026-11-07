@@ -9,7 +9,6 @@ import { assertCriticalProductionEnvironment, clerkPublishableKey } from "./env"
 import { registerHealthRoute } from "./health";
 import { contentSecurityPolicyHeaders, registerCspReportRoute } from "./contentSecurityPolicy";
 import { registerGoogleDriveOAuthRoutes } from "../googleDriveOAuthRoutes";
-import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { registerCandidateDocumentRoutes } from "../routes/candidateDocuments";
@@ -45,6 +44,8 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
  */
 export async function createApp() {
   const app = express();
+  // No "X-Powered-By: Express" on the responses: the stack is not advertised (SECU-04).
+  app.disable("x-powered-by");
   app.set("trust proxy", 1);
   const server = createServer(app);
 
@@ -88,7 +89,6 @@ export async function createApp() {
   // /sitemap.xml is generated at build time into dist/public by
   // scripts/prerender-route-seo.ts from the prerendered routes (served by the
   // Vercel CDN, or by express.static outside Vercel): a single source of truth.
-  registerStorageProxy(app);
   registerGoogleDriveOAuthRoutes(app);
 
   // tRPC API. A query is also accepted as POST, its input in the body: the
