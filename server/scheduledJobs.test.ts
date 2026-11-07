@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { appointments } from "../drizzle/schema";
+import { appointmentFulfillmentJobs, appointments } from "../drizzle/schema";
 import { createMemoryPg, type MemoryPg } from "./testing/memoryPgProxy";
 
 const database = vi.hoisted(() => ({ getDb: vi.fn() }));
@@ -7,10 +7,12 @@ const notifications = vi.hoisted(() => ({ sendReminderEmail: vi.fn(async (..._ar
 vi.mock("./db", () => ({ getDb: database.getDb }));
 vi.mock("./_core/notifications", () => notifications);
 vi.mock("./_core/notification", () => ({ notifyOwner: vi.fn(async () => true) }));
-vi.mock("./appointmentFulfillment", () => ({
+const fulfillment = vi.hoisted(() => ({
   recoverStaleAppointmentFulfillmentJobs: vi.fn(async () => ({ recovered: 0 })),
   processDueAppointmentFulfillmentJobs: vi.fn(async () => ({ processed: 0, results: [] })),
+  enqueueAppointmentFulfillment: vi.fn(async (_appointmentId: number) => undefined),
 }));
+vi.mock("./appointmentFulfillment", () => fulfillment);
 const documentJobs = vi.hoisted(() => ({
   recoverStaleCandidateDocumentJobs: vi.fn(async () => ({ recovered: 0, exhausted: 0 })),
   recreateMissingCandidateDocumentAnalysisJobs: vi.fn(async () => ({ recreated: 0 })),
@@ -21,7 +23,9 @@ vi.mock("./candidateDocumentProcessing", () => documentJobs);
 import {
   DAILY_REMINDER_WINDOW,
   drainInBatches,
+  PAID_APPOINTMENT_JOB_RECOVERY_SINCE,
   reminderWindowBounds,
+  requeuePaidAppointmentsWithoutFulfillment,
   runAppointmentFulfillmentWorker,
   runCandidateDocumentProcessingWorker,
   sendDueAppointmentReminders,
@@ -43,7 +47,7 @@ const remindedTrackingIds = () => notifications.sendReminderEmail.mock.calls.map
 
 beforeEach(() => {
   vi.clearAllMocks();
-  memory = createMemoryPg([appointments]);
+  memory = createMemoryPg([appointments, appointmentFulfillmentJobs]);
   database.getDb.mockResolvedValue(memory.db);
   vi.spyOn(console, "log").mockImplementation(() => undefined);
 });
@@ -172,6 +176,44 @@ describe("envoi des rappels", () => {
     expect(result.reminderRecovery).toEqual({ reminded: 1, sent: 1, failed: 0 });
     expect(remindedTrackingIds()).toEqual(["APT-1"]);
     expect(memory.rows(appointments).map(row => row.reminder_sent)).toEqual([1, 0]);
+  });
+});
+
+describe("rendez-vous payés restés sans leurs envois (DATA-12)", () => {
+  const afterGoLive = new Date(PAID_APPOINTMENT_JOB_RECOVERY_SINCE.getTime() + HOUR);
+  const seedJob = (appointmentId: number, jobType: string) => memory.seed(appointmentFulfillmentJobs, [{ appointment_id: appointmentId, job_type: jobType, status: "completed", attempts: 1 }]);
+
+  it("remet en file les envois d’un rendez-vous payé et confirmé sans tâche de confirmation ou de facture, créé depuis la mise en service de la reprise", async () => {
+    const onlyOwner = seedAppointment(1, { createdAt: afterGoLive });
+    seedJob(1, "owner");
+    seedAppointment(2, { createdAt: afterGoLive });
+    seedAppointment(3, { createdAt: afterGoLive });
+    seedJob(3, "confirmation");
+    seedAppointment(4, { createdAt: afterGoLive });
+    for (const jobType of ["owner", "confirmation", "invoice"]) seedJob(4, jobType);
+    // Older than the recovery, refunded, unpaid, cancelled: never replayed.
+    seedAppointment(5, { createdAt: new Date(PAID_APPOINTMENT_JOB_RECOVERY_SINCE.getTime() - HOUR) });
+    seedAppointment(6, { createdAt: afterGoLive, payment_status: "refunded" });
+    seedAppointment(7, { createdAt: afterGoLive, payment_status: "pending", appointment_status: "held" });
+    seedAppointment(8, { createdAt: afterGoLive, appointment_status: "cancelled" });
+
+    await expect(requeuePaidAppointmentsWithoutFulfillment()).resolves.toEqual({ requeued: 3 });
+    expect(fulfillment.enqueueAppointmentFulfillment.mock.calls.map(([id]) => id)).toEqual([onlyOwner.id, 2, 3]);
+  });
+
+  it("le travail quotidien les remet en file avant de traiter la file, et traite la file même quand la reprise échoue", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    seedAppointment(1, { createdAt: afterGoLive });
+    const order: string[] = [];
+    fulfillment.enqueueAppointmentFulfillment.mockImplementationOnce(async () => { order.push("enqueue"); });
+    fulfillment.processDueAppointmentFulfillmentJobs.mockImplementationOnce(async () => { order.push("process"); return { processed: 0, results: [] }; });
+
+    await expect(runAppointmentFulfillmentWorker({ batchSize: 5, maxBatches: 4, budgetMs: 35_000 })).resolves.toMatchObject({ missingJobs: { requeued: 1 } });
+    expect(order).toEqual(["enqueue", "process"]);
+
+    memory.failNext(/^select "id" from "appointments"/);
+    await expect(runAppointmentFulfillmentWorker({ batchSize: 5, maxBatches: 4, budgetMs: 35_000 })).resolves.toMatchObject({ missingJobs: null });
+    expect(fulfillment.processDueAppointmentFulfillmentJobs).toHaveBeenCalledTimes(2);
   });
 });
 

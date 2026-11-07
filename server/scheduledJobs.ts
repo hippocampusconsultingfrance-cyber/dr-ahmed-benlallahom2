@@ -1,5 +1,5 @@
-import { and, eq, gt, gte, isNull, lt, lte, or, sql } from "drizzle-orm";
-import { appointments, candidateAccounts, candidateSecurityRateLimits, contactMessages, cvApplications, gdprRequests, medicalQuestions, securityEvents } from "../drizzle/schema";
+import { and, eq, gt, gte, isNull, lt, lte, notInArray, or, sql } from "drizzle-orm";
+import { appointmentFulfillmentJobs, appointments, candidateAccounts, candidateSecurityRateLimits, contactMessages, cvApplications, gdprRequests, medicalQuestions, securityEvents } from "../drizzle/schema";
 import { getDb } from "./db";
 import { mutationRowCount } from "./dbMutation";
 import { emailLanguageFor } from "./emailLanguage";
@@ -149,9 +149,62 @@ export async function drainInBatches<T extends { processed: number }>(
   return { processed: batches.reduce((total, batch) => total + batch.processed, 0), batches };
 }
 
+/**
+ * DATA-12: bookings created from this date on, and only those, get back the
+ * post-payment jobs they lack (requeuePaidAppointmentsWithoutFulfillment). An
+ * older one is never replayed: the patient may have been written to another
+ * way since; scripts/db-invariants.sql lists them for the owner.
+ */
+export const PAID_APPOINTMENT_JOB_RECOVERY_SINCE = new Date("2026-11-07T00:00:00Z");
+
+type Database = NonNullable<Awaited<ReturnType<typeof getDb>>>;
+
+/** Paid, confirmed bookings created since the recovery went live (and before `createdBefore`) without a confirmation or invoice job. */
+function paidAppointmentsWithoutFulfillment(db: Database, createdBefore?: Date) {
+  const appointmentsWithJob = (jobType: "confirmation" | "invoice") => db.select({ appointmentId: appointmentFulfillmentJobs.appointmentId })
+    .from(appointmentFulfillmentJobs)
+    .where(eq(appointmentFulfillmentJobs.jobType, jobType));
+  return db.select({ id: appointments.id }).from(appointments).where(and(
+    eq(appointments.paymentStatus, "completed"),
+    eq(appointments.appointmentStatus, "confirmed"),
+    gte(appointments.createdAt, PAID_APPOINTMENT_JOB_RECOVERY_SINCE),
+    ...(createdBefore ? [lt(appointments.createdAt, createdBefore)] : []),
+    or(notInArray(appointments.id, appointmentsWithJob("confirmation")), notInArray(appointments.id, appointmentsWithJob("invoice"))),
+  ));
+}
+
+/**
+ * DATA-12: a paid, confirmed booking whose confirmation or invoice job was
+ * never stored (the database refused it once the payment was recorded, and
+ * Stripe no longer redelivers the event) gets its jobs back, through the
+ * webhook's own idempotent enqueue: a job already there is kept as it is,
+ * so nothing is sent twice. The jobs run in the same pass.
+ */
+export async function requeuePaidAppointmentsWithoutFulfillment(limit = 25) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const missing = await paidAppointmentsWithoutFulfillment(db).orderBy(appointments.id).limit(limit);
+  const { enqueueAppointmentFulfillment } = await import("./appointmentFulfillment");
+  let requeued = 0;
+  for (const appointment of missing) {
+    try {
+      await enqueueAppointmentFulfillment(appointment.id);
+      requeued += 1;
+    } catch (error) {
+      console.error("[AppointmentFulfillment] Missing post-payment jobs not queued:", safeErrorName(error));
+    }
+  }
+  return { requeued };
+}
+
 export async function runAppointmentFulfillmentWorker(options: { batchSize: number; maxBatches: number; budgetMs: number }) {
   const { processDueAppointmentFulfillmentJobs, recoverStaleAppointmentFulfillmentJobs } = await import("./appointmentFulfillment");
   const recovery = await recoverStaleAppointmentFulfillmentJobs();
+  // A failure here leaves the jobs already queued to their run.
+  const missingJobs = await requeuePaidAppointmentsWithoutFulfillment().catch(error => {
+    console.error("[AppointmentFulfillment] Recovery of paid bookings without jobs failed:", safeErrorName(error));
+    return null;
+  });
   const { processed, batches } = await drainInBatches(() => processDueAppointmentFulfillmentJobs(options.batchSize), options);
   // DATA-02: this job runs half a day after the reminder run, still within
   // the key's 24 hours: it takes back the reminders a stopped run left reserved.
@@ -159,7 +212,7 @@ export async function runAppointmentFulfillmentWorker(options: { batchSize: numb
     console.error("[Reminder] Recovery of reserved reminders failed:", safeErrorName(error));
     return null;
   });
-  return { recovery, processed, results: batches.flatMap(batch => batch.results), reminderRecovery };
+  return { recovery, missingJobs, processed, results: batches.flatMap(batch => batch.results), reminderRecovery };
 }
 
 /**
