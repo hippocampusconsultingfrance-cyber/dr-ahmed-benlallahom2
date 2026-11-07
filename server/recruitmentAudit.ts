@@ -61,10 +61,11 @@ export function parseRecruitmentJsonArray(value: string | null | undefined): str
 export const RECRUITMENT_PROFILE_SCAN_LIMIT = 10_000;
 
 /**
- * A country as the profile compares it: folded like the
+ * A specialty or a country as the profile compares it: folded like the
  * filters of the list and the admin search (adminFilterContains), accents,
  * case and ways of writing aside, so that the dossiers its SQL filter kept
- * (« emirats » finds « Émirats arabes unis ») are not dropped here.
+ * (« emirats » finds « Émirats arabes unis », « anesthesie » « Anesthésie »,
+ * INTL-12) are not dropped here.
  */
 const foldProfileText = (text: string) => foldAdminSearchText(text).toLowerCase();
 
@@ -86,7 +87,7 @@ export function matchesRecruitmentProfile(input: {
   const profile = input.profile;
   // INTL-02: without a verified score the dossier stays in the profile, listed apart to be read.
   if (input.score !== null && input.score < profile.minimumScore) return false;
-  if (profile.specialty && !input.specialty.toLowerCase().includes(profile.specialty.toLowerCase())) return false;
+  if (profile.specialty && !foldProfileText(input.specialty).includes(foldProfileText(profile.specialty))) return false;
   if (profile.targetCountry && !input.targetCountries.some(country => foldProfileText(country).includes(foldProfileText(profile.targetCountry!)))) return false;
 
   const skills = new Set(input.extractedSkills.map(value => value.toLowerCase()));

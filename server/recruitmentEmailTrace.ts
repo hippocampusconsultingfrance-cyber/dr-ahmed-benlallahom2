@@ -4,6 +4,7 @@ import { getDb } from "./db";
 import { and, desc, eq, exists, isNotNull, like, lt, or } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { createCandidateInvitationToken } from "./candidateAuth";
+import { candidateInvitationForcedResendAt } from "../shared/candidatePortalInvitationResend";
 import { emailLanguageFor } from "./emailLanguage";
 import {
   sendCvApplicationConfirmationEmail,
@@ -134,6 +135,19 @@ export function resolveCvConfirmationDelivery(events: CvConfirmationTraceEvent[]
 /** The confirmation email also contains the signed portal invitation link. */
 export function resolveCandidatePortalInvitationDelivery(events: CvConfirmationTraceEvent[]) {
   return resolveLatestAttempt(events, parseCandidatePortalInvitationAttempt);
+}
+
+/**
+ * REC-14: an invitation whose latest attempt is uncertain may be sent again
+ * anyway once that attempt is CANDIDATE_INVITATION_FORCED_RESEND_DELAY_MS old,
+ * as a new attempt under its own idempotency key.
+ */
+export function canForceCandidatePortalInvitation(
+  delivery: ReturnType<typeof resolveCandidatePortalInvitationDelivery>,
+  now = new Date(),
+) {
+  if (delivery.eventType !== "email.delivery_unknown" || !delivery.occurredAt) return false;
+  return candidateInvitationForcedResendAt(delivery.occurredAt).getTime() <= now.getTime();
 }
 
 /** Resolve the verification-email chain separately from the initial portal invitation. */

@@ -106,7 +106,7 @@ export const adminRecruitmentCampaignsRouter = router({
         conditions.push(inArray(cvApplications.id, input.selectedIds));
       }
       if (input.mode === "filtered") {
-        if (input.specialty) conditions.push(sql`LOWER(${cvApplications.specialty}) LIKE LOWER(${`%${input.specialty}%`})`);
+        if (input.specialty) conditions.push(adminFilterContains(cvApplications.specialty, input.specialty));
         if (input.country) conditions.push(adminFilterContains(cvApplications.targetCountries, input.country));
         if (input.minimumScore !== undefined) {
           conditions.push(sql`${cvApplications.aiScore} >= ${input.minimumScore}`);
@@ -168,7 +168,7 @@ export const adminRecruitmentCampaignsRouter = router({
         conditions.push(inArray(cvApplications.id, input.selectedIds));
       }
       if (input.mode === "filtered") {
-        if (input.specialty) conditions.push(sql`LOWER(${cvApplications.specialty}) LIKE LOWER(${`%${input.specialty}%`})`);
+        if (input.specialty) conditions.push(adminFilterContains(cvApplications.specialty, input.specialty));
         if (input.country) conditions.push(adminFilterContains(cvApplications.targetCountries, input.country));
         if (input.minimumScore !== undefined) {
           conditions.push(sql`${cvApplications.aiScore} >= ${input.minimumScore}`);

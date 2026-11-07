@@ -22,9 +22,10 @@ vi.mock("react", async importOriginal => {
       if (!(slot in hooks.values)) hooks.values[slot] = typeof initial === "function" ? (initial as () => unknown)() : initial;
       return [hooks.values[slot], (next: unknown) => { hooks.values[slot] = typeof next === "function" ? (next as (value: unknown) => unknown)(hooks.values[slot]) : next; }];
     },
-    // The tab is called as a plain function: its effects (the search box's
-    // typing delay, ADM-02) do not run, as in a static render.
-    useEffect: () => undefined,
+    // The tab is called as a plain function: its effects run at each call,
+    // without cleanup, enough for the typing delay of the search box and the
+    // filters (ADM-02, ADM-20), whose timer a test then lets elapse (typed()).
+    useEffect: (effect: () => void) => { effect(); },
   };
 });
 
@@ -53,7 +54,8 @@ vi.mock("@/lib/trpc", () => ({
     useQueries: (build: (t: unknown) => unknown[]) => build({ admin: { recruitment: { list: (input: unknown) => input } } }).map(() => ({ data: { items: state.items, total: state.items.length }, isLoading: false, error: null, refetch: vi.fn() })),
     admin: {
       recruitment: {
-        profiles: { list: { useQuery: () => ({ data: [], refetch: vi.fn() }) }, create: { useMutation: idle } },
+        profiles: { list: { useQuery: () => ({ data: [], refetch: vi.fn() }) }, create: { useMutation: idle }, delete: { useMutation: idle } },
+        detail: { useQuery: () => ({ data: undefined, isLoading: true, isFetching: false, error: null, refetch: vi.fn() }) },
         driveExport: { status: { useQuery: () => ({ data: { connected: true, lastError: null, failedExports: 0 }, refetch: vi.fn() }) }, retry: { useMutation: idle }, retryAllFailed: { useMutation: idle } },
         updateStatus: { useMutation: idle },
         getDownloadUrl: { useMutation: idle },
@@ -65,6 +67,7 @@ vi.mock("@/lib/trpc", () => ({
         followUps: { update: { useMutation: idle } },
         candidate: {
           sendPortalInvitation: { useMutation: idle },
+          markResponse: { useMutation: idle },
           detail: { useQuery: () => ({ data: state.detail, isLoading: false }) },
           confirmCertification: { useMutation: (options: MutationOptions) => { state.confirmOptions = options; return { mutate: state.confirmMutate, isPending: false }; } },
         },
@@ -76,6 +79,7 @@ vi.mock("@/lib/trpc", () => ({
 const { default: CertificationReview } = await import("./CertificationReview");
 const { default: Candidate360Dialog } = await import("./Candidate360Dialog");
 const { default: RecruitmentTab } = await import("./RecruitmentTab");
+const { ADMIN_SEARCH_DELAY_MS } = await import("./adminSearch");
 
 function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
   if (Array.isArray(node)) return node.flatMap(elements);
@@ -106,9 +110,17 @@ function renderTab() {
   return RecruitmentTab() as ReactElement;
 }
 
+/** Typed in the certification filter, which reaches the list once typing pauses (ADM-20). */
+function typeCertification(value: string) {
+  const certificationInput = elements(renderTab()).find(element => element.type === "input" && element.props.placeholder === "Ex. ACLS, ATLS")!;
+  (certificationInput.props.onChange as (event: unknown) => void)({ target: { value } });
+  renderTab();
+  vi.advanceTimersByTime(ADMIN_SEARCH_DELAY_MS);
+}
+
 beforeEach(() => {
   // Whether a certification has expired depends on the day.
-  vi.useFakeTimers({ now: new Date("2026-10-26T10:00:00.000Z"), toFake: ["Date"] });
+  vi.useFakeTimers({ now: new Date("2026-10-26T10:00:00.000Z"), toFake: ["Date", "setTimeout", "clearTimeout"] });
   hooks.values = [];
   state.language = "fr";
   state.items = [dossier()];
@@ -328,8 +340,7 @@ describe("confirmation des certifications par l’admin (IA-02)", () => {
 
   it("le filtre « certification » dit d’une date que seul un CV dont l’analyse n’a retenu aucun fait la donne, à vérifier (IA-02)", () => {
     state.items = [dossier({ certifications: "ACLS", certificationFacts: [{ name: "ACLS", origins: ["declared"], expiresAt: "2023-05", expiryUnverified: true }] })];
-    const certificationInput = elements(renderTab()).find(element => element.type === "input" && element.props.placeholder === "Ex. ACLS, ATLS")!;
-    (certificationInput.props.onChange as (event: unknown) => void)({ target: { value: "acls" } });
+    typeCertification("acls");
     expect(renderToStaticMarkup(renderTab())).toContain("Certification recherchée : ACLS (déclarée par le candidat), expirée en mai 2023 selon le CV, à vérifier</p>");
   });
 
@@ -367,8 +378,7 @@ describe("confirmation des certifications par l’admin (IA-02)", () => {
 
   it("le filtre « certification » dit d’où vient chaque certification trouvée, et la fiche du dossier permet de la confirmer", () => {
     expect(renderToStaticMarkup(renderTab())).not.toContain("Certification recherchée");
-    const certificationInput = elements(renderTab()).find(element => element.type === "input" && element.props.placeholder === "Ex. ACLS, ATLS")!;
-    (certificationInput.props.onChange as (event: unknown) => void)({ target: { value: "dha" } });
+    typeCertification("dha");
     // With its expiry, as the employer's file dates it.
     expect(renderToStaticMarkup(renderTab())).toContain("Certification recherchée : Licence DHA (extraite du CV par l’IA), expire en mai 2028</p>");
 
@@ -379,8 +389,7 @@ describe("confirmation des certifications par l’admin (IA-02)", () => {
 
   it("le filtre « certification » trouve une licence que le CV dit expirée, et le dit avec sa date", () => {
     state.items = [dossier({ certificationFacts: [{ name: "Licence DHA", origins: ["extracted"], expiresAt: "2019-03" }] })];
-    const certificationInput = elements(renderTab()).find(element => element.type === "input" && element.props.placeholder === "Ex. ACLS, ATLS")!;
-    (certificationInput.props.onChange as (event: unknown) => void)({ target: { value: "dha" } });
+    typeCertification("dha");
     expect(renderToStaticMarkup(renderTab())).toContain("Certification recherchée : Licence DHA (extraite du CV par l’IA), expirée en mars 2019</p>");
   });
 });

@@ -253,6 +253,85 @@ describe("actions d’administration du recrutement", () => {
     expect(pool.csv).toContain("\"91\"");
   });
 
+  it("exporte un numéro international avec « 00 » au lieu du « + », sans apostrophe, et garde la protection des autres colonnes (ADM-26)", async () => {
+    const grouped = seedCandidate(1, { phone: "+216 51 000 010", availability: "=HYPERLINK(\"https://example.test\")" });
+    const compact = seedCandidate(2, { phone: "+21651000010", mobility: "-1+1" });
+    const national = seedCandidate(3, { phone: "06 12 34 56 78" });
+    const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-PHONE-1", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Qatar" }]);
+    memory.seed(clientBriefCandidates, [{ brief_id: brief!.id, application_id: compact.id, association_status: "shortlisted", candidate_consent_at: consentAt }]);
+    const cells = (csv: string, email: string, column: string) => {
+      const [header, ...rows] = csv.split("\n");
+      const row = rows.find(line => line.includes(email))!;
+      return row.split(";")[header!.split(";").indexOf(`"${column}"`)];
+    };
+
+    const pool = await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: [grouped.id as number, compact.id as number, national.id as number] });
+    expect(cells(pool.csv, "c1@test.local", "Téléphone")).toBe("\"00216 51 000 010\"");
+    // Without spaces, its « 00 » set apart so that a spreadsheet keeps it as text.
+    expect(cells(pool.csv, "c2@test.local", "Téléphone")).toBe("\"00 21651000010\"");
+    expect(cells(pool.csv, "c3@test.local", "Téléphone")).toBe("\"06 12 34 56 78\"");
+    expect(pool.csv).not.toContain("'+");
+    expect(cells(pool.csv, "c1@test.local", "Disponibilité")).toBe("\"'=HYPERLINK(\"\"https://example.test\"\")\"");
+    expect(cells(pool.csv, "c2@test.local", "Mobilité")).toBe("\"'-1+1\"");
+
+    const shortlist = await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number });
+    expect(cells(shortlist.csv, "c2@test.local", "Téléphone")).toBe("\"00 21651000010\"");
+  });
+
+  it("écrit dans l’export du vivier les pays et les langues en clair, et le statut en mots (INTL-10)", async () => {
+    const candidate = seedCandidate(1, { target_countries: JSON.stringify(["Émirats arabes unis", "Qatar"]), languages: JSON.stringify(["Arabic", "French"]), status: "shortlisted" });
+    const pool = await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: [candidate.id as number] });
+    const [header, row] = pool.csv.split("\n");
+    // The file keeps its format: the same columns, separated by « ; ».
+    expect(header).toBe(["Prénom", "Nom", "Email", "Téléphone", "Spécialité", "Pays ciblés", "Langues", "Expérience (ans)", "Disponibilité", "Mobilité", "Certifications", "Score IA", "Statut"].map(cell => `"${cell}"`).join(";"));
+    expect(row).toContain("\"Émirats arabes unis ; Qatar\";\"Arabic ; French\"");
+    expect(row!.endsWith(";\"Présélectionnée\"")).toBe(true);
+    expect(row).not.toContain("[");
+  });
+
+  it("marque traitées ou ignore plusieurs relances d’un coup, celles encore à examiner seulement, chacune journalisée (ADM-13)", async () => {
+    const first = seedCandidate(1);
+    const second = seedCandidate(2);
+    const [toHandle, other, alreadyDone, untouched] = memory.seed(recruitmentFollowUpTasks, [
+      { application_id: first.id, kind: "follow_up_7", due_at: "2026-10-01 09:00:00.000", status: "suggested" },
+      { application_id: second.id, kind: "follow_up_14", due_at: "2026-10-08 09:00:00.000", status: "suggested" },
+      { application_id: second.id, kind: "follow_up_7", due_at: "2026-10-01 09:00:00.000", status: "dismissed", completed_by_open_id: "earlier_admin" },
+      { application_id: first.id, kind: "follow_up_14", due_at: "2026-10-08 09:00:00.000", status: "suggested" },
+    ]);
+
+    const result = await admin().admin.recruitment.followUps.updateMany({ ids: [toHandle!.id as number, other!.id as number, alreadyDone!.id as number], status: "completed" });
+    expect(result).toEqual({ success: true, updated: 2 });
+    const byId = new Map(memory.rows(recruitmentFollowUpTasks).map(row => [row.id, row]));
+    expect(byId.get(toHandle!.id)).toMatchObject({ status: "completed", completed_by_open_id: "user_owner" });
+    expect(byId.get(toHandle!.id)!.completed_at).not.toBeNull();
+    expect(byId.get(other!.id)).toMatchObject({ status: "completed", completed_by_open_id: "user_owner" });
+    expect(byId.get(alreadyDone!.id)).toMatchObject({ status: "dismissed", completed_by_open_id: "earlier_admin" });
+    expect(byId.get(untouched!.id)).toMatchObject({ status: "suggested", completed_at: null });
+    const audits = memory.rows(recruitmentAuditLogs).map(row => ({ applicationId: row.application_id, metadata: JSON.parse(String(row.metadata)) }));
+    expect(audits).toEqual([
+      { applicationId: first.id, metadata: { event: "follow_up", taskId: toHandle!.id, status: "completed", batch: true } },
+      { applicationId: second.id, metadata: { event: "follow_up", taskId: other!.id, status: "completed", batch: true } },
+    ]);
+
+    // Nothing left to review among them: nothing changes, nothing is logged.
+    await expect(admin().admin.recruitment.followUps.updateMany({ ids: [toHandle!.id as number], status: "dismissed" })).resolves.toEqual({ success: true, updated: 0 });
+    expect(memory.rows(recruitmentAuditLogs)).toHaveLength(2);
+  });
+
+  it("le taux de réponse ne compte que les réponses des profils contactés par une campagne (ADM-13)", async () => {
+    const contactedAt = "2026-10-01 09:00:00.000";
+    const answered = seedCandidate(1, { last_contacted_at: contactedAt });
+    seedCandidate(2, { last_contacted_at: contactedAt });
+    // Reached by « Proposer un échange » or writing on their own: no campaign has contacted them.
+    const neverContacted = seedCandidate(3);
+    await admin().admin.recruitment.candidate.markResponse({ id: answered.id as number });
+    await admin().admin.recruitment.candidate.markResponse({ id: neverContacted.id as number });
+
+    const dashboard = await admin().admin.recruitment.dashboard();
+    expect(dashboard!.candidateStats).toMatchObject({ total: 3, contacted: 2, responded: 1 });
+    expect(memory.rows(cvApplications).filter(row => row.last_candidate_response_at !== null)).toHaveLength(2);
+  });
+
   it("refuse un export du vivier dont plus aucun candidat sélectionné n’est exportable, au lieu d’un fichier vide (REC-01)", async () => {
     const refused = seedCandidate(1, { status: "rejected" });
     await expect(admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: [refused.id as number] }))

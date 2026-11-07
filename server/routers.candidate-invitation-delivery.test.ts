@@ -40,6 +40,8 @@ function fakeDb(invitationEvents: Array<{ eventType: string; providerEmailId: st
     [{ id: 7, firstName: "Test", email: "applicant@example.com", trackingId: "CV-TEST-7" }],
     [],
     invitationEvents,
+    // The sent invitation's trace, not recorded yet.
+    [],
   ];
   const insertedEvents: Array<Record<string, unknown>> = [];
   return {
@@ -95,5 +97,49 @@ describe("invitation administrateur et livraison incertaine", () => {
 
     expect(mocks.sendCandidatePortalAccessEmail).not.toHaveBeenCalled();
     expect(db.insertedEvents).toHaveLength(0);
+  });
+
+  describe("REC-14 — « Renvoyer quand même »", () => {
+    const uncertainAttempt = (minutesAgo: number) => ({
+      eventType: "email.delivery_unknown",
+      providerEmailId: null,
+      payload: JSON.stringify({ kind: "candidate_portal_invitation", outcome: "unknown", failureCode: "delivery_exception", attempt: 1 }),
+      occurredAt: new Date(Date.now() - minutesAgo * 60_000),
+    });
+
+    it("refuse avant 10 minutes, quand la tentative incertaine peut encore aboutir, et dit à quelle heure ce sera possible", async () => {
+      const attempt = uncertainAttempt(4);
+      const db = fakeDb([attempt]);
+      mocks.getDb.mockResolvedValue(db);
+      const at = new Date(attempt.occurredAt.getTime() + 10 * 60_000).toLocaleTimeString("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit" });
+
+      await expect(appRouter.createCaller(adminContext()).admin.recruitment.candidate.sendPortalInvitation({ id: 7, force: true }))
+        .rejects.toMatchObject({ code: "CONFLICT", message: `La tentative d’invitation incertaine date de moins de 10 minutes : elle peut encore aboutir. « Renvoyer quand même » sera possible à ${at}.` });
+      expect(mocks.sendCandidatePortalAccessEmail).not.toHaveBeenCalled();
+      expect(db.insertedEvents).toHaveLength(0);
+    });
+
+    it("sans demande explicite, bloque toujours, et dit que le renvoi forcé existe", async () => {
+      mocks.getDb.mockResolvedValue(fakeDb([uncertainAttempt(60)]));
+      await expect(appRouter.createCaller(adminContext()).admin.recruitment.candidate.sendPortalInvitation({ id: 7 }))
+        .rejects.toMatchObject({ code: "CONFLICT", message: expect.stringContaining("« Renvoyer quand même » est proposé 10 minutes après cette tentative") });
+      expect(mocks.sendCandidatePortalAccessEmail).not.toHaveBeenCalled();
+    });
+
+    it("après 10 minutes, envoie la tentative suivante sous sa propre clé d’idempotence, tracée et journalisée comme forcée", async () => {
+      const db = fakeDb([uncertainAttempt(11)]);
+      mocks.getDb.mockResolvedValue(db);
+      mocks.sendCandidatePortalAccessEmail.mockResolvedValue({ id: "email_forced" });
+
+      await expect(appRouter.createCaller(adminContext()).admin.recruitment.candidate.sendPortalInvitation({ id: 7, force: true })).resolves.toEqual({ success: true });
+
+      expect(mocks.sendCandidatePortalAccessEmail).toHaveBeenCalledTimes(1);
+      // Attempt 2: a second click sends under the same key, which Resend sends only once.
+      expect(mocks.sendCandidatePortalAccessEmail.mock.calls[0]![0]).toMatchObject({ kind: "invite", idempotencyKey: "candidate-portal-invitation-CV-TEST-7-attempt-2" });
+      expect(db.insertedEvents).toHaveLength(1);
+      expect(db.insertedEvents[0]).toMatchObject({ eventType: "email.sent", providerEmailId: "email_forced" });
+      expect(JSON.parse(String(db.insertedEvents[0]!.payload))).toMatchObject({ kind: "candidate_portal_invitation", outcome: "sent", attempt: 2 });
+      expect(mocks.logRecruitmentAction).toHaveBeenCalledWith(expect.objectContaining({ metadata: expect.objectContaining({ attempt: 2, forced: true, resendId: "email_forced" }) }));
+    });
   });
 });
