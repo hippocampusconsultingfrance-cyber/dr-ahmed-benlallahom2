@@ -13,6 +13,8 @@ import type { TrpcContext } from "./_core/context";
 // essais automatiques. Le remboursement fait depuis le tableau de bord passe par
 // la même file que celui fait dans Stripe. Vraies procédures, vraie file et
 // vrais emails ; seuls Resend (transport) et les alertes au médecin sont simulés.
+// Comme Resend, le transport refuse pendant 24 h (409) une clé d’idempotence
+// déjà reçue avec un autre contenu (ABUS-03).
 
 const resend = vi.hoisted(() => ({
   calls: [] as Array<{ message: Record<string, unknown>; options?: { idempotencyKey?: string } }>,
@@ -21,12 +23,21 @@ const resend = vi.hoisted(() => ({
   down: new Set<string>(),
   // Configuration d’envoi refusée (clé API, domaine) : tous les emails.
   configuration: null as null | { name: string; statusCode: number },
+  // Contenu reçu sous chaque clé d’idempotence, quelle qu’ait été la réponse, et les 409 répondus.
+  contentByKey: new Map<string, string>(),
+  conflicts: 0,
 }));
 vi.mock("resend", () => ({
   Resend: vi.fn().mockImplementation(() => ({
     emails: {
       send: vi.fn(async (message: Record<string, unknown>, options?: { idempotencyKey?: string }) => {
         resend.calls.push({ message, options });
+        const key = options?.idempotencyKey;
+        if (key && resend.contentByKey.has(key) && resend.contentByKey.get(key) !== JSON.stringify(message)) {
+          resend.conflicts += 1;
+          return { data: null, error: { name: "invalid_idempotent_request", statusCode: 409, message: "Same idempotency key used with a different request payload." } };
+        }
+        if (key) resend.contentByKey.set(key, JSON.stringify(message));
         const to = (message.to as string[])[0]!;
         if (resend.configuration) return { data: null, error: { ...resend.configuration, message: "Sending configuration refused." } };
         if (resend.rejected.has(to)) return { data: null, error: { name: "validation_error", statusCode: 422, message: "Invalid `to` field." } };
@@ -114,6 +125,8 @@ beforeEach(() => {
   resend.rejected.clear();
   resend.down.clear();
   resend.configuration = null;
+  resend.contentByKey.clear();
+  resend.conflicts = 0;
   owner.notifyOwner.mockClear();
   postPaymentDeliveryRetry.delaysMs = [0, 0];
   appointmentFulfillmentPacing.delayMs = 0;
@@ -385,6 +398,50 @@ describe("EXPL-02 — adresse du patient corrigée depuis la fiche du rendez-vou
     ]);
   });
 
+  it("une correction qui ne change que la casse de l’adresse : « Renvoyer » écrit à l’adresse corrigée sous une autre clé, que Resend ne refuse pas (409)", async () => {
+    const { id } = seedAppointment("APTCASSE0001", { customer_email: "Patient.Casse@Example.test" });
+    seedJob(id, "owner", { status: "completed", attempts: 1 });
+    seedJob(id, "confirmation");
+    resend.rejected.add("Patient.Casse@Example.test");
+    await processAppointmentFulfillmentNow(id);
+    expect(job(id, "confirmation")).toMatchObject({ status: "failed" });
+
+    await expect(admin().appointments.updateCustomerEmail({ trackingId: "APTCASSE0001", customerEmail: "patient.casse@example.test" })).resolves.toEqual({ success: true, unchanged: false });
+    const retry = await admin().appointments.retryFulfillment({ trackingId: "APTCASSE0001" });
+
+    expect(retry.deliveries.map(delivery => delivery.state)).toEqual(["sent", "sent"]);
+    const [refused] = emailsTo("Patient.Casse@Example.test");
+    const [sent] = emailsTo("patient.casse@example.test");
+    expect(sent.options?.idempotencyKey).toBe(patientEmailIdempotencyKey("appointment-confirmation-APTCASSE0001", "patient.casse@example.test"));
+    expect(sent.options?.idempotencyKey).not.toBe(refused.options?.idempotencyKey);
+    expect(job(id, "confirmation")).toMatchObject({ status: "completed", last_error: null });
+    expect(resend.conflicts).toBe(0);
+  });
+
+  it("la même adresse corrigée de sa seule casse, refusée à son tour : l’alerte au médecin prend une autre clé, chaque clé garde un seul contenu", async () => {
+    const { id } = seedAppointment("APTCASSE0002", { customer_email: "Patient.Refus@Example.test" });
+    seedJob(id, "owner", { status: "completed", attempts: 1 });
+    seedJob(id, "confirmation");
+    resend.rejected.add("Patient.Refus@Example.test");
+    resend.rejected.add("patient.refus@example.test");
+    await processAppointmentFulfillmentNow(id);
+
+    await admin().appointments.updateCustomerEmail({ trackingId: "APTCASSE0002", customerEmail: "patient.refus@example.test" });
+    await admin().appointments.retryFulfillment({ trackingId: "APTCASSE0002" });
+
+    // Refused again for the address, not met with 409 for the key.
+    expect(emailsTo("patient.refus@example.test")).toHaveLength(1);
+    expect(resend.conflicts).toBe(0);
+    expect(job(id, "confirmation")).toMatchObject({ status: "failed" });
+    const sent = alerts();
+    expect(sent.map(alert => alert.content.includes("— patient.refus@example.test —"))).toEqual([false, true]);
+    expect(new Set(sent.map(alert => alert.key)).size).toBe(2);
+    expect(sent.map(alert => alert.key)).toEqual([
+      patientEmailIdempotencyKey("appointment-confirmation-failure-APTCASSE0002-refused", "Patient.Refus@Example.test"),
+      patientEmailIdempotencyKey("appointment-confirmation-failure-APTCASSE0002-refused", "patient.refus@example.test"),
+    ]);
+  });
+
   it("vaut aussi pour l’email d’un remboursement refusé", async () => {
     const { id } = seedAppointment("APTFIXMAIL02");
     resend.rejected.add("aptfixmail02@example.test");
@@ -502,5 +559,76 @@ describe("ABUS-03 — l’alerte « Échec d’envoi » que Resend ne prend pas 
     expect(alertJob()).toMatchObject({ status: "completed", attempts: 1 });
     expect(alerts().at(-1)!.key).toBe(patientEmailIdempotencyKey("appointment-confirmation-failure-APTALERT0001-first", "aptalert0001@example.test"));
     expect(alerts()).toHaveLength(6);
+  });
+
+  it("l’alerte d’un refus en file cite l’adresse refusée sous sa clé, et l’adresse corrigée depuis sans « Renvoyer » comme corrigée, jamais comme refusée", async () => {
+    const refusedAddress = "aptalert0002@example.test";
+    const correctedAddress = "bonne.adresse.0002@example.test";
+    const { id } = seedAppointment("APTALERT0002");
+    seedJob(id, "owner", { status: "completed", attempts: 1 });
+    seedJob(id, "confirmation");
+    resend.rejected.add(refusedAddress);
+    // Refused; the owner's alert meets Resend's rate limit and waits in the queue.
+    owner.notifyOwner.mockResolvedValueOnce(false);
+    await processAppointmentFulfillmentNow(id);
+    expect(job(id, "confirmation_failure_alert")).toMatchObject({ status: "queued" });
+
+    // Corrected on the appointment, without « Renvoyer »: the new address is not tried.
+    await admin().appointments.updateCustomerEmail({ trackingId: "APTALERT0002", customerEmail: correctedAddress });
+    await processDueAppointmentFulfillmentJobs();
+
+    expect(emailsTo(correctedAddress)).toEqual([]);
+    expect(job(id, "confirmation_failure_alert")).toMatchObject({ status: "completed", last_error: null });
+    const [first, queued] = alerts();
+    expect(queued.content).toContain("a été refusé par le service d’envoi");
+    expect(queued.content).toContain(`Patient : Patient Test — ${refusedAddress} — +33600000000.`);
+    expect(queued.content).toContain(`corrigée depuis sur le rendez-vous en ${correctedAddress} (pas encore essayée) : « Renvoyer » l’y envoie.`);
+    expect(queued.content).not.toContain(`— ${correctedAddress} —`);
+    // The refused address's key, told apart from the one tried at once by the address it names since.
+    const refusedKey = patientEmailIdempotencyKey("appointment-confirmation-failure-APTALERT0002-refused", refusedAddress);
+    expect(first.key).toBe(refusedKey);
+    expect(queued.key).toBe(patientEmailIdempotencyKey(refusedKey, correctedAddress));
+    expect(queued.key).not.toBe(patientEmailIdempotencyKey("appointment-confirmation-failure-APTALERT0002-refused", correctedAddress));
+    // Once the alert has left, the email's job no longer keeps the refused address; it is still refused.
+    expect(String(job(id, "confirmation").last_error)).not.toContain(refusedAddress);
+    expect((await deliveriesOf("APTALERT0002")).map(delivery => delivery.state)).toEqual(["sent", "refused"]);
+
+    // « Renvoyer » then writes to the corrected address, once.
+    const retry = await admin().appointments.retryFulfillment({ trackingId: "APTALERT0002" });
+    expect(retry.deliveries.map(delivery => delivery.state)).toEqual(["sent", "sent"]);
+    expect(emailsTo(correctedAddress)).toHaveLength(1);
+    expect(alerts()).toHaveLength(2);
+  });
+
+  it("sans correction, l’alerte en file cite l’adresse refusée sous la clé de l’alerte envoyée aussitôt, que Resend reconnaît", async () => {
+    const { id } = seedAppointment("APTALERT0003");
+    seedJob(id, "owner", { status: "completed", attempts: 1 });
+    seedJob(id, "confirmation");
+    resend.rejected.add("aptalert0003@example.test");
+    owner.notifyOwner.mockResolvedValueOnce(false);
+    await processAppointmentFulfillmentNow(id);
+    await processDueAppointmentFulfillmentJobs();
+
+    const [first, queued] = alerts();
+    expect(queued).toEqual(first);
+    expect(queued.content).toContain("Patient : Patient Test — aptalert0003@example.test — +33600000000.");
+    expect(queued.content).not.toContain("corrigée depuis");
+  });
+
+  it("l’effacement RGPD du patient ferme l’alerte en file et l’email, sans garder l’adresse refusée", async () => {
+    const { closeErasedPatientFulfillment } = await import("./appointmentFulfillment");
+    const { id } = seedAppointment("APTALERT0004");
+    seedJob(id, "owner", { status: "completed", attempts: 1 });
+    seedJob(id, "confirmation");
+    resend.rejected.add("aptalert0004@example.test");
+    owner.notifyOwner.mockResolvedValueOnce(false);
+    await processAppointmentFulfillmentNow(id);
+
+    await closeErasedPatientFulfillment([id]);
+
+    expect(memory.rows(appointmentFulfillmentJobs).filter(row => row.appointment_id === id && row.job_type !== "owner").map(row => [row.job_type, row.status, row.last_error])).toEqual([
+      ["confirmation", "completed", "patient_data_erased"],
+      ["confirmation_failure_alert", "completed", "patient_data_erased"],
+    ]);
   });
 });

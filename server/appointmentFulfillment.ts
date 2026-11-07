@@ -402,15 +402,19 @@ function ownerNotificationKey(appointment: Pick<Appointment, "trackingId">) {
 
 /**
  * Idempotency key of an email to the patient: one per booking (or invoice) and
- * address. Every attempt to the same address reuses it, so the email never
- * leaves twice; once the address is corrected from the dashboard after a
- * refusal (EXPL-02), « Renvoyer » writes to the new one under a new key, which
- * Resend would otherwise refuse as reused with another content (409).
+ * address, as written. Every attempt to the same address reuses it, so the
+ * email never leaves twice; once the address is corrected from the dashboard
+ * after a refusal (EXPL-02), « Renvoyer » writes to the new one under a new
+ * key, which Resend would otherwise refuse as reused with another content
+ * (409) for 24 hours. A correction of its case alone changes what Resend
+ * receives too, and so the key (ABUS-03); the bounce of an address is still
+ * told once per mailbox, whatever its case (addressFingerprint).
  */
 export function patientEmailIdempotencyKey(key: string, customerEmail: string) {
-  return `${key}-${addressFingerprint(customerEmail)}`;
+  return `${key}-${createHash("sha256").update(customerEmail).digest("hex").slice(0, 16)}`;
 }
 
+/** The mailbox an address reaches, whatever its case: a bounce is told once per mailbox (EXPL-13). */
 function addressFingerprint(customerEmail: string) {
   return createHash("sha256").update(customerEmail.trim().toLowerCase()).digest("hex").slice(0, 16);
 }
@@ -555,35 +559,73 @@ function patientContact(appointment: Appointment) {
   return `Patient : ${appointment.customerName} — ${appointment.customerEmail} — ${appointment.customerPhone}.`;
 }
 
-/** A failure of a patient email, as its job records it. */
-type PatientEmailFailure = Pick<FulfillmentJob, "attempts" | "maxAttempts" | "lastError"> & { refused: boolean; terminal: boolean };
+/**
+ * A failure of a patient email, as its job records it, with the address it
+ * was tried with: the one its alert quotes, even once the appointment holds a
+ * corrected one (ABUS-03).
+ */
+type PatientEmailFailure = Pick<FulfillmentJob, "attempts" | "maxAttempts" | "lastError"> & { refused: boolean; terminal: boolean; customerEmail: string };
+
+/**
+ * End of the last error of a patient email whose owner alert waits in the
+ * queue (ABUS-03): the address the email was tried with. Corrected on the
+ * appointment before the alert leaves (« Corriger l’email du patient »
+ * without « Renvoyer »), the address the appointment holds was never tried:
+ * the alert quotes the refused one, under its key, and says it was corrected
+ * since. Kept only while that alert waits: it is forgotten once the alert has
+ * left or given up (forgetTriedAddress), and closed with the email's job when
+ * the patient's data is erased (closeErasedPatientFulfillment).
+ */
+const TRIED_ADDRESS_MARK = "\ntried_address:";
+
+function triedAddressOf(lastError: string | null) {
+  const at = lastError?.lastIndexOf(TRIED_ADDRESS_MARK) ?? -1;
+  return at < 0 ? null : lastError!.slice(at + TRIED_ADDRESS_MARK.length);
+}
+
+/** Once its owner alert has left or given up, a patient email's job no longer keeps the address it was tried with. */
+async function forgetTriedAddress(db: Database, appointmentId: number, jobType: PatientJobType) {
+  const [patientJob] = await db.select({ id: appointmentFulfillmentJobs.id, lastError: appointmentFulfillmentJobs.lastError }).from(appointmentFulfillmentJobs)
+    .where(and(eq(appointmentFulfillmentJobs.appointmentId, appointmentId), eq(appointmentFulfillmentJobs.jobType, jobType))).limit(1);
+  const at = patientJob?.lastError?.lastIndexOf(TRIED_ADDRESS_MARK) ?? -1;
+  if (!patientJob?.lastError || at < 0) return;
+  await db.update(appointmentFulfillmentJobs).set({ lastError: patientJob.lastError.slice(0, at) })
+    .where(and(eq(appointmentFulfillmentJobs.id, patientJob.id), eq(appointmentFulfillmentJobs.lastError, patientJob.lastError)));
+}
 
 /**
  * The owner's alert that a patient email did not go out: at its first failure
  * (the next automatic attempt may only come with the next scheduled run), at
  * a refusal, for which no new attempt is promised, and when retries are
  * exhausted. One key per wording: a refusal may follow a first failure of the
- * same job. And per address, which the alert quotes: once it is corrected
- * (« Corriger l’email du patient »), a new failure is told under a new key,
- * which Resend would otherwise refuse for 24 h as reused with another content
- * (409); the same address refused again keeps its key, and a single alert.
+ * same job. And per address, which the alert quotes: the one the email was
+ * tried with, exactly as written. Once it is corrected (« Corriger l’email du
+ * patient »), a new failure is told under a new key, which Resend would
+ * otherwise refuse for 24 h as reused with another content (409); the same
+ * address refused again keeps its key, and a single alert. Corrected before
+ * the alert leaves, the address the appointment now holds is named as
+ * corrected since, never as refused, and changes the key too (ABUS-03).
  */
 function failureAlertOf(jobType: PatientJobType, appointment: Appointment, failure: PatientEmailFailure) {
   const { refused, terminal, attempts, maxAttempts } = failure;
+  const corrected = failure.customerEmail !== appointment.customerEmail;
+  const contact = `${patientContact({ ...appointment, customerEmail: failure.customerEmail })}${corrected ? ` Cet envoi visait cette adresse, corrigée depuis sur le rendez-vous en ${appointment.customerEmail} (pas encore essayée) : « Renvoyer » l’y envoie.` : ""}`;
   const recorded = isRefundNoticeJob(jobType) ? "Le remboursement est bien enregistré" : "Le paiement est bien enregistré";
   // The invoice storage, not the email service, is named when it kept the invoice from going out.
   const storage = failedOnInvoiceStorage(failure.lastError);
   const cause = storage ? " : sa copie archivée dans le stockage des factures (Vercel Blob) n’a pas pu être vérifiée ou lue, et elle n’est pas refaite à sa place ; vérifiez dans Vercel que le stockage Blob est actif" : "";
+  const key = patientEmailIdempotencyKey(`appointment-${jobType}-failure-${appointment.trackingId}-${refused ? "refused" : terminal ? "final" : "first"}${storage ? "-storage" : ""}`, failure.customerEmail);
   return {
     payload: {
       title: `Échec d’envoi après ${isRefundNoticeJob(jobType) ? "remboursement" : "paiement"} (${appointment.trackingId})`,
       content: refused
-        ? `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} a été refusé par le service d’envoi (adresse email du patient refusée ou invalide, ou contenu de l’email refusé). ${recorded}. Ce refus n’est pas passager : vérifiez l’adresse du patient et contactez-le directement. Le site ne le renverra pas de lui-même : corrigez l’adresse sur le rendez-vous (onglet Réservations, « Corriger l’email du patient »), puis « Renvoyer » l’envoie à la nouvelle adresse. ${patientContact(appointment)}`
+        ? `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} a été refusé par le service d’envoi (adresse email du patient refusée ou invalide, ou contenu de l’email refusé). ${recorded}. Ce refus n’est pas passager : vérifiez l’adresse du patient et contactez-le directement. Le site ne le renverra pas de lui-même : corrigez l’adresse sur le rendez-vous (onglet Réservations, « Corriger l’email du patient »), puis « Renvoyer » l’envoie à la nouvelle adresse. ${contact}`
         : terminal
-          ? `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} a échoué ${attempts} fois${cause}. ${recorded} ; un envoi manuel au patient est nécessaire. ${patientContact(appointment)}`
-          : `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} vient d’échouer (tentative ${attempts} sur ${maxAttempts})${cause}. ${recorded}. Un nouvel essai automatique aura lieu lors de la prochaine exécution planifiée ; en attendant, vous pouvez contacter le patient. ${patientContact(appointment)}`,
+          ? `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} a échoué ${attempts} fois${cause}. ${recorded} ; un envoi manuel au patient est nécessaire. ${contact}`
+          : `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} vient d’échouer (tentative ${attempts} sur ${maxAttempts})${cause}. ${recorded}. Un nouvel essai automatique aura lieu lors de la prochaine exécution planifiée ; en attendant, vous pouvez contacter le patient. ${contact}`,
     },
-    idempotencyKey: patientEmailIdempotencyKey(`appointment-${jobType}-failure-${appointment.trackingId}-${refused ? "refused" : terminal ? "final" : "first"}${storage ? "-storage" : ""}`, appointment.customerEmail),
+    // The corrected address it names changes its content, and so its key.
+    idempotencyKey: corrected ? patientEmailIdempotencyKey(key, appointment.customerEmail) : key,
   };
 }
 
@@ -612,11 +654,14 @@ function bounceAlertOf(appointment: Appointment) {
  * queued as a job: refused or failed for good, or waiting for a new attempt
  * after its first failure, whose alert is written as it was then. Null once
  * the email went out or was closed, or while it waits for a first attempt
- * again (« Renvoyer »): nothing is left to alert about.
+ * again (« Renvoyer »): nothing is left to alert about. Tried with the
+ * address the job kept for the alert (TRIED_ADDRESS_MARK), or else the one
+ * the appointment holds.
  */
-function recordedFailureOf(job: FulfillmentJob): PatientEmailFailure | null {
-  if (job.status === "failed") return { ...job, refused: isRefusedJob(job), terminal: true };
-  if (job.status === "retry") return { ...job, attempts: 1, refused: false, terminal: false };
+function recordedFailureOf(job: FulfillmentJob, appointment: Appointment): PatientEmailFailure | null {
+  const customerEmail = triedAddressOf(job.lastError) ?? appointment.customerEmail;
+  if (job.status === "failed") return { ...job, refused: isRefusedJob(job), terminal: true, customerEmail };
+  if (job.status === "retry") return { ...job, attempts: 1, refused: false, terminal: false, customerEmail };
   return null;
 }
 
@@ -737,8 +782,9 @@ async function runJob(id: number) {
     } else {
       // The owner's failure alert of a patient email, queued when it could not
       // leave right after that failure (ABUS-03): written from the email's job
-      // and the appointment as they stand now; its key follows the address the
-      // appointment now holds, which it quotes (failureAlertOf).
+      // and the appointment as they stand now; it quotes the address the email
+      // was tried with, and takes its key, even once the appointment holds a
+      // corrected one (failureAlertOf).
       const patientJobType = alertedPatientJob(jobType)!;
       const [patientJob] = await db.select().from(appointmentFulfillmentJobs)
         .where(and(eq(appointmentFulfillmentJobs.appointmentId, appointment.id), eq(appointmentFulfillmentJobs.jobType, patientJobType))).limit(1);
@@ -747,7 +793,7 @@ async function runJob(id: number) {
         await releaseClaimedJob(db, job);
         return { completed: false, retry: true };
       }
-      const failure = patientJob ? recordedFailureOf(patientJob) : null;
+      const failure = patientJob ? recordedFailureOf(patientJob, appointment) : null;
       if (!failure) {
         await db.update(appointmentFulfillmentJobs).set({ status: "completed", finishedAt: new Date(), lastError: "failure_alert_outdated" }).where(eq(appointmentFulfillmentJobs.id, id));
         return { skipped: true };
@@ -757,6 +803,7 @@ async function runJob(id: number) {
       // Not asked again after the immediate budget: the job goes back to the queue.
       const delivered = await notifyOwner(alert.payload, { idempotencyKey: alert.idempotencyKey, stopAtDeadline: true }).catch(() => false);
       if (!delivered) throw new Error("owner_failure_alert_failed");
+      await forgetTriedAddress(db, appointment.id, patientJobType);
     }
     await db.update(appointmentFulfillmentJobs).set({ status: "completed", finishedAt: new Date(), lastError: null }).where(eq(appointmentFulfillmentJobs.id, id));
     return { completed: true };
@@ -787,6 +834,9 @@ async function runJob(id: number) {
     if (!isPatientJob(jobType)) {
       // The owner alert would use the very channel that just failed.
       console.error("[AppointmentFulfillment] Owner notification failed", { trackingId: appointment.trackingId, jobType, terminal });
+      // A failure alert that gives up no longer needs the address its email was tried with.
+      const alertedJobType = alertedPatientJob(jobType);
+      if (terminal && alertedJobType) await forgetTriedAddress(db, appointment.id, alertedJobType).catch(() => undefined);
     } else if (job.attempts === 1 || terminal) {
       // The owner is alerted (failureAlertOf). The alert takes its send slot,
       // a pause after the email that failed (ABUS-03). When that slot may come
@@ -794,11 +844,13 @@ async function runJob(id: number) {
       // is queued as a job of its own, sent by the next processing under the
       // same key while the address is unchanged: never without its slot nor
       // after the page or the webhook has answered, and not lost.
-      const alert = failureAlertOf(jobType, appointment, { attempts: job.attempts, maxAttempts: job.maxAttempts, lastError, refused, terminal });
+      const alert = failureAlertOf(jobType, appointment, { attempts: job.attempts, maxAttempts: job.maxAttempts, lastError, refused, terminal, customerEmail: appointment.customerEmail });
       const delivered = (await alertSendSlot()) && (await notifyOwner(alert.payload, { idempotencyKey: alert.idempotencyKey, stopAtDeadline: true }).catch(() => false));
       if (!delivered) {
         console.warn("[AppointmentFulfillment] Owner failure alert not sent at once; queued for the next run", { trackingId: appointment.trackingId, jobType });
-        await queueFailureAlert(db, appointment.id, jobType)
+        // The email's job keeps the address it was tried with for the alert (TRIED_ADDRESS_MARK).
+        await db.update(appointmentFulfillmentJobs).set({ lastError: `${lastError}${TRIED_ADDRESS_MARK}${appointment.customerEmail}` }).where(and(eq(appointmentFulfillmentJobs.id, id), eq(appointmentFulfillmentJobs.lastError, lastError)))
+          .then(() => queueFailureAlert(db, appointment.id, jobType))
           .catch(queueError => console.error("[AppointmentFulfillment] Owner failure alert could not be queued", { trackingId: appointment.trackingId, jobType, error: queueError instanceof Error ? queueError.name : "UnknownError" }));
       }
     }

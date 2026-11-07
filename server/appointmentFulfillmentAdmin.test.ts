@@ -15,6 +15,7 @@ const state = vi.hoisted(() => ({
   // Emails the email service refuses for good (address refused): no automatic retry.
   refused: new Set<string>(),
   sent: [] as Array<{ kind: string; to: string; pdf?: Buffer; invoiceNumber?: string }>,
+  tried: [] as Array<{ kind: string; to: string; key?: string }>,
 }));
 
 vi.mock("./db", () => ({ getDb: async () => state.memory?.db ?? null }));
@@ -57,6 +58,8 @@ vi.mock("./invoiceNumbering", async importOriginal => {
 });
 vi.mock("./_core/notifications", async importOriginal => {
   const send = (kind: string) => vi.fn(async (to: string, ...rest: unknown[]) => {
+    // Each attempt, refused or not, with its idempotency key.
+    state.tried.push({ kind, to, key: (rest[5] as { idempotencyKey?: string } | undefined)?.idempotencyKey });
     if (state.refused.has(kind)) throw new Error(`${kind}_email_refused`);
     if (state.down.has(kind)) throw new Error(`${kind}_email_failed`);
     state.sent.push(kind === "invoice" ? { kind, to, pdf: rest[3] as Buffer, invoiceNumber: rest[4] as string } : { kind, to });
@@ -158,6 +161,7 @@ beforeEach(() => {
   state.down.clear();
   state.refused.clear();
   state.sent = [];
+  state.tried = [];
   blobStore.objects.clear();
   blobStore.uploads = [];
   blobStore.reads = [];
@@ -379,6 +383,27 @@ describe("EXPL-02 — « Télécharger la facture »", () => {
     expect(download.equals(issued)).toBe(true);
     expect(await billedTo(download)).toEqual(["Patient Test", "aptinvfix001@example.test", "+33600000000"]);
     expect(blobStore.uploads).toHaveLength(1);
+  });
+
+  it("facture refusée puis adresse corrigée de sa seule casse : « Renvoyer » l’envoie sous une autre clé, que Resend ne refuse pas comme réutilisée avec un autre destinataire (ABUS-03)", async () => {
+    const paid = seedAppointment("APTINVCASE01", { customer_email: "Patient.Facture@Example.test" });
+    seedJob(paid.id, "owner", { status: "completed", attempts: 1 });
+    seedJob(paid.id, "confirmation", { status: "completed", attempts: 1 });
+    seedJob(paid.id, "invoice");
+    seedInvoice(paid.id, 61);
+    state.refused.add("invoice");
+    await processAppointmentFulfillmentNow(paid.id as number);
+
+    await admin().appointments.updateCustomerEmail({ trackingId: "APTINVCASE01", customerEmail: "patient.facture@example.test" });
+    state.refused.clear();
+    await admin().appointments.retryFulfillment({ trackingId: "APTINVCASE01" });
+
+    expect(state.tried).toEqual([
+      { kind: "invoice", to: "Patient.Facture@Example.test", key: patientEmailIdempotencyKey("appointment-invoice-FAC-2026-000061", "Patient.Facture@Example.test") },
+      { kind: "invoice", to: "patient.facture@example.test", key: patientEmailIdempotencyKey("appointment-invoice-FAC-2026-000061", "patient.facture@example.test") },
+    ]);
+    expect(state.tried[1]!.key).not.toBe(state.tried[0]!.key);
+    expect(job(paid.id, "invoice")).toMatchObject({ status: "completed", last_error: null });
   });
 
   it("facture déjà partie, confirmation refusée puis adresse corrigée : « Télécharger la facture » donne toujours la facture reçue par le patient", async () => {
