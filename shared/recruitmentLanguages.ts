@@ -94,7 +94,10 @@ function nameForms(folded: string, writtenIn: string) {
  * like one (Grèce, Germany, Deutschland, Polska) end with no inflection of
  * its name.
  */
-const NOT_LANGUAGES = ["Émirats arabes", "Arabische Emirate", "الإمارات العربية", "المملكة العربية", "Mandarin Oriental", "golfe Persique", "golfe arabo-persique", "golfe Arabique", "péninsule Arabique", "gomme arabique"].map(foldLanguageText);
+const NOT_LANGUAGES = [
+  "Émirats arabes", "Arabische Emirate", "الإمارات العربية", "المملكة العربية", "Mandarin Oriental",
+  "golfe Persique", "golfe-Persique", "golfe arabo-persique", "golfe Arabique", "péninsule Arabique", "gomme arabique", "République hellénique",
+].map(foldLanguageText);
 
 const LANGUAGE_NAMES = RECRUITMENT_LANGUAGES.flatMap(language =>
   [
@@ -211,6 +214,26 @@ const OPTION_CONNECTOR = new RegExp("^(?:et|and|und|y|e|ou|or|oder|o)\\s+|\\s+(?
 /** The required texts already split, as the compared texts above. */
 const READ_REQUIREMENTS = new Map<string, readonly RecruitmentLanguageRequirement[]>();
 
+/**
+ * The parts of a text at a Chinese conjunction or a dash, each that names a
+ * language with the parts after it that name none (a level: « Anglais - C1
+ * - Arabe » is « Anglais - C1 » and « Arabe »), and the parts before the
+ * first one that names one with it (埃 in 埃及阿拉伯语, Egyptian Arabic).
+ */
+function partsBetweenNames(text: string) {
+  const groups: Array<{ start: number; end: number; names: boolean }> = [];
+  let cursor = 0;
+  for (const part of partsOutsideBrackets(text, BETWEEN_NAMES)) {
+    const start = text.indexOf(part, cursor);
+    cursor = start + part.length;
+    const names = recruitmentLanguageCodes(part).length > 0;
+    const last = groups.at(-1);
+    if (last && (!names || !last.names)) Object.assign(last, { end: cursor, names: names || last.names });
+    else groups.push({ start, end: cursor, names });
+  }
+  return groups.map(({ start, end }) => text.slice(start, end));
+}
+
 /** The parts of a text between the separators found outside its brackets, each trimmed, those with a letter or a digit. */
 function partsOutsideBrackets(text: string, separator: RegExp) {
   const parts: string[] = [];
@@ -231,7 +254,7 @@ function partsOutsideBrackets(text: string, separator: RegExp) {
  * « Anglais - Arabe », « 英语和阿拉伯语 »: two), so that the matching
  * profiles, the missions and the Langue filter count them alike. Not split
  * inside brackets (« Anglais (C1/C2) » is one), nor at a Chinese conjunction
- * or a dash unless each side names a language (« Anglais - courant » is
+ * or a dash before a part that names no language (« Anglais - courant » is
  * one). A part that names several languages without a separator (« anglais
  * arabe ») requires them all; a text that offers a choice (« Anglais ou
  * arabe », « anglais et/ou arabe ») is one requirement, met by any of its
@@ -247,10 +270,8 @@ export function recruitmentLanguageRequirements(required: string): readonly Recr
     const anyOf = partsOutsideBrackets(text, OPTION_SEPARATOR).map(option => option.replace(OPTION_CONNECTOR, "")).filter(option => LETTER_OR_DIGIT.test(option));
     requirements = anyOf.length ? [{ text, codes: recruitmentLanguageCodes(text), anyOf }] : [];
   } else {
-    requirements = partsOutsideBrackets(required, REQUIREMENT_SEPARATOR).flatMap(part => {
-      const named = partsOutsideBrackets(part, BETWEEN_NAMES);
-      return named.length > 1 && named.every(name => recruitmentLanguageCodes(name).length) ? named : [part];
-    }).map(text => ({ text, codes: recruitmentLanguageCodes(text), anyOf: [] }));
+    requirements = partsOutsideBrackets(required, REQUIREMENT_SEPARATOR).flatMap(partsBetweenNames)
+      .map(text => ({ text, codes: recruitmentLanguageCodes(text), anyOf: [] }));
   }
   if (required.length <= COMPARED_TEXT_MAX_LENGTH) {
     if (READ_REQUIREMENTS.size >= COMPARED_TEXTS_LIMIT) READ_REQUIREMENTS.clear();

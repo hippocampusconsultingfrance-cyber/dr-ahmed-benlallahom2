@@ -56,7 +56,7 @@ describe("langues du recrutement comparées par code (IA-02)", () => {
     for (const [name, code] of [["langue arabique", "ar"], ["Persique", "fa"], ["langue hellénique", "el"], ["Hollandais", "nl"], ["hollandaise", "nl"]] as const) {
       expect(recruitmentLanguageCodes(name), name).toEqual([code]);
     }
-    for (const text of ["golfe Persique", "pays du Golfe arabo-persique", "péninsule arabique", "Golfe arabique", "gomme arabique"]) expect(recruitmentLanguageCodes(text), text).toEqual([]);
+    for (const text of ["golfe Persique", "Golfe-Persique", "pays du Golfe arabo-persique", "péninsule arabique", "Golfe arabique", "gomme arabique", "République hellénique"]) expect(recruitmentLanguageCodes(text), text).toEqual([]);
     const [hebrew] = recruitmentLanguageRequirements("Hébreu");
     expect(meetsRequiredLanguage(["Langue hébraïque"], hebrew!)).toBe(true);
     expect(meetsRequiredLanguage(["Hebrew"], recruitmentLanguageRequirements("hébraïque")[0]!)).toBe(true);
@@ -110,6 +110,15 @@ describe("langues du recrutement comparées par code (IA-02)", () => {
     expect(recruitmentLanguageRequirements("serbo-croate")).toEqual([{ text: "serbo-croate", codes: [], anyOf: [] }]);
     expect(recruitmentLanguageRequirements("Anglais - courant")).toEqual([{ text: "Anglais - courant", codes: ["en"], anyOf: [] }]);
     expect(recruitmentLanguageRequirements("Arabe – langue maternelle")).toEqual([{ text: "Arabe – langue maternelle", codes: ["ar"], anyOf: [] }]);
+    // A level between two dashes stays with the language before it, as « Anglais - Arabe courant » does.
+    for (const [required, texts] of [
+      ["Anglais - Arabe - courant", ["Anglais", "Arabe - courant"]],
+      ["Anglais - C1 - Arabe", ["Anglais - C1", "Arabe"]],
+      ["Anglais - Arabe courant", ["Anglais", "Arabe courant"]],
+      ["埃及阿拉伯语和英语", ["埃及阿拉伯语", "英语"]],
+    ] as const) {
+      expect(recruitmentLanguageRequirements(required).map(requirement => requirement.text), required).toEqual(texts);
+    }
   });
 
   it("lit une exigence qui laisse le choix comme une seule, tenue par l’une de ses langues (IA-02)", () => {
