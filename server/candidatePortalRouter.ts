@@ -23,6 +23,7 @@ import {
   hashCandidatePassword,
   hashCandidateToken,
   normalizeCandidateEmail,
+  normalizeCandidatePassword,
   validateCandidatePassword,
   verifyCandidatePasswordInConstantTime,
   waitForCandidateResponseFloor,
@@ -202,8 +203,15 @@ async function recordCandidateActivationDelivery(
 async function assertAcceptableNewPassword(password: string) {
   const passwordError = validateCandidatePassword(password);
   if (passwordError) throw candidateRefusal("BAD_REQUEST", "Choisissez un mot de passe d’au moins 15 caractères.", "candidate_password_too_short");
+  // INTL-12: the hash is computed on the NFKC form, which then opens the account
+  // for every form NFKC folds to (a full-width copy of a breached password opens
+  // it with the ASCII one): that form is checked, and the typed one when it differs.
+  const hashedForm = normalizeCandidatePassword(password);
+  const checkedForms = hashedForm === password ? [password] : [hashedForm, password];
   try {
-    if (await isCompromisedPassword(password)) throw candidateRefusal("BAD_REQUEST", "Ce mot de passe a déjà été compromis. Choisissez-en un autre, long et unique.", "candidate_password_compromised");
+    for (const form of checkedForms) {
+      if (await isCompromisedPassword(form)) throw candidateRefusal("BAD_REQUEST", "Ce mot de passe a déjà été compromis. Choisissez-en un autre, long et unique.", "candidate_password_compromised");
+    }
   } catch (error) {
     if (error instanceof TRPCError) throw error;
     throw candidateRefusal("SERVICE_UNAVAILABLE", "Le contrôle de sécurité du mot de passe est temporairement indisponible.", "candidate_password_check_unavailable");
@@ -669,7 +677,7 @@ export const candidatePortalRouter = router({
   }),
 
   resetPassword: publicProcedure.input(z.object({ email: z.string().email().max(320), token: z.string().min(20).max(200), password: passwordInput })).mutation(async ({ input, ctx }) => {
-    // Length and known-breach checks (isCompromisedPassword(input.password)) run before any change.
+    // Length and known-breach checks (assertAcceptableNewPassword) run before any change.
     await assertAcceptableNewPassword(input.password);
     const db = databaseOrThrow(await getDb());
     const candidate = (await db.select().from(candidateAccounts).where(and(

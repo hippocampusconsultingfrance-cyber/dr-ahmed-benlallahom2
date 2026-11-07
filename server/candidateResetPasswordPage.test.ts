@@ -90,6 +90,19 @@ describe("parcours de réinitialisation candidat", () => {
     await expect(client().api.login({ email: EMAIL, password: NEW_PASSWORD })).resolves.toMatchObject({ success: true });
   });
 
+  it("refuse la copie en pleine chasse d’un mot de passe compromis, que son hachage NFKC ouvrirait avec l’ASCII (INTL-12)", async () => {
+    const { link } = await candidateWithResetLink();
+    // « Ｐａｓｓｗｏｒｄ-… » : each ASCII character typed in its full-width form, which NFKC folds back.
+    const fullWidth = [...BREACHED_PASSWORD].map(character => String.fromCodePoint(character.codePointAt(0)! + 0xfee0)).join("");
+    expect(fullWidth).not.toBe(BREACHED_PASSWORD);
+    expect(fullWidth.normalize("NFKC")).toBe(BREACHED_PASSWORD);
+
+    await expect(reasonOf(client().api.resetPassword({ ...link, password: fullWidth }))).resolves.toBe("candidate_password_compromised");
+    // The link is kept, and the breached ASCII form never opens the account.
+    await expect(reasonOf(client().api.login({ email: EMAIL, password: BREACHED_PASSWORD }))).resolves.toBe("candidate_credentials_invalid");
+    await expect(client().api.resetPassword({ ...link, password: NEW_PASSWORD })).resolves.toEqual({ success: true });
+  });
+
   it("refuse un lien expiré", async () => {
     const { link } = await candidateWithResetLink();
     accountByEmail(db(), EMAIL)!.passwordResetExpiresAt = new Date(Date.now() - 1000);

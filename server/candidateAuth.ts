@@ -40,7 +40,7 @@ export function normalizeCandidateEmail(value: string): string {
  * same characters typed on another keyboard or pasted from another app (an
  * accent composed or not, a full-width letter, a ligature) give the same hash.
  */
-function normalizeCandidatePassword(password: string): string {
+export function normalizeCandidatePassword(password: string): string {
   return password.normalize("NFKC");
 }
 
