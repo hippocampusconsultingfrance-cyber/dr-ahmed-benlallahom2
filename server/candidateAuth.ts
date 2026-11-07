@@ -35,6 +35,15 @@ export function normalizeCandidateEmail(value: string): string {
   return value.trim().toLowerCase();
 }
 
+/**
+ * INTL-12: a password is hashed in its NFKC form (NIST 800-63B), so that the
+ * same characters typed on another keyboard or pasted from another app (an
+ * accent composed or not, a full-width letter, a ligature) give the same hash.
+ */
+function normalizeCandidatePassword(password: string): string {
+  return password.normalize("NFKC");
+}
+
 function passwordMaterial(password: string): Buffer {
   return createHmac("sha256", candidateAuthPepper()).update(password, "utf8").digest();
 }
@@ -55,14 +64,15 @@ export function validateCandidatePassword(password: string): string | null {
 }
 
 export async function hashCandidatePassword(password: string): Promise<string> {
+  // The rules apply to the password as typed, the one the candidate sees.
   const validation = validateCandidatePassword(password);
   if (validation) throw new Error(validation);
   const salt = randomBytes(16);
-  const hash = await deriveCandidateKey(passwordMaterial(password), salt, SCRYPT_N, SCRYPT_R, SCRYPT_P);
+  const hash = await deriveCandidateKey(passwordMaterial(normalizeCandidatePassword(password)), salt, SCRYPT_N, SCRYPT_R, SCRYPT_P);
   return ["scrypt", SCRYPT_N, SCRYPT_R, SCRYPT_P, salt.toString("base64url"), hash.toString("base64url")].join("$");
 }
 
-export async function verifyCandidatePassword(password: string, storedHash: string): Promise<boolean> {
+async function storedHashMatches(password: string, storedHash: string): Promise<boolean> {
   const [algorithm, n, r, p, saltText, hashText] = storedHash.split("$");
   if (algorithm !== "scrypt" || !n || !r || !p || !saltText || !hashText) return false;
   const numericN = Number(n);
@@ -73,6 +83,25 @@ export async function verifyCandidatePassword(password: string, storedHash: stri
   if (expected.length !== SCRYPT_KEY_LENGTH) return false;
   const actual = await deriveCandidateKey(passwordMaterial(password), Buffer.from(saltText, "base64url"), numericN, numericR, numericP);
   return timingSafeEqual(actual, expected);
+}
+
+/**
+ * How a password matches a stored hash: "normalized" in its NFKC form;
+ * "as_typed" only as typed, a hash stored before INTL-12 from a password
+ * NFKC changes, which the sign-in stores again in its NFKC form; false when
+ * neither matches.
+ */
+export type CandidatePasswordMatch = false | "normalized" | "as_typed";
+
+export async function matchCandidatePassword(password: string, storedHash: string): Promise<CandidatePasswordMatch> {
+  const normalized = normalizeCandidatePassword(password);
+  if (await storedHashMatches(normalized, storedHash)) return "normalized";
+  if (normalized !== password && await storedHashMatches(password, storedHash)) return "as_typed";
+  return false;
+}
+
+export async function verifyCandidatePassword(password: string, storedHash: string): Promise<boolean> {
+  return Boolean(await matchCandidatePassword(password, storedHash));
 }
 
 /**
@@ -107,12 +136,13 @@ function candidateDummyPasswordHash(): Promise<string> {
  * (unknown, pending or disabled account), so that the response time of a
  * sign-in does not reveal whether a candidate account exists (SEC-05 / CAND-13).
  */
-export async function verifyCandidatePasswordInConstantTime(password: string, storedHash: string | null | undefined): Promise<boolean> {
+export async function verifyCandidatePasswordInConstantTime(password: string, storedHash: string | null | undefined): Promise<CandidatePasswordMatch> {
   // Awaited in every case so that the one-off cost of creating the dummy hash
   // (first sign-in of a process) does not depend on the account either.
   const dummyHash = await candidateDummyPasswordHash();
-  if (storedHash && isCandidatePasswordSet(storedHash)) return verifyCandidatePassword(password, storedHash);
-  await verifyCandidatePassword(password, dummyHash);
+  // A password NFKC changes is checked in both forms against the dummy hash too.
+  if (storedHash && isCandidatePasswordSet(storedHash)) return matchCandidatePassword(password, storedHash);
+  await matchCandidatePassword(password, dummyHash);
   return false;
 }
 

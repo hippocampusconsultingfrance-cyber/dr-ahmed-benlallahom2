@@ -589,7 +589,9 @@ export const candidatePortalRouter = router({
       throw genericError;
     }
     const signedIn = candidate!;
-    await db.update(candidateAccounts).set({ failedLoginCount: 0, lockedUntil: null, lastLoginAt: new Date() }).where(eq(candidateAccounts.id, signedIn.id));
+    // INTL-12: a password hashed as typed before its NFKC normalisation is stored again in that form.
+    const rehashed = valid === "as_typed" && !validateCandidatePassword(input.password) ? { passwordHash: await hashCandidatePassword(input.password) } : {};
+    await db.update(candidateAccounts).set({ failedLoginCount: 0, lockedUntil: null, lastLoginAt: new Date(), ...rehashed }).where(eq(candidateAccounts.id, signedIn.id));
     await clearPersistentRateLimit({ action: CANDIDATE_LOGIN_POLICY.emailNetwork.action, subject: pairSubject });
     await clearPersistentRateLimit({ action: CANDIDATE_LOGIN_POLICY.email.action, subject: email });
     await createCandidateSession(signedIn.id, ctx.req, ctx.res);
