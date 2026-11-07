@@ -33,11 +33,13 @@ vi.mock("@/lib/trpc", () => {
         stats: {
           useQuery: () => ({
             data: {
-              appointments: { today: 0, tomorrow: 0 },
-              medicalQuestions: { open: 0, oldestReceivedAt: null },
+              appointments: { today: 0, tomorrow: 0, upcomingWeek: { count: 0, lastDay: "2026-11-13" } },
+              medicalQuestions: { open: 0, oldestReceivedAt: null, recentAnswers: { count: 0, averageResponseMs: null } },
               unreadMessages: 0,
               gdprRequests: { open: 0, nextDeadline: null },
               documentsToReview: 0,
+              applications: { new: 0, lastWeek: 0, lastFourWeeks: 0 },
+              bookingConversion: { started: 0, paid: 0 },
               revenue: { currentMonth: { month: "2026-11", amount: view.revenue }, previousMonth: { month: "2026-10", amount: "100.00" } },
             },
             isLoading: false,

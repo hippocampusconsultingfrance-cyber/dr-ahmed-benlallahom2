@@ -4,8 +4,8 @@ import { elementsOf, renderStateful, resetStatefulHooks } from "@/testing/statef
 
 // Raccourcis de la vue d’ensemble, telle que le tableau de bord la monte :
 // « Ouvrir les réservations » du panneau À traiter, les cartes de ce qui
-// attend une action (ADM-06), puis les accès rapides Candidatures et Missions,
-// ouvrent chacun leur onglet dans le tableau de bord.
+// attend une action et des indicateurs (ADM-06), puis les accès rapides
+// Candidatures et Missions, ouvrent chacun leur onglet dans le tableau de bord.
 
 vi.mock("react", async importOriginal => (await import("@/testing/statefulRender")).withStatefulHooks(await importOriginal()));
 vi.mock("@/_core/hooks/useAuth", () => ({ useAuth: () => ({ user: { name: "Dr Ahmed", role: "admin" }, loading: false, refresh: vi.fn(), logout: vi.fn() }) }));
@@ -23,11 +23,13 @@ vi.mock("@/lib/trpc", () => ({
       stats: {
         useQuery: () => ({
           data: {
-            appointments: { today: 3, tomorrow: 1 },
-            medicalQuestions: { open: 2, oldestReceivedAt: new Date("2026-10-20T08:00:00Z") },
+            appointments: { today: 3, tomorrow: 1, upcomingWeek: { count: 6, lastDay: "2026-11-13" } },
+            medicalQuestions: { open: 2, oldestReceivedAt: new Date("2026-10-20T08:00:00Z"), recentAnswers: { count: 3, averageResponseMs: 3_600_000 } },
             unreadMessages: 1,
             gdprRequests: { open: 0, nextDeadline: null },
             documentsToReview: 0,
+            applications: { new: 2, lastWeek: 3, lastFourWeeks: 8 },
+            bookingConversion: { started: 10, paid: 7 },
             revenue: { currentMonth: { month: "2026-11", amount: "300.00" }, previousMonth: { month: "2026-10", amount: "0.00" } },
           },
           isLoading: false,
@@ -76,6 +78,8 @@ describe("raccourcis de la vue d’ensemble", () => {
       [card("Messages non lus"), "Messages", ContactsTab],
       [card("Demandes RGPD ouvertes"), "RGPD", GdprTab],
       [card("Documents candidats à revoir"), "Documents candidats", CandidateDocumentsAdminTab],
+      [card("Nouvelles candidatures"), "Candidatures", RecruitmentTab],
+      [card("Délai moyen de réponse aux questions"), "Questions santé", MedicalQuestionsAdminTab],
       [shortcut("Candidatures"), "Candidatures", RecruitmentTab],
       [shortcut("Missions"), "Missions", EmployerBriefsTab],
     ] as const) {
