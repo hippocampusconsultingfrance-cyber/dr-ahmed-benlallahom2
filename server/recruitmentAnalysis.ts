@@ -272,12 +272,12 @@ const CANDIDATE_DATA_TAG = "donnees_candidat";
 /**
  * Characters a reader could take for those of our tag (IA-05), beyond what
  * the compatibility form already brings back (the full width letters, < and
- * >): the angle brackets and slashes that look like ours, and the Cyrillic or
- * Greek letters drawn like those of its name.
+ * >): the angle brackets and slashes that look like ours (〈〉 ⟨⟩ ‹› ❮❯ ❬❭ ❰❱
+ * 《》 ⟪⟫…), and the Cyrillic or Greek letters drawn like those of its name.
  */
 const TAG_LOOKALIKES = new Map<string, string>([
-  ...[0x3008, 0x27e8, 0x2039, 0x02c2, 0x1438, 0x276e, 0x29fc].map(code => [String.fromCodePoint(code), "<"] as const),
-  ...[0x3009, 0x27e9, 0x203a, 0x02c3, 0x1433, 0x276f, 0x29fd].map(code => [String.fromCodePoint(code), ">"] as const),
+  ...[0x3008, 0x27e8, 0x2039, 0x02c2, 0x1438, 0x276e, 0x29fc, 0x276c, 0x2770, 0x300a, 0x27ea].map(code => [String.fromCodePoint(code), "<"] as const),
+  ...[0x3009, 0x27e9, 0x203a, 0x02c3, 0x1433, 0x276f, 0x29fd, 0x276d, 0x2771, 0x300b, 0x27eb].map(code => [String.fromCodePoint(code), ">"] as const),
   ...[0x2215, 0x2044, 0x29f8].map(code => [String.fromCodePoint(code), "/"] as const),
   ...([[0x0430, "a"], [0x03b1, "a"], [0x0251, "a"], [0x0441, "c"], [0x03f2, "c"], [0x0501, "d"], [0x0435, "e"], [0x0456, "i"],
     [0x03b9, "i"], [0x0131, "i"], [0x043e, "o"], [0x03bf, "o"], [0x0455, "s"], [0x0578, "n"]] as const)
@@ -293,13 +293,24 @@ function decodedTagEntity(entity: RegExpExecArray) {
   return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : "";
 }
 
-/** Accents and format characters (zero width space, soft hyphen, word joiner…), which a reader skips. */
-const MARK_OR_FORMAT = new RegExp("[\\p{M}\\p{Cf}]", "gu");
+/**
+ * Accents and format characters (zero width space, soft hyphen, word joiner…),
+ * which a reader skips, and the blank letters drawn as nothing: the Hangul
+ * fillers (U+115F, U+1160, U+3164, U+FFA0) and the blank Braille pattern.
+ */
+const MARK_OR_FORMAT = new RegExp("[\\p{M}\\p{Cf}\\u115f\\u1160\\u3164\\uffa0\\u2800]", "gu");
+/**
+ * The tag characters U+E0020 to U+E007E: invisible, each the copy of an ASCII
+ * character (« ASCII smuggling »), which a model may read as that character.
+ */
+const TAG_CHARACTER_FIRST = 0xe0020;
+const TAG_CHARACTER_LAST = 0xe007e;
 
 /**
  * The candidate's text as a lenient reader of our tag would read it (IA-05):
- * entities decoded, in compatibility form, without accents, format characters
- * (zero width space, soft hyphen, word joiner…) or case, look-alikes replaced.
+ * entities decoded, tag characters read as their ASCII, in compatibility
+ * form, without accents, format characters (zero width space, soft hyphen,
+ * word joiner…), blank letters or case, look-alikes replaced.
  * `starts` and `ends` give, for each character of `text`, the part of the
  * original text it was read from.
  */
@@ -308,8 +319,10 @@ function readAsTag(value: string) {
   const readCharacter = (character: string) => {
     let reading = read.get(character);
     if (reading === undefined) {
+      const code = character.codePointAt(0)!;
+      const shown = code >= TAG_CHARACTER_FIRST && code <= TAG_CHARACTER_LAST ? String.fromCodePoint(code - 0xe0000) : character;
       reading = Array.from(
-        character.normalize("NFKD").replace(MARK_OR_FORMAT, "").toLowerCase(),
+        shown.normalize("NFKD").replace(MARK_OR_FORMAT, "").toLowerCase(),
         letter => TAG_LOOKALIKES.get(letter) ?? letter
       ).join("");
       read.set(character, reading);
