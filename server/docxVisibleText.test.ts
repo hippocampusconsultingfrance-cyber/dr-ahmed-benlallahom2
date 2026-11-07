@@ -1681,8 +1681,20 @@ describe("DOCX : écritures de droite à gauche, signes et émoticônes, constru
   describe("arabe, persan et hébreu : chaque lettre de sa forme la plus large dans les polices mesurées, un quart de plus, dans la police complexe du passage", () => {
     // Bounded, an Arabic, Persian or Hebrew line of a CV holds with room to spare in a text box of 425 pt by 120 pt, or a row of exact
     // height, in Word's complex script fonts: read whole (set aside whole before, of no bound).
-    it.each([["Arial"], ["Times New Roman"], ["Tahoma"], ["Segoe UI"], ["Simplified Arabic"], ["Traditional Arabic"], ["Sakkal Majalla"], ["Arabic Typesetting"]])("bloc arabe et persan honnête en %s dans une zone de texte qui le tient largement : lu entier, rien n’est écarté", async complexFont => {
+    it.each([["Arial"], ["Times New Roman"], ["Tahoma"], ["Segoe UI"], ["Simplified Arabic"], ["Traditional Arabic"], ["Sakkal Majalla"], ["Arabic Typesetting"], ["Dubai"]])("bloc arabe et persan honnête en %s dans une zone de texte qui le tient largement : lu entier, rien n’est écarté", async complexFont => {
       read(await check(box(rightToLeft(ARABIC, "", complexFont!) + rightToLeft(PERSIAN, "", complexFont!), 425, 120)), [ARABIC, PERSIAN]);
+    });
+
+    // David and Miriam, Windows' usual Hebrew fonts, of no metrics published: bounded as the Arabic fonts of Office (their free
+    // revivals, David Libre and Miriam Libre, among the fonts measured), on the same tall line.
+    it.each([["David"], ["Miriam"]])("CV hébreu en %s : nom et titre dans des lignes exactes, bloc dans une zone de texte qui le tient : lus ; l’hébreu qui remplit la ligne exacte repousse les affirmations : écartées", async complexFont => {
+      const rows = [rightToLeft("שרה כהן", "", complexFont!), rightToLeft("אחות טיפול נמרץ", "", complexFont!)].map((content): [string, string] => [exact(700), content]);
+      read(await check(table(9000, rows) + box(rightToLeft(HEBREW, "", complexFont!), 425, 60)), ["שרה כהן", "אחות טיפול נמרץ", HEBREW]);
+      expectSetAside(await check(before(run(`${HEBREW} ${HEBREW}`, `<w:rFonts w:cs="${complexFont}"/><w:szCs w:val="22"/>`))));
+      // Three lines of their tall line (2.76 em) in a box of 90 pt: the claims under them are set aside; in Arial, a line under them is read.
+      const lines = (font: string, last: string) => box([...Array(3).fill(rightToLeft("אחות טיפול נמרץ", "", font)), paragraph(last)].join(""), 425, 90);
+      expectSetAside(await check(lines(complexFont!, FAKE_ONE)));
+      read(await check(lines("Arial", "Disponible immédiatement.")), ["אחות טיפול נמרץ", "Disponible immédiatement."]);
     });
 
     it("ligne arabe, ligne hébraïque, chacune dans une ligne de tableau exacte qu’elle tient largement, et une police complexe que Word n’a pas (Amiri, dessinée en Arial ou Times New Roman) : lues entières", async () => {
@@ -1697,12 +1709,21 @@ describe("DOCX : écritures de droite à gauche, signes et émoticônes, constru
     });
 
     it("piège : de l’arabe dans une police complexe sans borne (Andalus, Urdu Typesetting, une police embarquée) : la suite de la ligne exacte est écartée", async () => {
-      for (const complexFont of ["Andalus", "Urdu Typesetting", "Dubai"]) {
+      for (const complexFont of ["Andalus", "Urdu Typesetting", "Aldhabi", "Dubai Medium", "Simplified Arabic Fixed", "Miriam Fixed"]) {
         expectSetAside(await check(before(run("ممرضة", `<w:rFonts w:cs="${complexFont}"/>`))));
         expect((await check(before(run("ممرضة", '<w:rFonts w:cs="Arial"/>')))).text).toContain("Titre : Médecin");
       }
       const embedded = fontTable('<w:font w:name="Zorglub"><w:embedRegular r:id="rId9" w:fontKey="{0F0E0D0C-0B0A-0908-0706-050403020100}"/></w:font>');
       expectSetAside(await check(before(run("ممرضة", '<w:rFonts w:cs="Zorglub"/>')), { parts: [embedded] }));
+    });
+
+    // Windows' supplemental fonts of a fixed pitch (Simplified Arabic Fixed, Miriam Fixed) draw their narrowest letters, alef and yod,
+    // as wide as their widest: never bounded as the fonts Word draws a font it does not have with, whatever the script.
+    it("piège : une rangée de lettres étroites (alef, yod) en Simplified Arabic Fixed ou Miriam Fixed, polices de Windows à chasse fixe : la suite de la ligne exacte est écartée, comme le latin de ces polices", async () => {
+      for (const [letters, complexFont] of [["ا".repeat(60), "Simplified Arabic Fixed"], ["י".repeat(60), "Miriam Fixed"]]) {
+        expectSetAside(await check(before(run(letters!, `<w:rFonts w:cs="${complexFont}"/><w:szCs w:val="22"/>`))));
+        expectSetAside(await check(before(run("Disponible", `<w:rFonts w:ascii="${complexFont}" w:hAnsi="${complexFont}"/>`))));
+      }
     });
 
     // Justified (w:jc both, distribute, a kashida justification), Word may stretch Arabic with kashidas: what follows it on its line is
@@ -1733,8 +1754,46 @@ describe("DOCX : écritures de droite à gauche, signes et émoticônes, constru
       expectSetAside(await check(before(run("☎".repeat(80), '<w:rFonts w:ascii="Arial" w:hAnsi="Arial"/>'))));
     });
 
-    it("piège : une émoticône dans une police sans borne (Segoe UI Emoji, une police embarquée) : la suite de la ligne exacte est écartée", async () => {
-      expectSetAside(await check(before(run("🙂", '<w:rFonts w:ascii="Segoe UI Emoji" w:hAnsi="Segoe UI Emoji"/>'))));
+    // Word writes the font of an emoji or a sign it inserts (Segoe UI Emoji, Segoe UI Symbol): the fonts the bounds of signs and of
+    // emoji are taken for. Named, their emoji and signs are bounded so; their letters, figures and spaces, not measured, are not.
+    const EMOJI_FONT = '<w:rFonts w:ascii="Segoe UI Emoji" w:hAnsi="Segoe UI Emoji"/>';
+    const SYMBOL_FONT = '<w:rFonts w:ascii="Segoe UI Symbol" w:hAnsi="Segoe UI Symbol"/>';
+    it("émoticônes et signes dans la police que Word leur donne (Segoe UI Emoji, Segoe UI Symbol), suivis du texte en Calibri : la ligne de contact qui tient sa zone de texte, sa ligne exacte, est lue", async () => {
+      const calibri = '<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/>';
+      const lines: Array<[string, string, string]> = [["📞", EMOJI_FONT, "+971 50 123 4567"], ["📧", EMOJI_FONT, "maria.santos@example.com"], ["☎", SYMBOL_FONT, "+971 4 219 3000"], ["✉", SYMBOL_FONT, "Dubai, Émirats arabes unis"]];
+      const contact = lines.map(([sign, font, text]) => runs("", [sign, font], [` ${text}`, calibri]));
+      read(await check(box(contact.join(""), 220, 100)), lines.map(([sign, , text]) => `${sign} ${text}`));
+      read(await check(table(4000, contact.map((line): [string, string] => [exact(400), line]))), lines.map(([sign, , text]) => `${sign} ${text}`));
+      for (const [sign, font] of [["🙂", EMOJI_FONT], ["☎", SYMBOL_FONT], ["👩‍⚕️", EMOJI_FONT], ["🇦🇪", EMOJI_FONT]]) expect((await check(before(run(sign!, font)))).text, sign).toContain("Titre : Médecin");
+    });
+
+    it("piège : émoticônes ou signes de Segoe UI Emoji ou Symbol qui remplissent la ligne exacte, une lettre ou un espace de ces polices, une police embarquée sous leur nom, des lignes d’émoticônes de leur hauteur : la suite est écartée", async () => {
+      // As many as the bounds of the run's font not named push the claims' first words under the row (« piège calibré » below).
+      for (const [filler, fewer, font] of [["🙂".repeat(22), "🙂".repeat(12), EMOJI_FONT], ["☎".repeat(24), "☎".repeat(16), SYMBOL_FONT], ["🙂".repeat(22), "🙂".repeat(12), SYMBOL_FONT]]) {
+        const result = await check(before(run(filler!, font)));
+        expect(result.text, font).not.toContain("Titre : Médecin");
+        expectSetAside(result, "Titre : ");
+        expect((await check(before(run(fewer!, font)))).text, font).toContain("Titre : Médecin");
+      }
+      for (const font of [EMOJI_FONT, SYMBOL_FONT]) {
+        expectSetAside(await check(before(run("Disponible", font))));
+        expectSetAside(await check(before(run("🙂 ", font))));
+        expectSetAside(await check(before(run("7", font))));
+      }
+      for (const name of ["Segoe UI Emoji", "Segoe UI Symbol"]) {
+        const embedded = fontTable(`<w:font w:name="${name}"><w:embedRegular r:id="rId9" w:fontKey="{0F0E0D0C-0B0A-0908-0706-050403020100}"/></w:font>`);
+        expectSetAside(await check(before(run("🙂", `<w:rFonts w:ascii="${name}" w:hAnsi="${name}"/>`)), { parts: [embedded] }));
+      }
+      // Kerned (w:kern), each sign up to the widest pair of the fonts of signs a quarter more: 19 ☎ fill the row, 12 leave room.
+      const kerned = (count: number) => before(run("☎".repeat(count), `${SYMBOL_FONT}<w:kern w:val="2"/>`));
+      expectSetAside(await check(kerned(19)), "Titre : ");
+      expect((await check(kerned(19))).text).not.toContain("Titre : Médecin");
+      expect((await check(kerned(12))).text).toContain("Titre : Médecin");
+      // Their lines are as tall as a font of signs' and an emoji's (1.762 em): three of them fill a box of 66 pt.
+      for (const [sign, font] of [["🙂", EMOJI_FONT], ["☎", SYMBOL_FONT]]) {
+        const line = paragraph(sign!, "", font);
+        expectSetAside(await check(box([line, line, line, paragraph(FAKE_ONE)].join(""), 425, 66)));
+      }
     });
   });
 
@@ -1982,6 +2041,59 @@ describe("DOCX : écritures de droite à gauche, signes et émoticônes, constru
         // A line break in the stored text, which the data has not: set aside.
         const split = `<w:p><w:sdt><w:sdtPr><w:dataBinding w:prefixMappings="${coverNamespace}" w:xpath="/ns0:CoverPageProperties[1]/ns0:CompanyAddress[1]" w:storeItemID="${COVER}"/></w:sdtPr><w:sdtContent>${run("Al Wasl Road,")}<w:r><w:br/></w:r>${run(" Dubai")}</w:sdtContent></w:sdt></w:p>`;
         expect((await check(split, { parts: coverParts(ADDRESS, PHONE, EMAIL) })).text).not.toContain("Al Wasl Road");
+      });
+
+      // Word's templates bind the postal address to a plain text control of several lines (w:text w:multiLine), which draws each line
+      // feed of the data as a line break: a stored break (w:br, w:cr) is the data's line feed.
+      const LINES = "8 avenue Foch\n34000 Montpellier";
+      /** The address bound to the cover page in a control of these properties (several lines by default), the claims after it. */
+      const multiLine = (content: string, text = '<w:text w:multiLine="1"/>') =>
+        `<w:p><w:pPr>${NO_SPACING}</w:pPr><w:sdt><w:sdtPr><w:dataBinding w:prefixMappings="${coverNamespace}" w:xpath="/ns0:CoverPageProperties[1]/ns0:CompanyAddress[1]" w:storeItemID="${COVER}"/>${text}</w:sdtPr><w:sdtContent>${content}</w:sdtContent></w:sdt>${run(` ${FAKE_ONE}`)}</w:p>`;
+      it("adresse de deux lignes liée à la page de garde (w:text w:multiLine), ses lignes séparées par un saut de ligne : lue dans le corps et dans une ligne exacte de deux lignes ; dans une ligne exacte d’une ligne, sa seconde ligne et la suite sont écartées", async () => {
+        const stored = `${run("8 avenue Foch")}<w:r><w:br/></w:r>${run("34000 Montpellier")}`;
+        const parts = coverParts(LINES, PHONE, EMAIL);
+        // mammoth's raw text joins the lines (it reads no w:br).
+        const body = await check(multiLine(stored), { parts });
+        expect(body.text).toContain("8 avenue Foch34000 Montpellier");
+        expect(body).toMatchObject({ hidden: "", unverifiable: "", reasons: [] });
+        for (const content of [`<w:r><w:t>8 avenue Foch</w:t><w:br/><w:t>34000 Montpellier</w:t></w:r>`, `${run("8 avenue Foch")}<w:r><w:cr/></w:r>${run("34000 Montpellier")}`]) {
+          expect((await check(multiLine(content), { parts })).text).toContain("8 avenue Foch34000 Montpellier");
+        }
+        const twoLines = await check(table(9000, [[exact(560), multiLine(stored)]]), { parts });
+        expect(twoLines.text).toContain("8 avenue Foch34000 Montpellier Titre : Médecin");
+        expectSetAside(await check(table(9000, [[exact(300), multiLine(stored)]]), { parts }));
+      });
+
+      it("piège : saut de ligne stocké qui n’est pas la fin de ligne de la donnée (contrôle d’une ligne, saut masqué, par un style aussi, supprimé, hors d’une course, de page ou dégageant, fin de ligne dans le texte, tabulation, retour chariot dans la donnée) : ce qui suit le saut dans la ligne exacte est écarté", async () => {
+        // Word draws the data on two lines: in a row of two lines, the claims after it are under the row; the check must not read them
+        // on the second line as if the break were not drawn.
+        const between = (breaking: string) => `${run("8 avenue Foch")}${breaking}${run("34000 Montpellier")}`;
+        const traps: Array<[string, string, string?]> = [
+          [between("<w:r><w:br/></w:r>"), LINES, "<w:text/>"],
+          [between("<w:r><w:br/></w:r>"), LINES, ""],
+          [between('<w:r><w:rPr><w:vanish/></w:rPr><w:br/></w:r>'), LINES],
+          [between('<w:del w:id="1" w:author="x"><w:r><w:br/></w:r></w:del>'), LINES],
+          [between("<w:br/>"), LINES],
+          [between('<w:r><w:br w:type="page"/></w:r>'), LINES],
+          [between('<w:r><w:br w:clear="all"/></w:r>'), LINES],
+          [run("8 avenue Foch\n34000 Montpellier"), LINES],
+          [between("<w:r><w:tab/></w:r>"), "8 avenue Foch\t34000 Montpellier"],
+          [between("<w:r><w:br/></w:r>"), "8 avenue Foch\r\n34000 Montpellier"],
+          // A break where the data has a space, which Word draws on one line; a tab the data has not.
+          [between("<w:r><w:br/></w:r>"), "8 avenue Foch 34000 Montpellier"],
+          [between("<w:r><w:tab/></w:r>"), "8 avenue Foch34000 Montpellier"],
+        ];
+        for (const [content, data, text] of traps) {
+          const result = await check(table(9000, [[exact(560), multiLine(content, text)]]), { parts: coverParts(data, PHONE, EMAIL) });
+          expect(result.text, content).not.toContain("Montpellier");
+          expectSetAside(result);
+        }
+        // A break its run hides by a character style: the data's line feed Word may draw is not laid out; what follows it is set aside.
+        const styles = '<w:style w:type="character" w:styleId="Cache"><w:name w:val="Cache"/><w:rPr><w:vanish/></w:rPr></w:style>';
+        const styled = await check(table(9000, [[exact(560), multiLine(between('<w:r><w:rPr><w:rStyle w:val="Cache"/></w:rPr><w:br/></w:r>'))]]), { parts: coverParts(LINES, PHONE, EMAIL), styles });
+        expect(styled.text).toContain("8 avenue Foch");
+        expect(styled.text).not.toContain("Montpellier");
+        expectSetAside(styled);
       });
 
       it("société liée aux propriétés étendues du document (docProps/app.xml) : égale, lue ; autre, écartée", async () => {

@@ -849,6 +849,8 @@ export const DOCX_FONT_ALIASES: Record<string, string> = {
   "georgia pro black": "unbounded",
   "verdana pro black": "unbounded",
   "amasis mt pro black": "unbounded",
+  "simplified arabic fixed": "unbounded",
+  "miriam fixed": "unbounded",
 };
 
 /**
@@ -1095,6 +1097,7 @@ export const DOCX_WORD_FONTS: ReadonlySet<string> = new Set([
   "mingliu_hkscs",
   "mingliu_hkscs-extb",
   "miriam",
+  "miriam fixed",
   "mistral",
   "modern no. 20",
   "mongolian baiti",
@@ -1180,6 +1183,7 @@ export const DOCX_WORD_FONTS: ReadonlySet<string> = new Set([
   "shruti",
   "simhei",
   "simplified arabic",
+  "simplified arabic fixed",
   "simsun",
   "simsun-extb",
   "simsun-extg",
@@ -1325,6 +1329,9 @@ export const DOCX_COMPLEX_FONTS: Record<string, string> = {
   "traditional arabic": "complex",
   "arabic typesetting": "complex",
   "sakkal majalla": "complex",
+  "dubai": "complex",
+  "david": "complex",
+  "miriam": "complex",
 };
 
 /** An emoji, in thousandths of the size, in regular and bold, and the height of its line. */

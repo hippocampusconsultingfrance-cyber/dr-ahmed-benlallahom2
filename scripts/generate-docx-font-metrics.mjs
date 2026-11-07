@@ -307,7 +307,10 @@ const WORD_FONTS = [
  * (Arial Black…), OCR A Extended, a typewriter font wider than any measured,
  * Perpetua Titling MT, of capitals only, which draws a lowercase letter as
  * its capital, wider than LISTED gives it;
- * Cambria Math and Gabriola, of lines far taller.
+ * Cambria Math and Gabriola, of lines far taller; the fonts of a fixed pitch
+ * of Windows' supplemental fonts of Arabic and Hebrew (Simplified Arabic
+ * Fixed, Miriam Fixed: round 12, corrector's round), of no metrics, whose
+ * narrowest letters are as wide as their widest.
  */
 const UNBOUNDED = [
   "arial black", "ocr a extended", "perpetua titling mt", "aptos black", "aptos extrabold", "segoe ui black", "segoe ui emoji", "segoe ui symbol", "segoe mdl2 assets", "segoe fluent icons", "hololens mdl2 assets",
@@ -320,6 +323,7 @@ const UNBOUNDED = [
   "palace script mt", "papyrus", "parchment", "playbill", "poor richard", "pristina", "rage italic", "ravie", "rockwell extra bold", "script mt bold", "showcard gothic",
   "snap itc", "stencil", "tempus sans itc", "tw cen mt condensed extra bold", "viner hand itc", "vivaldi", "vladimir script", "wide latin", "baguet script", "the hand",
   "the serif hand", "posterama text black", "rockwell nova extra bold", "gill sans nova ultra bold", "georgia pro black", "verdana pro black", "amasis mt pro black",
+  "simplified arabic fixed", "miriam fixed",
 ];
 /**
  * The characters measured an East Asian font draws a full em wide when it
@@ -797,8 +801,9 @@ const COMPLEX_CHARACTERS = [[0x0590, 0x05ff], [0x0600, 0x06ff], [0x0750, 0x077f]
 /**
  * Of a character of these scripts or a sign, how much wider than the widest of the fonts measured Word's fonts may draw it, in
  * thousandths more: a quarter, as Word's fonts of these scripts (Arial, Times New Roman, Segoe UI, Tahoma; Simplified Arabic,
- * Traditional Arabic, Arabic Typesetting and Sakkal Majalla; Segoe UI Symbol for signs) are of the Naskh, Kufi and sans designs
- * measured, of no metrics published: the bound of each character already the widest form of it in the widest font of some forty,
+ * Traditional Arabic, Arabic Typesetting, Sakkal Majalla and Dubai; David and Miriam, whose free revivals David Libre and Miriam
+ * Libre are measured; Segoe UI Symbol for signs) are of the Naskh, Kufi, sans and Hebrew designs measured, of no metrics
+ * published: the bound of each character already the widest form of it in the widest font of some forty,
  * bold ones included (س, ص, ڪ up to 1.5 and 1.9 em, Amiri's swash ڪ), a quarter covers a font of them that drew all its letters a
  * quarter wider than the widest measured; that none of Word's does is a judgement, not measured here, which the owner's check of
  * Windows' files confirms or not (check-windows-fonts.mjs); and what Word adds to each advance of a font it emboldens
@@ -809,12 +814,16 @@ const FALLBACK_SHARE = 250;
  * The fonts of Word the margin (FALLBACK_SHARE) is taken for, by the names Word writes (lower case), and the font measured whose
  * line they set: Arial, Times New Roman, Segoe UI and Tahoma, as measured or published (Liberation Sans and Serif, Selawik,
  * Tahoma's line: Word sets a line in the font's ascent and descent for Windows, the same for all its scripts), the four Arabic
- * fonts of Office of a line as tall as the tallest measured (complexLine). Any other complex script font (Andalus, Aldhabi, Urdu
- * Typesetting, Dubai, David, Miriam…), embedded or of no metrics here, draws them of no bound.
+ * fonts of Office of a line as tall as the tallest measured (complexLine); and, of the same line, Windows' other usual fonts of these
+ * scripts (round 12, corrector's round): Dubai, an Arabic sans (of Windows 10 and later), and the Hebrew fonts David and Miriam,
+ * whose free revivals (David Libre, Miriam Libre, measured) are of lines of 1.44 and 1.31 em, under half of it; Miriam Fixed, of
+ * a fixed pitch, and the weights of Dubai named apart (Dubai Medium, Dubai Light), not. Any other complex script font (Andalus,
+ * Aldhabi, Urdu Typesetting, Miriam Fixed…), embedded or of no metrics here, draws them of no bound.
  */
 const COMPLEX_FONTS = {
   "arial": "liberation-sans", "times new roman": "liberation-serif", "segoe ui": "selawik", "tahoma": "tahoma",
   "simplified arabic": "complex", "traditional arabic": "complex", "arabic typesetting": "complex", "sakkal majalla": "complex",
+  "dubai": "complex", "david": "complex", "miriam": "complex",
 };
 const fallbackFonts = [...FALLBACK_INSTALLED.flatMap(([family, styles]) => styles.flatMap(style => fontFiles(family, { style, names: [style] }))), ...complexFiles].map(shapedFont);
 if (!complexFiles.length) throw new Error("no fonts in the folder's subfolder complex: give a folder that holds them");
@@ -853,8 +862,8 @@ const [complexRegular, complexBold] = widestForms(COMPLEX_CHARACTERS, textFonts)
 const complexBounds = COMPLEX_CHARACTERS.map((_, at) => fallbackBound(complexRegular[at], complexBold[at]));
 /**
  * The height of a line of a font of these scripts Word has of no metrics published (Simplified Arabic, Traditional Arabic, Arabic
- * Typesetting, Sakkal Majalla): the tallest of the fonts measured that hold Arabic (Amiri's, of Windows' ascent and descent, which
- * hold the marks stacked above and below its letters that Windows must not clip).
+ * Typesetting, Sakkal Majalla, Dubai, David, Miriam): the tallest of the fonts measured that hold Arabic (Amiri's, of Windows'
+ * ascent and descent, which hold the marks stacked above and below its letters that Windows must not clip).
  */
 const complexLine = Math.ceil(Math.max(...textFonts.filter(font => font.glyphOf(0x0628)).map(font => font.line / font.unitsPerEm)) * 1000);
 /**

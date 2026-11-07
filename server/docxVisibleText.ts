@@ -20,7 +20,9 @@ import {
  *   font Word may draw it in, laid out alone (laidLayouts);
  * - characters measured (DOCX_FONT_CHARACTERS); those a font lacks as wide as
  *   in the widest of the reader's text fonts, a sign as in a font of signs
- *   (lacking, DOCX_SIGN_FALLBACK), on a line as tall as such a font's; Hebrew
+ *   (lacking, DOCX_SIGN_FALLBACK), on a line as tall as such a font's, as the
+ *   signs and emoji of a run that names Word's fonts of them (Segoe UI Symbol,
+ *   Segoe UI Emoji: SIGN_FONT, their other characters of no bound); Hebrew
  *   and Arabic in a complex script font of DOCX_COMPLEX_FONTS, each as its
  *   widest form in the fonts measured a quarter more (DOCX_COMPLEX_METRICS), at
  *   their size (w:szCs) and on their font's line; emoji as Noto Color Emoji's a
@@ -50,7 +52,8 @@ import {
  *   it may draw either, each choice it may draw and the fallback; of a content
  *   control bound to data (w:dataBinding), the text it stores when it is, to
  *   the character, the text of the element of the document's core or extended
- *   properties or of its custom XML part its binding names (storedAsBound).
+ *   properties or of its custom XML part its binding names, a line feed of it
+ *   a line break in a plain text control of several lines (storedAsBound).
  * Anything else (a font the document embeds, a display or heavy font of no
  * metrics, a character of no font measured, Hebrew or Arabic in another
  * complex script font, Arabic in a line Word may justify with kashidas from
@@ -1356,16 +1359,25 @@ function dataPath(xpath: string, prefixMappings: string) {
 /**
  * The content controls bound to data (w:dataBinding) whose content Word draws as it stores it, by where their w:sdt starts: the
  * text of the element of data their binding names (dataStores, dataIndex, dataPath) is their stored text (w:t), to the character,
- * of no tab, line break nor carriage return on either side, and no longer than MAX_BOUND_TEXT. Only the controls of such a binding
- * compare their text, as it comes, and stop at its first difference.
+ * of no tab nor carriage return on either side, and no longer than MAX_BOUND_TEXT. A line feed of the data is a line break of the
+ * content (w:br of no other type, w:cr), in a plain text control of several lines only (w:text w:multiLine), which Word draws the
+ * data's line feeds in as breaks (Word's templates bind a postal address so): in a run, not deleted nor moved away (w:del,
+ * w:moveFrom; one its run hides loses what follows it, cutInvisibleRuns); any other break, a tab, or a line feed or a tab within a
+ * w:t differs. Only the controls of such a binding compare their text, as it comes, and stop at its first difference.
  */
 function storedAsBound(xml: string, boundText: (store: string, xpath: string, prefixMappings: string) => string | undefined): Survey<Set<number>> {
   const same = new Set<number>();
-  /** Of each control open: where it starts, how deep its content is open, the text of its data, how much of it its text matched (-1: it differs). */
-  const open: Array<{ start: number; content: number; drawn?: string; matched: number }> = [];
+  /**
+   * Of each control open: where it starts, how deep its content is open, the text of its data, how much of it its text matched (-1:
+   * it differs), whether it is a plain text control of several lines (w:text w:multiLine).
+   */
+  const open: Array<{ start: number; content: number; drawn?: string; matched: number; multiLine: boolean }> = [];
   /** How many controls open still compare their text. */
   let comparing = 0;
   let textStart: number | null = null;
+  /** The elements open, by name; how deep content deleted or moved away is open. */
+  const names: string[] = [];
+  let removed = 0;
   const differ = (control: { matched: number }) => {
     control.matched = -1;
     comparing -= 1;
@@ -1373,7 +1385,7 @@ function storedAsBound(xml: string, boundText: (store: string, xpath: string, pr
   const visit = (tag: XmlTag) => {
     const control = open.at(-1);
     if (tag.name === "w:sdt") {
-      if (!tag.closing && !tag.selfClosing) open.push({ start: tag.start, content: 0, matched: 0 });
+      if (!tag.closing && !tag.selfClosing) open.push({ start: tag.start, content: 0, matched: 0, multiLine: false });
       else if (tag.closing && control) {
         open.pop();
         if (control.drawn === undefined || control.matched < 0) return;
@@ -1382,25 +1394,48 @@ function storedAsBound(xml: string, boundText: (store: string, xpath: string, pr
       }
     } else if (control && tag.name === "w:dataBinding" && !tag.closing && control.content === 0 && control.drawn === undefined) {
       const drawn = boundText(tag.attributes.get("w:storeItemID") ?? "", tag.attributes.get("w:xpath") ?? "", tag.attributes.get("w:prefixMappings") ?? "");
-      if (drawn !== undefined && drawn.length <= MAX_BOUND_TEXT && !/[\t\n\r\v\f\u0085\u2028\u2029]/.test(drawn)) {
+      if (drawn !== undefined && drawn.length <= MAX_BOUND_TEXT && !/[\t\r\v\f\u0085\u2028\u2029]/.test(drawn)) {
         control.drawn = drawn;
         comparing += 1;
       }
+    } else if (control && tag.name === "w:text" && !tag.closing && control.content === 0) {
+      control.multiLine = /^(1|true|on)$/i.test(tag.attributes.get("w:multiLine") ?? "");
     } else if (control && tag.name === "w:sdtContent" && !tag.selfClosing) control.content += tag.closing ? -1 : 1;
-    else if (comparing > 0 && !tag.closing && (tag.name === "w:tab" || tag.name === "w:br" || tag.name === "w:cr" || tag.name === "w:ptab")) {
+    else if (comparing > 0 && !tag.closing && (tag.name === "w:br" || tag.name === "w:cr")) {
+      // A line feed of the data only matches a break (of a run, of no other type, not deleted) of a plain text control of several
+      // lines; a w:t holds none (below).
+      const type = tag.attributes.get("w:type") ?? "textWrapping";
+      const clear = tag.attributes.get("w:clear") ?? "none";
+      const breaksLine = tag.name === "w:cr" || (type === "textWrapping" && clear === "none");
+      for (const each of open) {
+        if (each.drawn === undefined || each.matched < 0 || each.content <= 0) continue;
+        if (each.multiLine && breaksLine && removed === 0 && names.at(-1) === "w:r" && each.drawn.charCodeAt(each.matched) === 10) each.matched += 1;
+        else differ(each);
+      }
+    } else if (comparing > 0 && !tag.closing && (tag.name === "w:tab" || tag.name === "w:ptab")) {
       for (const each of open) if (each.drawn !== undefined && each.matched >= 0 && each.content > 0) differ(each);
     } else if (comparing > 0 && tag.name === "w:t" && !tag.selfClosing) {
       if (!tag.closing) textStart = tag.end;
       else if (textStart !== null) {
         const text = decodeXml(xml.slice(textStart, tag.start));
+        const plain = !/[\t\n\r\v\f\u0085\u2028\u2029]/.test(text);
         for (const each of open) {
           if (each.drawn === undefined || each.matched < 0 || each.content <= 0) continue;
-          if (each.drawn.length - each.matched >= text.length && each.drawn.startsWith(text, each.matched)) each.matched += text.length;
+          if (plain && each.drawn.length - each.matched >= text.length && each.drawn.startsWith(text, each.matched)) each.matched += text.length;
           else differ(each);
         }
         textStart = null;
       }
     }
+    // Where a break lies: in a run or not, in content deleted or moved away.
+    if (tag.selfClosing) return;
+    if (tag.closing) {
+      names.pop();
+      if (tag.name === "w:del" || tag.name === "w:moveFrom") removed = Math.max(0, removed - 1);
+      return;
+    }
+    names.push(tag.name);
+    if (tag.name === "w:del" || tag.name === "w:moveFrom") removed += 1;
   };
   return { visit, done: () => same };
 }
@@ -1990,6 +2025,25 @@ function lacking(style: FontStyle): number[] {
 }
 /** The height of a line of a font of signs Word draws a sign in that the run's font lacks, in sizes of its text. */
 const SIGN_LINE = DOCX_FONT_METRICS[DOCX_SIGN_FALLBACK]!.line / 1000;
+/**
+ * Word's fonts of signs and emoji, of no metrics published (DOCX_FONT_ALIASES: of no bound), as a run names them (Word writes the
+ * font of an emoji or a sign it inserts so): the very fonts DOCX_SIGN_FALLBACK and DOCX_EMOJI_METRICS bound what Word draws in
+ * them, of a sign the run's font lacks (lacking) and of an emoji (unmeasuredShare). Named, a sign of them is as wide as `lacking`
+ * gives it and an emoji as DOCX_EMOJI_METRICS (the run's fonts none of no bound), on a line as tall as either's, kerned as the
+ * fonts of signs and emoji (DOCX_KERNING_FALLBACK); any other character of them (a letter, a figure, punctuation, a space), not
+ * measured in them, of no bound. Embedded, or as another font's other name (w:altName), of no bound as any (candidates).
+ */
+const SIGN_FONT_NAMES = new Set(["segoe ui symbol", "segoe ui emoji"]);
+const signFontWidths = new Map<FontStyle, number[]>();
+const SIGN_FONT: DrawnFont = {
+  line: Math.max(SIGN_LINE, DOCX_EMOJI_METRICS.line / 1000),
+  kern: () => DOCX_KERNING_FALLBACK / 1000,
+  widths: style => {
+    let widths = signFontWidths.get(style);
+    if (!widths) signFontWidths.set(style, (widths = lacking(style).map((width, at) => (LETTER_LIKE[at] ? UNBOUNDED_SIZES : width))));
+    return widths;
+  },
+};
 
 /** Where each character of Hebrew and Arabic the check bounds is in DOCX_COMPLEX_METRICS, by its code: -1 when it is not one. */
 const COMPLEX_INDEX = new Int16Array(0x10000).fill(-1);
@@ -2303,7 +2357,7 @@ function fontResolver(table: Map<string, FontEntry[]>, theme: Theme): FontsOf {
     const known = knownFont(name);
     const fonts: DrawnFont[] = [];
     if (entries?.some(entry => entry.unbounded)) fonts.push(UNBOUNDED_FONT);
-    if (known) fonts.push(measuredFont(known));
+    if (known) fonts.push(SIGN_FONT_NAMES.has(name) ? SIGN_FONT : measuredFont(known));
     if (!known || !DOCX_WORD_FONTS.has(name)) {
       fonts.push(...substitutes(entries));
       if (SANS_NAME.test(name)) fonts.push(measuredFont(DOCX_SUBSTITUTE_FONTS.sans));
@@ -3290,6 +3344,9 @@ type Frame = BandSizes & {
    */
   bound?: boolean;
   dataBound?: boolean;
+  /** Content controls bound to data whose content Word draws as it stores it (storedAsBound), and their content. */
+  drawnAsStored?: boolean;
+  storedBound?: boolean;
   /** Content controls: where their w:sdt starts. */
   sdtStart?: number;
   /** Runs fitted to a width by their own properties (w:fitText): their group (fitTextGroups). */
@@ -3502,10 +3559,11 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
    * The frames of the stack placed off the page, off it with some margins only, that a shape in front may cover, cells or text boxes,
    * text boxes, deleted or moved away: counted as they come and go, not looked for at each run.
    */
-  const held = { offPage: 0, unplaced: 0, covered: 0, nested: 0, textBoxes: 0, deleted: 0, ruby: 0, bound: 0 };
+  const held = { offPage: 0, unplaced: 0, covered: 0, nested: 0, textBoxes: 0, deleted: 0, ruby: 0, bound: 0, stored: 0 };
   const hold = (frame: Frame, change: number) => {
     if (frame.name === "w:ruby") held.ruby += change;
     if (frame.bound) held.bound += change;
+    if (frame.storedBound) held.stored += change;
     if (frame.offPage || frame.hidden || frame.columnOff) held.offPage += change;
     if (frame.unplaced || frame.columnUnplaced) held.unplaced += change;
     if (frame.covered) held.covered += change;
@@ -5421,8 +5479,16 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     // But one bound to an element of the document's properties or custom XML whose text its content is (storedAsBound): Word draws
     // it as stored.
     if (tag.name === "w:sdt") frame.sdtStart = tag.start;
-    if (tag.name === "w:dataBinding" && parent?.name === "w:sdtPr" && grandParent?.name === "w:sdt" && !drawnAsStoredControls.has(grandParent.sdtStart ?? -1)) grandParent.dataBound = true;
+    if (tag.name === "w:dataBinding" && parent?.name === "w:sdtPr" && grandParent?.name === "w:sdt") {
+      if (drawnAsStoredControls.has(grandParent.sdtStart ?? -1)) grandParent.drawnAsStored = true;
+      else grandParent.dataBound = true;
+    }
     if (tag.name === "w:sdtContent" && parent?.dataBound) frame.bound = true;
+    if (tag.name === "w:sdtContent" && parent?.drawnAsStored) frame.storedBound = true;
+    // A line break of such a control (the line feed of its data) that its run hides, by its own properties or a style: Word may draw
+    // the data's line feed, which the check does not lay out; what follows it in its paragraph, and in its container, is of no place
+    // known.
+    if ((tag.name === "w:br" || tag.name === "w:cr") && parent?.name === "w:r" && held.stored > 0 && hides(runFormat(parent))) loseParagraph();
     // What Word draws that the check does not lay out: an equation (m:oMath, m:oMathPara, in Cambria Math, which mammoth does not
     // read), a subdocument (w:subDoc): of no extent known, what follows it in its paragraph may lie anywhere in the most room, and of
     // one among the paragraphs (a display equation, m:oMathPara out of a w:p), in its container (loseParagraph); a document imported
