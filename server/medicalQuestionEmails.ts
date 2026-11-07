@@ -1,8 +1,9 @@
 import { Resend } from "resend";
-import { buildHippocampusEmailShell, unverifiedRecipientGreeting } from "./_core/notifications";
+import { buildHippocampusEmailShell, emailSiteLink, textToSafeHtml, unverifiedRecipientGreeting } from "./_core/notifications";
 import { reportResendQuotaError, sendWithRateLimitRetry } from "./_core/resendDelivery";
 import { DEFAULT_TRANSACTIONAL_FROM, resolveConsultationContact } from "./consultationContact";
 import { adminLink } from "./adminLinks";
+import { emailLanguageFor } from "./emailLanguage";
 
 /**
  * Emails of the free medical-question service.
@@ -56,24 +57,54 @@ function escapeHtml(value: unknown): string {
     .replaceAll("'", "&#039;");
 }
 
+const MEDICAL_RESPONSE_COPY = {
+  fr: {
+    subject: "Réponse à votre question",
+    reviewed: "Votre question a été examinée.",
+    intro: "Vous trouverez ci-dessous une réponse d’information générale relue et validée par le Dr Ahmed Ben Lallahom.",
+    importantLabel: "Information importante :",
+    important: "cette réponse générale ne remplace pas une consultation, une évaluation préopératoire ni une prise en charge urgente. En cas d’urgence ou de symptôme inquiétant, contactez les secours ou un professionnel de santé sans attendre.",
+    reference: "Référence confidentielle :",
+    preheader: "Réponse d’information générale relue et validée par le Dr Ahmed Ben Lallahom – réf.",
+  },
+  en: {
+    subject: "Answer to your question",
+    reviewed: "Your question has been reviewed.",
+    intro: "Below is a general information answer, reviewed and validated by Dr Ahmed Ben Lallahom.",
+    importantLabel: "Important information:",
+    important: "this general answer does not replace a consultation, a pre-operative assessment or emergency care. In an emergency or in case of a worrying symptom, contact the emergency services or a health professional without delay.",
+    reference: "Confidential reference:",
+    preheader: "General information answer reviewed and validated by Dr Ahmed Ben Lallahom – ref.",
+  },
+} as const;
+
+/**
+ * The validated answer, in the language the question was asked in (MAIL-09):
+ * French for "fr" and for a question stored without one, English otherwise.
+ * The preview gives the reference only, never the answer (MAIL-12).
+ */
 export async function sendMedicalQuestionResponseEmail(
-  input: { email: string; firstName: string; trackingId: string; response: string },
+  input: { email: string; firstName: string; trackingId: string; response: string; language?: string | null },
   options: { idempotencyKey?: string } = {},
 ) {
   const contact = resolveMedicalQuestionContact();
+  const language = emailLanguageFor(input.language);
+  const copy = MEDICAL_RESPONSE_COPY[language];
+  const subject = `${copy.subject} — ${input.trackingId}`;
   // The first name comes from the public form: same greeting as the acknowledgement (MAIL-01).
-  const greeting = unverifiedRecipientGreeting(input.firstName);
+  const greeting = unverifiedRecipientGreeting(input.firstName, language);
+  // The answer's line breaks as <br />: Outlook ignores white-space (MAIL-10).
   const html = buildHippocampusEmailShell(`
-    <h2 style="color:#0891b2">Réponse à votre question</h2>
+    <h2 style="color:#0891b2">${copy.subject}</h2>
     <p>${escapeHtml(greeting)}</p>
-    <p>Votre question a été examinée. Vous trouverez ci-dessous une réponse d’information générale relue et validée par le Dr. Ahmed Ben Lallahom.</p>
-    <div style="margin:20px 0;padding:18px;border-radius:10px;background:#f1f5f9;white-space:pre-line;line-height:1.65;color:#0f172a;">${escapeHtml(input.response)}</div>
-    <p style="font-size:13px;line-height:1.55;color:#475569;"><strong>Information importante :</strong> cette réponse générale ne remplace pas une consultation, une évaluation préopératoire ni une prise en charge urgente. En cas d’urgence ou de symptôme inquiétant, contactez les secours ou un professionnel de santé sans attendre.</p>
-    <p style="font-size:12px;color:#64748b;">Référence confidentielle : ${escapeHtml(input.trackingId)}</p>
-  `);
-  const text = `${greeting}\n\nVotre question a été examinée.\n\n${input.response}\n\nInformation importante : cette réponse générale ne remplace pas une consultation, une évaluation préopératoire ni une prise en charge urgente. En cas d’urgence ou de symptôme inquiétant, contactez les secours ou un professionnel de santé sans attendre.\n\nRéférence confidentielle : ${input.trackingId}`;
+    <p>${copy.reviewed} ${copy.intro}</p>
+    <div style="margin:20px 0;padding:18px;border-radius:10px;background:#f1f5f9;line-height:1.65;color:#0f172a;">${textToSafeHtml(input.response)}</div>
+    <p style="font-size:13px;line-height:1.55;color:#475569;"><strong>${copy.importantLabel}</strong> ${copy.important}</p>
+    <p style="font-size:12px;color:#64748b;">${copy.reference} ${escapeHtml(input.trackingId)}</p>
+  `, language, { brand: "doctor", title: subject, preheader: `${copy.preheader} ${input.trackingId}` });
+  const text = `${greeting}\n\n${copy.reviewed}\n\n${input.response}\n\n${copy.importantLabel} ${copy.important}\n\n${copy.reference} ${input.trackingId}`;
   const { error } = await sendWithRateLimitRetry(() => getResendClient().emails.send(
-    { from: contact.from, to: [input.email], replyTo: contact.replyTo, subject: `Réponse à votre question — ${input.trackingId}`, html, text },
+    { from: contact.from, to: [input.email], replyTo: contact.replyTo, subject, html, text },
     options.idempotencyKey ? { idempotencyKey: options.idempotencyKey } : undefined,
   ));
   if (error) {
@@ -86,29 +117,39 @@ export async function sendMedicalQuestionResponseEmail(
 export async function sendMedicalQuestionAcknowledgementEmail(input: { email: string; firstName: string; trackingId: string; language: string }) {
   const contact = resolveMedicalQuestionContact();
   const french = input.language === "fr";
+  const language = french ? "fr" : "en";
   const delay = medicalQuestionDelayText(input.language);
-  const greeting = unverifiedRecipientGreeting(input.firstName, french ? "fr" : "en");
+  const greeting = unverifiedRecipientGreeting(input.firstName, language);
   const subject = french ? `Votre question a bien été reçue — ${input.trackingId}` : `Your question has been received — ${input.trackingId}`;
+  // MAIL-07: the GDPR form, beside the reply by email.
+  const gdprUrl = emailSiteLink("/gdpr", language);
   const html = buildHippocampusEmailShell(french ? `
     <h2 style="color:#0891b2">Votre question a bien été reçue</h2>
     <p>${escapeHtml(greeting)}</p>
-    <p>Nous avons bien reçu votre question. Elle sera relue par le Dr. Ahmed Ben Lallahom avant toute réponse, qui vous sera envoyée par email.</p>
+    <p>Nous avons bien reçu votre question. Elle sera relue par le Dr Ahmed Ben Lallahom avant toute réponse, qui vous sera envoyée par email.</p>
     <p>${escapeHtml(delay)}</p>
     <p style="margin:20px 0;padding:14px;border-radius:10px;background:#f1f5f9;font-family:monospace;font-size:16px;font-weight:700;color:#0f172a;">Référence : ${escapeHtml(input.trackingId)}</p>
     <p style="font-size:13px;line-height:1.55;color:#475569;"><strong>Ce service ne traite pas les urgences.</strong> En cas de danger immédiat ou de symptôme inquiétant, contactez les secours (15 ou 112) ou un professionnel de santé sans attendre cette réponse.</p>
-    <p style="font-size:12px;color:#64748b;">Pour retirer votre consentement ou supprimer votre demande, répondez à cet email en indiquant votre référence.</p>
+    <p style="font-size:12px;color:#64748b;">Pour retirer votre consentement ou supprimer votre demande, répondez à cet email en indiquant votre référence, ou utilisez notre <a href="${escapeHtml(gdprUrl)}" style="color:#0e7490;">formulaire RGPD</a>.</p>
   ` : `
     <h2 style="color:#0891b2">Your question has been received</h2>
     <p>${escapeHtml(greeting)}</p>
-    <p>We have received your question. It will be reviewed by Dr. Ahmed Ben Lallahom before any answer, which will be sent to you by email.</p>
+    <p>We have received your question. It will be reviewed by Dr Ahmed Ben Lallahom before any answer, which will be sent to you by email.</p>
     <p>${escapeHtml(delay)}</p>
     <p style="margin:20px 0;padding:14px;border-radius:10px;background:#f1f5f9;font-family:monospace;font-size:16px;font-weight:700;color:#0f172a;">Reference: ${escapeHtml(input.trackingId)}</p>
     <p style="font-size:13px;line-height:1.55;color:#475569;"><strong>This service does not handle emergencies.</strong> In case of immediate danger or a worrying symptom, contact the emergency services (112) or a health professional without waiting for this answer.</p>
-    <p style="font-size:12px;color:#64748b;">To withdraw your consent or delete your request, reply to this email with your reference.</p>
-  `);
+    <p style="font-size:12px;color:#64748b;">To withdraw your consent or delete your request, reply to this email with your reference, or use our <a href="${escapeHtml(gdprUrl)}" style="color:#0e7490;">GDPR form</a>.</p>
+  `, language, {
+    brand: "doctor",
+    title: subject,
+    // MAIL-12: the reference and the next step, never the question.
+    preheader: french
+      ? `Référence ${input.trackingId} – votre question sera relue par le Dr Ahmed Ben Lallahom avant toute réponse.`
+      : `Reference ${input.trackingId} – your question will be reviewed by Dr Ahmed Ben Lallahom before any answer.`,
+  });
   const text = french
-    ? `${greeting}\n\nNous avons bien reçu votre question. Elle sera relue par le Dr. Ahmed Ben Lallahom avant toute réponse, qui vous sera envoyée par email.\n\n${delay}\n\nRéférence : ${input.trackingId}\n\nCe service ne traite pas les urgences. En cas de danger immédiat ou de symptôme inquiétant, contactez les secours (15 ou 112) ou un professionnel de santé sans attendre cette réponse.\n\nPour retirer votre consentement ou supprimer votre demande, répondez à cet email en indiquant votre référence.`
-    : `${greeting}\n\nWe have received your question. It will be reviewed by Dr. Ahmed Ben Lallahom before any answer, which will be sent to you by email.\n\n${delay}\n\nReference: ${input.trackingId}\n\nThis service does not handle emergencies. In case of immediate danger or a worrying symptom, contact the emergency services (112) or a health professional without waiting for this answer.\n\nTo withdraw your consent or delete your request, reply to this email with your reference.`;
+    ? `${greeting}\n\nNous avons bien reçu votre question. Elle sera relue par le Dr Ahmed Ben Lallahom avant toute réponse, qui vous sera envoyée par email.\n\n${delay}\n\nRéférence : ${input.trackingId}\n\nCe service ne traite pas les urgences. En cas de danger immédiat ou de symptôme inquiétant, contactez les secours (15 ou 112) ou un professionnel de santé sans attendre cette réponse.\n\nPour retirer votre consentement ou supprimer votre demande, répondez à cet email en indiquant votre référence, ou utilisez notre formulaire RGPD : ${gdprUrl}`
+    : `${greeting}\n\nWe have received your question. It will be reviewed by Dr Ahmed Ben Lallahom before any answer, which will be sent to you by email.\n\n${delay}\n\nReference: ${input.trackingId}\n\nThis service does not handle emergencies. In case of immediate danger or a worrying symptom, contact the emergency services (112) or a health professional without waiting for this answer.\n\nTo withdraw your consent or delete your request, reply to this email with your reference, or use our GDPR form: ${gdprUrl}`;
   // The public form most exposed to a relay flood: a short rate limit is sent
   // again, a used-up quota is reported, as for the other emails (ABUS-03).
   const { error } = await sendWithRateLimitRetry(() => getResendClient().emails.send(
