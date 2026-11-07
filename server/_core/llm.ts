@@ -338,8 +338,10 @@ const fetchWithBackoff = async (
   for (let attempt = 0; ; attempt++) {
     let waitMs: number;
     try {
-      // The signal also bounds the caller's reading of the answer.
-      const response = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+      // The signal also bounds the caller's reading of the answer. It takes
+      // whole milliseconds only (a RangeError otherwise, the request never
+      // sent): a new try's time, after a jittered pause, has a fraction.
+      const response = await fetch(url, { ...init, signal: AbortSignal.timeout(Math.floor(timeoutMs)) });
       if (response.ok || attempt === RETRY_MAX_RETRIES) {
         return response;
       }
