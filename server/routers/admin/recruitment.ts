@@ -106,6 +106,42 @@ function spreadsheetMayReadAsNumberOrDate(value: string) {
   return fraction !== null && (fraction[1] !== undefined || /[.,]/.test(fraction[2]!));
 }
 
+/** The fewest digits of a phone number: around a « / » or a « , », a shorter part makes a fraction or a decimal (« 0612 34/56 », « 126,465/103 »), not several numbers. */
+const PHONE_NUMBER_DIGITS = 7;
+
+/** The signs that separate several numbers typed in one field, and how the export writes them between those numbers. */
+const PHONE_NUMBER_SEPARATORS = [[/\s*\/\s*/, " / "], [/\s*,\s*/, ", "]] as const;
+
+/**
+ * Several numbers typed in one field (« 06.12.34.56.78 / 06.98.76.54.32 »,
+ * « 0612345678,0698765432 »), each written as it would be alone and their
+ * separator kept (« 06 12 34 56 78 / 06 98 76 54 32 »), so that setting the
+ * digits apart never runs two numbers into one; null for a single number, or
+ * if the numbers so joined could still be read as a number (ADM-26).
+ */
+function severalPhoneNumbersAsText(value: string) {
+  for (const [separator, joint] of PHONE_NUMBER_SEPARATORS) {
+    const numbers = value.split(separator);
+    if (numbers.length < 2 || numbers.some(number => number.replace(/\D/g, "").length < PHONE_NUMBER_DIGITS)) continue;
+    const written = numbers.map(phoneAsText).join(joint);
+    return spreadsheetMayReadAsNumberOrDate(written) ? null : written;
+  }
+  return null;
+}
+
+/** A phone number, « + » already written « 00 », as text for a spreadsheet: see csvPhoneValue. */
+function phoneAsText(written: string): string {
+  if (SPREADSHEET_SCIENTIFIC.test(written)) return `'${written}`;
+  if (!spreadsheetMayReadAsNumberOrDate(written)) return written;
+  const several = severalPhoneNumbersAsText(written);
+  if (several !== null) return several;
+  const digits = written.replace(/\D/g, "");
+  // « 00 » before three digits would read as thousands in French (« 00 123 »).
+  if (digits.startsWith("00") && digits.length >= 6) return `00 ${digits.slice(2)}`;
+  if (digits.length >= 3) return digits.replace(/\B(?=(?:\d{2})+$)/g, " ");
+  return `'${written}`;
+}
+
 /**
  * ADM-26: a phone number as the exports write it, so that a spreadsheet keeps
  * it as text, leading zeros included, with nothing to clean by hand before it
@@ -119,21 +155,18 @@ function spreadsheetMayReadAsNumberOrDate(value: string) {
  * others by two from the end (« 0612345678 », « (0612345678) » and
  * « 0612 345 678 » give « 06 12 34 56 78 »), which no spreadsheet reads as a
  * number; one of two digits, which spreadsheets always read as a number, and
- * a number in scientific notation, leave behind an apostrophe. Any other
+ * a number in scientific notation, leave behind an apostrophe. Several
+ * numbers separated by « / » or « , » leave each set apart on its own, their
+ * separator kept (« 06.12.34.56.78 / 06.98.76.54.32 » and
+ * « 0612345678,0698765432 » give « 06 12 34 56 78 / 06 98 76 54 32 » and
+ * « 06 12 34 56 78, 06 98 76 54 32 »: severalPhoneNumbersAsText). Any other
  * number leaves as typed (« 0033 (0)6 12 34 56 78 », « 0612345678 /
  * 0698765432 »). The other columns keep the protection.
  */
 function csvPhoneValue(phone: string | null) {
   if (!phone) return phone;
   const typed = phone.trim();
-  const written = typed.startsWith("+") ? `00${typed.slice(1)}` : typed;
-  if (SPREADSHEET_SCIENTIFIC.test(written)) return `'${written}`;
-  if (!spreadsheetMayReadAsNumberOrDate(written)) return written;
-  const digits = written.replace(/\D/g, "");
-  // « 00 » before three digits would read as thousands in French (« 00 123 »).
-  if (digits.startsWith("00") && digits.length >= 6) return `00 ${digits.slice(2)}`;
-  if (digits.length >= 3) return digits.replace(/\B(?=(?:\d{2})+$)/g, " ");
-  return `'${written}`;
+  return phoneAsText(typed.startsWith("+") ? `00${typed.slice(1)}` : typed);
 }
 
 /** What really happened to a manual CV re-analysis (ADM-REC-02). */

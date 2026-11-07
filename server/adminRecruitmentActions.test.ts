@@ -344,6 +344,44 @@ describe("actions d’administration du recrutement", () => {
     expect(phones((await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number })).csv)).toEqual(expected);
   });
 
+  it("garde séparés plusieurs numéros saisis dans le même champ quand leurs chiffres sont mis à part, « / » ou « , » entre eux (ADM-26)", async () => {
+    // Set apart as a whole, « 06.12.34.56.78 / 06.98.76.54.32 » gave « 06 12 34 56 78 06 98 76 54 32 », one number of twenty
+    // digits, and « 6.71.23.45.67 / 6.71.23.45.69 » a pair astride the two (« … 76 71 … »). Each number is now set apart on its own.
+    const typed = {
+      "06.12.34.56.78 / 06.98.76.54.32": "06 12 34 56 78 / 06 98 76 54 32",
+      "06.12.34.56.78/06.98.76.54.32": "06 12 34 56 78 / 06 98 76 54 32",
+      "0471.23.45.67 / 0498.76.54.32": "04 71 23 45 67 / 04 98 76 54 32",
+      "079.123.45.67 / 076.987.65.43": "07 91 23 45 67 / 07 69 87 65 43",
+      "0661.234567 / 0698.765432": "06 61 23 45 67 / 06 98 76 54 32",
+      "0612.345.678 / 0698.765.432": "06 12 34 56 78 / 06 98 76 54 32",
+      "6.71.23.45.67 / 6.71.23.45.69": "6 71 23 45 67 / 6 71 23 45 69",
+      // A comma between numbers, which Calc reads as a decimal or grouping sign.
+      "0612345678,0698765432": "06 12 34 56 78, 06 98 76 54 32",
+      "+33612345678,0033698765432": "00 33612345678, 00 33698765432",
+      "0612345678,0698765432,0123456789": "06 12 34 56 78, 06 98 76 54 32, 01 23 45 67 89",
+      // Text already, left as typed.
+      "0612345678 / 0698765432": "0612345678 / 0698765432",
+      "06 12 34 56 78 / 06 98 76 54 32": "06 12 34 56 78 / 06 98 76 54 32",
+      "06.12.34.56.78, 06.98.76.54.32": "06.12.34.56.78, 06.98.76.54.32",
+      "06.12.34.56.78 / 06.98.76.54.32 / 01.23.45.67.89": "06.12.34.56.78 / 06.98.76.54.32 / 01.23.45.67.89",
+      // Not two numbers: a fraction and a decimal, too short for a phone number on one side.
+      "0612 34/56": "06 12 34 56",
+      "126,465/103": "1 26 46 51 03",
+    };
+    const candidates = Object.keys(typed).map((phone, index) => seedCandidate(index + 1, { phone }));
+    const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-PHONE-4", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Qatar" }]);
+    memory.seed(clientBriefCandidates, candidates.map(candidate => ({ brief_id: brief!.id, application_id: candidate.id, association_status: "shortlisted", candidate_consent_at: consentAt })));
+    const phones = (csv: string) => {
+      const [header, ...rows] = csv.split("\n");
+      const column = header!.split(";").indexOf("\"Téléphone\"");
+      return Object.fromEntries(rows.map(row => [row.split(";")[2], row.split(";")[column]]));
+    };
+    const expected = Object.fromEntries(Object.values(typed).map((phone, index) => [`"c${index + 1}@test.local"`, `"${phone}"`]));
+
+    expect(phones((await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: candidates.map(candidate => candidate.id as number) })).csv)).toEqual(expected);
+    expect(phones((await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number })).csv)).toEqual(expected);
+  });
+
   it("écrit dans l’export du vivier les pays et les langues en clair, et le statut en mots (INTL-10)", async () => {
     const candidate = seedCandidate(1, { target_countries: JSON.stringify(["Émirats arabes unis", "Qatar"]), languages: JSON.stringify(["Arabic", "French"]), status: "shortlisted" });
     const pool = await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: [candidate.id as number] });
