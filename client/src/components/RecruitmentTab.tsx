@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import Candidate360Dialog from "./Candidate360Dialog";
 import CertificationReview from "./CertificationReview";
 import { useCvDownload } from "./useCvDownload";
+import { AUDIT_NOT_RECORDED_REASON } from "@shared/databaseRefusalReasons";
 import { certificationFactLabel, recruitmentFactNameContains } from "@shared/recruitmentFactOrigins";
 import { RECRUITMENT_APPLICATION_STATUS_OPTIONS, type RecruitmentApplicationStatus } from "@shared/recruitmentApplicationStatuses";
 import { AI_ANALYSIS_UNAVAILABLE_LABEL, isAiAnalysisUnavailable, SCORE_UNAVAILABLE_EXPLANATION, SCORE_UNAVAILABLE_HEADING, scoredApplicationsFirst } from "./recruitmentScoreGroups";
@@ -125,6 +126,24 @@ function showAdminToast(notice: AdminToast) {
   else toast.info(notice.message);
 }
 
+/**
+ * The onError of an action done elsewhere (an email sent, an analysis or a
+ * Google Drive copy started): when only its audit line was refused (DATA-01),
+ * it is done all the same, so the server's words of what became of it are a
+ * warning, and `done` leaves the screen as a success does (the composer
+ * closed, the list read again), with nothing left to send twice.
+ */
+function doneOrFailed(done: () => void) {
+  return (mutationError: { message: string; data?: { reason?: string } | null }) => {
+    if (mutationError.data?.reason !== AUDIT_NOT_RECORDED_REASON) {
+      toast.error(mutationError.message);
+      return;
+    }
+    showAdminToast({ tone: "warning", message: mutationError.message });
+    done();
+  };
+}
+
 const ERASURE_CONFIRMATION = "Effacer définitivement ce dossier ? Seront supprimés : le CV et ses copies (stockage et Google Drive), les analyses IA, les relances et historiques d’emails, la présence dans les missions, ainsi que l’espace candidat lié, ses sessions et ses documents. Seule une preuve d’effacement anonymisée est conservée. Action irréversible.";
 
 function describeErasureReport(report: { storageObjectsDeleted: number; googleDrive: { status: string; deleted: number }; candidateAccountsErased: number; candidateDocumentsDeleted: number; rowsDeleted: Record<string, number>; otherApplicationsWithSameEmail: number }) {
@@ -216,7 +235,7 @@ export default function RecruitmentTab() {
       showAdminToast(reanalysisToast(result));
       utils.admin.recruitment.list.invalidate();
     },
-    onError: mutationError => toast.error(mutationError.message),
+    onError: doneOrFailed(() => utils.admin.recruitment.list.invalidate()),
   });
 
   const reanalyzeFailed = trpc.admin.recruitment.reanalyzeFailed.useMutation({
@@ -224,7 +243,7 @@ export default function RecruitmentTab() {
       showAdminToast(reanalyzeFailedToast(result));
       utils.admin.recruitment.list.invalidate();
     },
-    onError: mutationError => toast.error(mutationError.message),
+    onError: doneOrFailed(() => utils.admin.recruitment.list.invalidate()),
   });
 
   const retryDriveExport = trpc.admin.recruitment.driveExport.retry.useMutation({
@@ -233,7 +252,10 @@ export default function RecruitmentTab() {
       utils.admin.recruitment.list.invalidate();
       driveExportStatus.refetch();
     },
-    onError: mutationError => toast.error(mutationError.message),
+    onError: doneOrFailed(() => {
+      utils.admin.recruitment.list.invalidate();
+      driveExportStatus.refetch();
+    }),
   });
 
   const retryAllDriveExports = trpc.admin.recruitment.driveExport.retryAllFailed.useMutation({
@@ -242,7 +264,10 @@ export default function RecruitmentTab() {
       utils.admin.recruitment.list.invalidate();
       driveExportStatus.refetch();
     },
-    onError: mutationError => toast.error(mutationError.message),
+    onError: doneOrFailed(() => {
+      utils.admin.recruitment.list.invalidate();
+      driveExportStatus.refetch();
+    }),
   });
 
   const retryConfirmationEmail = trpc.admin.recruitment.confirmationEmail.retry.useMutation({
@@ -254,7 +279,7 @@ export default function RecruitmentTab() {
       else toast.info("Aucun nouvel e-mail n’a été envoyé. Vérifiez le suivi de la candidature.");
       utils.admin.recruitment.list.invalidate();
     },
-    onError: mutationError => toast.error(mutationError.message),
+    onError: doneOrFailed(() => utils.admin.recruitment.list.invalidate()),
   });
 
   const createProfile = trpc.admin.recruitment.profiles.create.useMutation({
@@ -272,7 +297,10 @@ export default function RecruitmentTab() {
       setEmailComposer(null);
       setCustomRequest("");
     },
-    onError: mutationError => toast.error(mutationError.message),
+    onError: doneOrFailed(() => {
+      setEmailComposer(null);
+      setCustomRequest("");
+    }),
   });
 
   const sendPortalInvitation = trpc.admin.recruitment.candidate.sendPortalInvitation.useMutation({
@@ -280,7 +308,7 @@ export default function RecruitmentTab() {
       toast.success("Invitation de création d’espace candidat envoyée");
       utils.admin.recruitment.list.invalidate();
     },
-    onError: mutationError => toast.error(mutationError.message),
+    onError: doneOrFailed(() => utils.admin.recruitment.list.invalidate()),
   });
 
   // Langue d’envoi présélectionnée d’après la langue du formulaire de candidature :

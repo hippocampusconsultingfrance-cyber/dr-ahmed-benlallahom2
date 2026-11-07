@@ -8,16 +8,19 @@ import { recruitmentAnalysisErrorLabel, recruitmentDriveExportErrorLabel, recrui
 // l’administrateur : effacement RGPD confirmé puis rapporté, reprise de
 // l’accusé de dépôt (avec avertissement de doublon quand rien n’est tracé),
 // reprise de la copie Google Drive, suivi de l’invitation et de l’activation
-// de l’espace candidat, pays du diplôme, erreurs d’analyse lisibles et lecture
-// du CV jamais présentée comme vérifiée (IA-01).
+// de l’espace candidat, pays du diplôme, erreurs d’analyse lisibles, lecture
+// du CV jamais présentée comme vérifiée (IA-01), et action faite dont seule la
+// trace d’audit a été refusée (DATA-01).
 
 vi.mock("react", async importOriginal => (await import("@/testing/statefulRender")).withStatefulHooks(await importOriginal()));
 
-type MutationOptions = { onSuccess?: (result: any, input?: any) => unknown };
+type MutationOptions = { onSuccess?: (result: any, input?: any) => unknown; onError?: (error: { message: string; data?: { reason?: string } | null }) => unknown };
 const state = vi.hoisted(() => {
   const mutations: Record<string, { mutate: ReturnType<typeof vi.fn>; options?: MutationOptions }> = {};
   return {
     applications: [] as Array<Record<string, unknown>>,
+    invalidateList: vi.fn(),
+    refetchDrive: vi.fn(),
     drive: { connected: true, lastError: null as string | null, failedExports: 0 },
     mutations,
     toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
@@ -34,7 +37,7 @@ vi.mock("./Candidate360Dialog", () => ({ default: () => null }));
 vi.mock("./CertificationReview", () => ({ default: () => null }));
 vi.mock("@/lib/trpc", () => ({
   trpc: {
-    useUtils: () => ({ admin: { recruitment: { list: { invalidate: vi.fn(), cancel: vi.fn(), getData: vi.fn(), setData: vi.fn() } } } }),
+    useUtils: () => ({ admin: { recruitment: { list: { invalidate: state.invalidateList, cancel: vi.fn(), getData: vi.fn(), setData: vi.fn() } } } }),
     useQueries: (build: (t: unknown) => unknown[]) => {
       const t = { admin: { recruitment: { list: (input: unknown) => input } } };
       return build(t).map(() => ({ data: { items: state.applications, total: state.applications.length }, isLoading: false, error: null, refetch: vi.fn() }));
@@ -43,7 +46,7 @@ vi.mock("@/lib/trpc", () => ({
       recruitment: {
         profiles: { list: { useQuery: () => ({ data: [], refetch: vi.fn() }) }, create: { useMutation: state.mutation("profiles.create") } },
         driveExport: {
-          status: { useQuery: () => ({ data: state.drive, refetch: vi.fn() }) },
+          status: { useQuery: () => ({ data: state.drive, refetch: state.refetchDrive }) },
           retry: { useMutation: state.mutation("driveExport.retry") },
           retryAllFailed: { useMutation: state.mutation("driveExport.retryAllFailed") },
         },
@@ -96,7 +99,7 @@ const confirm = vi.fn(() => confirmAnswer);
 
 beforeEach(() => {
   for (const key of Object.keys(state.mutations)) delete state.mutations[key];
-  for (const fn of Object.values(state.toast)) fn.mockClear();
+  for (const fn of [...Object.values(state.toast), state.invalidateList, state.refetchDrive]) fn.mockClear();
   state.drive = { connected: true, lastError: null, failedExports: 0 };
   confirmAnswer = false;
   confirm.mockClear();
@@ -237,6 +240,55 @@ describe("espace candidat", () => {
     expect(active.props.disabled).toBe(true);
     expect(pageText()).toContain("Espace actif");
     expect(pageText()).not.toContain("Activation 2");
+  });
+});
+
+describe("action faite dont la trace d’audit est refusée (DATA-01)", () => {
+  const notTraced = (done: string) => ({ message: `${done} Sa trace n’a pas pu être écrite dans le journal d’audit.`, data: { reason: "audit_not_recorded" } });
+  const composerOpen = () => render().find(element => typeof element.props.onOpenChange === "function")!.props.open;
+
+  it("ferme le message envoyé au candidat et l’annonce envoyé, sans rien laisser à renvoyer", () => {
+    state.applications = [dossier(1)];
+    open(1);
+    action("Demander un complément")!.props.onClick();
+    expect(composerOpen()).toBe(true);
+    action("Envoyer l’email")!.props.onClick();
+    expect(mutate("sendTemplateEmail")).toHaveBeenCalledTimes(1);
+
+    state.mutations.sendTemplateEmail!.options!.onError!(notTraced("L’email est envoyé."));
+    expect(state.toast.warning.mock.calls).toEqual([["L’email est envoyé. Sa trace n’a pas pu être écrite dans le journal d’audit.", { duration: 10_000 }]]);
+    expect(state.toast.error).not.toHaveBeenCalled();
+    expect(composerOpen()).toBe(false);
+    // Its button no longer sends anything.
+    expect(action("Envoyer l’email")!.props.disabled).toBe(true);
+  });
+
+  it("garde ouvert le message refusé, en erreur, pour un nouvel essai", () => {
+    state.applications = [dossier(1)];
+    open(1);
+    action("Proposer un échange")!.props.onClick();
+    state.mutations.sendTemplateEmail!.options!.onError!({ message: "Resend indisponible", data: null });
+    expect(state.toast.error.mock.calls).toEqual([["Resend indisponible"]]);
+    expect(state.toast.warning).not.toHaveBeenCalled();
+    expect(composerOpen()).toBe(true);
+    expect(action("Envoyer l’email")!.props.disabled).toBe(false);
+  });
+
+  it("relit la liste et l’état de Google Drive après une analyse, une invitation, un accusé ou une copie relancés", () => {
+    state.applications = [dossier(1)];
+    render();
+    for (const path of ["reanalyze", "reanalyzeFailed", "candidate.sendPortalInvitation", "confirmationEmail.retry", "driveExport.retry", "driveExport.retryAllFailed"]) {
+      state.mutations[path]!.options!.onError!(notTraced("L’action est faite."));
+    }
+    expect(state.toast.warning).toHaveBeenCalledTimes(6);
+    expect(state.toast.error).not.toHaveBeenCalled();
+    expect(state.invalidateList).toHaveBeenCalledTimes(6);
+    expect(state.refetchDrive).toHaveBeenCalledTimes(2);
+
+    // Any other refusal: an error, and nothing read again.
+    state.mutations.reanalyze!.options!.onError!({ message: "Candidature introuvable", data: { reason: "value_not_allowed" } });
+    expect(state.toast.error.mock.calls).toEqual([["Candidature introuvable"]]);
+    expect(state.invalidateList).toHaveBeenCalledTimes(6);
   });
 });
 

@@ -92,6 +92,37 @@ export function driveRetryOutcome(
   return { outcome: result.retry ? "retry_scheduled" : "failed", error };
 }
 
+/**
+ * What a resent « accusé de dépôt » became, said when its audit line is refused
+ * (DATA-01): sent, refused by Resend or of uncertain delivery, as the screen says it.
+ */
+const CONFIRMATION_RETRY_DONE: Record<"sent" | "failed" | "delivery_unknown", string> = {
+  sent: "L’accusé de dépôt est renvoyé.",
+  failed: "Resend a refusé l’e-mail. Vérifiez la configuration et le suivi.",
+  delivery_unknown: "La réponse de Resend est incertaine. Vérifiez le suivi avant tout nouvel envoi pour éviter un doublon.",
+};
+
+/** The same for a re-analysis started: queued or run, and what came of it; « already running » changed nothing. */
+const REANALYSIS_DONE: Record<Exclude<ReturnType<typeof reanalysisOutcome>["outcome"], "already_running">, string> = {
+  completed: "L’analyse est relancée et son résultat actualisé.",
+  needs_review: "L’analyse est relancée et son résultat actualisé : des points demandent une revue humaine.",
+  ai_unavailable: "L’analyse est relancée, mais le fournisseur d’IA la refuse : examinez le CV manuellement.",
+  queued: "L’analyse est remise en file : elle sera traitée au prochain passage.",
+  retry_scheduled: "L’analyse relancée a échoué ; une nouvelle tentative est programmée.",
+  failed: "L’analyse relancée a échoué : examinez le CV manuellement.",
+};
+
+/** The same for a Drive copy requeued: copied, waiting or failed; one already done or running changed nothing. */
+const DRIVE_RETRY_DONE: Record<Exclude<ReturnType<typeof driveRetryOutcome>["outcome"], "already_completed" | "already_running">, string> = {
+  completed: "Le CV est copié dans Google Drive.",
+  queued: "La copie Google Drive est remise en file.",
+  waiting_validation: "La copie Google Drive est remise en file : elle suivra la validation du CV par le contrôle de sécurité.",
+  not_connected: "La copie Google Drive est remise en file, mais Google Drive n’est pas connecté : connectez-le depuis l’en-tête de l’onglet.",
+  reconnect_required: "La copie Google Drive est remise en file : elle repartira après la reconnexion de Google Drive.",
+  retry_scheduled: "La copie Google Drive a échoué ; une nouvelle tentative est prévue.",
+  failed: "La copie Google Drive a échoué : consultez le détail du dossier.",
+};
+
 // International recruitment applications
 export const adminRecruitmentRouter = router({
   confirmationEmail: router({
@@ -100,7 +131,11 @@ export const adminRecruitmentRouter = router({
       if (result.outcome === "not_found") throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable." });
       if (result.outcome === "blocked") throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Cette adresse a rejeté ou bloqué l’e-mail. Vérifiez-la avant tout nouvel envoi." });
       if (result.outcome === "exhausted") throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Les tentatives automatiques sont épuisées. Vérifiez la configuration Resend avant un nouvel essai." });
-      await traceRecruitmentActionDone([{ applicationId: input.id, adminOpenId: ctx.user.openId, action: "email", metadata: { template: "application_confirmation_retry", outcome: result.outcome } }]);
+      const record = { applicationId: input.id, adminOpenId: ctx.user.openId, action: "email" as const, metadata: { template: "application_confirmation_retry", outcome: result.outcome } };
+      // Sent, refused by Resend or of uncertain delivery, the email was tried. Otherwise (already sent,
+      // untracked) nothing was sent: a refused line leaves nothing changed, as the screen then says.
+      if (result.outcome === "sent" || result.outcome === "failed" || result.outcome === "delivery_unknown") await traceRecruitmentActionDone([record], CONFIRMATION_RETRY_DONE[result.outcome]);
+      else await logRecruitmentAction(record);
       return result;
     }),
   }),
@@ -117,12 +152,15 @@ export const adminRecruitmentRouter = router({
         ? { processed: 0, waitingForAuthorization: false, reconnectRequired: false, results: [] as Array<Record<string, unknown>> }
         : await processDueCvGoogleDriveExports(1, [application.id]);
       const outcome = driveRetryOutcome(queue, processing);
-      await traceRecruitmentActionDone([{
+      const record = {
         applicationId: application.id,
         adminOpenId: ctx.user.openId,
-        action: "export",
+        action: "export" as const,
         metadata: { event: "google_drive_retry", ...queue, processed: processing.processed, outcome: outcome.outcome },
-      }]);
+      };
+      // Already copied or being copied, nothing was requeued: a refused line leaves nothing changed.
+      if (outcome.outcome === "already_completed" || outcome.outcome === "already_running") await logRecruitmentAction(record);
+      else await traceRecruitmentActionDone([record], DRIVE_RETRY_DONE[outcome.outcome]);
       return { success: true, ...queue, processed: processing.processed, ...outcome };
     }),
     // « Relancer toutes les copies échouées » (REC-09).
@@ -130,7 +168,10 @@ export const adminRecruitmentRouter = router({
       const { googleDriveConnectionWait, processDueCvGoogleDriveExports, retryAllFailedCvGoogleDriveExports } = await import("../../googleDriveExport");
       const queue = await retryAllFailedCvGoogleDriveExports();
       // Requeued already: their lines in one statement, all or none.
-      await traceRecruitmentActionDone(queue.applicationIds.map(applicationId => ({ applicationId, adminOpenId: ctx.user.openId, action: "export" as const, metadata: { event: "google_drive_retry", batch: true } })));
+      await traceRecruitmentActionDone(
+        queue.applicationIds.map(applicationId => ({ applicationId, adminOpenId: ctx.user.openId, action: "export" as const, metadata: { event: "google_drive_retry", batch: true } })),
+        `${queue.requeued} copie(s) Google Drive remise(s) en file.`,
+      );
       // A few copies inline (each one downloads and uploads a CV); the cron copies the rest.
       // Nothing to copy: the connection's real state all the same (REC-09).
       const processing = queue.requeued > 0
@@ -573,12 +614,15 @@ export const adminRecruitmentRouter = router({
       const queue = await enqueueCvAnalysis(application.id);
       const processing = await processDueCvAnalysisJobs(1, [application.id]);
       const outcome = reanalysisOutcome(queue, processing);
-      await traceRecruitmentActionDone([{
+      const record = {
         applicationId: application.id,
         adminOpenId: ctx.user.openId,
-        action: "reanalyze",
+        action: "reanalyze" as const,
         metadata: { queued: queue.queued, accelerated: queue.accelerated, alreadyRunning: queue.alreadyRunning, processed: processing.processed, outcome: outcome.outcome },
-      }]);
+      };
+      // Already running, nothing was queued: a refused line leaves nothing changed.
+      if (outcome.outcome === "already_running") await logRecruitmentAction(record);
+      else await traceRecruitmentActionDone([record], REANALYSIS_DONE[outcome.outcome]);
       return { success: true, queued: queue.queued || queue.accelerated, processed: processing.processed, ...outcome };
     }),
 

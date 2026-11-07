@@ -32,6 +32,8 @@ const state = vi.hoisted(() => ({
   memory: null as null | { db: unknown },
   emails: [] as string[],
   invitationFails: false,
+  /** What retryCvConfirmationEmail finds or makes of the « accusé de dépôt »: nothing sent (already sent), or sent, refused by Resend. */
+  confirmation: "sent" as "sent" | "failed" | "already_sent",
   queued: [] as number[],
   analysed: [] as number[],
   signedUrls: [] as string[],
@@ -62,8 +64,10 @@ vi.mock("./candidateAuth", async importOriginal => ({
 vi.mock("./recruitmentEmailTrace", async importOriginal => ({
   ...await importOriginal<typeof import("./recruitmentEmailTrace")>(),
   retryCvConfirmationEmail: vi.fn(async (applicationId: number) => {
+    if (state.confirmation === "already_sent") return { outcome: "already_sent", attempted: false };
     state.emails.push(`confirmation:${applicationId}`);
-    return { outcome: "sent" };
+    const sent = state.confirmation === "sent";
+    return { outcome: state.confirmation, attempted: true, delivery: { status: state.confirmation, providerEmailId: sent ? "email-confirmation" : null, failureCode: sent ? null : "validation_error" } };
   }),
 }));
 vi.mock("./recruitmentProcessing", async importOriginal => ({
@@ -149,6 +153,7 @@ beforeEach(() => {
   state.memory = memory;
   state.emails = [];
   state.invitationFails = false;
+  state.confirmation = "sent";
   state.queued = [];
   state.analysed = [];
   state.signedUrls = [];
@@ -303,9 +308,18 @@ describe("DATA-01 — une action faite au-dehors dont la ligne d'audit est refus
     });
     expect(console.error).toHaveBeenCalledWith("[Recruitment] Action done, its audit lines not recorded", expect.objectContaining({ actions: ["email"], count: 1, code: "23514" }));
 
+    // The « accusé de dépôt » as it ended: resent, or refused by Resend, whose refusal the admin still reads.
     refuseNextLine("recruitment_audit_logs");
-    await expect(admin().recruitment.confirmationEmail.retry({ id })).rejects.toMatchObject(doneNotTraced("L’action est faite."));
-    expect(state.emails).toEqual(["template:amal@test.local", `confirmation:${id}`]);
+    await expect(admin().recruitment.confirmationEmail.retry({ id })).rejects.toMatchObject(doneNotTraced("L’accusé de dépôt est renvoyé."));
+    state.confirmation = "failed";
+    refuseNextLine("recruitment_audit_logs");
+    await expect(admin().recruitment.confirmationEmail.retry({ id })).rejects.toMatchObject(doneNotTraced("Resend a refusé l’e-mail. Vérifiez la configuration et le suivi."));
+    expect(state.emails).toEqual(["template:amal@test.local", `confirmation:${id}`, `confirmation:${id}`]);
+    // Already sent, nothing was sent again: refused, its line rightly says that nothing was changed.
+    state.confirmation = "already_sent";
+    refuseNextLine("recruitment_audit_logs");
+    await expect(admin().recruitment.confirmationEmail.retry({ id })).rejects.toMatchObject(refusedAsUnchanged);
+    expect(state.emails).toHaveLength(3);
     expect(auditLines()).toEqual([]);
 
     // Traced as usual otherwise.
@@ -332,11 +346,18 @@ describe("DATA-01 — une action faite au-dehors dont la ligne d'audit est refus
     expect(auditLines()).toEqual([]);
   });
 
-  it("l'analyse relancée d'un dossier est dite faite quand sa trace est refusée, jamais « rien n'a été modifié »", async () => {
+  it("l'analyse relancée d'un dossier est dite faite, avec son résultat, quand sa trace est refusée, et une analyse déjà en cours n'a rien modifié", async () => {
     const id = seedApplication();
     refuseNextLine("recruitment_audit_logs");
-    await expect(admin().recruitment.reanalyze({ id })).rejects.toMatchObject(doneNotTraced("L’action est faite."));
+    await expect(admin().recruitment.reanalyze({ id })).rejects.toMatchObject(doneNotTraced("L’analyse est relancée et son résultat actualisé."));
     expect([state.queued, state.analysed]).toEqual([[id], [id]]);
+
+    // Already running, nothing was queued nor analysed.
+    const { enqueueCvAnalysis, processDueCvAnalysisJobs } = await import("./recruitmentProcessing");
+    vi.mocked(enqueueCvAnalysis).mockResolvedValueOnce({ queued: false, accelerated: false, alreadyRunning: true });
+    vi.mocked(processDueCvAnalysisJobs).mockResolvedValueOnce({ processed: 0, results: [] } as unknown as Awaited<ReturnType<typeof processDueCvAnalysisJobs>>);
+    refuseNextLine("recruitment_audit_logs");
+    await expect(admin().recruitment.reanalyze({ id })).rejects.toMatchObject(refusedAsUnchanged);
     expect(auditLines()).toEqual([]);
   });
 

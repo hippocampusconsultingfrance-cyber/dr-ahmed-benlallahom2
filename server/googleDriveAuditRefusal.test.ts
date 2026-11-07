@@ -14,7 +14,7 @@ const state = vi.hoisted(() => {
   process.env.GOOGLE_DRIVE_CLIENT_SECRET ||= "client-secret";
   process.env.GOOGLE_DRIVE_CV_FOLDER_ID ||= "folder-id";
   process.env.CANDIDATE_DOCUMENT_ENCRYPTION_KEY ||= Buffer.alloc(32, 7).toString("base64");
-  return { memory: null as null | { db: unknown }, uploads: [] as string[] };
+  return { memory: null as null | { db: unknown }, uploads: [] as string[], uploadRefused: false };
 });
 
 vi.mock("./db", () => ({ getDb: async () => state.memory?.db ?? null }));
@@ -59,18 +59,21 @@ function seedCopy(index: number, job: Record<string, unknown> = {}) {
 const copyOf = (applicationId: number) => memory.rows(cvGoogleDriveExportJobs).find(row => row.application_id === applicationId)!;
 const auditLines = () => memory.rows(recruitmentAuditLogs).map(row => JSON.parse(String(row.metadata)) as Record<string, unknown>);
 const refuseAuditLines = (times: number) => memory.failNext(/^insert into "recruitment_audit_logs"/, times, "23514");
-const doneNotTraced = { code: "INTERNAL_SERVER_ERROR", message: "L’action est faite. Sa trace n’a pas pu être écrite dans le journal d’audit.", cause: { reason: "audit_not_recorded" } };
+/** A copy requeued whose trace was refused: what became of it, and its trace missing. */
+const doneNotTraced = (done: string) => ({ code: "INTERNAL_SERVER_ERROR", message: `${done} Sa trace n’a pas pu être écrite dans le journal d’audit.`, cause: { reason: "audit_not_recorded" } });
 
 beforeEach(() => {
   memory = createMemoryPg([cvApplications, cvGoogleDriveExportJobs, googleDriveConnections, recruitmentAuditLogs, candidateSecurityRateLimits]);
   state.memory = memory;
   state.uploads = [];
+  state.uploadRefused = false;
   vi.spyOn(console, "error").mockImplementation(() => undefined);
   vi.stubGlobal("fetch", vi.fn(async (input: string | URL, init?: RequestInit) => {
     const url = new URL(String(input));
     if (url.hostname === "oauth2.googleapis.com") return new Response(JSON.stringify({ access_token: "access" }), { status: 200 });
     if (url.hostname === "blob.test") return new Response(Buffer.from("%PDF-1.7 cv"));
     if (url.pathname.startsWith("/upload/drive/v3/files") && init?.method === "POST") {
+      if (state.uploadRefused) return new Response(JSON.stringify({ error: { message: "Backend Error" } }), { status: 500 });
       state.uploads.push(String(init.body).match(/CVAUDIT\d+/)?.[0] ?? "?");
       return new Response(JSON.stringify({ id: `file-${state.uploads.length}`, webViewLink: `https://drive.google.com/file-${state.uploads.length}` }));
     }
@@ -109,18 +112,31 @@ describe("DATA-01 — copie Google Drive faite, ligne d'audit refusée", () => {
     expect(auditLines()).toEqual([expect.objectContaining({ destination: "google_drive", driveFileId: "file-1", trackingId: "CVAUDIT00000002" })]);
   });
 
-  it("« Relancer la copie » et « Relancer toutes les copies échouées » disent la copie relancée faite quand sa trace est refusée", async () => {
+  it("« Relancer la copie » et « Relancer toutes les copies échouées » disent ce qu'est devenue la copie relancée quand sa trace est refusée", async () => {
     seedConnection();
     const id = seedCopy(3, { status: "failed", attempts: 5, last_error: "google_drive_upload_500_Backend Error" });
     // The copy's line, then the admin's.
     refuseAuditLines(2);
-    await expect(admin().recruitment.driveExport.retry({ id })).rejects.toMatchObject(doneNotTraced);
+    await expect(admin().recruitment.driveExport.retry({ id })).rejects.toMatchObject(doneNotTraced("Le CV est copié dans Google Drive."));
     expect(copyOf(id)).toMatchObject({ status: "completed", drive_file_id: "file-1" });
     expect(state.uploads).toEqual(["CVAUDIT00000003"]);
+    // Copied already, nothing is requeued: refused, its line rightly says that nothing was changed.
+    refuseAuditLines(1);
+    await expect(admin().recruitment.driveExport.retry({ id })).rejects.toMatchObject({ code: "BAD_REQUEST", cause: { reason: "value_not_allowed" } });
+
+    // Requeued and refused by Drive again: said failed, never copied.
+    const refusedByDrive = seedCopy(6, { status: "failed", attempts: 5, last_error: "google_drive_upload_500_Backend Error" });
+    state.uploadRefused = true;
+    refuseAuditLines(1);
+    await expect(admin().recruitment.driveExport.retry({ id: refusedByDrive })).rejects.toMatchObject({
+      code: "INTERNAL_SERVER_ERROR", message: expect.stringMatching(/^La copie Google Drive a échoué.* Sa trace n’a pas pu être écrite dans le journal d’audit\.$/), cause: { reason: "audit_not_recorded" },
+    });
+    expect(copyOf(refusedByDrive).status).not.toBe("completed");
+    state.uploadRefused = false;
 
     const failed = [seedCopy(4, { status: "failed", attempts: 5, last_error: "google_drive_upload_500_Backend Error" }), seedCopy(5, { status: "failed", attempts: 5, last_error: "google_drive_upload_500_Backend Error" })];
     refuseAuditLines(1);
-    await expect(admin().recruitment.driveExport.retryAllFailed()).rejects.toMatchObject(doneNotTraced);
+    await expect(admin().recruitment.driveExport.retryAllFailed()).rejects.toMatchObject(doneNotTraced("2 copie(s) Google Drive remise(s) en file."));
     // Requeued, both: the next pass of the cron copies them.
     expect(failed.map(applicationId => copyOf(applicationId))).toEqual(failed.map(() => expect.objectContaining({ status: "queued", attempts: 0, last_error: null })));
     expect(auditLines()).toEqual([]);

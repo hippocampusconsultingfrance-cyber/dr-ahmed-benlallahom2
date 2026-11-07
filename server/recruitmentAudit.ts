@@ -6,6 +6,7 @@ import { PublicErrorReason } from "./_core/trpc";
 import { postgresConstraintName } from "./databaseConstraints";
 import { postgresErrorCode } from "./languageColumns";
 import { foldAdminSearchText } from "../shared/adminSearchFolding";
+import { AUDIT_NOT_RECORDED_REASON } from "../shared/databaseRefusalReasons";
 import { meetsRequiredLanguage, recruitmentLanguageRequirements } from "../shared/recruitmentLanguages";
 
 export type RecruitmentAuditAction =
@@ -54,9 +55,6 @@ export async function logRecruitmentAction(input: RecruitmentAuditRecord): Promi
 export function recordWithRecruitmentAudit(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, change: BatchItem<"pg">, records: RecruitmentAuditRecord[]) {
   return db.batch([change, recruitmentAuditInsert(db, records)]);
 }
-
-/** Reason sent with AUDIT_NOT_RECORDED_MESSAGE, for a screen to word it in its language. */
-export const AUDIT_NOT_RECORDED_REASON = "audit_not_recorded";
 
 /** Said once the action is done but its trace could not be written: never « rien n’a été modifié » (DATA-01). */
 export const AUDIT_NOT_RECORDED_MESSAGE = "Sa trace n’a pas pu être écrite dans le journal d’audit.";
