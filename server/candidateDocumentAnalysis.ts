@@ -46,11 +46,21 @@ function contentText(content: unknown): string {
 const boundedItems = (items: unknown) =>
   Array.isArray(items) ? items.filter((item): item is string => typeof item === "string").slice(0, 12).map(item => item.slice(0, 300)) : [];
 
-/** A calendar date written AAAA-MM-JJ, or null (IA-06): « 2026-02-30 », « 03/2027 » or free text are no date. */
+/** The years a document's issue or expiry date can fall in (IA-06): from 1950 to 30 years after the current one. */
+const EARLIEST_DOCUMENT_YEAR = 1950;
+const LATEST_DOCUMENT_YEARS_AHEAD = 30;
+
+/**
+ * A calendar date written AAAA-MM-JJ, within those years, or null (IA-06):
+ * « 2026-02-30 », « 03/2027 », « 0000-01-01 », « 9999-12-31 » or free text
+ * are no date.
+ */
 function calendarDate(value: unknown) {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
   const date = new Date(`${value}T00:00:00Z`);
-  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value ? value : null;
+  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) return null;
+  const year = date.getUTCFullYear();
+  return year >= EARLIEST_DOCUMENT_YEAR && year <= new Date().getUTCFullYear() + LATEST_DOCUMENT_YEARS_AHEAD ? value : null;
 }
 
 export function parseCandidateDocumentAnalysis(content: unknown): CandidateDocumentAnalysis {
