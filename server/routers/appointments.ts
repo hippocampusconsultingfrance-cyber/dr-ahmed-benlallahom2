@@ -262,13 +262,17 @@ export const appointmentsRouter = router({
         }
 
         const appointmentEnd = new Date(date.getTime() + 30 * 60 * 1000);
+        // DATA-13 : les bornes partent en chaînes ISO-8601 UTC, comme la fin du
+        // maintien plus bas. Des Date seraient envoyées à l’heure locale du
+        // processus : en TZ=Europe/Paris, la fenêtre testée glisserait d’une à
+        // deux heures, et le créneau libre juste avant un rendez-vous serait refusé.
         const existingAppointments = await db
           .select({ id: appointments.id })
           .from(appointments)
           .where(
             and(
-              sql`appointment_date < ${appointmentEnd}`,
-              sql`appointment_date + (duration * INTERVAL '1 minute') > ${date}`,
+              sql`appointment_date < ${appointmentEnd.toISOString()}`,
+              sql`appointment_date + (duration * INTERVAL '1 minute') > ${date.toISOString()}`,
               occupiesSlot(),
             )
           )

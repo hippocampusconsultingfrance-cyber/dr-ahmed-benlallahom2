@@ -7,9 +7,10 @@
  * select/from/innerJoin/leftJoin/where/orderBy/limit (and a COUNT(*) alone),
  * insert/values/returning,
  * onConflictDoUpdate/onConflictDoNothing, update/set/where/returning and
- * delete/where. Each statement executes atomically (like a single SQL
- * statement), and every `await` yields, so read-modify-write races in the
- * application code are reproducible with concurrent calls.
+ * delete/where, and batch. Each statement executes atomically (like a single SQL
+ * statement), a batch as one transaction, and every `await` yields, so
+ * read-modify-write races in the application code are reproducible with
+ * concurrent calls.
  *
  * Never import this module from production code.
  */
@@ -477,11 +478,42 @@ export class InMemoryDrizzle {
   insert(table: AnyTable) { return { values: (values: Row | Row[]) => new InsertQuery(this, table, Array.isArray(values) ? values : [values]) }; }
   update(table: AnyTable) { return { set: (values: Row) => new UpdateQuery(this, table, values) }; }
   delete(table: AnyTable) { return new DeleteQuery(this, table); }
+
+  /**
+   * Runs the statements in order, with no other statement in between, as
+   * neon-http's batch runs them in one transaction: when one fails, every row
+   * is put back as it was (the same objects, which tests may hold) and the
+   * batch fails with that error.
+   */
+  batch(queries: PromiseLike<unknown>[]): Promise<unknown[]> {
+    return Promise.resolve().then(() => {
+      const tables = new Map<string, { rows: Row[]; values: Row[] }>();
+      this.data.forEach((rows, name) => tables.set(name, { rows: rows.slice(), values: rows.map(row => ({ ...row })) }));
+      const sequences = new Map(this.sequences);
+      try {
+        return queries.map(query => (query as Thenable<unknown>).runInBatch());
+      } catch (error) {
+        this.data.forEach((rows, name) => {
+          const before = tables.get(name);
+          rows.splice(0, rows.length, ...(before?.rows ?? []));
+          before?.rows.forEach((row, index) => {
+            for (const key of Object.keys(row)) delete row[key];
+            Object.assign(row, before.values[index]);
+          });
+        });
+        this.sequences.clear();
+        sequences.forEach((value, name) => this.sequences.set(name, value));
+        throw error;
+      }
+    });
+  }
 }
 
 abstract class Thenable<T> implements PromiseLike<T> {
   private promise: Promise<T> | null = null;
   protected abstract execute(): T;
+  /** Runs the statement now, inside a batch. */
+  runInBatch(): T { return this.execute(); }
   then<A = T, B = never>(onFulfilled?: ((value: T) => A | PromiseLike<A>) | null, onRejected?: ((reason: unknown) => B | PromiseLike<B>) | null): Promise<A | B> {
     // Yield once before executing so concurrent callers interleave between statements.
     this.promise ??= Promise.resolve().then(() => this.execute());

@@ -1,10 +1,12 @@
 -- Contrôles de cohérence de la base (DATA-14), repris de la batterie de l'audit
 -- du 24 octobre 2026 (docs/audits/AUDIT_AMELIORATIONS_2026-10-24.invariants.sql)
--- et calibrés pour ne rien signaler sur une base saine.
+-- et calibrés pour ne rien signaler sur une base saine, hors famille MAJ.
 --
 -- Lecture seule : coller le fichier entier dans l'éditeur SQL de Neon (branche de
 -- production) ou lancer `psql "$DATABASE_URL" -f scripts/db-invariants.sql`.
--- Chaque ligne dont « violations » est > 0 est un invariant violé ; « tenu_par »
+-- Chaque ligne dont « violations » est > 0 est un invariant violé, sauf dans la
+-- famille MAJ : indicative, elle compte des dates de mise à jour qu'aucun code ne
+-- tient et sort > 0 sur une base saine (voir plus bas) ; « tenu_par »
 -- dit qui le tient aujourd'hui (la base, le code, l'admin ou rien). À passer une
 -- fois avant chaque migration de la production, et quand le bilan quotidien de
 -- sécurité signale un « Contrôle de cohérence de la base » : le cron
@@ -39,7 +41,9 @@
 --   garde sa décision, et le cron ferme sa tâche interrompue (EXPL-12).
 -- - listes de statuts : celles de drizzle/schema.ts aujourd'hui (dont les
 --   alertes et remboursements de la file d'après paiement).
--- - famille MAJ : indicative (aucun code ne tient ces dates), pas de donnée à corriger.
+-- - famille MAJ : indicative (aucun code ne tient ces dates), pas de donnée à
+--   corriger ; un rendez-vous payé, un document analysé ou une tâche terminée
+--   normalement y comptent déjà.
 WITH params AS (SELECT timestamp '2026-09-01 00:00:00' AS queue_live_since)
 SELECT 'FK' AS famille, 'cv_candidate_certifications sans candidature' AS invariant, 'code (effacement)' AS tenu_par, (SELECT count(*) FROM (select id from cv_candidate_certifications c where not exists (select 1 from cv_applications a where a.id=c.application_id)) q) AS violations
 UNION ALL

@@ -20,6 +20,8 @@ const resend = vi.hoisted(() => ({
   rejected: new Set<string>(),
   // Quota quotidien épuisé pour les alertes « Échec d’envoi » au médecin.
   quotaUsedUp: true,
+  // Et pour l’alerte de sécurité elle-même.
+  quotaRefusesSecurityAlert: false,
 }));
 vi.mock("resend", () => ({
   Resend: vi.fn().mockImplementation(() => ({
@@ -28,7 +30,7 @@ vi.mock("resend", () => ({
         resend.calls.push({ subject: message.subject, to: message.to[0]!, at: Date.now(), text: message.text });
         if (resend.rejected.has(message.to[0]!)) return { data: null, error: { name: "validation_error", statusCode: 422, message: "Invalid `to` field." } };
         // The owner's « Échec d’envoi » alerts meet the used-up daily quota.
-        if (resend.quotaUsedUp && message.subject.startsWith("Échec d’envoi")) return { data: null, error: { name: "daily_quota_exceeded", statusCode: 429, message: "You have reached your daily quota." } };
+        if (resend.quotaUsedUp && (message.subject.startsWith("Échec d’envoi") || (resend.quotaRefusesSecurityAlert && message.subject.startsWith("Alerte sécurité")))) return { data: null, error: { name: "daily_quota_exceeded", statusCode: 429, message: "You have reached your daily quota." } };
         return { data: { id: `email_${resend.calls.length}` }, error: null };
       }),
     },
@@ -79,6 +81,7 @@ beforeEach(async () => {
   resend.calls.length = 0;
   resend.rejected.clear();
   resend.quotaUsedUp = true;
+  resend.quotaRefusesSecurityAlert = false;
   postPaymentDeliveryRetry.delaysMs = [0, 0];
   appointmentFulfillmentPacing.delayMs = PAUSE_MS;
   vi.stubEnv("RESEND_API_KEY", "re_test_quota_alert");
@@ -152,6 +155,33 @@ describe("ABUS-03 — l’alerte « quota Resend épuisé » levée pendant les 
     // Nothing is left for the run after.
     await processDueAppointmentFulfillmentJobs();
     expect(sent(SECURITY_ALERT)).toHaveLength(1);
+  }, 10_000);
+
+  it("est mise en file aussi quand le même quota la refuse dans son créneau : le passage suivant l’envoie une fois le quota revenu", async () => {
+    resend.quotaRefusesSecurityAlert = true;
+    const id = seedRefusedConfirmation("APTQUOTA0008");
+
+    await processAppointmentFulfillmentNow(id);
+
+    // Tried in its slot, refused by the quota as well: queued rather than left to the next quota event.
+    expect(sent(SECURITY_ALERT)).toHaveLength(1);
+    expect(quotaAlertJobs()).toEqual([expect.objectContaining({ appointment_id: id, status: "queued", attempts: 0 })]);
+
+    // Before the new try after that failure, the queued alert waits.
+    resend.quotaUsedUp = false;
+    await processDueAppointmentFulfillmentJobs();
+    expect(sent(SECURITY_ALERT)).toHaveLength(1);
+    expect(quotaAlertJobs()).toEqual([expect.objectContaining({ status: "retry", attempts: 1, last_error: "quota_alert_not_sent" })]);
+
+    // Then the quota is back and the next run sends it, once.
+    alertWindow().blocked_until = pgTimestamp(new Date(Date.now() - 1000));
+    quotaAlertJobs()[0]!.scheduled_for = pgTimestamp(new Date(Date.now() - 1000));
+    await processDueAppointmentFulfillmentJobs();
+    expect(sent(SECURITY_ALERT)).toHaveLength(2);
+    expect(sent(SECURITY_ALERT)[1]!.text).toContain("Alerte reportée");
+    expect(quotaAlertJobs()).toEqual([expect.objectContaining({ status: "completed", attempts: 2, last_error: null })]);
+    await processDueAppointmentFulfillmentJobs();
+    expect(sent(SECURITY_ALERT)).toHaveLength(2);
   }, 10_000);
 
   it("une seule en file par période, quel que soit le rendez-vous dont l’email a rencontré le quota", async () => {

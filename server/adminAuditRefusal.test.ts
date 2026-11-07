@@ -5,6 +5,9 @@ import {
   appointmentInvoices,
   appointments,
   candidateAccounts,
+  candidateDocumentAuditLogs,
+  candidateDocumentProcessingJobs,
+  candidateDocuments,
   contactMessages,
   cvApplications,
   gdprRequests,
@@ -111,7 +114,7 @@ const admin = () => caller().admin;
 const questions = () => caller().medicalQuestions.admin;
 
 /** The next line of this journal is refused, as a CHECK constraint refuses it (23514). */
-const refuseNextLine = (table: "recruitment_audit_logs" | "medical_question_audit_logs" | "security_events") =>
+const refuseNextLine = (table: "recruitment_audit_logs" | "medical_question_audit_logs" | "security_events" | "candidate_document_audit_logs") =>
   memory.failNext(new RegExp(`^insert into "${table}"`), 1, "23514");
 
 /** The refusal of a write the procedure did not handle: « rien n'a été modifié ». */
@@ -147,7 +150,7 @@ const auditLines = () => memory.rows(recruitmentAuditLogs).map(row => ({ applica
 
 beforeEach(() => {
   memory = createMemoryPg([
-    appointmentFulfillmentJobs, appointmentInvoices, appointments, candidateAccounts, contactMessages, cvApplications, gdprRequests,
+    appointmentFulfillmentJobs, appointmentInvoices, appointments, candidateAccounts, candidateDocumentAuditLogs, candidateDocumentProcessingJobs, candidateDocuments, contactMessages, cvApplications, gdprRequests,
     medicalQuestionAuditLogs, medicalQuestions, recruitmentAuditLogs, recruitmentEmailEvents, recruitmentFollowUpTasks, securityEvents,
   ]);
   state.memory = memory;
@@ -290,6 +293,46 @@ describe("DATA-01 — une modification en base et sa ligne d'audit, d'un seul co
     await expect(questions().delete({ id: asked })).rejects.toMatchObject({ code: "NOT_FOUND" });
     await expect(admin().contacts.delete({ id: message!.id as number })).rejects.toMatchObject({ code: "NOT_FOUND" });
     expect(memory.rows(securityEvents)).toHaveLength(4);
+  });
+
+  it("ne tranche pas un document du coffre et ne relance pas son analyse quand la base refuse leur ligne d'audit", async () => {
+    const [account] = memory.seed(candidateAccounts, [{ email: "vera@test.local", password_hash: "scrypt$unused", status: "active" }]);
+    const seedDocument = (name: string, extra: Record<string, unknown> = {}) => memory.seed(candidateDocuments, [{
+      candidate_id: account!.id, category: "diploma", original_name: name, storage_key: `candidate-documents/quarantine/1/${name}`, mime_type: "application/pdf",
+      size_bytes: 2048, checksum: "0".repeat(64), status: "needs_review", analysis_status: "completed", ...extra,
+    }])[0]!.id as number;
+    const reviewed = seedDocument("diplome.pdf");
+    // Left « en cours » by a run stopped 2 days ago: « Relancer l’analyse » closes its job.
+    const stuck = seedDocument("licence.pdf", { status: "analyzing", analysis_status: "analyzing" });
+    memory.seed(candidateDocumentProcessingJobs, [{ document_id: stuck, status: "running", attempts: 1, started_at: new Date(Date.now() - 2 * 24 * 3_600_000) }]);
+    const before = {
+      documents: memory.rows(candidateDocuments).map(row => ({ ...row })),
+      jobs: memory.rows(candidateDocumentProcessingJobs).map(row => ({ ...row })),
+    };
+    const unchanged = () => {
+      expect(memory.rows(candidateDocuments)).toEqual(before.documents);
+      expect(memory.rows(candidateDocumentProcessingJobs)).toEqual(before.jobs);
+      expect(memory.rows(candidateDocumentAuditLogs)).toEqual([]);
+    };
+
+    refuseNextLine("candidate_document_audit_logs");
+    await expect(admin().candidateDocuments.review({ id: reviewed, status: "rejected", notes: "Faux diplôme" })).rejects.toMatchObject(refusedAsUnchanged);
+    unchanged();
+    refuseNextLine("candidate_document_audit_logs");
+    await expect(admin().candidateDocuments.reanalyze({ id: stuck })).rejects.toMatchObject(refusedAsUnchanged);
+    unchanged();
+
+    // Accepted, each change with its lines.
+    await expect(admin().candidateDocuments.review({ id: reviewed, status: "rejected", notes: "Faux diplôme" })).resolves.toEqual({ success: true });
+    await expect(admin().candidateDocuments.reanalyze({ id: stuck })).resolves.toEqual({ success: true, queued: true });
+    expect(memory.rows(candidateDocuments).find(row => row.id === reviewed)).toMatchObject({ status: "rejected", review_notes: "Faux diplôme", reviewed_by_open_id: "user_owner" });
+    expect(memory.rows(candidateDocuments).find(row => row.id === stuck)).toMatchObject({ status: "validating", analysis_status: "queued" });
+    expect(memory.rows(candidateDocumentProcessingJobs).map(row => [row.status, row.last_error])).toEqual([["completed", "worker_interrupted_reanalysis_requested"], ["queued", null]]);
+    expect(memory.rows(candidateDocumentAuditLogs).map(row => [row.document_id, row.actor_type, row.action])).toEqual([
+      [reviewed, "admin", "reviewed"],
+      [stuck, "system", "analysis_requested"],
+      [stuck, "admin", "analysis_requested"],
+    ]);
   });
 });
 

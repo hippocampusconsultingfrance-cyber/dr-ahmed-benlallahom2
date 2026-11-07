@@ -31,6 +31,8 @@ beforeEach(() => {
   timeouts = [];
   signals = [];
   vi.spyOn(AbortSignal, "timeout").mockImplementation(ms => {
+    // As Node's own: a delay with a fraction is refused, and no request is sent.
+    if (!Number.isInteger(ms)) throw new RangeError(`The value of "delay" is out of range. It must be an integer. Received ${ms}`);
     timeouts.push(ms);
     const controller = new AbortController();
     signals.push(controller);
@@ -92,6 +94,36 @@ describe("appel à l’IA borné dans le temps (EXPL-12)", () => {
   it("n’envoie aucune requête quand le travail planifié n’a plus le temps minimum : la tâche peut être rendue à la file", async () => {
     await expect(runWithProcessingDeadline(Date.now() + LLM_REQUEST_MINIMUM_MS - 1, call)).rejects.toBeInstanceOf(ProcessingDeadlineError);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("refait la requête après un refus passager quand il reste moins de 30 s au travail planifié, l’attente tirée au hasard comprise", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0.371);
+    fetchMock.mockResolvedValueOnce(new Response("busy", { status: 503 })).mockImplementation(async () => answer());
+    const result = runWithProcessingDeadline(Date.now() + 25_000, call).catch(error => error as Error);
+
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(await result).toMatchObject({ choices: [{ message: { content: "ok" } }] });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(timeouts).toHaveLength(2);
+    expect(timeouts[1]).toBeGreaterThanOrEqual(LLM_REQUEST_MINIMUM_MS);
+    expect(timeouts[1]).toBeLessThan(25_000);
+  });
+
+  it("refait une requête coupée par son délai de 30 s, hors travail planifié, dans ce qui reste du budget de l’appel", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0.629);
+    hangUntilTimeout();
+    const result = call().catch(error => error as Error);
+
+    await vi.advanceTimersByTimeAsync(0);
+    fetchMock.mockImplementation(async () => answer());
+    await timeOut(0);
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(await result).toMatchObject({ choices: [{ message: { content: "ok" } }] });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(timeouts[1]).toBeGreaterThanOrEqual(LLM_REQUEST_MINIMUM_MS);
+    expect(timeouts[1]).toBeLessThanOrEqual(LLM_CALL_BUDGET_MS - LLM_REQUEST_TIMEOUT_MS);
   });
 
   it("ne refait pas une requête coupée par la fin du travail planifié : l’échec est celui du fournisseur", async () => {

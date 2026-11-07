@@ -367,4 +367,18 @@ describe("appointments.create — fin du maintien en UTC (DATA-13)", () => {
     expect(minutesAhead).toBeGreaterThan(0);
     expect(minutesAhead).toBeLessThanOrEqual(60);
   });
+
+  it("passe les bornes du contrôle de chevauchement en chaînes ISO UTC, même quand le processus est à l’heure de Paris", async () => {
+    process.env.TZ = "Europe/Paris";
+    const db = fakeDb(0);
+    mocks.getDb.mockResolvedValue(db);
+    const input = bookingInput();
+
+    await appRouter.createCaller(publicContext()).appointments.create(input);
+
+    const overlap = db.whereClauses.map(clause => dialect.sqlToQuery(clause)).find(query => query.sql.includes("appointment_date <"));
+    const start = new Date(input.appointmentDate);
+    // The window of the slot itself, [start, start + 30 min), in UTC: a Date would be sent at Paris time.
+    expect(overlap?.params.slice(0, 2)).toEqual([new Date(start.getTime() + 30 * 60_000).toISOString(), start.toISOString()]);
+  });
 });

@@ -602,6 +602,7 @@ export async function recoverStaleCvGoogleDriveExportJobs(staleAfterMs = 15 * 60
     status: cvGoogleDriveExportJobs.status,
     attempts: cvGoogleDriveExportJobs.attempts,
     maxAttempts: cvGoogleDriveExportJobs.maxAttempts,
+    lastError: cvGoogleDriveExportJobs.lastError,
   }).from(cvGoogleDriveExportJobs).where(or(
     and(eq(cvGoogleDriveExportJobs.status, "running"), lte(cvGoogleDriveExportJobs.startedAt, staleBefore)),
     and(inArray(cvGoogleDriveExportJobs.status, ["queued", "retry"]), gte(cvGoogleDriveExportJobs.attempts, cvGoogleDriveExportJobs.maxAttempts)),
@@ -611,12 +612,18 @@ export async function recoverStaleCvGoogleDriveExportJobs(staleAfterMs = 15 * 60
   let exhausted = 0;
   for (const candidate of candidates) {
     const terminal = candidate.attempts >= candidate.maxAttempts;
+    // A copy put back in the queue with its attempts spent (by hand in SQL,
+    // without attempts = 0) was never interrupted: it keeps the cause of its
+    // last failure, and « Relancer la copie » gives it a fresh budget.
+    const lastError = candidate.status !== "running"
+      ? candidate.lastError ?? "attempts_exhausted_before_run"
+      : terminal ? "worker_interrupted_attempts_exhausted" : "worker_interrupted";
     const result = await db.update(cvGoogleDriveExportJobs).set({
       status: terminal ? "failed" : "retry",
       scheduledFor: now,
       startedAt: null,
       finishedAt: terminal ? now : null,
-      lastError: terminal ? "worker_interrupted_attempts_exhausted" : "worker_interrupted",
+      lastError,
       updatedAt: now,
     }).where(and(
       eq(cvGoogleDriveExportJobs.id, candidate.id),
