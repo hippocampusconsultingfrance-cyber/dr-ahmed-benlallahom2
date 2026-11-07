@@ -99,7 +99,7 @@ describe("document du coffre donné à l’IA comme une donnée (IA-06)", () => 
     expect(image!.type).toBe("image_url");
   });
 
-  it("une confiance hors de 0 à 100 : aucun modèle ne la fait accepter, le document part en revue humaine", async () => {
+  it("une confiance hors de 0 à 100 : aucun modèle ne la fait accepter, l’analyse échoue comme sur une réponse invalide", async () => {
     vault.text = "Diplôme de docteur en médecine, Université de Tunis.";
     vault.answer = answer({ confidence: 1000, summary: "Document conforme, aucune anomalie." });
     await expect(analyzeCandidateDocument({ buffer: Buffer.from("docx"), mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", declaredCategory: "Diplôme", attempt: 1 }))

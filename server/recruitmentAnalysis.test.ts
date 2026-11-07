@@ -657,6 +657,22 @@ describe("une même citation ne compte qu’une fois (IA-04)", () => {
     expect(twoLines.scoreBreakdown.specialtyMatch).toBe(30);
     expect(twoLines.relevanceScore).toBe(35);
   });
+
+  it("un en-tête répété sur deux pages, cité en entier pour un champ et en partie ou à cheval pour l’autre sur l’autre page : 15 points", () => {
+    const header = `Dr Camille Martin, ${title}, titulaire du DESAR`;
+    const repeated = `[PAGE 1]\n${header}\n${skillLine}\n[PAGE 2]\n${header}\nLangues : français (courant)`;
+    // The whole header for the title on page 1, a part of it, or a quote that only overlaps it, for the specialty on page 2.
+    for (const [titleQuote, specialtyQuote] of [[header, title], [header, `Martin, ${title}`], [`Camille Martin, ${title}`, `${title}, titulaire du DESAR`]]) {
+      const result = normalizeRecruitmentAnalysis(quotedTwice([titleQuote!, "page 1"], [specialtyQuote!, "page 2"]), repeated, declared);
+      expect(result.fieldEvidence.map(item => item.evidenceVerified)).toEqual([true, true, true]);
+      // Before: 30 points and a score of 35.
+      expect(result.scoreBreakdown.specialtyMatch).toBe(15);
+      expect(result.relevanceScore).toBe(20);
+    }
+    // The specialty also written on a line of its own is a second quote.
+    const ownLine = `[PAGE 1]\n${header}\n${skillLine}\n[PAGE 2]\n${header}\nPoste actuel : ${title}`;
+    expect(normalizeRecruitmentAnalysis(quotedTwice([header, "page 1"], [title, "page 2"]), ownLine, declared).scoreBreakdown.specialtyMatch).toBe(30);
+  });
 });
 
 describe("données du candidat entre les balises du serveur (IA-05)", () => {
@@ -747,13 +763,32 @@ describe("citations lues dans la transcription de la vision (IA-07)", () => {
     ],
   });
 
-  it("marque chaque citation d’un CV scanné, sans plafonner son score", () => {
+  it("marque chaque citation d’un CV scanné, et ce marquage ne change pas son score", () => {
     const scanned = normalizeRecruitmentAnalysis(reading, source, { ...declared, extractionMethod: "pdf_vision", extractionConfidence: 95 });
     const digital = normalizeRecruitmentAnalysis(reading, source, { ...declared, extractionMethod: "pdf_text" });
     expect(scanned.fieldEvidence.map(item => [item.evidenceVerified, item.fromTranscription])).toEqual([[true, true], [true, true], [true, true]]);
     expect(digital.fieldEvidence.some(item => "fromTranscription" in item)).toBe(false);
+    // Capping or withholding the score of a CV the vision read is left to the owner (IA-07).
     expect(scanned.relevanceScore).toBe(35);
     expect(scanned.scoreBreakdown).toEqual(digital.scoreBreakdown);
+  });
+
+  it("marque aussi les contradictions citées dans ce que la vision a transcrit", () => {
+    const contradicted = analysisFixture({
+      ...reading,
+      contradictions: [
+        { field: "specialty", declaredValue: "Anesthésie-réanimation", documentValue: "Médecin anesthésiste-réanimateur", evidence: "Médecin anesthésiste-réanimateur", sourceLocation: "page 1", confidence: 95 },
+        { field: "specialty", declaredValue: "Anesthésie-réanimation", documentValue: "réanimation polyvalente", evidence: "Compétence : réanimation polyvalente", sourceLocation: "page 2", confidence: 95 },
+      ],
+    });
+    const marks = (context: Partial<Parameters<typeof normalizeRecruitmentAnalysis>[2]>) =>
+      normalizeRecruitmentAnalysis(contradicted, source, { ...declared, extractionConfidence: 95, ...context }).contradictions.map(item => [item.evidenceVerified, item.fromTranscription ?? false]);
+    expect(marks({ extractionMethod: "pdf_vision" })).toEqual([[true, true], [true, true]]);
+    expect(marks({
+      extractionMethod: "pdf_text",
+      invisibleText: { characters: 0, excerpt: "", unverifiable: { characters: 40, excerpt: "Compétence : réanimation polyvalente", reasons: ["image"], share: 0, rereadPages: [2] } },
+    })).toEqual([[true, false], [true, true]]);
+    expect(marks({ extractionMethod: "pdf_text" })).toEqual([[true, false], [true, false]]);
   });
 
   it("PDF numérique dont la vision a relu la page 2 : seules les citations de cette page sont marquées", () => {

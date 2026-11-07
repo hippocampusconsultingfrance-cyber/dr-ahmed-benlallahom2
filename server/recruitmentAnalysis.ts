@@ -61,6 +61,8 @@ export type CvContradiction = {
   sourceLocation: string;
   confidence: number;
   evidenceVerified: boolean;
+  /** Quoted from a page the vision transcribed, as for CvEvidenceReference (IA-07). */
+  fromTranscription?: true;
 };
 
 export type NormalizedExperience = {
@@ -1240,11 +1242,20 @@ function quotePlaces(text: string, quote: string) {
   return places;
 }
 
-/** Two different quotes written in two places of the text that do not overlap (IA-04). */
+/**
+ * Two different quotes written in two places of the text (IA-04): one of them
+ * is written somewhere that overlaps no place of the other. A header repeated
+ * on each page, cited whole for one field and in part (or overlapping) for the
+ * other, overlaps itself on every page: it stays one quote.
+ */
 function quotesAreApart(text: string, left: string, right: string) {
   if (left === right) return false;
+  const leftPlaces = quotePlaces(text, left);
   const rightPlaces = quotePlaces(text, right);
-  return quotePlaces(text, left).some(([start, end]) => rightPlaces.some(([otherStart, otherEnd]) => end <= otherStart || otherEnd <= start));
+  const placeOutside = (places: Array<[number, number]>, others: Array<[number, number]>) =>
+    places.some(([start, end]) => others.every(([otherStart, otherEnd]) => end <= otherStart || otherEnd <= start));
+  return leftPlaces.length > 0 && rightPlaces.length > 0 &&
+    (placeOutside(leftPlaces, rightPlaces) || placeOutside(rightPlaces, leftPlaces));
 }
 
 function distinctEvidence<T extends EvidenceBearing>(evidence: T[], paged: boolean): T[] {
@@ -1384,7 +1395,8 @@ export function normalizeRecruitmentAnalysis(
   const paged = hasPageMarkers(sourceText);
   // IA-07: on a scan, and on the pages the vision read again, a quote is found
   // in what the vision transcribed, not in the file: the admin is told to
-  // compare it with the scan. No score is capped for it (owner's decision).
+  // compare it with the scan. The marking changes no score: whether the score
+  // of a CV the vision read is capped or withheld is left to the owner.
   const transcribedPages = new Set(declared.invisibleText?.unverifiable?.rereadPages ?? []);
   const fromTranscription = (sourceLocation: string) =>
     declared.extractionMethod === "pdf_vision" || transcribedPages.has(locationPage(sourceLocation) ?? 0);
@@ -1560,12 +1572,15 @@ export function normalizeRecruitmentAnalysis(
         ) === index
     )
     .filter(item => contradictionMatchesDeclaredContext(item, declared))
-    .map(item => markEvidence(
-      item,
-      sourceText,
-      [item.documentValue],
-      declared.extractionConfidence
-    ));
+    .map((item): CvContradiction => ({
+      ...markEvidence(
+        item,
+        sourceText,
+        [item.documentValue],
+        declared.extractionConfidence
+      ),
+      ...(fromTranscription(item.sourceLocation) ? { fromTranscription: true as const } : {}),
+    }));
   const evidenceExperiences = distinctExperiencesByFact(normalizedExperiences);
   const allEvidence = distinctEvidence([
     ...evidenceExperiences,

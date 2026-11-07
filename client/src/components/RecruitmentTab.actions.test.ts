@@ -276,7 +276,10 @@ describe("lecture du CV par l’outil (IA-01)", () => {
       professionalTitle: "Anesthésiste-réanimateur", specialties: ["Anesthésie"], verifiedSkills: ["ALR"], confidence: 90, evidenceCoverage: 75,
       scoreBreakdown: { specialtyMatch: 30, experienceEvidence: 20, skillsEvidence: 15, languageReadiness: 10, credentialReadiness: 7 },
       fieldEvidence,
-      contradictions: [{ field: "specialty", declaredValue: "Anesthésie", documentValue: "Réanimation", sourceLocation: "page 1", evidenceVerified: true }],
+      contradictions: [
+        { field: "specialty", declaredValue: "Anesthésie", documentValue: "Réanimation", sourceLocation: "page 1", evidenceVerified: true },
+        { field: "language", declaredValue: "Anglais", documentValue: "Allemand", sourceLocation: "page 3", evidenceVerified: true, fromTranscription: true },
+      ],
     }),
   });
 
@@ -294,7 +297,8 @@ describe("lecture du CV par l’outil (IA-01)", () => {
       expect(status!.props.className).toContain(fieldEvidenceStatusTone(item));
     }
     expect(text).toContain("Issue de la transcription automatique, à contrôler sur le scan");
-    expect(text).toContain(`(${contradictionEvidenceLabel(true)})`);
+    expect(text).toContain(`Réanimation » — page 1(${contradictionEvidenceLabel(true)})`);
+    expect(text).toContain(`Allemand » — page 3(${contradictionEvidenceLabel(true, true)})`);
     // Analyses saved with the earlier wording are shown with the current one.
     expect(text).toContain(cvReadingTextForDisplay("Lecture automatisée : 3 citation(s) vérifiée(s) sur 4. Les faits disposent d’une preuve exploitable. Revue humaine obligatoire."));
     expect(text).toContain("Titre professionnel trouvé dans le texte lu par l’outil : Anesthésiste-réanimateur");

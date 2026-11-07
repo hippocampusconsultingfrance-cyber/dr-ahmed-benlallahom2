@@ -29,8 +29,9 @@ export function fieldEvidenceStatusTone(item: FieldEvidenceStatus) {
   return item.sourceLocation !== FORM_SOURCE && item.evidenceVerified && !item.fromTranscription ? "text-foreground" : "text-amber-700 dark:text-amber-300";
 }
 
-export function contradictionEvidenceLabel(evidenceVerified: boolean | undefined) {
-  return evidenceVerified ? "citation trouvée dans le texte lu par l’outil" : "citation à vérifier";
+export function contradictionEvidenceLabel(evidenceVerified: boolean | undefined, fromTranscription?: boolean) {
+  if (!evidenceVerified) return "citation à vérifier";
+  return fromTranscription ? "citation issue de la transcription automatique, à contrôler sur le scan" : "citation trouvée dans le texte lu par l’outil";
 }
 
 // Analyses saved before this wording still call the server-generated summary,
