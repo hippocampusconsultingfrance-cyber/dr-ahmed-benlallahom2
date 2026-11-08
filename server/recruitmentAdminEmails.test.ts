@@ -6,10 +6,12 @@ import type { TrpcContext } from "./_core/context";
 const state = vi.hoisted(() => ({
   memory: null as null | { db: unknown },
   sendEmail: vi.fn(),
+  // A campaign goes by Resend's batch endpoint (EXPL-08).
+  sendBatch: vi.fn(),
 }));
 
 vi.mock("resend", () => ({
-  Resend: vi.fn(() => ({ emails: { send: state.sendEmail } })),
+  Resend: vi.fn(() => ({ emails: { send: state.sendEmail }, batch: { send: state.sendBatch } })),
 }));
 vi.mock("./db", () => ({ getDb: async () => state.memory?.db ?? null }));
 vi.mock("./adminMfa", async importOriginal => ({
@@ -18,6 +20,7 @@ vi.mock("./adminMfa", async importOriginal => ({
 }));
 
 import { appRouter } from "./routers";
+import { campaignBatchIdempotencyKey } from "./routers/admin/recruitmentCampaigns";
 
 // MAIL-01: names planted through the public application form. The admin later
 // emails these addresses (campaign, template), which nobody has verified.
@@ -52,8 +55,18 @@ function urls(content: string) {
   return content.match(/https?:\/\/[^\s"'<>]+/g) ?? [];
 }
 
+type SentPayload = { to: string[]; subject: string; html: string; text?: string; headers?: Record<string, string> };
+
+/** Every email handed to Resend, one by one or in a batch, in order. */
 function sentPayloads() {
-  return state.sendEmail.mock.calls.map(([payload]) => payload as { to: string[]; subject: string; html: string });
+  return [
+    ...state.sendEmail.mock.calls.map(([payload]) => payload as SentPayload),
+    ...state.sendBatch.mock.calls.flatMap(([payloads]) => payloads as SentPayload[]),
+  ];
+}
+
+function acceptBatches() {
+  state.sendBatch.mockImplementation(async (payloads: SentPayload[]) => ({ data: { data: payloads.map((_, index) => ({ id: `email-batch-${index}` })) }, error: null, headers: {} }));
 }
 
 function expectNoTrapText(html: string) {
@@ -68,6 +81,8 @@ describe("emails envoyés depuis l’admin aux adresses saisies dans le formulai
     state.memory = memory;
     state.sendEmail.mockReset();
     state.sendEmail.mockResolvedValue({ data: { id: "email-admin" }, error: null });
+    state.sendBatch.mockReset();
+    acceptBatches();
   });
 
   it("une campagne à tous les profils éligibles salue sans recopier un nom piégé, et garde son contenu", async () => {
@@ -85,15 +100,32 @@ describe("emails envoyés depuis l’admin aux adresses saisies dans le formulai
       expect(payload.html).toContain("Une mission à Genève, répondez par email.");
       expect(payload.html).toContain("/recruitment/unsubscribe?token=");
       expectNoTrapText(payload.html);
+      // RGPD-19: a plain-text part, without the planted name either.
+      expect(payload.text).toContain("Une mission à Genève, répondez par email.");
+      expect(payload.text).toContain("Ne plus recevoir d’opportunités de recrutement : https://drahmedbenlallahom.com/recruitment/unsubscribe?token=");
+      expectNoTrapText(payload.text!);
     }
     expect(byRecipient.get("zoe@test.local")!.html).toContain("<p>Bonjour Zoë,</p>");
+    // EXPL-08: five recipients, one call of the batch endpoint, nothing one by one.
+    expect(state.sendBatch).toHaveBeenCalledTimes(1);
+    expect(state.sendEmail).not.toHaveBeenCalled();
   });
 
-  it("chaque destinataire d’une campagne part sous sa propre clé d’idempotence Resend (DATA-05)", async () => {
+  it("chaque email d’une campagne porte la désinscription en un clic de son destinataire, et le lot la clé de ses destinataires (RGPD-19, EXPL-08)", async () => {
     seedCandidates([{ first_name: "Zoë", last_name: "N'Diaye", email: "zoe@test.local" }, { first_name: "Camille", last_name: "Roy", email: "camille@test.local" }]);
     const { campaignId } = await admin().admin.recruitment.campaigns.send({ title: "Mission à Genève", subject: "Offre Suisse", body: "Une mission à Genève, répondez par email.", language: "fr", mode: "all_eligible", confirmed: true });
-    const recipientIds = memory.rows(recruitmentCampaignRecipients).map(row => row.id);
-    expect(state.sendEmail.mock.calls.map(([, options]) => options)).toEqual(recipientIds.map(id => ({ idempotencyKey: `campaign-${campaignId}-recipient-${id}` })));
+    const recipientIds = memory.rows(recruitmentCampaignRecipients).map(row => row.id as number);
+    expect(state.sendBatch.mock.calls.map(([, options]) => options)).toEqual([{ idempotencyKey: campaignBatchIdempotencyKey(campaignId, recipientIds) }]);
+    const tokenOf = Object.fromEntries(memory.rows(cvApplications).map(row => [row.email, row.marketing_unsubscribe_token as string]));
+    for (const payload of sentPayloads()) {
+      const token = tokenOf[payload.to[0]!]!;
+      expect(token).toMatch(/^[0-9a-f]{32}$/);
+      expect(payload.headers).toEqual({
+        "List-Unsubscribe": `<https://drahmedbenlallahom.com/api/recruitment/unsubscribe?token=${token}>`,
+        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+      });
+      expect(payload.html).toContain(`https://drahmedbenlallahom.com/recruitment/unsubscribe?token=${token}`);
+    }
   });
 
   it("une campagne en anglais salue par « Hello, » quand le nom est piégé", async () => {
@@ -102,6 +134,7 @@ describe("emails envoyés depuis l’admin aux adresses saisies dans le formulai
     const [payload] = sentPayloads();
     expect(payload!.html).toContain("<p>Hello,</p>");
     expect(payload!.html).toContain("Unsubscribe from future recruitment opportunities");
+    expect(payload!.text).toMatch(/^Geneva assignment\n\nHello,\n\nAn assignment in Geneva, reply by email\.\n\nThis offer concerns your professional profile\.\n\nUnsubscribe from future recruitment opportunities: https:\/\/drahmedbenlallahom\.com\/recruitment\/unsubscribe\?token=[0-9a-f]{32}\n\nHippocampus Consulting$/);
     expectNoTrapText(payload!.html);
   });
 
@@ -129,6 +162,8 @@ describe("audience « filtrée » d’une campagne de recrutement", () => {
     state.memory = memory;
     state.sendEmail.mockReset();
     state.sendEmail.mockResolvedValue({ data: { id: "email-admin" }, error: null });
+    state.sendBatch.mockReset();
+    acceptBatches();
   });
 
   it("envoie aux candidats du pays visé quelle que soit la casse saisie, comme le vivier et les candidatures le filtrent", async () => {

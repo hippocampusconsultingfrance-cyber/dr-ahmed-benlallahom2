@@ -1,15 +1,25 @@
 import { inspect } from "node:util";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clientBriefCandidates, clientBriefs, cvApplications, cvCandidateCertifications, cvCandidateLanguages, recruitmentAuditLogs, recruitmentCampaignRecipients, recruitmentCampaigns, recruitmentFollowUpTasks } from "../drizzle/schema";
 import { RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "./recruitmentAnalysis";
 import { createMemoryPg, type MemoryPg } from "./testing/memoryPgProxy";
 import type { TrpcContext } from "./_core/context";
 
+type BatchEmail = { to: string; subject: string; html: string; text: string; headers: Record<string, string> };
+
 const state = vi.hoisted(() => ({
   memory: null as null | { db: unknown },
   sentTo: [] as string[],
   keys: [] as Array<string | undefined>,
+  batchSizes: [] as number[],
+  // Addresses Resend refuses: strict validation, the whole batch is refused (422).
   failFor: new Set<string>(),
+  // Resend takes the next batch, then its answer is lost (network).
+  loseNextAnswer: false,
+  // Resend's daily quota is used up.
+  quotaExceeded: false,
+  // Resend's answer to each key, kept 24 hours: the same key and emails get it back, nothing is sent again.
+  answers: new Map<string, { emails: string; ids: string[] }>(),
 }));
 
 vi.mock("./db", () => ({ getDb: async () => state.memory?.db ?? null }));
@@ -19,16 +29,29 @@ vi.mock("./adminMfa", async importOriginal => ({
 }));
 vi.mock("./_core/notifications", async importOriginal => ({
   ...await importOriginal<typeof import("./_core/notifications")>(),
-  sendRecruitmentCampaignEmail: vi.fn(async (input: { candidateEmail: string; idempotencyKey?: string }) => {
-    state.keys.push(input.idempotencyKey);
-    if (state.failFor.has(input.candidateEmail)) throw new Error("resend_unavailable");
-    state.sentTo.push(input.candidateEmail);
-    return { id: `email-${state.sentTo.length}` };
+  // Resend's batch endpoint as it answers (EXPL-08): all the batch or none of it.
+  sendRecruitmentCampaignBatch: vi.fn(async (emails: BatchEmail[], idempotencyKey: string) => {
+    state.keys.push(idempotencyKey);
+    state.batchSizes.push(emails.length);
+    const earlier = state.answers.get(idempotencyKey);
+    if (earlier && earlier.emails === JSON.stringify(emails)) return { ids: earlier.ids, error: null };
+    if (state.quotaExceeded) return { ids: null, error: { name: "daily_quota_exceeded", statusCode: 429, message: "daily quota" }, failureCode: "quota", messageRefused: false, retryLater: true };
+    if (emails.some(email => state.failFor.has(email.to))) return { ids: null, error: { name: "validation_error", statusCode: 422, message: "Invalid `to` field" }, failureCode: "provider_rejected", messageRefused: true, retryLater: false };
+    const ids = emails.map(email => `email-${state.sentTo.push(email.to)}`);
+    state.answers.set(idempotencyKey, { emails: JSON.stringify(emails), ids });
+    if (state.loseNextAnswer) {
+      state.loseNextAnswer = false;
+      throw new Error("fetch failed");
+    }
+    return { ids, error: null };
   }),
 }));
 
 import { appRouter, driveRetryOutcome, reanalysisOutcome } from "./routers";
 import { buildClientBriefOwnerNotification } from "./clientBriefNotification";
+import { campaignBatchIdempotencyKey } from "./routers/admin/recruitmentCampaigns";
+
+const REFUSED = "Resend campaign email failed: Invalid `to` field";
 
 let memory: MemoryPg;
 // The candidate agreed to be presented for the mission (RGPD-03).
@@ -57,7 +80,14 @@ describe("actions d’administration du recrutement", () => {
     state.memory = memory;
     state.sentTo = [];
     state.keys = [];
+    state.batchSizes = [];
     state.failFor.clear();
+    state.loseNextAnswer = false;
+    state.quotaExceeded = false;
+    state.answers.clear();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("changer le statut conserve la note interne (ADM-REC-01)", async () => {
@@ -114,6 +144,98 @@ describe("actions d’administration du recrutement", () => {
     expect(state.sentTo).toEqual([]);
   });
 
+  it("envoie 200 destinataires en deux lots de 100, insérés d’une seule requête et enregistrés lot par lot (EXPL-08)", async () => {
+    const candidates = Array.from({ length: 200 }, (_, index) => seedCandidate(index + 1, { marketing_unsubscribe_token: `token${String(index + 1).padStart(27, "0")}` }));
+    const before = memory.statements.length;
+    const result = await admin().admin.recruitment.campaigns.send({ title: "Offre test", subject: "Offre Suisse", body: "Une mission à Genève, répondez par email.", language: "fr", mode: "selected", selectedIds: candidates.map(candidate => candidate.id as number), confirmed: true });
+    expect(result).toMatchObject({ total: 200, sent: 200, failed: 0 });
+    expect(state.batchSizes).toEqual([100, 100]);
+    const statements = memory.statements.slice(before).map(statement => statement.sql);
+    expect(statements.filter(sql => sql.startsWith('insert into "recruitment_campaign_recipients"'))).toHaveLength(1);
+    // A few statements a batch, not six a recipient: the follow-ups and the journal in one insert each.
+    expect(statements.filter(sql => sql.startsWith('insert into "recruitment_follow_up_tasks"'))).toHaveLength(2);
+    expect(statements.filter(sql => sql.startsWith('insert into "recruitment_audit_logs"'))).toHaveLength(2);
+    expect(statements.length).toBeLessThan(220 + 20);
+    const recipients = memory.rows(recruitmentCampaignRecipients);
+    expect(recipients.every(row => row.delivery_status === "sent" && typeof row.provider_email_id === "string")).toBe(true);
+    expect(new Set(recipients.map(row => row.provider_email_id)).size).toBe(200);
+    expect(memory.rows(recruitmentFollowUpTasks)).toHaveLength(400);
+    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "sent" });
+    // Each batch under the key of its own recipients, in the order of their ids.
+    const ids = recipients.map(row => row.id as number).sort((a, b) => a - b);
+    expect(state.keys).toEqual([campaignBatchIdempotencyKey(result.campaignId, ids.slice(0, 100)), campaignBatchIdempotencyKey(result.campaignId, ids.slice(100))]);
+  });
+
+  it("un lot dont la réponse se perd est renvoyé tel quel sous la même clé : Resend redonne sa première réponse, aucun email ne part deux fois (EXPL-08, DATA-02)", async () => {
+    const first = seedCandidate(1, { marketing_unsubscribe_token: "a".repeat(32) });
+    const second = seedCandidate(2, { marketing_unsubscribe_token: "b".repeat(32) });
+    state.loseNextAnswer = true;
+    const result = await admin().admin.recruitment.campaigns.send({ title: "Offre test", subject: "Offre Suisse", body: "Une mission à Genève, répondez par email.", language: "fr", mode: "selected", selectedIds: [first.id as number, second.id as number], confirmed: true });
+    expect(result).toMatchObject({ total: 2, sent: 0, failed: 2 });
+    expect(memory.rows(recruitmentCampaignRecipients).map(row => [row.delivery_status, row.error])).toEqual([["failed", "fetch failed"], ["failed", "fetch failed"]]);
+
+    await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId: result.campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 2, sent: 2, failed: 0 });
+    expect(state.keys).toHaveLength(2);
+    expect(state.keys[1]).toBe(state.keys[0]);
+    expect(state.sentTo).toEqual(["c1@test.local", "c2@test.local"]);
+    expect(memory.rows(recruitmentCampaignRecipients).map(row => [row.delivery_status, row.provider_email_id])).toEqual([["sent", "email-1"], ["sent", "email-2"]]);
+    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "sent" });
+  });
+
+  it("arrête la campagne à un quota épuisé, sans essayer les lots suivants, et laisse tous les destinataires à relancer (EXPL-08, ABUS-03)", async () => {
+    const candidates = Array.from({ length: 150 }, (_, index) => seedCandidate(index + 1, { marketing_unsubscribe_token: `token${String(index + 1).padStart(27, "0")}` }));
+    state.quotaExceeded = true;
+    const result = await admin().admin.recruitment.campaigns.send({ title: "Offre test", subject: "Offre Suisse", body: "Une mission à Genève, répondez par email.", language: "fr", mode: "selected", selectedIds: candidates.map(candidate => candidate.id as number), confirmed: true });
+    expect(result).toMatchObject({ total: 150, sent: 0, failed: 150 });
+    expect(state.batchSizes).toEqual([100]);
+    const recipients = memory.rows(recruitmentCampaignRecipients);
+    expect(new Set(recipients.map(row => `${row.delivery_status}:${row.error}`))).toEqual(new Set(["failed:Resend campaign email failed: daily quota"]));
+    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "failed" });
+
+    state.quotaExceeded = false;
+    await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId: result.campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 150, sent: 150, failed: 0 });
+    expect(state.batchSizes).toEqual([100, 100, 50]);
+    expect(new Set(state.sentTo).size).toBe(150);
+    expect(state.sentTo).toHaveLength(150);
+  });
+
+  it("reprend un envoi coupé en cours de route : les destinataires « queued » depuis plus de 10 minutes, pas ceux d’un envoi en cours (EXPL-08)", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-08T10:00:00.000Z"));
+    const stalled = seedCandidate(1, { marketing_unsubscribe_token: "a".repeat(32) });
+    const recent = seedCandidate(2, { marketing_unsubscribe_token: "b".repeat(32) });
+    // The function was cut off at 60 s: the campaign stays « sending », its recipients « queued », none emailed.
+    const [campaign] = memory.seed(recruitmentCampaigns, [{ title: "Offre test", subject: "Offre Suisse", body: "Une mission à Genève, répondez par email.", language: "fr", audience_mode: "selected", recipient_count: 2, status: "sending", created_by_open_id: "user_owner" }]);
+    const campaignId = campaign!.id as number;
+    memory.seed(recruitmentCampaignRecipients, [{ campaign_id: campaignId, application_id: stalled.id, recipient_email: "c1@test.local", delivery_status: "queued", created_at: "2026-11-08 09:49:00.000" }]);
+    memory.seed(recruitmentCampaignRecipients, [{ campaign_id: campaignId, application_id: recent.id, recipient_email: "c2@test.local", delivery_status: "queued", created_at: "2026-11-08 09:55:00.000" }]);
+
+    await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 1, sent: 1, failed: 0, skipped: 0 });
+    expect(state.sentTo).toEqual(["c1@test.local"]);
+    expect(Object.fromEntries(memory.rows(recruitmentCampaignRecipients).map(row => [row.recipient_email, row.delivery_status]))).toEqual({ "c1@test.local": "sent", "c2@test.local": "queued" });
+    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "sent" });
+  });
+
+  it("une relance en cours n’est pas reprise par une seconde avant 10 minutes (EXPL-08)", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-08T10:00:00.000Z"));
+    const candidate = seedCandidate(1, { marketing_unsubscribe_token: "a".repeat(32) });
+    state.loseNextAnswer = true;
+    const result = await admin().admin.recruitment.campaigns.send({ title: "Offre test", subject: "Offre Suisse", body: "Une mission à Genève, répondez par email.", language: "fr", mode: "selected", selectedIds: [candidate.id as number], confirmed: true });
+    expect(result).toMatchObject({ sent: 0, failed: 1 });
+    // A retry claims it (« queued », the attempt dated), then is cut off before its answer.
+    const recipient = memory.rows(recruitmentCampaignRecipients)[0]!;
+    Object.assign(recipient, { delivery_status: "queued", error: null, last_event_at: "2026-11-08 10:00:00.000" });
+
+    vi.setSystemTime(new Date("2026-11-08T10:05:00.000Z"));
+    await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId: result.campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 0, sent: 0 });
+    vi.setSystemTime(new Date("2026-11-08T10:11:00.000Z"));
+    await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId: result.campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 1, sent: 1 });
+    // Resend took the first batch: the retry, under the same key, gets its answer back.
+    expect(state.sentTo).toEqual(["c1@test.local"]);
+    expect(recipient).toMatchObject({ delivery_status: "sent", provider_email_id: "email-1" });
+  });
+
   it("un email accepté par Resend reste envoyé quand son enregistrement échoue, et aucune relance ne le renvoie (DATA-05)", async () => {
     const accepted = seedCandidate(1);
     const failing = seedCandidate(2);
@@ -129,13 +251,17 @@ describe("actions d’administration du recrutement", () => {
     // Never « failed » once accepted, nor any internal SQL message kept for the admin; the
     // provider's id is kept, for its bounce or complaint events.
     expect(acceptedRecipient).toMatchObject({ recipient_email: "c1@test.local", delivery_status: "sent", provider_email_id: "email-1", error: null });
-    expect(failedRecipient).toMatchObject({ recipient_email: "c2@test.local", delivery_status: "failed", error: "resend_unavailable" });
+    expect(failedRecipient).toMatchObject({ recipient_email: "c2@test.local", delivery_status: "failed", error: REFUSED });
     // The rest of the bookkeeping is written together or not at all.
     expect(memory.rows(recruitmentFollowUpTasks)).toEqual([]);
     expect(memory.rows(recruitmentAuditLogs).filter(row => row.action === "email")).toEqual([]);
     expect(memory.rows(cvApplications).find(row => row.id === accepted.id)!.last_contacted_at).toBeNull();
-    // One key per recipient.
-    expect(state.keys).toEqual([`campaign-${result.campaignId}-recipient-${acceptedRecipient!.id}`, `campaign-${result.campaignId}-recipient-${failedRecipient!.id}`]);
+    // The batch Resend refused for c2's address, then each email alone, under its recipient's key.
+    expect(state.keys).toEqual([
+      campaignBatchIdempotencyKey(result.campaignId, [acceptedRecipient!.id as number, failedRecipient!.id as number]),
+      `campaign-${result.campaignId}-recipient-${acceptedRecipient!.id}`,
+      `campaign-${result.campaignId}-recipient-${failedRecipient!.id}`,
+    ]);
 
     // The retry sends only the email Resend refused, under the same key; c1 gets nothing more.
     state.failFor.clear();
@@ -150,7 +276,9 @@ describe("actions d’administration du recrutement", () => {
     await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId: result.campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 0, sent: 0 });
   });
 
-  it("un email accepté dont même le destinataire ne s’enregistre pas reste « queued », jamais renvoyé (DATA-05)", async () => {
+  it("un email accepté dont même le destinataire ne s’enregistre pas reste « queued » ; repris 10 minutes plus tard sous la même clé, il ne repart pas (DATA-05, EXPL-08)", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-08T10:00:00.000Z"));
     const candidate = seedCandidate(1);
     // The batch, then the recipient alone, are refused after Resend accepted the email.
     memory.failNext(/^update "recruitment_campaign_recipients" set "delivery_status" = \$1, "provider_email_id"/, 2);
@@ -164,6 +292,14 @@ describe("actions d’administration du recrutement", () => {
     expect(state.sentTo).toEqual(["c1@test.local"]);
     // A retry with nothing to send leaves the campaign sent, not « failed ».
     expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "sent" });
+
+    // Ten minutes later it is taken up again: the same email under the same key, Resend's
+    // first answer comes back, and the provider's id is recorded at last.
+    vi.setSystemTime(new Date("2026-11-08T10:11:00.000Z"));
+    await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId: result.campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 1, sent: 1, failed: 0 });
+    expect(state.keys).toEqual([`campaign-${result.campaignId}-recipient-${memory.rows(recruitmentCampaignRecipients)[0]!.id}`, `campaign-${result.campaignId}-recipient-${memory.rows(recruitmentCampaignRecipients)[0]!.id}`]);
+    expect(state.sentTo).toEqual(["c1@test.local"]);
+    expect(memory.rows(recruitmentCampaignRecipients)[0]).toMatchObject({ delivery_status: "sent", provider_email_id: "email-1" });
   });
 
   it("une relance compte comme envoyé le destinataire resté « queued » après l’acceptation de son email (DATA-05)", async () => {
@@ -188,7 +324,8 @@ describe("actions d’administration du recrutement", () => {
 
   it("un destinataire dont le jeton de désinscription ne s’enregistre pas reste « failed », sans email, et une relance l’envoie sous sa clé (DATA-05)", async () => {
     const blocked = seedCandidate(1);
-    const served = seedCandidate(2);
+    // c2 already has its token: nothing to record for it.
+    const served = seedCandidate(2, { marketing_unsubscribe_token: "b".repeat(32) });
     const unsubscribeTokenWrite = /^update "cv_applications" set "marketing_unsubscribe_token"/;
     // c1's token is refused before anything is sent, at the send then at the first retry.
     memory.failNext(unsubscribeTokenWrite);
@@ -208,7 +345,7 @@ describe("actions d’administration du recrutement", () => {
     // the tokens it carried (inspected, so that an Error object counts too).
     const refusedTokens = memory.statements.filter(statement => unsubscribeTokenWrite.test(statement.sql) && statement.params[1] === blocked.id).map(statement => String(statement.params[0]));
     expect(refusedTokens).toHaveLength(2);
-    expect(error).toHaveBeenCalledWith(expect.stringContaining("Unsubscribe token not recorded"), expect.objectContaining({ error: "Error" }));
+    expect(error).toHaveBeenCalledWith(expect.stringContaining("Unsubscribe tokens not recorded"), expect.objectContaining({ error: "Error" }));
     const logged = inspect(error.mock.calls, { depth: null });
     expect(logged).not.toContain("Failed query");
     for (const token of refusedTokens) expect(logged).not.toContain(token);

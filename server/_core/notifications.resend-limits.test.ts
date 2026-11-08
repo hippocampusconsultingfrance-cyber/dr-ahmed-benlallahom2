@@ -7,11 +7,12 @@ process.env.CANDIDATE_AUTH_PEPPER ||= TEST_PEPPER;
 
 // ABUS-03 : limite de débit et quota Resend. Seul le transport Resend est simulé.
 const state = vi.hoisted(() => ({ db: null as unknown, send: vi.fn() }));
-vi.mock("resend", () => ({ Resend: vi.fn(() => ({ emails: { send: state.send } })) }));
+vi.mock("resend", () => ({ Resend: vi.fn(() => ({ emails: { send: state.send }, batch: { send: state.send } })) }));
 vi.mock("../db", () => ({ getDb: async () => state.db }));
 vi.mock("./notification", async importOriginal => ({ ...await importOriginal<typeof import("./notification")>(), notifyOwner: vi.fn(async () => true) }));
 
 const {
+  buildRecruitmentCampaignEmail,
   candidatePortalAccessEmailFailureCode,
   postPaymentDeliveryRetry,
   resendRateLimitRetry,
@@ -20,7 +21,7 @@ const {
   sendConfirmationEmail,
   sendCvApplicationConfirmationEmail,
   sendOwnerNotificationEmail,
-  sendRecruitmentCampaignEmail,
+  sendRecruitmentCampaignBatch,
   sendRecruitmentTemplateEmail,
 } = await import("./notifications");
 const { sendMedicalQuestionAcknowledgementEmail, sendMedicalQuestionResponseEmail } = await import("../medicalQuestionEmails");
@@ -38,7 +39,10 @@ const confirmation = () => sendConfirmationEmail("patient@example.test", "Patien
 const ownerBooking = () => sendOwnerNotificationEmail("Patient Test", "patient@example.test", "+33600000000", "APTLIMIT0001", new Date("2026-11-20T09:00:00Z"), 100, { idempotencyKey: "appointment-owner-APTLIMIT0001" });
 const access = () => sendCandidatePortalAccessEmail({ to: "candidate@example.test", firstName: "Camille", kind: "verify", actionUrl: "https://drahmedbenlallahom.com/candidate/verify?token=t", idempotencyKey: "candidate-portal-activation-abc" });
 const questionAcknowledgement = () => sendMedicalQuestionAcknowledgementEmail({ email: "person@example.test", firstName: "Marie", trackingId: "QMED-LIMIT-0001", language: "fr" });
-const campaign = () => sendRecruitmentCampaignEmail({ candidateEmail: "candidate@example.test", candidateFirstName: "Camille", campaignTitle: "Poste en réanimation", subject: "Nouvelle opportunité", body: "Un poste est ouvert.", language: "fr", unsubscribeUrl: "https://drahmedbenlallahom.com/recruitment/unsubscribe?token=abc" });
+// A campaign goes by Resend's batch endpoint (EXPL-08), answered `{ data: [{ id }] }`.
+const campaignEmail = { to: "candidate@example.test", ...buildRecruitmentCampaignEmail({ candidateFirstName: "Camille", campaignTitle: "Poste en réanimation", subject: "Nouvelle opportunité", body: "Un poste est ouvert.", language: "fr", unsubscribeUrl: "https://drahmedbenlallahom.com/recruitment/unsubscribe?token=abc", oneClickUnsubscribeUrl: "https://drahmedbenlallahom.com/api/recruitment/unsubscribe?token=abc" }) };
+const campaign = () => sendRecruitmentCampaignBatch([campaignEmail], "campaign-1-recipient-1");
+const batchSent = { data: { data: [{ id: "email_ok" }] }, error: null, headers: {} };
 
 beforeEach(() => {
   state.db = createInMemoryDrizzle();
@@ -201,11 +205,20 @@ describe("emails des questions santé et du recrutement : même lecture des refu
 
   it("renvoie aussi un email de campagne limité, et n’insiste pas avant un retry-after trop long", async () => {
     vi.useFakeTimers();
-    state.send.mockResolvedValueOnce(rateLimited("2")).mockResolvedValueOnce(sent);
+    state.send.mockResolvedValueOnce(rateLimited("2")).mockResolvedValueOnce(batchSent);
     const delivery = campaign();
     await vi.advanceTimersByTimeAsync(2_000);
-    await expect(delivery).resolves.toEqual({ id: "email_ok" });
+    await expect(delivery).resolves.toEqual({ ids: ["email_ok"], error: null });
     expect(state.send).toHaveBeenCalledTimes(2);
+    // The same batch, under the same key.
+    expect(state.send.mock.calls[1]).toEqual(state.send.mock.calls[0]);
+    expect(state.send.mock.calls[0][1]).toEqual({ idempotencyKey: "campaign-1-recipient-1" });
+
+    // A retry-after longer than a request waits: nothing more, and the campaign stops there.
+    state.send.mockReset();
+    state.send.mockResolvedValue(rateLimited("60"));
+    await expect(campaign()).resolves.toMatchObject({ ids: null, failureCode: "rate_limited", retryLater: true });
+    expect(state.send).toHaveBeenCalledTimes(1);
 
     state.send.mockReset();
     state.send.mockResolvedValue(rateLimited("60"));
@@ -218,7 +231,7 @@ describe("emails des questions santé et du recrutement : même lecture des refu
 
     await expect(questionAcknowledgement()).rejects.toThrow(/^medical_question_acknowledgement_email_failed:/);
     await expect(sendMedicalQuestionResponseEmail({ email: "person@example.test", firstName: "Marie", trackingId: "QMED-LIMIT-0001", response: "Réponse." })).rejects.toThrow(/^medical_question_response_email_failed:/);
-    await expect(campaign()).rejects.toThrow("Resend campaign email failed");
+    await expect(campaign()).resolves.toMatchObject({ ids: null, failureCode: "quota", retryLater: true, messageRefused: false });
 
     expect(state.send).toHaveBeenCalledTimes(3);
     expect(quotaEvents().map(event => JSON.parse(String(event.metadata)))).toEqual([

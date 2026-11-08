@@ -24,10 +24,10 @@ vi.mock("./_core/notifications", async importOriginal => ({
     state.confirmations.push({ to, idempotencyKey });
     return { status: "sent", providerEmailId: `email-${state.confirmations.length}`, failureCode: null };
   }),
-  sendRecruitmentCampaignEmail: vi.fn(async (input: { candidateEmail: string }) => {
-    state.campaignEmails.push(input.candidateEmail);
-    return { id: `campaign-email-${state.campaignEmails.length}` };
-  }),
+  sendRecruitmentCampaignBatch: vi.fn(async (emails: Array<{ to: string }>) => ({
+    ids: emails.map(email => `campaign-email-${state.campaignEmails.push(email.to)}`),
+    error: null,
+  })),
 }));
 vi.mock("./recruitmentErasure", async importOriginal => ({
   ...await importOriginal<typeof import("./recruitmentErasure")>(),

@@ -93,7 +93,7 @@ describe("emails d’accès à l’espace candidat en anglais", () => {
 
 describe("campagne de recrutement envoyée en anglais", () => {
   it("garde le pied de page dans la langue choisie par l’administrateur", async () => {
-    const campaign = { candidateEmail: "candidate@example.com", candidateFirstName: "Aisha", campaignTitle: "ICU opportunity", subject: "New opportunity", body: "A position is open.", unsubscribeUrl: "https://drahmedbenlallahom.com/recruitment/unsubscribe?token=abc" };
+    const campaign = { candidateEmail: "candidate@example.com", candidateFirstName: "Aisha", campaignTitle: "ICU opportunity", subject: "New opportunity", body: "A position is open.", unsubscribeUrl: "https://drahmedbenlallahom.com/recruitment/unsubscribe?token=abc", oneClickUnsubscribeUrl: "https://drahmedbenlallahom.com/api/recruitment/unsubscribe?token=abc" };
     await sendRecruitmentCampaignEmail({ ...campaign, language: "en" });
     const english = sendEmail.mock.calls[0][0].html;
     expect(english).toContain("Hello Aisha,");
