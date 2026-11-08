@@ -426,6 +426,38 @@ describe("actions d’administration du recrutement", () => {
     expect(phones((await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number })).csv)).toEqual(expected);
   });
 
+  it("écrit « 00 » pour le « + » d’un numéro international saisi entre parenthèses quand ses chiffres sont mis à part, comme pour un « + » en tête (ADM-26)", async () => {
+    // Its « + » was dropped and nothing written instead: « (+33612345678) » gave « 3 36 12 34 56 78 », the country code run into the national pairs.
+    const typed = {
+      "(+33612345678)": "00 33612345678",
+      "( +33612345678 )": "00 33612345678",
+      "(+34 612 345 678)": "00 34612345678",
+      "(+33.6.12.34.56.78)": "00 33612345678",
+      "(+21651000010)": "00 21651000010",
+      "(+12025550143)": "00 12025550143",
+      "(+351 912 345 678)": "00 351912345678",
+      // A number and its variant, and a number whose « / » follows its area code, as with a « + » in first position.
+      "(+33.6.12.34.56.78/79)": "0033612345678 / 79",
+      "(+961 312345/6)": "00 9613123456",
+      // The same numbers typed with « 00 » or a leading « + », and a « + » whose number is text already, left as typed.
+      "(0033612345678)": "00 33612345678",
+      "+33612345678": "00 33612345678",
+      "(+33) 6 12 34 56 78": "(+33) 6 12 34 56 78",
+    };
+    const candidates = Object.keys(typed).map((phone, index) => seedCandidate(index + 1, { phone }));
+    const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-PHONE-6", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Qatar" }]);
+    memory.seed(clientBriefCandidates, candidates.map(candidate => ({ brief_id: brief!.id, application_id: candidate.id, association_status: "shortlisted", candidate_consent_at: consentAt })));
+    const phones = (csv: string) => {
+      const [header, ...rows] = csv.split("\n");
+      const column = header!.split(";").indexOf("\"Téléphone\"");
+      return Object.fromEntries(rows.map(row => [row.split(";")[2], row.split(";")[column]]));
+    };
+    const expected = Object.fromEntries(Object.values(typed).map((phone, index) => [`"c${index + 1}@test.local"`, `"${phone}"`]));
+
+    expect(phones((await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: candidates.map(candidate => candidate.id as number) })).csv)).toEqual(expected);
+    expect(phones((await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number })).csv)).toEqual(expected);
+  });
+
   it("écrit dans l’export du vivier les pays et les langues en clair, et le statut en mots (INTL-10)", async () => {
     const candidate = seedCandidate(1, { target_countries: JSON.stringify(["Émirats arabes unis", "Qatar"]), languages: JSON.stringify(["Arabic", "French"]), status: "shortlisted" });
     const pool = await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: [candidate.id as number] });

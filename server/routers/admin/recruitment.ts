@@ -116,9 +116,20 @@ function spreadsheetMayReadAsNumberOrDate(typed: string) {
 /** Where digits are set apart by two from the end (« 06 12 34 56 78 »). */
 const BY_TWO_FROM_THE_END = /\B(?=(?:\d{2})+$)/g;
 
-/** A phone number's digits set apart, « + » already written « 00 », so that no spreadsheet reads them as a number: see csvPhoneValue. */
-function phoneDigitsSetApart(written: string) {
+/**
+ * A phone number's digits, a « + » typed before them written « 00 », its
+ * opening parenthesis or not (« (+34 612 345 678) » gives « 0034612345678 »,
+ * as « +34 612 345 678 »), so that the country code is never run into the
+ * national number.
+ */
+function phoneDigits(written: string) {
   const digits = written.replace(/\D/g, "");
+  return /^\D*\+/.test(written) ? `00${digits}` : digits;
+}
+
+/** A phone number's digits set apart, its « + » written « 00 », so that no spreadsheet reads them as a number: see csvPhoneValue. */
+function phoneDigitsSetApart(written: string) {
+  const digits = phoneDigits(written);
   // « 00 » before three digits would read as thousands in French (« 00 123 »).
   if (digits.startsWith("00") && digits.length >= 6) return `00 ${digits.slice(2)}`;
   if (digits.length >= 3) return digits.replace(BY_TWO_FROM_THE_END, " ");
@@ -135,7 +146,7 @@ const PHONE_NUMBER_DIGITS = 7;
 
 /** The digits of a phone number, its « 00 » for « + » aside (« 0049 151 » has five). */
 function phoneNumberDigits(written: string) {
-  return written.replace(/\D/g, "").replace(/^00/, "").length;
+  return phoneDigits(written).replace(/^00/, "").length;
 }
 
 /**
@@ -168,7 +179,7 @@ function severalPhoneNumbersAsText(value: string): string | null {
     const parts = value.split(separator).filter(part => /\d/.test(part));
     if (parts.length < 2) continue;
     const first = parts[0]!;
-    const withVariants = joint === " / " && phoneNumberDigits(first) >= (first.replace(/\D/g, "").startsWith("00") ? INTERNATIONAL_PHONE_NUMBER_WITH_VARIANT_DIGITS : PHONE_NUMBER_WITH_VARIANT_DIGITS);
+    const withVariants = joint === " / " && phoneNumberDigits(first) >= (phoneDigits(first).startsWith("00") ? INTERNATIONAL_PHONE_NUMBER_WITH_VARIANT_DIGITS : PHONE_NUMBER_WITH_VARIANT_DIGITS);
     const variant = (part: string | undefined) => withVariants && part !== undefined && phoneNumberDigits(part) < PHONE_NUMBER_DIGITS;
     if (!parts.every((part, index) => phoneNumberDigits(part) >= PHONE_NUMBER_DIGITS || (index > 0 && variant(part)))) continue;
     const written = parts.map((part, index) => {
@@ -198,7 +209,8 @@ function phoneAsText(written: string): string {
  * it behind an apostrophe. A number a spreadsheet may read as a number or a
  * date (spreadsheetMayReadAsNumberOrDate) leaves with its digits set apart:
  * its « 00 » by one space (« +34 612 345 678 », « +21651000010 » and
- * « 0021651000010 » give « 00 34612345678 » and « 00 21651000010 »), the
+ * « 0021651000010 » give « 00 34612345678 » and « 00 21651000010 »), a « + »
+ * after an opening parenthesis too (« (+34 612 345 678) »: phoneDigits), the
  * others by two from the end (« 0612345678 », « (0612345678) » and
  * « 0612 345 678 » give « 06 12 34 56 78 »), which no spreadsheet reads as a
  * number; one of two digits, which spreadsheets always read as a number, and
