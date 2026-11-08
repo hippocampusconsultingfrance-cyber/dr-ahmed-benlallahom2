@@ -68,6 +68,8 @@ const services = {
   pwnedRange: vi.fn(async (_prefix: string, _headers: Headers) => new Response("")),
 };
 const realFetch = globalThis.fetch;
+/** Any other address these routes would reach, which no stand-in answers: each one fails its test. */
+const unexpectedRequests: string[] = [];
 
 const dialect = new PgDialect();
 const db = () => state.db as InMemoryDrizzle;
@@ -106,12 +108,16 @@ beforeEach(() => {
     const url = String(input);
     if (url === SITEVERIFY) return services.siteverify(init!.body as URLSearchParams);
     if (url.startsWith(PWNED_RANGE)) return services.pwnedRange(url.slice(PWNED_RANGE.length), new Headers(init?.headers));
-    return realFetch(input, init);
+    // Only the test's own requests to the app leave; any other outbound call fails the test.
+    if (url.startsWith(`${baseUrl}/`)) return realFetch(input, init);
+    unexpectedRequests.push(url);
+    return Promise.reject(new Error(`unexpected outbound request: ${url}`));
   }));
   vi.spyOn(console, "warn").mockImplementation(() => undefined);
   vi.spyOn(console, "error").mockImplementation(() => undefined);
 });
 afterEach(() => {
+  expect(unexpectedRequests.splice(0), "unexpected outbound requests").toEqual([]);
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -230,7 +236,24 @@ describe("hors de Vitest, au-delà du seuil, la demande est refusée (CODE-10)",
     const refused = await submit("medicalQuestions.submit", question("patient@test.local", ACCEPTED_TOKEN), ip);
 
     expect(refused).toMatchObject({ status: 400, error: { data: { code: "BAD_REQUEST" } } });
+    // The limit stands before the anti-robot check: the fourth question is refused without reaching Cloudflare.
+    expect(services.siteverify).toHaveBeenCalledTimes(3);
     expect(db().rows(medicalQuestions)).toHaveLength(3);
+    expect(blocked()).toEqual(["public_medical_question_protection"]);
+  });
+
+  it("medicalQuestions.submit : au-delà de la limite par IP, refus 429 même en changeant d’adresse", async () => {
+    const ip = "198.51.100.25";
+    const { maxAttempts } = PUBLIC_EMAIL_IP_RATE_LIMITS.medicalQuestion;
+    for (let index = 1; index <= maxAttempts; index += 1) {
+      await expect(submit("medicalQuestions.submit", question(`patient${index}@test.local`, ACCEPTED_TOKEN), ip), `question ${index}`).resolves.toEqual({ status: 200, error: null });
+    }
+
+    const refused = await submit("medicalQuestions.submit", question("encore@test.local", ACCEPTED_TOKEN), ip);
+
+    expect(refused).toMatchObject({ status: 429, error: { data: { code: "TOO_MANY_REQUESTS" } } });
+    expect(db().rows(medicalQuestions)).toHaveLength(maxAttempts);
+    expect(blocked()).toEqual(["public_medical_question_protection"]);
   });
 
   it("/api/recruitment/apply : au-delà de la limite par IP, refus avec le code recruitment_rate_limited, même en changeant d’adresse", async () => {
