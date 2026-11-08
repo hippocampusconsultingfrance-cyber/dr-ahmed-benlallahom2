@@ -4,7 +4,7 @@
 
 Cette recette vérifie, sur le **domaine publié** `https://drahmedbenlallahom.com`, le paiement de réservation, la création de facture et la délivrance des emails transactionnels. Utilisez un créneau de test et une adresse email que vous contrôlez. Ne saisissez jamais de données de santé réelles et ne réalisez aucun envoi de campagne de masse pendant cette vérification.
 
-> Les confirmations et les factures sont désormais mises en file après le paiement puis reprises automatiquement, au plus tard dans les cinq minutes. Il est normal que l’email n’arrive pas instantanément.
+> La confirmation et la facture partent dès que le paiement est reçu (webhook Stripe, ou page de retour du paiement). Un envoi en échec est repris par la tâche quotidienne `appointment-fulfillment` (06:20 UTC), ou tout de suite avec « Renvoyer » sur le rendez-vous (onglet « Réservations »). Horaires et procédures de référence : [docs/EXPLOITATION.md](./docs/EXPLOITATION.md).
 
 | Élément | Valeur de test |
 |---|---|
@@ -21,16 +21,16 @@ Cette recette vérifie, sur le **domaine publié** `https://drahmedbenlallahom.c
 2. Vérifiez que le tarif affiché correspond à l’horaire choisi : **100 €** entre 08:00 et 18:00, **150 €** entre 18:00 et 08:00. Passez au paiement.
 3. Sur la page Stripe, utilisez la carte de test indiquée ci-dessus. Après confirmation, vous devez revenir vers la page de succès du site. Ne fermez pas l’onglet avant la redirection.
 4. Dans l’administration, vérifiez qu’une seule réservation est créée pour le créneau, avec un paiement confirmé. Cette vérification est importante pour confirmer le verrou anti-double réservation.
-5. Attendez jusqu’à cinq minutes. Contrôlez la boîte de réception et le dossier indésirable de l’adresse de test : l’email doit récapituler la demande, le créneau et le lien Google Meet. Vérifiez que l’expéditeur est `recrutement@drahmedbenlallahom.com` et que la réponse est dirigée vers `hippocampusconsultingfrance@gmail.com` lorsque le message concerne Hippocampus Consulting.
+5. Attendez quelques minutes. Contrôlez la boîte de réception et le dossier indésirable de l’adresse de test : l’email doit récapituler la demande, le créneau et le lien Google Meet. Vérifiez que l’expéditeur est `recrutement@drahmedbenlallahom.com` et que la réponse est dirigée vers `hippocampusconsultingfrance@gmail.com` lorsque le message concerne Hippocampus Consulting.
 6. Ouvrez le lien de facture fourni dans l’email, si présent, et vérifiez le montant, la date, la référence de réservation et l’adresse email de test. Ne transmettez pas ce lien : il relève de la réservation test.
 
 ## Contrôles de reprise et d’échec
 
-Si l’email ou la facture n’est pas reçu dans les cinq minutes, ne recréez pas immédiatement une seconde réservation. Recherchez d’abord la réservation dans l’administration et vérifiez les tâches post-paiement. La tâche `appointment-fulfillment` relance les confirmations et factures échouées toutes les cinq minutes.
+Si l’email ou la facture n’est pas reçu quelques minutes après le paiement, ne recréez pas une seconde réservation. Recherchez d’abord la réservation dans l’administration (« À traiter » dans « Vue d'ensemble », puis le rendez-vous dans l’onglet « Réservations ») et vérifiez ses envois après paiement. La tâche `appointment-fulfillment` reprend les confirmations et factures en échec une fois par jour, à 06:20 UTC ; « Renvoyer » les envoie tout de suite.
 
 | Situation constatée | Contrôle à effectuer | Action sûre |
 |---|---|---|
-| Paiement validé, email absent | Vérifier les spams et le statut de la réservation | Attendre le prochain passage de la file ; ne pas payer une seconde fois |
+| Paiement validé, email absent | Vérifier les spams et le statut de la réservation | « Renvoyer » sur le rendez-vous, ou attendre le passage quotidien de 06:20 UTC ; ne pas payer une seconde fois |
 | Facture absente, email reçu | Vérifier la file post-paiement et l’adresse email de test | Déclencher une reprise administrative seulement après vérification |
 | Retour Stripe interrompu | Vérifier le paiement dans Stripe puis la réservation dans l’administration | Laisser le webhook et la file reprendre le traitement |
 | Double réservation suspectée | Rechercher le même créneau dans l’administration | Ne pas supprimer de données ; documenter l’heure et les références |
