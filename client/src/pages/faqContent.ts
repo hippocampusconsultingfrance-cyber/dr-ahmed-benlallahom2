@@ -1,7 +1,8 @@
 export type FaqLocale = "fr" | "en" | "de" | "zh";
 
 export type FaqEntry = { question: string; answer: string };
-export type FaqContent = { eyebrow: string; title: string; description: string; note: string; booking: string; apply: string; entries: FaqEntry[] };
+/** humanReview: the line under the notice, in the page's language like the rest (EN-07). */
+export type FaqContent = { eyebrow: string; title: string; description: string; note: string; humanReview: string; booking: string; apply: string; entries: FaqEntry[] };
 
 const faq: Record<FaqLocale, FaqContent> = {
   fr: {
@@ -9,6 +10,7 @@ const faq: Record<FaqLocale, FaqContent> = {
     title: "Questions fréquentes",
     description: "Retrouvez les informations essentielles sur la consultation, la réservation, la confidentialité et les parcours Hippocampus Consulting.",
     note: "Cette page donne des informations pratiques et ne remplace pas un avis médical personnalisé ni les services d’urgence : en cas d’urgence, appelez le 15 (SAMU) ou 112.",
+    humanReview: "Hippocampus Consulting · revue humaine obligatoire pour le recrutement",
     booking: "Réserver une consultation",
     apply: "Je suis soignant : postuler",
     entries: [
@@ -25,6 +27,7 @@ const faq: Record<FaqLocale, FaqContent> = {
     title: "Frequently asked questions",
     description: "Find essential information about consultations, booking, confidentiality and Hippocampus Consulting pathways.",
     note: "This page provides practical information. It does not replace personalised medical advice or emergency services: in an emergency, call 15 (SAMU) or 112.",
+    humanReview: "Hippocampus Consulting · mandatory human review for recruitment",
     booking: "Book a consultation",
     apply: "I'm a healthcare professional: apply",
     entries: [
@@ -41,6 +44,7 @@ const faq: Record<FaqLocale, FaqContent> = {
     title: "Häufig gestellte Fragen",
     description: "Hier finden Sie wichtige Informationen zu Beratung, Buchung, Vertraulichkeit und den Angeboten von Hippocampus Consulting.",
     note: "Diese Seite bietet praktische Informationen. Sie ersetzt weder eine persönliche medizinische Beratung noch den Notdienst: Rufen Sie im Notfall 15 (SAMU) oder 112 an.",
+    humanReview: "Hippocampus Consulting · verpflichtende menschliche Prüfung im Recruiting",
     booking: "Beratung buchen",
     apply: "Ich bin Gesundheitsfachkraft: bewerben",
     entries: [
@@ -57,6 +61,7 @@ const faq: Record<FaqLocale, FaqContent> = {
     title: "常见问题",
     description: "了解咨询、预约、保密和 Hippocampus Consulting 服务流程的必要信息。",
     note: "本页仅提供实用信息，不能替代个性化医疗意见或紧急服务。如遇紧急情况，请拨打 15（SAMU）或 112。",
+    humanReview: "Hippocampus Consulting · 招聘必须经过人工审核",
     booking: "预约咨询",
     apply: "我是医护人员：申请职位",
     entries: [

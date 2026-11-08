@@ -12,7 +12,8 @@ export default function EducationSection() {
             <span className="font-display text-7xl font-bold text-gold-gradient opacity-30">2006–2026</span>
           </div>
           <div className="lg:col-span-8 section-heading">
-            <span className="eyebrow-label mb-5">Clinical formation</span>
+            {/* English kicker on every page, its wording left to the owner (PUB-15): read with an English voice (A11Y-13). */}
+            <span lang="en" className="eyebrow-label mb-5">Clinical formation</span>
             <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-bold text-foreground mb-4">
               {content.education.title}
             </h2>

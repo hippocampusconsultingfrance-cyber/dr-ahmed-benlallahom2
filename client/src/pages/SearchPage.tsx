@@ -6,6 +6,18 @@ import Footer from "@/components/Footer";
 import { SEOHead } from "@/components/SEOHead";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { publicShortcuts, searchPublicPages } from "@/lib/publicSearchIndex";
+import { STATIC_ROUTE_METADATA } from "@shared/routeMetadata";
+
+/**
+ * Title and description of /search in the language shown (EN-07): in French, those of the prerendered
+ * page (shared/routeMetadata.ts), which SEOHead keeps; in the other languages, their translation.
+ */
+export const searchSeo = {
+  fr: STATIC_ROUTE_METADATA["/search"],
+  en: { title: "Search | Dr. Ben Lallahom", description: "Search the website’s public information." },
+  de: { title: "Suche | Dr. Ben Lallahom", description: "Durchsuchen Sie die öffentlichen Informationen der Website." },
+  zh: { title: "搜索 | Dr. Ben Lallahom", description: "搜索本网站的公开信息。" },
+} as const;
 
 const copy = {
   fr: { title: "Rechercher sur le site", placeholder: "Rechercher une information publique…", search: "Rechercher", idle: "Saisissez un mot-clé pour explorer les informations publiques visibles sur le site.", results: "résultat(s)", partial: "Aucune page ne contient tous ces mots. Pages qui en contiennent au moins un :", none: "Aucune information publique ne correspond à cette recherche.", visit: "Consulter" },
@@ -17,6 +29,7 @@ const copy = {
 export default function SearchPage() {
   const { language } = useLanguage();
   const strings = copy[language];
+  const seo = searchSeo[language];
   const [query, setQuery] = useState(() => new URLSearchParams(window.location.search).get("q") ?? "");
   const results = useMemo(() => searchPublicPages(query, language), [query, language]);
   const hasQuery = query.trim().length > 0;
@@ -25,7 +38,7 @@ export default function SearchPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <SEOHead title="Recherche | Dr. Ahmed Ben Lallahom" description="Recherchez les informations publiques visibles sur le site." noIndex />
+      <SEOHead title={seo.title} description={seo.description} noIndex />
       <Navigation />
       <main id="main-content" tabIndex={-1} className="container pt-32 pb-20 md:pt-40">
         <div className="mx-auto max-w-3xl">

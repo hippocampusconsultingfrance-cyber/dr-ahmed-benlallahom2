@@ -6,6 +6,7 @@ import { SEOHead } from "@/components/SEOHead";
 import { useLanguage } from "@/contexts/LanguageContext";
 import LanguageMenu from "@/components/LanguageMenu";
 import { ManageCookiesButton } from "@/components/CookieConsent";
+import { STATIC_ROUTE_METADATA } from "@shared/routeMetadata";
 
 type SupportedLanguage = "fr" | "en" | "de" | "zh";
 
@@ -59,9 +60,21 @@ export function getRecruitmentUnsubscribeCopy(language: SupportedLanguage) {
   return copy[language];
 }
 
+/**
+ * Title and description of the page in the language shown (EN-07): in French, those of the prerendered
+ * page (shared/routeMetadata.ts), which SEOHead keeps; in the other languages, their translation.
+ */
+export const recruitmentUnsubscribeSeo = {
+  fr: STATIC_ROUTE_METADATA["/recruitment/unsubscribe"],
+  en: { title: "Recruitment preferences | Hippocampus Consulting", description: "Manage your recruitment communication preferences." },
+  de: { title: "Recruiting-Einstellungen | Hippocampus Consulting", description: "Verwalten Sie Ihre Einstellungen für Recruiting-Mitteilungen." },
+  zh: { title: "招聘订阅偏好 | Hippocampus Consulting", description: "管理您的招聘通信偏好。" },
+} as const;
+
 export default function RecruitmentUnsubscribePage() {
   const { language } = useLanguage();
   const copy = getRecruitmentUnsubscribeCopy(language as SupportedLanguage);
+  const seo = recruitmentUnsubscribeSeo[language as SupportedLanguage];
   const token = useMemo(() => new URLSearchParams(window.location.search).get("token")?.trim() ?? "", []);
   const unsubscribe = trpc.recruitmentPreferences.unsubscribe.useMutation();
   const invalidToken = token.length < 24 || token.length > 80;
@@ -73,7 +86,7 @@ export default function RecruitmentUnsubscribePage() {
 
   return (
     <>
-      <SEOHead title="Désinscription recrutement | Hippocampus Consulting" description="Gérez vos préférences de communications de recrutement." noIndex />
+      <SEOHead title={seo.title} description={seo.description} noIndex />
       <main className="flex min-h-screen flex-col items-center justify-center bg-[#030a12] p-6 text-center text-white">
         <div className="mb-4 flex w-full max-w-lg justify-end"><LanguageMenu tone="candidate" /></div>
         <section className="w-full max-w-lg rounded-3xl border border-cyan-950 bg-slate-950/80 p-8 shadow-2xl sm:p-10" aria-live="polite">

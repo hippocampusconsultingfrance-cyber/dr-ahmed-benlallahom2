@@ -14,7 +14,8 @@ export default function ValuesSection() {
       <div className="container">
         {/* Offset header — left aligned */}
         <div className="section-heading mb-16 max-w-xl">
-          <span className="eyebrow-label mb-5">Principles in practice</span>
+          {/* English kicker on every page, its wording left to the owner (PUB-15): read with an English voice (A11Y-13). */}
+          <span lang="en" className="eyebrow-label mb-5">Principles in practice</span>
           <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-bold text-foreground mb-3">
             {content.values.title}
           </h2>

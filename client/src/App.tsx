@@ -56,12 +56,22 @@ function RouteLoading() {
   return <div className="app-loading-shell" role="status" aria-live="polite"><div className="app-loading-mark" aria-hidden="true"><span /></div><div className="app-loading-copy"><span className="app-loading-kicker">ABL / HIPPOCAMPUS</span><span className="app-loading-title">{copy.title}</span><span className="app-loading-caption">{copy.caption}</span></div></div>;
 }
 
+/** Tab title and description of the candidate vault, a private page outside the prerendered table, in the language shown (EN-07). */
+export const candidatePortalSeo = {
+  fr: { title: "Coffre documentaire candidat | Hippocampus Consulting", description: "Consultez et déposez vos documents administratifs de manière sécurisée." },
+  en: { title: "Candidate document vault | Hippocampus Consulting", description: "View and upload your administrative documents securely." },
+  de: { title: "Dokumententresor für Kandidaten | Hippocampus Consulting", description: "Sehen Sie Ihre Verwaltungsdokumente ein und laden Sie sie sicher hoch." },
+  zh: { title: "候选人文档库 | Hippocampus Consulting", description: "安全地查看和上传您的行政文件。" },
+} as const;
+
 function CandidatePortalPrivateRoute() {
+  const { language } = useLanguage();
+  const seo = candidatePortalSeo[language];
   return (
     <>
       <SEOHead
-        title="Coffre documentaire candidat | Hippocampus Consulting"
-        description="Consultez et déposez vos documents administratifs de manière sécurisée."
+        title={seo.title}
+        description={seo.description}
         noIndex
       />
       <CandidatePortalPage />
