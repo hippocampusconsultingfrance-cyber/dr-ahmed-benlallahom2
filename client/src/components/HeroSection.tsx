@@ -10,8 +10,9 @@ import { ArrowUpRight, BadgeCheck, Clock3, Languages } from "lucide-react";
 export const HERO_ROLE_INTERVAL_MS = 3000;
 
 /**
- * Index of the hero role shown: each role once, then back to the first, where the title stays
- * (A11Y-07, WCAG 2.2.2); none changes when the visitor asks for reduced motion.
+ * Index of the hero role shown: each role once, then back to the first, where the title stays;
+ * none changes when the visitor asks for reduced motion (A11Y-07). The title still updates by
+ * itself, with no pause: only the three roles shown at once would meet WCAG 2.2.2 strictly.
  */
 export function useHeroRoleIndex(count: number) {
   const [roleIndex, setRoleIndex] = useState(0);
@@ -98,9 +99,10 @@ export default function HeroSection() {
 
           {/* Animated role with cyan accent (A11Y-07): the roles share one grid cell, so that the block keeps
               the height of the longest one, wrapped on a phone rather than cut, and the page does not move
-              when the role changes. Screen readers read the three roles at once. */}
+              when the role changes. Screen readers read the three roles at once, separated by commas, which
+              they pause on (a « · » can be read out as « middle dot »). */}
           <div className="min-h-10 sm:min-h-12 mb-8">
-            <p className="sr-only">{content.hero.roles.join(" · ")}</p>
+            <p className="sr-only">{content.hero.roles.join(", ")}</p>
             <div className="grid" aria-hidden="true">
               {content.hero.roles.map((role, index) => (
                 <p
@@ -135,7 +137,8 @@ export default function HeroSection() {
             </button>
           </div>
 
-          <div className="trust-strip" aria-label="Professional assurances">
+          {/* No aria-label: on a div without a role, it is not allowed (axe aria-prohibited-attr), and was in English on every page. */}
+          <div className="trust-strip">
             <div className="trust-strip-item">
               <BadgeCheck aria-hidden="true" className="h-4 w-4" />
               <span>{trustCopy[0]}</span>

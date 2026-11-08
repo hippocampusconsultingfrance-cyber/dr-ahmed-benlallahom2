@@ -65,7 +65,7 @@ describe("titre rotatif du héros (A11Y-07)", () => {
     expect(Array.from(stack.children).map(role => role.textContent)).toEqual(contentEn.hero.roles);
     expect(block.className).toMatch(/\bmin-h-10\b/);
     expect(block.className).not.toMatch(/(^|\s)(h-\d+|sm:h-\d+|overflow-hidden)(\s|$)/);
-    expect(block.querySelector(".sr-only")?.textContent).toBe(contentEn.hero.roles.join(" · "));
+    expect(block.querySelector(".sr-only")?.textContent).toBe(contentEn.hero.roles.join(", "));
   });
 });
 
@@ -77,5 +77,15 @@ describe("illustration du héros (A11Y-14)", () => {
 
     expect(illustration.getAttribute("alt")).toBe("");
     expect(illustration.getAttribute("aria-hidden")).toBe("true");
+  });
+});
+
+describe("bandeau de confiance du héros", () => {
+  it("ne porte aucun aria-label sur un div sans rôle, où il est interdit (axe aria-prohibited-attr)", () => {
+    preferReducedMotion(false);
+    const { container } = mount("fr");
+
+    expect(container.querySelector(".trust-strip")?.textContent).toContain("Expertise clinique certifiée");
+    expect(Array.from(container.querySelectorAll("#hero div[aria-label]:not([role])")).map(element => element.getAttribute("aria-label"))).toEqual([]);
   });
 });

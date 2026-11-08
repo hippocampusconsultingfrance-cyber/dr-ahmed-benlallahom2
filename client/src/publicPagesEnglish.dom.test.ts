@@ -92,8 +92,9 @@ function englishTexts() {
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
   for (let current = walker.nextNode(); current; current = walker.nextNode()) {
     const element = current.nodeType === Node.ELEMENT_NODE ? current as Element : current.parentElement!;
-    // Les noms de pays viennent d'Intl.DisplayNames (EN-11), pas des dictionnaires du site.
-    if (element.closest("script, style, noscript, [autocomplete='country-name']")) continue;
+    // Les noms de pays viennent d'Intl.DisplayNames (EN-11), pas des dictionnaires du site : seules les
+    // options d'un pays sont exemptées, l'invite de la liste et ses attributs restent contrôlés.
+    if (element.closest("script, style, noscript, [autocomplete='country-name'] option:not([value=''])")) continue;
     if (!(element.closest("[lang]")?.getAttribute("lang") ?? "en").startsWith("en")) continue;
     if (current.nodeType === Node.TEXT_NODE) texts.push({ where: `<${element.tagName.toLowerCase()}>`, text: current.textContent ?? "" });
     else for (const name of ["alt", "aria-label", "title", "placeholder"]) if (element.hasAttribute(name)) texts.push({ where: `${name} of <${element.tagName.toLowerCase()}>`, text: element.getAttribute(name) ?? "" });
@@ -128,7 +129,7 @@ afterEach(() => {
 describe("pages publiques en anglais (EN-07, A11Y-13)", () => {
   it("repère les restes de français, hors noms propres et passages marqués lang", () => {
     document.head.innerHTML = "";
-    document.body.innerHTML = `<p>Go home</p><a href="#main">Aller au contenu principal</a><img alt="Illustration médicale" src="x.svg"><p>Bibliothèque d’information</p><p lang="fr">Réponse publiée</p><p>Centre Hospitalier du Mans</p><p>Practice at the Institut de…</p><p>Practice in the de…</p>`;
+    document.body.innerHTML = `<p>Go home</p><a href="#main">Aller au contenu principal</a><img alt="Illustration médicale" src="x.svg"><p>Bibliothèque d’information</p><p lang="fr">Réponse publiée</p><p>Centre Hospitalier du Mans</p><p>Practice at the Institut de…</p><p>Practice in the de…</p><select autocomplete="country-name" aria-label="Pays du diplôme"><option value="">Choisissez un pays</option><option value="Côte d’Ivoire">Côte d’Ivoire</option></select>`;
     document.title = "Recherche | Dr. Ben Lallahom";
 
     expect(frenchLeftovers()).toEqual([
@@ -137,6 +138,8 @@ describe("pages publiques en anglais (EN-07, A11Y-13)", () => {
       "alt of <img> « Illustration médicale » : médicale",
       "<p> « Bibliothèque d’information » : bibliothèque",
       "<p> « Practice in the de… » : de",
+      "aria-label of <select> « Pays du diplôme » : du, diplôme",
+      "<option> « Choisissez un pays » : un",
     ]);
     document.body.innerHTML = "";
   });

@@ -154,7 +154,7 @@ export const contentFr = {
 
   // Section Formation
   education: {
-    title: "Formation & Certifications",
+    title: "Formation & certifications",
     subtitle: "Un parcours académique d'excellence en anesthésie-réanimation, de la Faculté de médecine de Tunis aux diplômes européens.",
     diplomas: [
       { year: "2025–2026", title: "Capacité d'évaluation et de traitement de la douleur", institution: "Université de Nantes (en cours)" },
