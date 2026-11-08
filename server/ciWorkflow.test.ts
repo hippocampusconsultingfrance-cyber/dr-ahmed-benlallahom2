@@ -553,7 +553,7 @@ const QUALITY_STEPS: readonly Readonly<Record<string, string>>[] = [
 const QUALITY_SCRIPTS: Readonly<Record<string, string>> = {
   check: "tsc --noEmit",
   "test:ci": "vitest run",
-  build: `NODE_ENV=production vite build && tsx scripts/prerender-route-seo.ts && esbuild server/_core/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist && esbuild server/vercelEntry.ts --platform=node --packages=external --bundle --format=esm --banner:js="import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" --outfile=api/index.js`,
+  build: `NODE_ENV=production vite build && tsx scripts/prerender-route-seo.ts && esbuild server/_core/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist && esbuild server/vercelEntry.ts --platform=node --packages=external --bundle --format=esm --banner:js="import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" --outfile=dist/vercel/index.js`,
   knip: "knip",
 };
 

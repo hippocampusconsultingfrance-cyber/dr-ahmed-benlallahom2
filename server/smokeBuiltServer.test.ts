@@ -149,7 +149,10 @@ describe("test de fumée du serveur construit (CODE-14)", { timeout: 20_000 }, (
     expect(BUILT_SERVERS.map(target => target.entry)).toEqual(["api/index.js", "dist/index.js"]);
     const routeChecks = ["lazyPackages", "booking", "stripeWebhook", "resendWebhook", "scheduledJob", "noModuleErrors", "noOutboundConnections"];
     for (const target of BUILT_SERVERS) expect(target.checks, target.name).toEqual(expect.arrayContaining(["health", "api", ...routeChecks]));
-    expect(scripts.build).toContain("--outfile=api/index.js");
+    // api/index.js, versioned, re-exports the bundle the build writes (CODE-13).
+    expect(BUILT_SERVERS[0]!.bundle).toBe("dist/vercel/index.js");
+    expect(scripts.build).toContain("--outfile=dist/vercel/index.js");
+    expect(scripts.build).not.toContain("api/index.js");
     expect(scripts.start).toContain("node dist/index.js");
   });
 
@@ -301,6 +304,20 @@ describe("test de fumée du serveur construit (CODE-14)", { timeout: 20_000 }, (
   it("échoue sur un paquet importé à la demande introuvable, même dans une branche que les requêtes n'atteignent pas", async () => {
     const root = fixture({ "server.mjs": routesServer({ source: 'if (process.env.SMOKE_NEVER) await import("tests5-smoke-missing-package");' }) });
     await expect(smokeBuiltServer(routesTarget, { root })).rejects.toThrow(/paquet\(s\) importé\(s\) à la demande introuvable\(s\) depuis server\.mjs : tests5-smoke-missing-package/);
+  });
+
+  it("démarre la fonction par le fichier qui re-exporte le bundle, et cherche dans ce bundle les paquets importés à la demande (CODE-13)", async () => {
+    const files = (lazy: string) => ({
+      "package.json": JSON.stringify({ type: "module" }),
+      "api/index.js": 'export { default } from "../dist/vercel/index.js";\n',
+      "dist/vercel/index.js": `${HANDLER}\nif (process.env.SMOKE_NEVER) await import(${JSON.stringify(lazy)});\n`,
+      "node_modules/smoke-installed/package.json": JSON.stringify({ name: "smoke-installed", type: "module", exports: "./index.js" }),
+      "node_modules/smoke-installed/index.js": "export default 1;\n",
+    });
+    const target = { name: "fonction de test", entry: "api/index.js", bundle: "dist/vercel/index.js", vercel: true, checks: ["health", "api", "lazyPackages"] };
+    const { results } = await smokeBuiltServer(target, { root: fixture(files("smoke-installed")) });
+    expect(results).toEqual(["/api/health 503 (base error, configuration ok)", "/api/trpc/auth.me 200 (session anonyme)", "1 paquet(s) importé(s) à la demande résolu(s)"]);
+    await expect(smokeBuiltServer(target, { root: fixture(files("tests5-smoke-missing-package")) })).rejects.toThrow(/introuvable\(s\) depuis dist\/vercel\/index\.js : tests5-smoke-missing-package/);
   });
 
   it("échoue quand le webhook Stripe répond 500 (SDK introuvable) au lieu de refuser la signature", async () => {
