@@ -1,5 +1,4 @@
 import express, { type Express } from "express";
-import { internalErrorSummary } from "../_core/trpc";
 import { recordResendEmailEvent } from "../resendWebhookEvents";
 import { logError } from "../_core/logError";
 
@@ -29,7 +28,7 @@ export function registerResendWebhookRoute(app: Express) {
     try {
       ({ Webhook } = await loadSvix());
     } catch (error) {
-      console.error("Resend webhook unavailable", internalErrorSummary(error));
+      logError("Resend webhook unavailable", error, { req });
       res.status(500).send("Resend webhook unavailable");
       return;
     }

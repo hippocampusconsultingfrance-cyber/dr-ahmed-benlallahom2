@@ -129,12 +129,14 @@ describe("svix introuvable au premier évènement Resend (EXPL-15)", () => {
       const unavailable = await post();
       expect(unavailable.status).toBe(500);
       expect(await unavailable.text()).toBe("Resend webhook unavailable");
-      expect(error).toHaveBeenCalledWith("Resend webhook unavailable", expect.any(String));
+      // One JSON line from logError (EXPL-11), the label saying where it failed.
+      const labelOf = (line: unknown) => { try { return (JSON.parse(String(line)) as { label?: string }).label; } catch { return undefined; } };
+      expect(error.mock.calls.map(([line]) => labelOf(line))).toContain("Resend webhook unavailable");
 
       // Installed again (next deployment, transient failure): the next event loads it.
       vi.doUnmock("svix");
       expect((await post()).status).toBe(400);
-      expect(error).toHaveBeenLastCalledWith("Resend webhook verification failed:", expect.any(String));
+      expect(labelOf(error.mock.lastCall?.[0])).toBe("Resend webhook verification failed");
     } finally {
       await new Promise(resolve => listening.server.close(resolve));
     }
