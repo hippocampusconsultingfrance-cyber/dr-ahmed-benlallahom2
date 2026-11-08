@@ -200,6 +200,33 @@ describe("langues du recrutement comparées par code (IA-02)", () => {
     expect(["Cantonese", "粤语", "广东话", "Mandarin", "Chinese"].filter(name => givesRequiredLanguage(name, cantonese!))).toEqual(["Cantonese", "粤语", "广东话"]);
   });
 
+  it("reconnaît une langue hors table sous ses noms usuels (noms ISO anglais, graphies courantes, noms que les candidats écrivent) et une macrolangue ou une famille par chacun de ses membres (IA02-R3-NOMS-BIS)", () => {
+    const met = (required: string, names: string[]) => recruitmentLanguageRequirements(required).filter(requirement => meetsRequiredLanguage(names, requirement)).length;
+    for (const [required, names] of [
+      ["Pachto – Anglais", ["English", "Pushto"]], ["Pachto – Anglais", ["English", "Pashtu"]], ["Pendjabi – Anglais", ["English", "Panjabi"]],
+      ["Azerbaïdjanais – Anglais", ["English", "Azeri"]], ["Indonésien – Anglais", ["English", "Bahasa Indonesia"]], ["Malais – Anglais", ["English", "Bahasa Melayu"]],
+      ["Népalais – Anglais", ["English", "Nepalese"]], ["Peul – Français", ["French", "Fulani"]], ["Peul – Français", ["French", "Pulaar"]],
+      // A macrolanguage or a family, met by each of its languages.
+      ["Berbère – Français", ["French", "Kabyle"]], ["Berbère – Français", ["French", "Tachelhit"]], ["Kurde – Anglais", ["English", "Sorani"]],
+      ["Kurde – Anglais", ["English", "Kurmanji"]], ["Serbo-croate – Anglais", ["English", "Serbian"]], ["Serbo-croate – Anglais", ["English", "Bosnian"]],
+      ["Serbo-croate – Anglais", ["English", "Croatian"]],
+    ] as const) {
+      // Before (ddcc047): one of the two requirements, 8 language points of 15, neither the profile nor the Langue filter.
+      expect(met(required, [...names]), `${required} / ${names.join(", ")}`).toBe(2);
+    }
+    // English only meets one of them; a language of the family does not meet another of its languages.
+    for (const required of ["Kurde – Anglais", "Pachto – Anglais", "Serbo-croate – Anglais"]) expect(met(required, ["English"]), required).toBe(1);
+    expect(met("Sorani – Anglais", ["English", "Kurdish"])).toBe(1);
+    // French names that are languages: two requirements, not one met by French or English alone (before: « Moré – Français » was French).
+    for (const required of ["Moré – Français", "Azéri – Anglais", "Malinké – Français", "Comorien – Français", "Pidgin – Anglais"]) {
+      expect(recruitmentLanguageRequirements(required), required).toHaveLength(2);
+      expect(met(required, ["French", "English"]), required).toBe(1);
+    }
+    expect(met("Moré – Français", ["French", "Mooré"])).toBe(2);
+    // « more », a word, is no language without its accent.
+    expect(recruitmentLanguageRequirements("English – more than B2").map(requirement => requirement.text)).toEqual(["English – more than B2"]);
+  });
+
   it("garde avec sa langue ce qui la qualifie après un tiret : une exigence, une préférence, une variété ou une région, en français, anglais, allemand et chinois (IA-02)", () => {
     // Before: « Anglais – obligatoire » was two requirements, English and « obligatoire », met by nobody.
     const qualified: Array<[string, string]> = [

@@ -164,7 +164,10 @@ function comparedText(text: string): ComparedText {
   const core = blankBrackets(folded).replaceAll("\u0000", " ").replace(/\s+/g, " ").trim() || folded.trim();
   // The languages the table does not know it names outside brackets, by their codes: read when first asked for.
   let others: readonly string[] | undefined;
-  const compared = { folded, core, codes: Object.freeze(codes), get others() { return (others ??= Object.freeze(otherLanguageCodes(core))); } };
+  const compared = {
+    folded, core, codes: Object.freeze(codes),
+    get others() { return (others ??= Object.freeze(otherLanguageCodes(core, blankBrackets(text.normalize("NFC").toLowerCase()).replaceAll("\u0000", " ")))); },
+  };
   if (text.length <= COMPARED_TEXT_MAX_LENGTH) {
     if (COMPARED_TEXTS.size >= COMPARED_TEXTS_LIMIT) COMPARED_TEXTS.clear();
     COMPARED_TEXTS.set(text, compared);
@@ -236,7 +239,8 @@ const READ_REQUIREMENTS = new Map<string, readonly RecruitmentLanguageRequiremen
  * Magahi, Dogri, Bodo and Mizo; Minangkabau, Balinese, Madurese, Buginese,
  * Sasak, Tetum and Tok Pisin. Not those whose name is mostly a place's
  * (Douala, Bassa, Lunda, Aceh, Banjar, Pampanga) or, accents aside, a word
- * (« moré », Mooré: « more »), nor Swiss German, a variety of German. Not
+ * (« moré », Mooré: « more », read with its accent only, below), nor Swiss
+ * German, a variety of German. Not
  * the table's, nor the constructed or ancient languages, whose names also
  * qualify a language or a place (« Amérique latine », « 世界语言 »): Latin,
  * Sanskrit, Pali, Avestan, Church Slavic, Esperanto, Ido, Interlingua,
@@ -264,7 +268,12 @@ const OTHER_LANGUAGE_LOCALES = ["fr", "en", "de", "zh"];
  * (« luba-kasaï »), Sorani (« Central Kurdish »), Kurmanji, Kapampangan,
  * Bisaya, Mooré, the languages of southern Africa under their own names
  * (Setswana, isiZulu…), Hokkien, and Cantonese, also where Intl.DisplayNames
- * is missing, and as 广东话 or 粵語.
+ * is missing, and as 广东话 or 粵語. And the usual names it does not give: the
+ * English names of ISO 639 (Pushto, Panjabi, Fulah), the spellings in use
+ * (Pashtu, Azeri, Nepalese, Fulani), the names the candidates write their
+ * language under (Bahasa Indonesia, Bahasa Melayu, Afaan Oromoo, Bamanankan,
+ * Pular, Shqip, Frysk, پښتو, الكردية, الأمازيغية, السواحيلية, አማርኛ,
+ * Українська), and French names (azéri, malinké, comorien, pidgin).
  */
 const OTHER_LANGUAGE_NAMES: ReadonlyArray<readonly [codes: string, ...names: string[]]> = [
   ["hbs", "Serbo-croate", "Serbo-Croatian", "Serbokroatisch", "塞尔维亚-克罗地亚语"],
@@ -301,7 +310,48 @@ const OTHER_LANGUAGE_NAMES: ReadonlyArray<readonly [codes: string, ...names: str
   ["mos", "Mooré", "Mossi"],
   ["yue", "Cantonais", "Cantonese", "Kantonesisch", "粤语", "广东话", "廣東話", "粵語"],
   ["nan", "Hokkien"],
+  ["ps", "Pushto", "Pashtu", "Pakhto", "پښتو"],
+  ["pa", "Panjabi"],
+  ["az", "Azeri", "Azéri", "Aseri"],
+  ["id", "Bahasa Indonesia"],
+  ["ms", "Bahasa Melayu", "Bahasa Malaysia"],
+  ["ne", "Nepalese"],
+  ["ff", "Fulani", "Fulah"],
+  ["ku", "الكردية", "Kurdî", "Kurdi"],
+  ["ber", "الأمازيغية", "ⵜⴰⵎⴰⵣⵉⵖⵜ"],
+  ["sw", "السواحيلية"],
+  ["man", "Malinké", "Malinke", "Maninka", "Mandinka", "Mandingue", "Mandingo"],
+  ["zdj wni swb wlc", "Comorien", "Comorian", "Shikomori", "Komorisch"],
+  ["pcm", "Pidgin"],
+  ["om", "Afaan Oromoo", "Oromiffa"],
+  ["am", "Amharigna", "Amarigna", "አማርኛ"],
+  ["ti", "Tigrigna", "ትግርኛ"],
+  ["bm", "Bamanankan"],
+  ["fuf", "Pular"],
+  ["yue", "Yue"],
+  ["gd", "Gàidhlig"],
+  ["fy", "Frysk"],
+  ["si", "Singhalese"],
+  ["sq", "Shqip"],
+  ["uk", "Українська"],
 ];
+
+/** Names of a language that are words accents aside (« moré », « more »): found only as written, with their accents, case aside. */
+const ACCENTED_NAMES: ReadonlyArray<readonly [code: string, name: string]> = [["mos", "moré"]];
+
+/**
+ * The languages of a macrolanguage or a family the table does not know, by
+ * its code: a requirement of it is met by each of them (« Kurde » by Sorani
+ * and Kurmanji, « Serbo-croate » by Serbian, Croatian and Bosnian, « Berbère »
+ * by Kabyle, Tachelhit and Tamazight, « Peul » by Pulaar), not the reverse.
+ */
+const MEMBER_LANGUAGES: Readonly<Record<string, readonly string[]>> = {
+  ku: ["ckb", "kmr", "sdh"],
+  hbs: ["sr", "hr", "bs", "cnr"],
+  ber: ["kab", "shi", "tzm", "zgh", "rif"],
+  ff: ["fuc", "fuf", "fuv"],
+  man: ["emk", "mnk"],
+};
 
 /** Each name of a language the table does not know, folded, and the codes of the languages it names. */
 let otherLanguageNames: ReadonlyMap<string, readonly string[]> | undefined;
@@ -344,13 +394,14 @@ function readOtherLanguageNames() {
  * by one of their names found whole in it (« yue » for « Cantonese » as for
  * « cantonais courant », « gd » for « Gaelic »); none for any other text.
  */
-function otherLanguageCodes(folded: string) {
+function otherLanguageCodes(folded: string, written: string) {
   otherLanguageNames ??= readOtherLanguageNames();
   const codes: string[] = [];
   otherLanguageNames.forEach((named, name) => {
     if (!containsWords(folded, name)) return;
     for (const code of named) if (!codes.includes(code)) codes.push(code);
   });
+  for (const [code, name] of ACCENTED_NAMES) if (!codes.includes(code) && containsWords(written, name)) codes.push(code);
   return codes;
 }
 
@@ -458,12 +509,14 @@ function containsWords(folded: string, words: string) {
 /**
  * Whether a name gives a language the table does not know: by the code of a
  * language both name (« Cantonese » or « 粤语 » for « Cantonais », the form
- * recording it in the page's language, the AI in the CV's), or by its words,
+ * recording it in the page's language, the AI in the CV's), or of one of the
+ * languages of the macrolanguage or the family it requires (« Sorani » for
+ * « Kurde », « Serbian » for « Serbo-croate »), or by its words,
  * those of one whole in the other's, what they say between brackets aside.
  */
 function givesOtherLanguage(name: ComparedText, required: ComparedText) {
   if (required.codes.length) return false;
-  if (required.others.some(code => name.others.includes(code))) return true;
+  if (required.others.some(code => name.others.includes(code) || (MEMBER_LANGUAGES[code] ?? []).some(member => name.others.includes(member)))) return true;
   return containsWords(name.folded, required.core) || (!name.codes.length && containsWords(required.folded, name.core));
 }
 

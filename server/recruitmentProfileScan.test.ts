@@ -279,6 +279,39 @@ describe("Candidatures — profil de matching et filtres de la liste (IA-02)", (
     }
   });
 
+  it("reconnaît une langue hors table sous ses noms usuels et une macrolangue par chacun de ses membres : le profil, la mission et le filtre Langue (IA02-R3-NOMS-BIS)", async () => {
+    const dossier = (lastName: string, languages: string[]) => ({
+      tracking_id: `CVNAME${lastName}`, first_name: "Dr", last_name: lastName, email: `${lastName.toLowerCase()}@test.local`, specialty: "Anesthésie-réanimation",
+      target_countries: JSON.stringify(["Émirats arabes unis"]), languages: JSON.stringify(languages), analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION,
+      cv_file_key: `recruitment/cv/${lastName}.pdf`, cv_original_name: "cv.pdf", cv_mime_type: "application/pdf", cv_size_bytes: 1000,
+    });
+    memory.seed(cvApplications, [
+      dossier("Sorani", ["English", "Sorani"]), dossier("Kurmanji", ["English", "Kurmanji"]), dossier("Serbian", ["English", "Serbian"]),
+      dossier("Bosnian", ["English", "Bosnian"]), dossier("Pushto", ["English", "Pushto"]), dossier("Kabyle", ["French", "Kabyle"]),
+      dossier("Fulani", ["French", "Fulani"]), dossier("Englishonly", ["English"]), dossier("Frenchonly", ["French"]),
+    ]);
+    const filtered = async (language: string) => lastNames((await caller().admin.recruitment.list({ language })).items).sort();
+    const profiled = async (language: string) => {
+      const [profile] = memory.seed(recruitmentMatchProfiles, [{ name: language, minimum_score: 0, required_languages: JSON.stringify([language]), active: 1 }]);
+      return lastNames((await caller().admin.recruitment.list({ profileId: profile!.id as number })).items).sort();
+    };
+    const missioned = async (language: string) => {
+      const [brief] = memory.seed(clientBriefs, [{ brief_id: `BRIEF-NAME-${memory.rows(clientBriefs).length}`, organization_name: "Hôpital", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie-réanimation", country: "Émirats arabes unis", required_languages: language }]);
+      const result = await caller().admin.clientBriefs.candidates({ briefId: brief!.id as number, limit: 50 });
+      return result.candidates.filter(candidate => candidate.match.breakdown.languages === 15).map(candidate => candidate.lastName).sort();
+    };
+    // Before (ddcc047): 8 language points of 15, neither the profile nor the filter, for each of these candidates.
+    const expected: Array<[string, string[]]> = [
+      ["Kurde – Anglais", ["Kurmanji", "Sorani"]], ["Serbo-croate – Anglais", ["Bosnian", "Serbian"]], ["Pachto – Anglais", ["Pushto"]],
+      ["Berbère – Français", ["Kabyle"]], ["Peul – Français", ["Fulani"]],
+    ];
+    for (const [language, names] of expected) {
+      expect(await filtered(language), `filtre ${language}`).toEqual(names);
+      expect(await profiled(language), `profil ${language}`).toEqual(names);
+      expect(await missioned(language), `mission ${language}`).toEqual(names);
+    }
+  });
+
   it("ne lit les langues tirées du CV, et leurs citations, que pour un profil qui exige des langues (IA-02)", async () => {
     seedCandidates(0, 3, 3);
     const [byCountry, byLanguage] = memory.seed(recruitmentMatchProfiles, [
