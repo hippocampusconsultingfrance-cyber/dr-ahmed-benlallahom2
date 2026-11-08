@@ -235,7 +235,7 @@ describe("GET /api/health (sonde de disponibilité, M29 / OPS-05)", () => {
   });
 
   it("ne dit pas au public QUELLE variable manque ; le secret des tâches planifiées donne le détail", async () => {
-    const environment = { ...completeEnvironment(), TURNSTILE_SECRET_KEY: "", RESEND_WEBHOOK_SECRET: "", CANDIDATE_DOCUMENT_ENCRYPTION_KEY: "" };
+    const environment: NodeJS.ProcessEnv = { ...completeEnvironment(), TURNSTILE_SECRET_KEY: "", RESEND_WEBHOOK_SECRET: "", CANDIDATE_DOCUMENT_ENCRYPTION_KEY: "" };
     const anonymous = await run(environment);
     expect(anonymous.status).toBe(503);
     expect(anonymous.body).toMatchObject({ status: "error", checks: { database: { status: "ok" }, configuration: { status: "missing" } } });

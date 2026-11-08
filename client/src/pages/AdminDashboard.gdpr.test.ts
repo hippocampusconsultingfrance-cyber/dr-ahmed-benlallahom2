@@ -324,7 +324,7 @@ describe("RGPD-12 — rechercher une personne par email", () => {
 
     state.found = { data: found, isLoading: false, error: null };
     const onRevealed = vi.fn();
-    const panel = () => renderStateful(() => PersonalDataSearchPanel({ requestedEmail: "jeanne@test.local", reveal: true, onRevealed })) as ReactElement;
+    const panel = () => renderStateful(() => PersonalDataSearchPanel({ requestedEmail: "jeanne@test.local", reveal: true, onRevealed })) as ReactElement<{ className: string }>;
     const statusOf = (tree: ReactElement) => elementsOf(tree).find(element => element.props.role === "status")!.props.children;
     const section = panel();
     expect(section.props.className).toMatch(/(^| )scroll-mt-28 .*sm:scroll-mt-20/);

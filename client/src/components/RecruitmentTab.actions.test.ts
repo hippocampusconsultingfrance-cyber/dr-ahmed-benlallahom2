@@ -117,7 +117,7 @@ function open(id: number) {
 }
 
 let confirmAnswer: boolean;
-const confirm = vi.fn(() => confirmAnswer);
+const confirm = vi.fn((_message: string) => confirmAnswer);
 
 beforeEach(() => {
   for (const key of Object.keys(state.mutations)) delete state.mutations[key];
@@ -401,9 +401,8 @@ describe("lecture du CV par l’outil (IA-01)", () => {
 });
 
 describe("REC-14 — invitation dont la livraison est incertaine", () => {
-  const uncertainSince = (minutes: number) => dossier(1, {
-    candidatePortalInvitation: { eventType: "email.delivery_unknown", attempts: 1, failureCode: "delivery_exception", occurredAt: new Date(Date.now() - minutes * 60_000) },
-  });
+  const uncertainAttempt = (minutes: number) => ({ eventType: "email.delivery_unknown", attempts: 1, failureCode: "delivery_exception", occurredAt: new Date(Date.now() - minutes * 60_000) });
+  const uncertainSince = (minutes: number) => dossier(1, { candidatePortalInvitation: uncertainAttempt(minutes) });
 
   it("propose « Renvoyer quand même » 10 minutes après la tentative, confirmé, comme une nouvelle tentative forcée", () => {
     state.applications = [uncertainSince(11)];
@@ -420,11 +419,11 @@ describe("REC-14 — invitation dont la livraison est incertaine", () => {
   });
 
   it("dit avant ces 10 minutes à quelle heure il sera possible, sans le proposer", () => {
-    const uncertain = uncertainSince(3);
-    state.applications = [uncertain];
+    const attempt = uncertainAttempt(3);
+    state.applications = [dossier(1, { candidatePortalInvitation: attempt })];
     open(1);
     expect(action("Renvoyer quand même")).toBeUndefined();
-    const at = new Date(uncertain.candidatePortalInvitation.occurredAt.getTime() + 10 * 60_000)
+    const at = new Date(attempt.occurredAt.getTime() + 10 * 60_000)
       .toLocaleTimeString("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit" });
     expect(pageText()).toContain(`« Renvoyer quand même » possible à ${at}, une fois le suivi vérifié.`);
   });

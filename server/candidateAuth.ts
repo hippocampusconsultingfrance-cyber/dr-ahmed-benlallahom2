@@ -150,7 +150,8 @@ export async function verifyCandidatePasswordInConstantTime(password: string, st
 export function candidateAuthResponseFloorMs(): number {
   const configured = Number(process.env.CANDIDATE_AUTH_RESPONSE_FLOOR_MS);
   if (Number.isFinite(configured) && configured >= 0) return Math.min(configured, 5000);
-  return process.env.NODE_ENV === "test" ? 0 : 1200;
+  // No floor under Vitest only (VITEST=true), not for a NODE_ENV=test set by mistake on a real server (CODE-10).
+  return process.env.VITEST === "true" ? 0 : 1200;
 }
 
 /** Waits until at least floorMs (plus a little jitter) have elapsed since startedAt. */

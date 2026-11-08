@@ -115,7 +115,7 @@ describe("montants au format français dans l’administration", () => {
     expect(html).toContain(">100,00 €<");
     expect(html).not.toMatch(/\d\.\d\d ?€/);
 
-    const prompt = vi.fn(() => null);
+    const prompt = vi.fn((_message: string) => null);
     vi.stubGlobal("window", { prompt, confirm: vi.fn(() => false) });
     const click = (label: string) => (elementsOf(tree).find(element => typeof element.props.onClick === "function" && renderToStaticMarkup(element as ReactElement).includes(label))!.props.onClick as () => void)();
     click("Annuler (praticien) et rembourser");

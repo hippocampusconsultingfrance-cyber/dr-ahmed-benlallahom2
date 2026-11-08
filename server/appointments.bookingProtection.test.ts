@@ -10,7 +10,7 @@ import {
   parseAppointmentDate,
 } from "./routers";
 import { requestIpHash } from "./candidateSecurity";
-import type { TrpcContext } from "./_core/context";
+import { createTestContext } from "./testSupport/trpcContext";
 
 const mocks = vi.hoisted(() => ({
   getDb: vi.fn(),
@@ -57,13 +57,7 @@ function bookingInput(overrides: Partial<{ customerEmail: string }> = {}) {
   };
 }
 
-function publicContext(headers: Record<string, string> = {}, ip?: string): TrpcContext {
-  return {
-    user: null,
-    req: { protocol: "https", headers, ip } as unknown as TrpcContext["req"],
-    res: { clearCookie: vi.fn() } as unknown as TrpcContext["res"],
-  };
-}
+const publicContext = (headers: Record<string, string> = {}, ip?: string) => createTestContext({ req: { headers, ip } });
 
 function fakeDb(activeHoldCount: number | string) {
   const selectResults: unknown[][] = [[{ count: activeHoldCount }], [], EVERY_DAY_SLOTS, []];

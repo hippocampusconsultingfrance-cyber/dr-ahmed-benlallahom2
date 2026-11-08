@@ -79,7 +79,7 @@ describe.skipIf(!executablePath)("Candidatures de l’admin dans un navigateur",
     await server?.close();
   });
 
-  async function openApplication(width: number, entered: Partial<typeof application> = {}): Promise<Page> {
+  async function openApplication(width: number, entered: Partial<Record<keyof typeof application, unknown>> = {}): Promise<Page> {
     const procedures: Record<string, Procedure> = {
       "auth.me": () => ({ id: 1, openId: "user_owner", name: "Dr Test", email: "owner@test.local", role: "admin", mfaVerified: true }),
       "adminSecurity.status": () => ({ verified: true }),

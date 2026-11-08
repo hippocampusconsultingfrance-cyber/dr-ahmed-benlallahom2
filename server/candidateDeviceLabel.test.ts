@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { candidateAccounts, candidateSessions } from "../drizzle/schema";
 import { hashCandidatePassword, hashCandidateToken } from "./candidateAuth";
 import { candidateDeviceLabel, readableCandidateDeviceLabel } from "./candidateDeviceLabel";

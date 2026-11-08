@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { appRouter, parseAppointmentDate } from "./routers";
-import type { TrpcContext } from "./_core/context";
+import { createTestContext } from "./testSupport/trpcContext";
 import {
   BOOKING_HORIZON_MS,
   BOOKING_INVALID_PHONE_MESSAGE,
@@ -57,13 +57,7 @@ function fakeDb() {
   };
 }
 
-function publicContext(): TrpcContext {
-  return {
-    user: null,
-    req: { protocol: "https", headers: {}, ip: "192.0.2.1" } as unknown as TrpcContext["req"],
-    res: { clearCookie: vi.fn() } as unknown as TrpcContext["res"],
-  };
-}
+const publicContext = () => createTestContext({ req: { ip: "192.0.2.1" } });
 
 /** Next half-hour boundary at least `offsetMs` from now (slots are on :00/:30). */
 function slotStartAfter(offsetMs: number): Date {

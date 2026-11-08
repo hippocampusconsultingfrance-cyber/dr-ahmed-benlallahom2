@@ -3,7 +3,6 @@ import Footer from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
 // Adresse de contact publique unique du site (PUB-CONTACT-01), aussi utilisée par la facture et le JSON-LD.
 import { siteConfig } from "@/data/site-config";
-import { ArrowLeft } from "lucide-react";
 import { Link, useSearchParams } from "wouter";
 import { SEOHead } from "@/components/SEOHead";
 import { useEffect } from "react";

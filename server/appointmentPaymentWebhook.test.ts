@@ -9,7 +9,7 @@ const fulfillment = vi.hoisted(() => ({
   processAppointmentFulfillmentNow: vi.fn(async () => ({ processed: 2, results: [] })),
   closeUnsentAppointmentFulfillment: vi.fn(async () => 0),
 }));
-const owner = vi.hoisted(() => ({ notifyOwner: vi.fn(async () => true) }));
+const owner = vi.hoisted(() => ({ notifyOwner: vi.fn(async (_payload: { title: string; content: string }) => true) }));
 vi.mock("./db", () => ({ getDb: database.getDb }));
 vi.mock("./appointmentFulfillment", () => fulfillment);
 vi.mock("./_core/notification", () => owner);
@@ -120,7 +120,7 @@ describe("webhook Stripe checkout.session.completed", () => {
     expect(sql).toContain('"stripe_payment_intent_id" is null');
     expect(sql).toContain('"appointment_status" <>');
     expect(owner.notifyOwner).toHaveBeenCalledTimes(1);
-    const alert = owner.notifyOwner.mock.calls[0][0] as { title: string; content: string };
+    const alert = owner.notifyOwner.mock.calls[0]![0];
     expect(alert.title).toContain("non confirmable");
     expect(alert.title).toContain("APT-42");
     expect(alert.content).toContain("Remboursement ou reprogrammation manuelle requis");

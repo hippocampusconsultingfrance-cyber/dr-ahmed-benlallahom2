@@ -1,7 +1,7 @@
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import superjson from "superjson";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { TrpcContext } from "./_core/context";
+import { createTestContext } from "./testSupport/trpcContext";
 
 // ABUS-02 — appointments.create : sans anti-robot sur le parcours normal, avec
 // lui seulement quand bookingChallengeRequired signale un abus (couvert par
@@ -87,11 +87,7 @@ async function postCreate(extra: Record<string, unknown> = {}) {
     endpoint: "/api/trpc",
     router: appRouter,
     req: new Request("http://localhost/api/trpc/appointments.create?batch=1", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ 0: superjson.serialize(input) }) }),
-    createContext: (): TrpcContext => ({
-      user: null,
-      req: { protocol: "https", headers: { "x-forwarded-for": IP }, ip: IP } as unknown as TrpcContext["req"],
-      res: { clearCookie: vi.fn() } as unknown as TrpcContext["res"],
-    }),
+    createContext: () => createTestContext({ req: { headers: { "x-forwarded-for": IP }, ip: IP } }),
   });
   const [body] = await response.json() as Array<{ error?: { json: { message: string; data: { code: string; httpStatus: number; reason?: string } } }; result?: { data: { json: { checkoutUrl?: string; trackingId?: string } } } }>;
   return body;

@@ -1,6 +1,6 @@
 import mammoth from "mammoth";
 import { describe, expect, it } from "vitest";
-import { DOCUMENT_DECOMPRESSION_LIMITS } from "./documentDecompressionLimits";
+import { DOCUMENT_DECOMPRESSION_LIMITS, type DocumentDecompressionLimits } from "./documentDecompressionLimits";
 import { withoutInvisibleDocxText } from "./docxVisibleText";
 import { buildZip } from "./testing/zipFixture";
 
@@ -19,13 +19,14 @@ function docx(body: string, styles = "", parts: Array<{ name: string; relationsh
   const links = parts.filter(part => part.relationship).map((part, index) =>
     `<Relationship Id="rId${index + 2}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${part.relationship}" Target="${part.name.slice("word/".length)}"/>`).join("");
   const replaced = new Set(parts.map(part => part.name));
-  return buildZip([
+  const ownParts: Array<{ name: string; content: string | Buffer }> = [
     { name: "[Content_Types].xml", content: '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>' },
     { name: "_rels/.rels", content: '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>' },
     { name: "word/_rels/document.xml.rels", content: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>${links}</Relationships>` },
     { name: "word/document.xml", content: `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="${W_NAMESPACE}" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><w:body>${body}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:left="1417" w:right="1417" w:top="1417" w:bottom="1417"/></w:sectPr></w:body></w:document>` },
     { name: "word/styles.xml", content: `<?xml version="1.0" encoding="UTF-8"?><w:styles xmlns:w="${W_NAMESPACE}"><w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults>${styles}</w:styles>` },
-  ].filter(part => !replaced.has(part.name)).concat(parts.map(({ name, content }) => ({ name, content }))));
+  ];
+  return buildZip(ownParts.filter(part => !replaced.has(part.name)).concat(parts.map(({ name, content }) => ({ name, content }))));
 }
 
 const escaped = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;");
@@ -140,7 +141,7 @@ const start = "Références : Clinique Exemple, service de chirurgie, cadre de s
 const honestLines = () => HONEST.map(line => paragraph(line)).join("");
 
 /** What is read of the honest lines and `body` (placed after them, or before them at the top of the page), what is set aside, why; `parts`: other parts of the document (docx). */
-async function check(body: string, { styles, limits = DOCUMENT_DECOMPRESSION_LIMITS, atTop = false, parts }: { styles?: string; limits?: typeof DOCUMENT_DECOMPRESSION_LIMITS; atTop?: boolean; parts?: Parameters<typeof docx>[2] } = {}) {
+async function check(body: string, { styles, limits = DOCUMENT_DECOMPRESSION_LIMITS, atTop = false, parts }: { styles?: string; limits?: DocumentDecompressionLimits; atTop?: boolean; parts?: Parameters<typeof docx>[2] } = {}) {
   const result = withoutInvisibleDocxText(docx(atTop ? body + honestLines() : honestLines() + body, styles, parts), limits);
   const text = (await mammoth.extractRawText({ buffer: result.buffer })).value.replace(/\s+/g, " ");
   const hidden = result.invisibleText.join(" ").replace(/\s+/g, " ");

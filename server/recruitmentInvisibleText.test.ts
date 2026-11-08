@@ -6,6 +6,7 @@ import { candidateSecurityRateLimits, cvApplications, cvCandidateCertifications,
 import { createMemoryPg, type MemoryPg } from "./testing/memoryPgProxy";
 import { classicPdf } from "./testing/pdfFixture";
 import { buildZip } from "./testing/zipFixture";
+import type { PdfTextReading } from "./pdfExtractionSandbox";
 
 // IA-01 : un CV piégé cache du texte (blanc sur blanc, police minuscule, texte
 // invisible, recouvert, rogné, calque masqué, transparent, hors page ; dans un
@@ -25,7 +26,7 @@ import { buildZip } from "./testing/zipFixture";
 
 const state = vi.hoisted(() => ({
   memory: null as null | { db: unknown },
-  file: Buffer.alloc(0),
+  file: Buffer.alloc(0) as Buffer,
   prompts: [] as string[],
   reading: null as null | Record<string, unknown>,
   ocrText: "",
@@ -68,6 +69,8 @@ vi.mock("./pdfExtractionSandbox", async importOriginal => {
 const { extractCvDocument, INVISIBLE_TEXT_REVIEW_MODEL, visibilityRequiresReview } = await import("./recruitmentAnalysis");
 const { processDueCvAnalysisJobs } = await import("./recruitmentProcessing");
 const { PdfReaderUnavailableError, readPdfIsolated } = await import("./pdfExtractionSandbox");
+/** The isolated reader asked for a file's text, one of its two overloads. */
+const readPdfText = vi.mocked(readPdfIsolated as (buffer: Buffer, task: { kind: "text"; first: number }) => Promise<PdfTextReading>);
 const { ProcessingDeadlineError, runWithProcessingDeadline } = await import("./processingDeadline");
 const { analyzeCandidateDocument, CandidateDocumentTextSetAsideError } = await import("./candidateDocumentAnalysis");
 const { invokeLLM } = await import("./_core/llm");
@@ -139,7 +142,7 @@ const PDF_TECHNIQUES: Record<keyof typeof HIDDEN, (document: PDFKit.PDFDocument)
   },
   layerOff: document => {
     const layer = document.ref({ Type: "OCG", Name: new String("Calque masqué") });
-    layer.end();
+    layer.end(undefined);
     (document as unknown as { _root: { data: Record<string, unknown> } })._root.data.OCProperties = { OCGs: [layer], D: { OFF: [layer], Order: [layer] } };
     (document.page as unknown as { resources: { data: Record<string, unknown> } }).resources.data.Properties = { OC1: layer };
     document.fontSize(10).fillColor("black").addContent("/OC /OC1 BDC");
@@ -976,7 +979,7 @@ describe("texte invisible écarté à l’extraction (IA-01)", () => {
   }, PDF_TEST_TIMEOUT_MS);
 
   it("ne signale pas un tiret ou une puce trop petits, écartés comme le reste", async () => {
-    vi.mocked(readPdfIsolated).mockResolvedValueOnce({ total: 1, pages: [{ num: 1, text: PHYSICIAN_CV.join("\n") }], visibility: { invisibleText: ["-", "•", "–"], uncheckedPages: [], unverifiableText: [] } });
+    readPdfText.mockResolvedValueOnce({ total: 1, pages: [{ num: 1, text: PHYSICIAN_CV.join("\n") }], visibility: { invisibleText: ["-", "•", "–"], uncheckedPages: [], unverifiableText: [] } });
     expect(await extractCvDocument(await honestPdf(), "application/pdf")).toMatchObject({ invisibleText: undefined, warnings: [] });
   });
 
@@ -1014,7 +1017,7 @@ describe("texte invisible écarté à l’extraction (IA-01)", () => {
     const page2 = "Expérience : Médecin anesthésiste-réanimateur, Hôpital Exemple, 2010-2015";
 
     it("le dit clairement : texte des pages non contrôlées écarté comme non vérifiable, ou lu sans contrôle quand le lecteur isolé manque", async () => {
-      vi.mocked(readPdfIsolated).mockResolvedValueOnce({ ...twoPages, visibility: { invisibleText: [], uncheckedPages: [2], unverifiableText: [{ page: 2, reason: "unfinished", text: page2 }] } });
+      readPdfText.mockResolvedValueOnce({ ...twoPages, visibility: { invisibleText: [], uncheckedPages: [2], unverifiableText: [{ page: 2, reason: "unfinished", text: page2 }] } });
       const partial = await extractCvDocument(await honestPdf(), "application/pdf");
       // Not the misleading « page 2: too little text »: the page had text, left unchecked.
       expect(partial.warnings).toEqual([`unverifiable_text_set_aside:${page2.length}`, "pdf_visibility_check_unfinished"]);
@@ -1028,7 +1031,7 @@ describe("texte invisible écarté à l’extraction (IA-01)", () => {
     });
 
     it("rend le CV à la file quand c’est la limite du cron qui a raccourci la lecture", async () => {
-      vi.mocked(readPdfIsolated).mockResolvedValueOnce({ ...twoPages, visibility: { invisibleText: [], uncheckedPages: [2], unverifiableText: [{ page: 2, reason: "unfinished", text: page2 }] } });
+      readPdfText.mockResolvedValueOnce({ ...twoPages, visibility: { invisibleText: [], uncheckedPages: [2], unverifiableText: [{ page: 2, reason: "unfinished", text: page2 }] } });
       const buffer = await honestPdf();
       await expect(runWithProcessingDeadline(Date.now() + 20_000, () => extractCvDocument(buffer, "application/pdf"))).rejects.toBeInstanceOf(ProcessingDeadlineError);
     });
@@ -1106,7 +1109,7 @@ describe("dossier d’un CV qui cache du texte, de bout en bout (IA-01)", () => 
     state.prompts = [];
     state.ocrText = "";
     state.ocrPages = [];
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(state.file)));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(new Uint8Array(state.file))));
   });
   afterEach(() => {
     vi.unstubAllGlobals();

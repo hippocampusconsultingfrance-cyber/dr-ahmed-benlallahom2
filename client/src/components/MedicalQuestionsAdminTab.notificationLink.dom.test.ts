@@ -67,7 +67,7 @@ describe("ADM-09 — question ouverte depuis le lien d’une notification", () =
   it("cherche la référence dans toutes les files, ouvre la question et place le focus sur son détail", async () => {
     view.questions = [question(7, "QMED-ABCD2345-EFGH6", "Patiente7", "answered")];
     const scrollIntoView = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => undefined);
-    render(createElement(MedicalQuestionsAdminTab, { initialSearch: "QMED-ABCD2345-EFGH6" }));
+    render(createElement<{ initialSearch?: string }>(MedicalQuestionsAdminTab, { initialSearch: "QMED-ABCD2345-EFGH6" }));
 
     // « Toutes »: a question answered since its notification is still found.
     expect(view.requests[0]).toEqual({ order: "newest", search: "QMED-ABCD2345-EFGH6", limit: 50, offset: 0 });
@@ -86,7 +86,7 @@ describe("ADM-09 — question ouverte depuis le lien d’une notification", () =
     view.questions = [question(7, "QMED-ABCD2345-EFGH6", "Patiente7"), question(8, "QMED-ABCD2345-EFGH7", "Patiente8")];
     const scrolled: Element[] = [];
     vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(function (this: Element) { scrolled.push(this); });
-    render(createElement(MedicalQuestionsAdminTab, { initialSearch: "QMED-ABCD2345-EFGH6" }));
+    render(createElement<{ initialSearch?: string }>(MedicalQuestionsAdminTab, { initialSearch: "QMED-ABCD2345-EFGH6" }));
 
     await waitFor(() => expect(detail().textContent).toContain("Jeanne Patiente7"));
     expect(scrolled).toEqual([detail()]);
@@ -99,7 +99,7 @@ describe("ADM-09 — question ouverte depuis le lien d’une notification", () =
 
   it("n’ouvre rien pour une référence qu’aucune question affichée n’a, et garde la file « À traiter » sans lien", async () => {
     view.questions = [question(7, "QMED-ABCD2345-EFGH6", "Patiente7")];
-    render(createElement(MedicalQuestionsAdminTab, { initialSearch: "QMED-ZZZZ9999-ZZZZ9" }));
+    render(createElement<{ initialSearch?: string }>(MedicalQuestionsAdminTab, { initialSearch: "QMED-ZZZZ9999-ZZZZ9" }));
     expect(screen.getByText("Sélectionnez une question pour consulter ses informations privées.")).toBeTruthy();
     expect(view.reads).toEqual([]);
     cleanup();

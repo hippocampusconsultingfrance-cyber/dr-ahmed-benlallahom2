@@ -2,6 +2,7 @@ import { PgDialect } from "drizzle-orm/pg-core";
 import type { SQL } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TrpcContext } from "./_core/context";
+import { createTestContext } from "./testSupport/trpcContext";
 import { appointments, availabilitySlots, blockedDates } from "../drizzle/schema";
 
 // SEC-07 / BOOK-BLOCKREASON (dates bloquées publiques sans motif, futures seulement)
@@ -18,13 +19,7 @@ import { appRouter, parisDateKey } from "./routers";
 
 const dialect = new PgDialect();
 
-function context(admin: boolean): TrpcContext {
-  return {
-    user: admin ? ({ openId: "test-admin", role: "admin" } as TrpcContext["user"]) : null,
-    req: { protocol: "https", headers: {} } as TrpcContext["req"],
-    res: { clearCookie: vi.fn() } as unknown as TrpcContext["res"],
-  };
-}
+const context = (admin: boolean) => createTestContext(admin ? { user: { openId: "test-admin", role: "admin" } as TrpcContext["user"], mfaVerified: true } : {});
 
 /** Select results served per table, in order; records selected columns, WHERE clauses and inserts. */
 function fakeDb(results: Map<unknown, unknown[][]>) {

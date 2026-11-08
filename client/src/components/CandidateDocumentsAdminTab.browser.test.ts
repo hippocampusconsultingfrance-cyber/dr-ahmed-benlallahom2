@@ -39,7 +39,7 @@ export const useClerk = () => ({ signOut: async () => undefined });
 const LONG_FILE_NAME = `Curriculum_Vitae_${"Dr_Amina_Haddad_anesthesie_reanimation_CHU_".repeat(3)}2026.pdf`;
 const LONG_OTHER_LABEL = "Attestation_de_reussite_au_concours_de_praticien_attache_associe_session_2024_CHU_de_Lyon_service_anesthesie_reanimation_et_medecine_perioperatoire".padEnd(154, "x");
 
-const document = (id: number, overrides: Record<string, unknown>) => ({
+const vaultDocument = (id: number, overrides: Record<string, unknown>) => ({
   id,
   candidateId: 7,
   candidateEmail: "amina.haddad.candidate.with.a.long.address@example-hospital-recruitment.test",
@@ -101,8 +101,8 @@ describe.skipIf(!executablePath)("Documents candidats de l’admin dans un navig
       "admin.candidateDocuments.list": (input) => {
         listInputs.push(input);
         return [
-          document(1, { originalName: LONG_FILE_NAME }),
-          document(2, { category: "other", categoryOtherLabel: LONG_OTHER_LABEL, originalName: "attestation.pdf" }),
+          vaultDocument(1, { originalName: LONG_FILE_NAME }),
+          vaultDocument(2, { category: "other", categoryOtherLabel: LONG_OTHER_LABEL, originalName: "attestation.pdf" }),
         ];
       },
     };

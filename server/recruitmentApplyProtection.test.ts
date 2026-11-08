@@ -48,7 +48,7 @@ const cv = validPdfBuffer();
 let baseUrl = "";
 let close: () => Promise<void> = async () => undefined;
 
-function db() { return state.db as InMemoryDrizzle; }
+function db() { return state.db as ReturnType<typeof inMemoryDbWithApplicationInsert>; }
 
 function inMemoryDbWithApplicationInsert() {
   // The application row is written with a raw INSERT ... RETURNING id, which the

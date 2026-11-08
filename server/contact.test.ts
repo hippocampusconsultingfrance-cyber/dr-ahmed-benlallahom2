@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { appRouter } from "./routers";
-import type { TrpcContext } from "./_core/context";
+import { createTestContext } from "./testSupport/trpcContext";
 import { verifyCandidateTurnstile } from "./candidateTurnstile";
 import { notifyOwner, type NotificationPayload } from "./_core/notification";
 import { getDb } from "./db";
@@ -39,22 +39,9 @@ vi.mock("./candidateTurnstile", () => ({
   verifyCandidateTurnstile: vi.fn(async () => undefined),
 }));
 
-function createPublicContext(): TrpcContext {
-  return {
-    user: null,
-    req: {
-      protocol: "https",
-      headers: {},
-    } as TrpcContext["req"],
-    res: {
-      clearCookie: vi.fn(),
-    } as unknown as TrpcContext["res"],
-  };
-}
-
 describe("contact.submit", () => {
   it("accepts a valid contact form submission", async () => {
-    const ctx = createPublicContext();
+    const ctx = createTestContext();
     const caller = appRouter.createCaller(ctx);
 
     const result = await caller.contact.submit({
@@ -71,7 +58,7 @@ describe("contact.submit", () => {
   });
 
   it("accepts a submission without phone number", async () => {
-    const ctx = createPublicContext();
+    const ctx = createTestContext();
     const caller = appRouter.createCaller(ctx);
 
     const result = await caller.contact.submit({
@@ -86,7 +73,7 @@ describe("contact.submit", () => {
   });
 
   it("rejects submission with invalid email", async () => {
-    const ctx = createPublicContext();
+    const ctx = createTestContext();
     const caller = appRouter.createCaller(ctx);
 
     await expect(
@@ -100,7 +87,7 @@ describe("contact.submit", () => {
   });
 
   it("rejects submission with empty name", async () => {
-    const ctx = createPublicContext();
+    const ctx = createTestContext();
     const caller = appRouter.createCaller(ctx);
 
     await expect(
@@ -114,7 +101,7 @@ describe("contact.submit", () => {
   });
 
   it("rejects submission with empty message", async () => {
-    const ctx = createPublicContext();
+    const ctx = createTestContext();
     const caller = appRouter.createCaller(ctx);
 
     await expect(
@@ -128,7 +115,7 @@ describe("contact.submit", () => {
   });
 
   it("accepts submission with GDPR consent", async () => {
-    const ctx = createPublicContext();
+    const ctx = createTestContext();
     const caller = appRouter.createCaller(ctx);
 
     const result = await caller.contact.submit({
@@ -143,7 +130,7 @@ describe("contact.submit", () => {
   });
 
   it("rejects submission with GDPR consent declined", async () => {
-    const ctx = createPublicContext();
+    const ctx = createTestContext();
     const caller = appRouter.createCaller(ctx);
 
     try {
@@ -163,7 +150,7 @@ describe("contact.submit", () => {
 
 describe("gdpr.submit", () => {
   it("accepts a valid GDPR access request", async () => {
-    const ctx = createPublicContext();
+    const ctx = createTestContext();
     const caller = appRouter.createCaller(ctx);
 
     const result = await caller.gdpr.submit({
@@ -180,7 +167,7 @@ describe("gdpr.submit", () => {
   });
 
   it("accepts a GDPR deletion request", async () => {
-    const ctx = createPublicContext();
+    const ctx = createTestContext();
     const caller = appRouter.createCaller(ctx);
 
     const result = await caller.gdpr.submit({
@@ -195,7 +182,7 @@ describe("gdpr.submit", () => {
   });
 
   it("accepts a GDPR rectification request", async () => {
-    const ctx = createPublicContext();
+    const ctx = createTestContext();
     const caller = appRouter.createCaller(ctx);
 
     const result = await caller.gdpr.submit({
@@ -210,7 +197,7 @@ describe("gdpr.submit", () => {
   });
 
   it("accepts a GDPR portability request", async () => {
-    const ctx = createPublicContext();
+    const ctx = createTestContext();
     const caller = appRouter.createCaller(ctx);
 
     const result = await caller.gdpr.submit({
@@ -225,7 +212,7 @@ describe("gdpr.submit", () => {
   });
 
   it("accepts a GDPR objection request", async () => {
-    const ctx = createPublicContext();
+    const ctx = createTestContext();
     const caller = appRouter.createCaller(ctx);
 
     const result = await caller.gdpr.submit({
@@ -240,7 +227,7 @@ describe("gdpr.submit", () => {
   });
 
   it("rejects GDPR request with invalid email", async () => {
-    const ctx = createPublicContext();
+    const ctx = createTestContext();
     const caller = appRouter.createCaller(ctx);
 
     await expect(
@@ -254,7 +241,7 @@ describe("gdpr.submit", () => {
   });
 
   it("rejects GDPR request with empty name", async () => {
-    const ctx = createPublicContext();
+    const ctx = createTestContext();
     const caller = appRouter.createCaller(ctx);
 
     await expect(
@@ -268,7 +255,7 @@ describe("gdpr.submit", () => {
   });
 
   it("accepts GDPR request without phone number", async () => {
-    const ctx = createPublicContext();
+    const ctx = createTestContext();
     const caller = appRouter.createCaller(ctx);
 
     const result = await caller.gdpr.submit({
@@ -283,7 +270,7 @@ describe("gdpr.submit", () => {
   });
 
   it("accepts GDPR request without description", async () => {
-    const ctx = createPublicContext();
+    const ctx = createTestContext();
     const caller = appRouter.createCaller(ctx);
 
     const result = await caller.gdpr.submit({
@@ -301,7 +288,7 @@ describe("contrôle anti-robot des formulaires contact et RGPD", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("refuse un message de contact dont le contrôle Turnstile échoue, sans l’enregistrer ni prévenir le cabinet", async () => {
-    const caller = appRouter.createCaller(createPublicContext());
+    const caller = appRouter.createCaller(createTestContext());
     vi.mocked(verifyCandidateTurnstile).mockRejectedValueOnce(new Error("candidate_turnstile_invalid"));
 
     await expect(caller.contact.submit({
@@ -318,7 +305,7 @@ describe("contrôle anti-robot des formulaires contact et RGPD", () => {
   });
 
   it("refuse une demande RGPD dont le contrôle Turnstile échoue, sans l’enregistrer ni prévenir le cabinet", async () => {
-    const caller = appRouter.createCaller(createPublicContext());
+    const caller = appRouter.createCaller(createTestContext());
     vi.mocked(verifyCandidateTurnstile).mockRejectedValueOnce(new Error("candidate_turnstile_invalid"));
 
     await expect(caller.gdpr.submit({
@@ -336,7 +323,7 @@ describe("contrôle anti-robot des formulaires contact et RGPD", () => {
 
 describe("numéros de suivi des formulaires contact et RGPD", () => {
   it("donne à chaque envoi un numéro imprévisible au format historique, sans Math.random() ni horodatage", async () => {
-    const caller = appRouter.createCaller(createPublicContext());
+    const caller = appRouter.createCaller(createTestContext());
     const random = vi.spyOn(Math, "random");
     try {
       const contacts = await Promise.all(Array.from({ length: 20 }, () => caller.contact.submit({ name: "Jean Dupont", email: "jean@example.com", message: "Bonjour.", gdprConsent: 1 })));
@@ -373,7 +360,7 @@ describe("message de contact : réponse au visiteur, catégorie et accusé de r�
   });
 
   it("fait répondre le cabinet au visiteur, et dit dans la notification qui écrit", async () => {
-    const caller = appRouter.createCaller(createPublicContext());
+    const caller = appRouter.createCaller(createTestContext());
     await caller.contact.submit({ ...typed, category: "institution", language: "en" });
     await caller.contact.submit({ ...typed, email: "sans-categorie@example.com" });
 
@@ -393,7 +380,7 @@ describe("message de contact : réponse au visiteur, catégorie et accusé de r�
   });
 
   it("met la référence en tête du sujet et relie la notification à l’élément dans l’administration (INTL-11, ADM-09)", async () => {
-    const caller = appRouter.createCaller(createPublicContext());
+    const caller = appRouter.createCaller(createTestContext());
     const contact = await caller.contact.submit({ ...typed, name: "Jeanne Martin" });
     const request = await caller.gdpr.submit({ name: "Jeanne Martin", email: "jeanne@example.com", requestType: "access" });
 
@@ -406,14 +393,14 @@ describe("message de contact : réponse au visiteur, catégorie et accusé de r�
   });
 
   it("refuse une catégorie inconnue sans rien enregistrer", async () => {
-    const caller = appRouter.createCaller(createPublicContext());
+    const caller = appRouter.createCaller(createTestContext());
     await expect(caller.contact.submit({ ...typed, category: "spam" as never })).rejects.toMatchObject({ code: "BAD_REQUEST" });
     expect((await getDb())!.execute).not.toHaveBeenCalled();
     expect(resend.send).not.toHaveBeenCalled();
   });
 
   it("envoie un seul accusé, avec la référence, sans recopier le nom, le téléphone ni le message", async () => {
-    const caller = appRouter.createCaller(createPublicContext());
+    const caller = appRouter.createCaller(createTestContext());
     const { trackingId } = await caller.contact.submit({ ...typed, category: "patient" });
 
     expect(sentEmails()).toHaveLength(1);
@@ -434,7 +421,7 @@ describe("message de contact : réponse au visiteur, catégorie et accusé de r�
       vi.stubEnv("CONSULTATION_FROM_EMAIL", from);
       vi.stubEnv("CONSULTATION_REPLY_TO", replyTo);
       try {
-        await appRouter.createCaller(createPublicContext()).contact.submit(typed);
+        await appRouter.createCaller(createTestContext()).contact.submit(typed);
       } finally {
         vi.unstubAllEnvs();
       }
@@ -450,7 +437,7 @@ describe("message de contact : réponse au visiteur, catégorie et accusé de r�
   });
 
   it("écrit l’accusé en anglais pour une page en anglais, allemand ou chinois", async () => {
-    const caller = appRouter.createCaller(createPublicContext());
+    const caller = appRouter.createCaller(createTestContext());
     for (const language of ["en", "de", "zh"] as const) await caller.contact.submit({ ...typed, language });
     await caller.contact.submit({ ...typed, language: "fr" });
 
@@ -464,7 +451,7 @@ describe("message de contact : réponse au visiteur, catégorie et accusé de r�
 
   it("n’envoie ni accusé ni notification au-delà du volume du jour, et garde le message", async () => {
     vi.mocked(countPublicFormDailyVolume).mockResolvedValue(false);
-    const caller = appRouter.createCaller(createPublicContext());
+    const caller = appRouter.createCaller(createTestContext());
 
     await expect(caller.contact.submit(typed)).resolves.toMatchObject({ success: true });
     expect((await getDb())!.execute).toHaveBeenCalledTimes(1);
@@ -474,7 +461,7 @@ describe("message de contact : réponse au visiteur, catégorie et accusé de r�
 
   it("accepte le message quand Resend refuse l’accusé, échoue ou n’est pas configuré", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    const caller = appRouter.createCaller(createPublicContext());
+    const caller = appRouter.createCaller(createTestContext());
 
     resend.send.mockResolvedValueOnce({ data: null, error: { name: "validation_error", message: "Invalid `to` field", statusCode: 422 } });
     await expect(caller.contact.submit(typed)).resolves.toMatchObject({ success: true });

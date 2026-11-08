@@ -26,11 +26,11 @@ function render(element: ReactElement, { language = "fr", path = "/" } = {}) {
   const queryClient = new QueryClient();
   const trpcClient = trpc.createClient({ links: [httpBatchLink({ url: "http://localhost/api/trpc", transformer: superjson })] });
   return renderToStaticMarkup(
-    createElement(trpc.Provider, { client: trpcClient, queryClient },
+    createElement(trpc.Provider, { client: trpcClient, queryClient, children:
       createElement(QueryClientProvider, { client: queryClient },
-        createElement(Router, { ssrPath: path },
-          createElement(ThemeProvider, { defaultTheme: "dark", switchable: true },
-            createElement(LanguageProvider, null, element))))),
+        createElement(Router, { ssrPath: path, children:
+          createElement(ThemeProvider, { defaultTheme: "dark", switchable: true, children:
+            createElement(LanguageProvider, null, element) }) })) }),
   );
 }
 

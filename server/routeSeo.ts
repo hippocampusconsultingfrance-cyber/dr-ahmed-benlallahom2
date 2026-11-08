@@ -5,7 +5,6 @@ import {
   ROBOTS_INDEX,
   ROBOTS_NOINDEX,
   SITE_NAME,
-  SITE_ORIGIN,
   STATIC_ROUTE_METADATA,
   canonicalUrlFor,
   normalizePathname,
