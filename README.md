@@ -34,7 +34,7 @@ pnpm dev                  # http://localhost:3000 (Express + Vite en mode middle
 | `pnpm check` | Vérification TypeScript, fichiers de test compris |
 | `pnpm test` | Suite Vitest complète, sans aucun secret : `vitest.config.ts` donne aux tests les valeurs factices de la CI, une valeur posée dans l'environnement restant celle utilisée |
 | `pnpm test:ci` | Suite utilisée par la CI, la même : aucun fichier de test écarté |
-| `pnpm build` | Build Vite, pré-rendu SEO par page (`scripts/prerender-route-seo.ts`), bundle serveur `dist/index.js` et fonction Vercel `api/index.js` |
+| `pnpm build` | Build Vite, pré-rendu SEO par page (`scripts/prerender-route-seo.ts`), bundle serveur `dist/index.js` et fonction Vercel `dist/vercel/index.js`, re-exportée par `api/index.js` (versionné, inchangé par le build) |
 | `pnpm start` | Lance le build Express (hébergement hors Vercel) |
 | `pnpm test:visual` | Régression visuelle (Playwright, Chromium trouvé seul ou donné par `CHROMIUM`) ; `pnpm test:visual:record` écrit les candidats dans `tmp/visual-regression` (ignoré par git) ou `VISUAL_BASELINE_DIR` |
 | `pnpm check:performance` | Build + budgets de performance |

@@ -584,8 +584,12 @@ Les 169 constats restants ont été triés dans le code actuel. Pour chacun, la 
   - les téléphones de l'export restent du texte dans Calc en anglais, français et allemand, et plusieurs numéros saisis dans un champ sont séparés (ADM-26) ;
   - la copie en pleine chasse d'un mot de passe compromis est refusée à la réinitialisation comme à la connexion, et les apostrophes typographiques sont confondues dans les filtres (INTL-12) ;
   - le lien d'une notification ouvre sa question santé ou sa candidature (ADM-09) ;
-  - le contrôle de la CI s'exécute avant tout code du dépôt : installation sans scripts ni pnpmfile, fichiers du contrôle épinglés par leur empreinte, chaque paquet vérifié contre le registre (CODE-14).
-- **IA des CV** : un troisième tour est en cours. IA-02 (une mention comme « obligatoire » ou une variété comme « Golfe » après un tiret) et IA-05 (balises écrites en caractères d'étiquette, en chevrons voisins ou avec des remplissages hangul) sont validés. Pour IA-04, chaque correctif d'un cas en a cassé un voisin (tabulations, paragraphes longs, postes répétés d'une page à l'autre, ligne dessinée en morceaux). Trois conceptions indépendantes de « l'endroit » d'une preuve ont donc été comparées sur tous les cas connus. La meilleure est en cours d'implémentation, et deux vérificateurs la contrôleront : l'un sur les attaques, l'autre sur la parité PDF/DOCX des CV honnêtes.
+  - le contrôle de la CI s'exécute avant tout code du dépôt : installation sans scripts ni pnpmfile, fichiers du contrôle épinglés par leur empreinte, chaque paquet vérifié contre le registre (CODE-14) ;
+  - le 8 novembre (troisième tour) : deux numéros, ou un numéro et sa variante courte, restent séparés quels que soient leurs séparateurs ; un numéro seul n'est jamais coupé après son indicatif ; le « + » d'un numéro écrit entre parenthèses devient « 00 » (ADM-26). Les postes écrits après une virgule ou une espace sont en cours de vérification.
+- **IA des CV** : en cours. IA-02 (une mention comme « obligatoire » ou une variété comme « Golfe » après un tiret) et IA-05 (balises écrites en caractères d'étiquette, en chevrons voisins ou avec des remplissages hangul) sont validés.
+  - IA-04 a d'abord été traité par six séries de corrections qui reconstruisaient la mise en page du PDF et du DOCX. Chacune fermait un cas et faisait perdre des points à des CV honnêtes (tabulations, paragraphes longs, en-tête courant avec le nom en grand à côté du titre).
+  - Le constat d'origine est étroit : une même phrase citée deux fois avec deux libellés d'emplacement comptait double. Il est corrigé depuis la vague 2. Les mises en page construites ne donnent pas plus qu'une écriture des mêmes revendications en clair sur plusieurs lignes, et la revue humaine reste obligatoire.
+  - Un évaluateur a donc comparé, sur tous les cas connus, l'état fusionné (600b1c3), une règle minimale et la tête. Contrainte : aucun CV honnête ne perd de points. L'état choisi, les six séries annulées plus une règle minimale, est en revérification.
 - **Laissés à votre décision** : la base réglée à l'heure de Paris (DATA-13, `SHOW timezone` sur Neon) ; les langues écrites en anglais dans l'export en français, qui relèvent du format d'export (INTL-10).
 
 **Vague 3 (fusionnée le 8 novembre)** :
@@ -615,7 +619,25 @@ Les 169 constats restants ont été triés dans le code actuel. Pour chacun, la 
   - où publier les images de référence de la régression visuelle, aujourd'hui lues sur le stockage Forge de Manus (CODE-17).
 - **Au déploiement** : un email ou une facture renvoyés juste après, sous la même clé d'idempotence Resend (moins de 24 h), ont un HTML ou un PDF différent de la première tentative. Resend peut alors répondre 409.
 
-**Vagues 4 à 6** : à faire. Elles couvrent l'accueil, les campagnes, les journaux, le poids du serveur, les pays et fichiers, le tarif et l'heure de Paris, l'effacement RGPD, la sécurité de l'admin, les tests de bout en bout et la mise en forme du code.
+**Vague 4 (fusionnée le 8 novembre)** :
+
+| ID | État | Reste à faire |
+|---|---|---|
+| A11Y-07, A11Y-14 | ✅ titre de l'accueil : chaque rôle une fois, puis le premier reste ; rien ne bouge si le mouvement réduit est demandé ; bloc à la hauteur du rôle le plus long, que le téléphone met sur plusieurs lignes au lieu de le couper ; illustrations décoratives sans texte alternatif | Afficher les trois rôles en même temps pour satisfaire strictement WCAG 2.2.2 (choix visuel) |
+| EN-07, A11Y-13 | ⏳ lien d'évitement, titres d'onglet de la recherche, de la désinscription et du coffre, blocs des questions santé dans la langue de la page ; passages restés en français marqués `lang="fr"` ; un test rend chaque page publique en anglais et échoue sur un mot français hors d'un passage marqué | `lang="fr"` sur la fiche 360° et les notifications de l'admin |
+| EN-15 | ⏳ « (in French) » à côté de ce qui reste en français ; l'admin voit dans quelle langue une question est présentée au public | Valider 2 ou 3 sources institutionnelles en anglais (RCoA, NHS, ESAIC) ; choisir ou non une vraie langue de publication (migration) |
+| PUB-15 | ⏳ titres et libellés français en minuscules à la française ; « Dr » sans point hors des titres SEO ; « sites miniers isolés » et « plates-formes offshore » | Sur-titres anglais et libellés de marque (« Clinical leadership », « Leadership », « Business Advisory »…), « Dr. » des titres SEO et du H1 de l'accueil, libellés de `/legal` |
+| EXPL-08 | ✅ campagne envoyée par l'API batch de Resend, 100 emails par appel ; destinataires mis en file en une requête ; ceux restés en file plus de 10 min sont repris, dans les 23 h où Resend garde la clé | Offre Resend payante avant la première campagne de plus de 50 destinataires ; sous-domaine d'envoi dédié |
+| RGPD-19 | ⏳ version texte et désinscription en un clic (`List-Unsubscribe` et POST) sur chaque email de campagne | Adresse de désinscription lue par quelqu'un, pour le `mailto:` (décision PUB-19) |
+| MAIL-13 | ✅ aperçu exact d'une campagne ou d'un modèle dans l'admin ; « M'envoyer un test », à l'adresse de l'admin connecté seulement ; `pnpm emails:preview` ; rendus figés en instantanés | — |
+| EXPL-11 | ✅ une ligne JSON par erreur (`logError`) dans les tâches, les webhooks, tRPC, la base, le portail candidat et Google Drive, sans paramètre SQL ni adresse email ; une tâche en échec ne renvoie plus son message d'erreur, seulement une référence | — |
+| EXPL-19 | ⏳ 38 rapports d'août rangés dans `docs/archive/` ; `docs/EXPLOITATION.md` écrit à partir du code (tâches, variables, alertes, procédures) ; calendrier de revue court | Relire `docs/EXPLOITATION.md` ; désigner qui fait le test de restauration Neon, la revue des accès et la vérification des offres |
+| CODE-13 | ✅ `api/index.js` versionné et stable : il ne fait que reprendre le bundle que le build écrit dans `dist/vercel/`, et aucun build ne le modifie | Vérifier sur la preview Vercel que `/api/health`, une tâche planifiée et le webhook Resend répondent (la preview n'est pas joignable d'ici) |
+| EXPL-15 | ⏳ pdfkit, @vercel/blob et svix chargés à leur premier usage : la fonction s'importe en 0,87 à 0,90 s au lieu de 1,2 à 1,5 s (médiane de 5) | Charger « ai » à la demande une fois IA-04 fusionné ; vérifier que Fluid compute est activé |
+| SEOP-14 | ✅ `/assets` en cache un jour, revalidé en arrière-plan pendant une semaine ; en-têtes de sécurité gardés | — |
+| CODE-23 | ⏳ Dependabot chaque semaine, par groupes ; happy-dom 21, esbuild 0.28, vite 7.3.7 | express 5, stripe 23, TypeScript 7, et vitest 4 (34 fichiers de tests à adapter), qui débloque vite 8 |
+
+**Vagues 5 et 6** : à faire. Elles couvrent les pays et fichiers, le tarif et l'heure de Paris, l'effacement RGPD, la sécurité de l'admin, les tests de bout en bout et la mise en forme du code.
 
 ### À faire de votre côté
 - **Comptes et secrets, tout de suite** :
