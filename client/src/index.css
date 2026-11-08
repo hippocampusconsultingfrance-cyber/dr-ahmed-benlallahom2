@@ -187,6 +187,14 @@ html.high-readability textarea {
   a[href^="mailto:"] {
     overflow-wrap: anywhere;
   }
+  /* Réponses repliées de la FAQ, gardées dans la page sous l'attribut hidden (SEOP-03) : imprimées comme les
+     autres. Le display: none !important de Tailwind pour [hidden] est dans cette couche, où il l'emporte sur
+     le @media print hors couche plus bas ; une règle plus précise de la même couche le remplace. */
+  @media print {
+    [data-slot="accordion-content"][hidden] {
+      display: block !important;
+    }
+  }
 }
 
 html[lang="zh"],
