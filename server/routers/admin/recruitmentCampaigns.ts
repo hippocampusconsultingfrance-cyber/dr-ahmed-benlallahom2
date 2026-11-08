@@ -13,7 +13,7 @@ import {
   recruitmentFollowUpTasks,
   recruitmentOfferTemplates,
 } from "../../../drizzle/schema";
-import { eq, and, or, sql, desc, inArray, isNull, lt } from "drizzle-orm";
+import { eq, and, or, sql, desc, inArray, isNull, lt, gt } from "drizzle-orm";
 import {
   buildRecruitmentCampaignEmail,
   RESEND_BATCH_MAX_EMAILS,
@@ -42,10 +42,20 @@ type ReadyRecipient = Omit<CampaignRecipient, "candidate"> & { candidate: Campai
  */
 const STALLED_RECIPIENT_MS = 10 * 60 * 1000;
 
+/**
+ * Taken up only while Resend still knows the key of its batch: a key is kept
+ * 24 hours from its first use, never earlier than the recipient's insertion,
+ * so an email accepted with its answer lost gets Resend's first answer back.
+ * Older, its outcome stays uncertain (« queued ») and it is never sent again
+ * blindly, as before EXPL-08 (DATA-05).
+ */
+const STALLED_RECIPIENT_MAX_AGE_MS = 23 * 60 * 60 * 1000;
+
 function stalledRecipient(now: Date) {
   const stalledBefore = new Date(now.getTime() - STALLED_RECIPIENT_MS);
   return and(
     eq(recruitmentCampaignRecipients.deliveryStatus, "queued"),
+    gt(recruitmentCampaignRecipients.createdAt, new Date(now.getTime() - STALLED_RECIPIENT_MAX_AGE_MS)),
     or(
       and(isNull(recruitmentCampaignRecipients.lastEventAt), lt(recruitmentCampaignRecipients.createdAt, stalledBefore)),
       lt(recruitmentCampaignRecipients.lastEventAt, stalledBefore),
@@ -118,8 +128,9 @@ async function withUnsubscribeTokens(db: CampaignDb, campaignId: number, recipie
  * there is logged, never turned into a retryable failure. The recipients
  * alone are then recorded « sent » with the provider's ids, the link their
  * bounce or complaint events need (DATA-04); refused too, they stay
- * « queued » and a retry, 10 minutes later, sends the same batch under the
- * same key: Resend answers with the same ids, the emails do not go twice.
+ * « queued » and a retry, 10 minutes later and within 23 hours, sends the
+ * same batch under the same key: Resend answers with the same ids, the
+ * emails do not go twice.
  */
 async function recordBatchSent(db: CampaignDb, campaign: CampaignContent, recipients: ReadyRecipient[], providerIds: Array<string | null>, adminOpenId: string) {
   const contactedAt = new Date();
@@ -391,11 +402,11 @@ export const adminRecruitmentCampaignsRouter = router({
   /**
    * Sends the campaign again to its failed recipients (provider error
    * before acceptance) and to those left « queued » more than 10 minutes,
-   * a send cut off mid-way (EXPL-08), by the same batches, so that a batch
-   * whose answer was lost goes again under the same key and Resend gives
-   * its first answer back. Bounces, complaints, suppressions and candidates
-   * who withdrew their consent are never retried; recipients already
-   * served are never emailed twice.
+   * within 23 hours of the campaign, a send cut off mid-way (EXPL-08), by
+   * the same batches, so that a batch whose answer was lost goes again
+   * under the same key and Resend gives its first answer back. Bounces,
+   * complaints, suppressions and candidates who withdrew their consent are
+   * never retried; recipients already served are never emailed twice.
    */
   retryFailed: adminProcedure
     .input(z.object({ campaignId: z.number().int().positive(), confirmed: z.literal(true) }))
@@ -434,7 +445,8 @@ export const adminRecruitmentCampaignsRouter = router({
       const statuses = await db.select({ deliveryStatus: recruitmentCampaignRecipients.deliveryStatus }).from(recruitmentCampaignRecipients).where(eq(recruitmentCampaignRecipients.campaignId, campaign.id));
       // A recipient « queued » is no failure: its email went out, accepted
       // with both recordings refused (DATA-05), or is going out in another
-      // send; a retry 10 minutes later sends it again under the same key.
+      // send; a retry 10 minutes later, within 23 hours of the campaign,
+      // sends it again under the same key.
       // One stopped before the provider accepted it, its unsubscribe token
       // not recorded included, is left « failed », offered again.
       const served = statuses.filter(row => ["sent", "delivered", "delayed", "queued"].includes(row.deliveryStatus)).length;

@@ -44,7 +44,7 @@ function admin() {
   return appRouter.createCaller(ctx);
 }
 
-function seedCandidates(candidates: Array<{ first_name: string; last_name: string; email: string }>) {
+function seedCandidates(candidates: Array<{ first_name: string; last_name: string; email: string; createdAt?: string }>) {
   return memory.seed(cvApplications, candidates.map((candidate, index) => ({
     tracking_id: `CVGREET${String(index).padStart(5, "0")}`, specialty: "Anesthésie", target_countries: "[]",
     cv_file_key: `recruitment/cv/g${index}.pdf`, cv_original_name: "cv.pdf", cv_mime_type: "application/pdf", cv_size_bytes: 1000, marketing_consent: 1, ...candidate,
@@ -126,6 +126,35 @@ describe("emails envoyés depuis l’admin aux adresses saisies dans le formulai
       });
       expect(payload.html).toContain(`https://drahmedbenlallahom.com/recruitment/unsubscribe?token=${token}`);
     }
+  });
+
+  it("une adresse refusée par Resend (422) ne fait échouer que son email : le lot est coupé en deux jusqu’à elle, les autres partent (EXPL-08)", async () => {
+    // Newest first in the audience, so inserted, and batched, in this order.
+    seedCandidates(["a", "b", "bad", "d"].map((name, index) => ({ first_name: "Zoë", last_name: "Nom", email: `${name}@test.local`, createdAt: `2026-11-08 10:0${4 - index}:00.000` })));
+    // Resend's strict validation: one invalid `to` and the whole batch is refused, nothing sent.
+    state.sendBatch.mockImplementation(async (payloads: SentPayload[]) => payloads.some(payload => payload.to[0] === "bad@test.local")
+      ? { data: null, error: { name: "validation_error", statusCode: 422, message: "Invalid `to` field" }, headers: {} }
+      : { data: { data: payloads.map(payload => ({ id: `email-${payload.to[0]}` })) }, error: null, headers: {} });
+    const result = await admin().admin.recruitment.campaigns.send({ title: "Mission à Genève", subject: "Offre Suisse", body: "Une mission à Genève, répondez par email.", language: "fr", mode: "all_eligible", confirmed: true });
+    expect(result).toMatchObject({ total: 4, sent: 3, failed: 1 });
+
+    const idOf = Object.fromEntries(memory.rows(recruitmentCampaignRecipients).map(row => [row.recipient_email, row.id as number]));
+    const [a, b, bad, d] = ["a", "b", "bad", "d"].map(name => idOf[`${name}@test.local`]!);
+    expect(state.sendBatch.mock.calls.map(([payloads, options]) => [(payloads as SentPayload[]).map(payload => payload.to[0]), options])).toEqual([
+      [["a@test.local", "b@test.local", "bad@test.local", "d@test.local"], { idempotencyKey: campaignBatchIdempotencyKey(result.campaignId, [a!, b!, bad!, d!]) }],
+      [["a@test.local", "b@test.local"], { idempotencyKey: campaignBatchIdempotencyKey(result.campaignId, [a!, b!]) }],
+      [["bad@test.local", "d@test.local"], { idempotencyKey: campaignBatchIdempotencyKey(result.campaignId, [bad!, d!]) }],
+      [["bad@test.local"], { idempotencyKey: `campaign-${result.campaignId}-recipient-${bad}` }],
+      [["d@test.local"], { idempotencyKey: `campaign-${result.campaignId}-recipient-${d}` }],
+    ]);
+    expect(Object.fromEntries(memory.rows(recruitmentCampaignRecipients).map(row => [row.recipient_email, [row.delivery_status, row.provider_email_id, row.error]]))).toEqual({
+      "a@test.local": ["sent", "email-a@test.local", null],
+      "b@test.local": ["sent", "email-b@test.local", null],
+      "bad@test.local": ["failed", null, "Resend campaign email failed: Invalid `to` field"],
+      "d@test.local": ["sent", "email-d@test.local", null],
+    });
+    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "partially_sent" });
+    expect(state.sendEmail).not.toHaveBeenCalled();
   });
 
   it("une campagne en anglais salue par « Hello, » quand le nom est piégé", async () => {

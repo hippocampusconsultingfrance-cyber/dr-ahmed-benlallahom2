@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { createElement } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // MAIL-13 — le compositeur d’email candidat, monté par React avec un faux
@@ -71,6 +71,7 @@ vi.mock("@/lib/trpc", async () => {
 });
 
 const { default: RecruitmentTab } = await import("./RecruitmentTab");
+const { ADMIN_SEARCH_DELAY_MS } = await import("./adminSearch");
 
 function mount() {
   const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
@@ -92,6 +93,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -114,6 +116,26 @@ describe("MAIL-13 — aperçu exact et test d’un email candidat", () => {
     fireEvent.change(within(dialog).getByRole("combobox", { name: "Langue d’envoi" }), { target: { value: "en" } });
     expect(view.previewed.at(-1)).toEqual({ id: 1, template: "additional_information", language: "en" });
     expect(within(dialog).getByTitle("Aperçu de l’email au candidat").getAttribute("srcdoc")).toContain("additional_information");
+  });
+
+  it("montre dans l’aperçu les précisions tapées une fois la saisie en pause, sans un aperçu par touche", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const dialog = openComposer("Demander un complément");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Aperçu exact de l’email" }));
+    expect(view.previewed.at(-1)).toEqual({ id: 1, template: "additional_information", language: "fr" });
+
+    const precisions = () => view.previewed.map(input => (input as { customRequest?: string }).customRequest).filter(Boolean);
+    const field = within(dialog).getByPlaceholderText(/attestation d’inscription/);
+    fireEvent.change(field, { target: { value: "  Merci de joindre" } });
+    act(() => vi.advanceTimersByTime(ADMIN_SEARCH_DELAY_MS - 1));
+    fireEvent.change(field, { target: { value: "  Merci de joindre votre diplôme.  " } });
+    act(() => vi.advanceTimersByTime(ADMIN_SEARCH_DELAY_MS - 1));
+    // Still typing: the preview keeps the email without the precision.
+    expect(precisions()).toEqual([]);
+
+    act(() => vi.advanceTimersByTime(1));
+    expect(view.previewed.at(-1)).toEqual({ id: 1, template: "additional_information", language: "fr", customRequest: "Merci de joindre votre diplôme." });
+    expect(new Set(precisions())).toEqual(new Set(["Merci de joindre votre diplôme."]));
   });
 
   it("envoie le test à l’administrateur avec les précisions tapées, sans envoyer l’email au candidat ni fermer le compositeur", async () => {

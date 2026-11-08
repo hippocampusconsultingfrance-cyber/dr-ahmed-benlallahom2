@@ -216,6 +216,25 @@ describe("actions d’administration du recrutement", () => {
     expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "sent" });
   });
 
+  it("ne renvoie pas d’office un destinataire « queued » depuis plus de 23 heures, quand Resend ne reconnaîtrait plus sa clé (EXPL-08, DATA-05)", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-08T10:00:00.000Z"));
+    const candidate = seedCandidate(1, { marketing_unsubscribe_token: "a".repeat(32) });
+    // Its email was accepted, both recordings refused: the outcome stays uncertain, the row « queued ».
+    memory.failNext(/^update "recruitment_campaign_recipients" set "delivery_status" = \$1, "provider_email_id"/, 2);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const result = await admin().admin.recruitment.campaigns.send({ title: "Offre test", subject: "Offre Suisse", body: "Une mission à Genève, répondez par email.", language: "fr", mode: "selected", selectedIds: [candidate.id as number], confirmed: true });
+    error.mockRestore();
+    expect(memory.rows(recruitmentCampaignRecipients)[0]).toMatchObject({ delivery_status: "queued" });
+    // A day later Resend has forgotten the key: sent again, the candidate would get the offer twice.
+    state.answers.clear();
+    vi.setSystemTime(new Date("2026-11-09T09:01:00.000Z"));
+    await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId: result.campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 0, sent: 0 });
+    expect(state.sentTo).toEqual(["c1@test.local"]);
+    expect(memory.rows(recruitmentCampaignRecipients)[0]).toMatchObject({ delivery_status: "queued" });
+    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "sent" });
+  });
+
   it("une relance en cours n’est pas reprise par une seconde avant 10 minutes (EXPL-08)", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-11-08T10:00:00.000Z"));

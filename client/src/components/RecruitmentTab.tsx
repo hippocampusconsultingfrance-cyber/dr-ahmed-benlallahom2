@@ -862,7 +862,7 @@ export default function RecruitmentTab({ initialSearch = "" }: { initialSearch?:
       )}
 
       <Dialog open={Boolean(emailComposer)} onOpenChange={open => { if (!open && !sendTemplateEmail.isPending) setEmailComposer(null); }}>
-        <DialogContent className="sm:max-w-xl">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Composer un email candidat</DialogTitle>
             <DialogDescription className="wrap-anywhere">
