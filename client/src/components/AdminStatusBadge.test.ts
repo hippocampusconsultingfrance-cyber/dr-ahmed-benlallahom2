@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { contrastRatio, oklchToLinearRgb, relativeLuminance, type Oklch } from "@/lib/contrast";
+import { contrastOnTint, contrastRatio, type Oklch } from "@/lib/contrast";
 
 // ADM-07 — un badge de statut unique pour l’administration : les statuts des
 // paiements, rendez-vous, questions santé, témoignages et demandes RGPD en
@@ -60,19 +60,6 @@ const PALETTE: Record<string, Record<string, Oklch>> = {
 
 /** Card and page background of the dark theme (client/src/index.css). */
 const DARK_SURFACES: Oklch[] = [[0.15, 0.025, 250], [0.12, 0.02, 250]];
-
-const encode = (channel: number) => (channel <= 0.0031308 ? 12.92 * channel : 1.055 * channel ** (1 / 2.4) - 0.055);
-const decode = (channel: number) => (channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
-
-/** Contrast of a text on a tint laid over a surface, blended as the browser does, in sRGB. */
-function contrastOnTint(text: Oklch, tint: Oklch, alpha: number, surface: Oklch) {
-  const over = oklchToLinearRgb(tint).map(encode);
-  const under = oklchToLinearRgb(surface).map(encode);
-  const [red, green, blue] = over.map((channel, index) => decode(channel * alpha + under[index]! * (1 - alpha)));
-  const background = 0.2126 * red! + 0.7152 * green! + 0.0722 * blue!;
-  const [lighter, darker] = [relativeLuminance(text), background].sort((a, b) => b - a);
-  return (lighter + 0.05) / (darker + 0.05);
-}
 
 describe("A11Y-12 — teintes des badges lisibles dans les deux thèmes", () => {
   it.each(Object.keys(ADMIN_BADGE_TONES))("teinte %s", tone => {

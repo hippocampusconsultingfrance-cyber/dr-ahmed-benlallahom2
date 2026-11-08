@@ -3,6 +3,7 @@ import { createElement } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { contrastOnTint, contrastRatio, type Oklch } from "@/lib/contrast";
 
 // Documents candidats montés par React dans un DOM, avec un faux tRPC :
 // « Refuser » et « Archiver » demandent la note interne saisie (aucun texte mis
@@ -192,6 +193,34 @@ describe("état d’analyse affiché sur la carte (EXPL-12)", () => {
   });
 });
 
+describe("carte d’analyse lisible en thème clair (A11Y-12)", () => {
+  /** Tailwind 4 shades the card uses (node_modules/tailwindcss/theme.css), and the light theme's white card. */
+  const SHADES: Record<string, Oklch> = { "cyan-700": [0.52, 0.105, 223.128], "cyan-800": [0.45, 0.085, 224.283], "cyan-950": [0.302, 0.056, 229.695], "amber-700": [0.555, 0.163, 48.998] };
+  const WHITE_CARD: Oklch = [1, 0, 0];
+  /** The light-theme text colour of an element: its text-* class without a dark: prefix. */
+  const lightText = (element: Element) => {
+    const name = Array.from(element.classList).find(value => /^text-[a-z]+-\d+$/.test(value));
+    if (!name || !SHADES[name.slice(5)]) throw new Error(`no known text colour on ${element.outerHTML}`);
+    return SHADES[name.slice(5)]!;
+  };
+
+  it("garde le titre, le modèle et les points à vérifier au-dessus de 4,5:1 sur la carte blanche", () => {
+    view.list.data = [diploma({ aiSummary: "Diplôme de docteur en médecine.", aiConfidence: 80, aiModel: "gpt-test", aiFlags: JSON.stringify(["date_illisible"]) })];
+    mount();
+    const model = screen.getByText("Modèle: gpt-test");
+    const box = model.parentElement!;
+    // The analysis box: a 15 % cyan-950 tint on the card.
+    expect(box.classList.contains("bg-cyan-950/15")).toBe(true);
+    const onBox = (element: Element) => contrastOnTint(lightText(element), SHADES["cyan-950"]!, 0.15, WHITE_CARD);
+    expect(onBox(model)).toBeGreaterThanOrEqual(4.5);
+    expect(onBox(screen.getByText("Synthèse IA d’aide à la revue"))).toBeGreaterThanOrEqual(4.5);
+    // The points to verify, under the box, on the card itself.
+    const flags = screen.getByText(/^Points à vérifier/);
+    expect(box.contains(flags)).toBe(false);
+    expect(contrastRatio(lightText(flags), WHITE_CARD)).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
 describe("documents regroupés par candidat, avec leur candidature (ADM-19)", () => {
   const omar = { candidateId: 9, candidateEmail: "omar@test.local", firstName: "Omar", lastName: "Said" };
 
@@ -209,7 +238,8 @@ describe("documents regroupés par candidat, avec leur candidature (ADM-19)", ()
     expect(groups.map(group => within(group).getByRole("heading", { level: 3 }).textContent)).toEqual(["Amina Haddad", "Omar Said"]);
 
     const amina = screen.getByRole("region", { name: "Amina Haddad" });
-    expect(amina.textContent).toContain("amina@test.local · 2 document(s)");
+    // Those of the rows read (the 50 most recent), not every document of the candidate.
+    expect(amina.textContent).toContain("amina@test.local · 2 document(s) affiché(s)");
     expect(within(amina).getByText(/identite\.pdf/)).toBeTruthy();
     expect(within(amina).getByText(/diplome\.pdf/)).toBeTruthy();
     expect(within(screen.getByRole("region", { name: "Omar Said" })).getByText(/licence\.pdf/)).toBeTruthy();
