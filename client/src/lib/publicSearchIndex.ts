@@ -249,6 +249,21 @@ export const publicShortcuts: { title: Localized<string>; links: { href: string;
   ],
 };
 
+/**
+ * Mots trop courants pour suffire à la recherche de secours, présents dans presque toutes les pages
+ * (« de », « la », « the », « und ») ; une lettre seule non plus. Les mots courts du site (« cv »,
+ * « rh », « ia ») y suffisent (PUB-28).
+ */
+const fallbackStopWords: Localized<ReadonlySet<string>> = {
+  fr: new Set(["au", "aux", "de", "des", "du", "en", "et", "la", "le", "les", "ou", "par", "pour", "sur", "un", "une"]),
+  en: new Set(["an", "and", "at", "by", "for", "in", "is", "of", "on", "or", "the", "to"]),
+  de: new Set(["am", "an", "auf", "das", "dem", "den", "der", "des", "die", "ein", "eine", "fur", "im", "in", "mit", "oder", "und", "von", "zu"]),
+  zh: new Set(["的", "和", "与", "在", "或"]),
+};
+
+/** Ponctuation au début ou à la fin d'un mot tapé (« annuler ? », « cancel? »), qui n'en fait pas partie. */
+const EDGE_PUNCTUATION = new RegExp("^[^\\p{L}\\p{N}]+|[^\\p{L}\\p{N}]+$", "gu");
+
 function normalize(value: string) {
   return value.normalize("NFD").replace(/[̀-ͯ]/g, "").toLocaleLowerCase();
 }
@@ -269,17 +284,16 @@ function rank(terms: string[], language: SearchLanguage) {
 /**
  * Pages qui contiennent tous les mots de la recherche, les mieux placées d'abord. Sans aucune, pour
  * une recherche de plusieurs mots (« recrutement Dubai »), celles qui en contiennent au moins un,
- * marquées `partial` (PUB-28) ; les mots latins d'une ou deux lettres (« de », « la », « à ») n'y
- * suffisent pas, ils sont dans presque toutes les pages.
+ * hors mots vides, marquées `partial` (PUB-28). Un signe isolé (« ? ») n'est pas un mot.
  */
 export function searchPublicPages(query: string, language: SearchLanguage) {
-  const terms = normalize(query).trim().split(/\s+/).filter(Boolean);
+  const terms = normalize(query).trim().split(/\s+/).map((term) => term.replace(EDGE_PUNCTUATION, "")).filter(Boolean);
   if (!terms.length) return [];
 
   const complete = rank(terms, language).filter(({ matchedTerms }) => matchedTerms === terms.length);
   if (complete.length || terms.length === 1) return complete.map((result) => ({ ...result, partial: false }));
 
-  const meaningful = terms.filter((term) => term.length > 2 || !/^[a-z0-9]+$/.test(term));
+  const meaningful = terms.filter((term) => !fallbackStopWords[language].has(term) && !/^[a-z0-9]$/.test(term));
   if (!meaningful.length) return [];
   return rank(meaningful, language).filter(({ matchedTerms }) => matchedTerms > 0).map((result) => ({ ...result, partial: true }));
 }

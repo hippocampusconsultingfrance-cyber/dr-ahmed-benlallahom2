@@ -100,12 +100,32 @@ describe("recherche sans résultat (PUB-28)", () => {
     }
   });
 
-  it("ne se rabat pas sur les mots d’une ou deux lettres, présents dans presque toutes les pages", () => {
+  it("ne se rabat pas sur les mots vides ni sur une lettre seule, présents dans presque toutes les pages", () => {
     expect(hrefs("la zzzz", "fr")).toEqual([]);
     expect(hrefs("à de zzzz", "fr")).toEqual([]);
+    expect(hrefs("x zzzz", "fr")).toEqual([]);
+    expect(hrefs("the of zzzz", "en")).toEqual([]);
+    expect(hrefs("der und zzzz", "de")).toEqual([]);
     expect(hrefs("zzzz", "fr")).toEqual([]);
     // Un mot chinois de deux caractères reste un vrai mot.
     expect(hrefs("麻醉 zzzz", "zh")).toContain("/questions-anesthesie");
+  });
+
+  it("se rabat sur un mot court du site, comme « cv »", () => {
+    for (const language of ["fr", "en"] as const) {
+      const results = searchPublicPages("cv dubai", language);
+      expect(results[0]?.entry.href, language).toBe("/recruitment/standard");
+      expect(results.every(result => result.partial), language).toBe(true);
+    }
+  });
+
+  it("ne compte pas la ponctuation autour des mots comme un mot", () => {
+    for (const [query, language] of [["annuler ?", "fr"], ["« annuler »", "fr"], ["cancel?", "en"], ["取消？", "zh"]] as const) {
+      const results = searchPublicPages(query, language);
+      expect(results.map(result => result.entry.href).sort(), `${language}:${query}`).toEqual(["/booking", "/faq"]);
+      expect(results.every(result => !result.partial), `${language}:${query}`).toBe(true);
+    }
+    expect(hrefs("?", "fr")).toEqual([]);
   });
 
   it("propose comme raccourcis de vraies pages du site, nommées dans les 4 langues", () => {
