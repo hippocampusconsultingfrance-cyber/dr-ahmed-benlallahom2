@@ -9,6 +9,7 @@ import AdminStatusBadge from "@/components/AdminStatusBadge";
 import { formatAdminDateTime } from "@/components/adminDateFormat";
 import { adminListCount, adminPageOffsets, ADMIN_PAGE_SIZE, mergeAdminPages, useAdminPageCount } from "@/components/adminPagination";
 import { adminSearchStatus, useAdminSearch } from "@/components/adminSearch";
+import { publishedQuestionLanguage } from "@/lib/publishedQuestionLanguage";
 import { toast } from "sonner";
 
 const MIN_PRIVATE_RESPONSE_LENGTH = 20;
@@ -38,6 +39,18 @@ const REJECTION_REASONS = {
 } as const;
 
 type RejectionReason = keyof typeof REJECTION_REASONS;
+
+/**
+ * EN-15, A11Y-13: the public library presents the anonymised version in the language of the
+ * question (publishedQuestionLanguage), which its card declares to screen readers and names on a
+ * page in another language. Said beside the two fields, so that the version is written in it.
+ */
+const PUBLIC_VERSION_LANGUAGE_NAMES = { fr: "français", en: "anglais", de: "allemand", zh: "chinois" } as const;
+
+function publicVersionLanguageHint(language: string | null | undefined): string {
+  const name = PUBLIC_VERSION_LANGUAGE_NAMES[publishedQuestionLanguage(language)];
+  return `Version publique présentée en ${name}, la langue de la question : rédigez-la en ${name}.`;
+}
 
 const SEND_EXCERPT_LENGTH = 160;
 
@@ -375,13 +388,14 @@ export default function MedicalQuestionsAdminTab({ initialSearch = "" }: { initi
               </button>
               <p className="text-xs leading-5 text-muted-foreground">L’IA ne crée pas de réponse médicale : elle reformule uniquement votre brouillon. Relisez toujours avant de valider.</p>
 
+              <p id="medical-question-public-language" className="text-xs leading-5 text-muted-foreground">{publicVersionLanguageHint(selected.data.language)}</p>
               <label className="block text-sm font-medium" htmlFor="medical-question-public-question">
                 Question publique anonymisée
-                <textarea id="medical-question-public-question" value={publicQuestion} onChange={event => setPublicQuestion(event.target.value)} rows={3} className="form-control mt-2 block w-full" placeholder="Supprimez tout élément identifiant." />
+                <textarea id="medical-question-public-question" value={publicQuestion} onChange={event => setPublicQuestion(event.target.value)} rows={3} className="form-control mt-2 block w-full" placeholder="Supprimez tout élément identifiant." aria-describedby="medical-question-public-language" />
               </label>
               <label className="block text-sm font-medium" htmlFor="medical-question-public-response">
                 Réponse publique anonymisée
-                <textarea id="medical-question-public-response" value={publicResponse} onChange={event => setPublicResponse(event.target.value)} rows={6} className="form-control mt-2 block w-full" placeholder="Version destinée à la bibliothèque publique." />
+                <textarea id="medical-question-public-response" value={publicResponse} onChange={event => setPublicResponse(event.target.value)} rows={6} className="form-control mt-2 block w-full" placeholder="Version destinée à la bibliothèque publique." aria-describedby="medical-question-public-language" />
               </label>
               <label className="flex items-start gap-3 text-sm">
                 <input type="checkbox" checked={publish} disabled={selected.data.publicationConsent !== 1} onChange={event => setPublish(event.target.checked)} className="form-consent-checkbox mt-1" />

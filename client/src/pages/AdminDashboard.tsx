@@ -1,11 +1,12 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { SignInButton, UserButton } from "@clerk/react";
 import { trpc } from "@/lib/trpc";
-import { Suspense, useState, type FormEvent } from "react";
+import { Suspense, useState, type FormEvent, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Calendar, MessageSquare, Shield, DollarSign, ArrowLeft, Star, CalendarDays, UserRound, BriefcaseBusiness, Send, UsersRound, LogOut } from "lucide-react";
 import { toast } from "sonner";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { Link, useLocation, useSearch } from "wouter";
 import { adminLocationOf, adminPath, type AdminTab } from "@shared/adminTabs";
 import SecurityOperationsTab from "@/components/SecurityOperationsTab";
@@ -22,6 +23,16 @@ import { getActiveAdminTabLabel } from "./adminDashboardMobileTabs";
 import { CandidateDocumentsAdminTab, EmployerBriefsTab, MailingTab, RecruitmentTab, VivierTab } from "./adminLazyTabs";
 
 export type Tab = AdminTab;
+
+/**
+ * A11Y-13: the dashboard is written in French whatever the site's language, which the page's html
+ * lang carries, so each of its screens says lang="fr". These tabs are translated (ADM-07): they
+ * follow the site's language, and say it.
+ */
+function InSiteLanguage({ children }: { children: ReactNode }) {
+  const { language } = useLanguage();
+  return <div lang={language}>{children}</div>;
+}
 
 export default function AdminDashboard() {
   const { user, loading, refresh, logout } = useAuth();
@@ -53,7 +64,7 @@ export default function AdminDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background px-4 py-16">
+      <div lang="fr" className="min-h-screen bg-background px-4 py-16">
         <div className="mx-auto max-w-3xl">
           <PublicContentSkeleton cards={1} label="Chargement de l’accès administrateur" />
         </div>
@@ -63,7 +74,7 @@ export default function AdminDashboard() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center px-4">
+      <div lang="fr" className="min-h-screen bg-background flex items-center justify-center px-4">
         <div className="max-w-md text-center">
           <h1 className="text-2xl font-bold text-foreground mb-4">Connexion administrateur requise</h1>
           <p className="text-muted-foreground mb-6">Connectez-vous avec le compte propriétaire pour accéder aux candidatures et aux missions.</p>
@@ -77,7 +88,7 @@ export default function AdminDashboard() {
 
   if (user.role !== "admin") {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center px-4">
+      <div lang="fr" className="min-h-screen bg-background flex items-center justify-center px-4">
         <div className="max-w-md text-center">
           <h1 className="text-2xl font-bold text-foreground mb-4">Accès refusé</h1>
           <p className="text-muted-foreground mb-6">Votre session ne possède pas les permissions nécessaires. Si votre rôle vient d’être mis à jour, actualisez l’accès ou reconnectez-vous.</p>
@@ -99,12 +110,12 @@ export default function AdminDashboard() {
   }
 
   if (adminSecurity.isLoading) {
-    return <div className="min-h-screen bg-background px-4 py-16"><div className="mx-auto max-w-3xl"><PublicContentSkeleton cards={1} label="Vérification de sécurité" /></div></div>;
+    return <div lang="fr" className="min-h-screen bg-background px-4 py-16"><div className="mx-auto max-w-3xl"><PublicContentSkeleton cards={1} label="Vérification de sécurité" /></div></div>;
   }
 
   if (!adminSecurity.data?.verified) {
     // The page's main region, which « Aller au contenu principal » reaches (A11Y-12).
-    return <main className="min-h-screen bg-background flex items-center justify-center px-4"><div className="w-full max-w-md rounded-2xl border border-cyan-900/50 bg-card p-7 shadow-2xl"><div className="mb-5 flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-xl bg-cyan-400/10 text-cyan-300"><Shield className="h-6 w-6"/></span><div><h1 className="text-xl font-bold text-foreground">Validation de sécurité</h1><p className="text-sm text-muted-foreground">Une seconde vérification protège les documents et CV sensibles.</p></div></div><p className="mb-4 text-sm text-muted-foreground">Demandez un code à six chiffres sur votre email administrateur, puis saisissez-le ci-dessous.</p><Button className="mb-5 w-full" onClick={() => requestMfa.mutate()} disabled={requestMfa.isPending}>{requestMfa.isPending ? "Envoi en cours…" : "Envoyer un code de sécurité"}</Button><form className="space-y-2" onSubmit={submitMfaCode}><label htmlFor="admin-mfa-code" className="text-sm font-medium text-foreground">Code à 6 chiffres</label><Input id="admin-mfa-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={mfaCode} onChange={event => setMfaCode(event.target.value.replace(/\D/g, ""))} placeholder="123456"/><Button type="submit" className="mt-2 w-full" variant="outline" disabled={mfaCode.length !== 6 || verifyMfa.isPending}>{verifyMfa.isPending ? "Vérification…" : "Valider le code"}</Button></form><Button asChild variant="ghost" className="mt-3 w-full"><Link href="/">Retour au site</Link></Button><Button variant="ghost" className="mt-1 w-full" onClick={signOut} disabled={signingOut}><LogOut className="mr-2 h-4 w-4"/>{signingOut ? "Déconnexion…" : "Se déconnecter"}</Button></div></main>;
+    return <main lang="fr" className="min-h-screen bg-background flex items-center justify-center px-4"><div className="w-full max-w-md rounded-2xl border border-cyan-900/50 bg-card p-7 shadow-2xl"><div className="mb-5 flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-xl bg-cyan-400/10 text-cyan-300"><Shield className="h-6 w-6"/></span><div><h1 className="text-xl font-bold text-foreground">Validation de sécurité</h1><p className="text-sm text-muted-foreground">Une seconde vérification protège les documents et CV sensibles.</p></div></div><p className="mb-4 text-sm text-muted-foreground">Demandez un code à six chiffres sur votre email administrateur, puis saisissez-le ci-dessous.</p><Button className="mb-5 w-full" onClick={() => requestMfa.mutate()} disabled={requestMfa.isPending}>{requestMfa.isPending ? "Envoi en cours…" : "Envoyer un code de sécurité"}</Button><form className="space-y-2" onSubmit={submitMfaCode}><label htmlFor="admin-mfa-code" className="text-sm font-medium text-foreground">Code à 6 chiffres</label><Input id="admin-mfa-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={mfaCode} onChange={event => setMfaCode(event.target.value.replace(/\D/g, ""))} placeholder="123456"/><Button type="submit" className="mt-2 w-full" variant="outline" disabled={mfaCode.length !== 6 || verifyMfa.isPending}>{verifyMfa.isPending ? "Vérification…" : "Valider le code"}</Button></form><Button asChild variant="ghost" className="mt-3 w-full"><Link href="/">Retour au site</Link></Button><Button variant="ghost" className="mt-1 w-full" onClick={signOut} disabled={signingOut}><LogOut className="mr-2 h-4 w-4"/>{signingOut ? "Déconnexion…" : "Se déconnecter"}</Button></div></main>;
   }
 
   const tabs = [
@@ -124,7 +135,7 @@ export default function AdminDashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-background print-paper">
+    <div lang="fr" className="min-h-screen bg-background print-paper">
       {/* Header */}
       <header className="border-b border-border bg-card/50 backdrop-blur sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 py-3 sm:py-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -204,12 +215,12 @@ export default function AdminDashboard() {
         {/* The recruitment tabs load when first opened (adminLazyTabs.ts). */}
         <Suspense fallback={<PublicContentSkeleton label="Chargement de la section" />}>
           {activeTab === "recruitment" && <RecruitmentTab key={reference} initialSearch={reference} />}
-          {activeTab === "candidateDocuments" && <CandidateDocumentsAdminTab />}
-          {activeTab === "vivier" && <VivierTab onCompose={candidateIds => { setMailingSelectedIds(candidateIds); setActiveTab("mailing"); }} />}
-          {activeTab === "mailing" && <MailingTab initialSelectedIds={mailingSelectedIds} />}
-          {activeTab === "employerBriefs" && <EmployerBriefsTab key={reference} reference={reference} />}
+          {activeTab === "candidateDocuments" && <InSiteLanguage><CandidateDocumentsAdminTab /></InSiteLanguage>}
+          {activeTab === "vivier" && <InSiteLanguage><VivierTab onCompose={candidateIds => { setMailingSelectedIds(candidateIds); setActiveTab("mailing"); }} /></InSiteLanguage>}
+          {activeTab === "mailing" && <InSiteLanguage><MailingTab initialSelectedIds={mailingSelectedIds} /></InSiteLanguage>}
+          {activeTab === "employerBriefs" && <InSiteLanguage><EmployerBriefsTab key={reference} reference={reference} /></InSiteLanguage>}
         </Suspense>
-        {activeTab === "security" && <SecurityOperationsTab />}
+        {activeTab === "security" && <InSiteLanguage><SecurityOperationsTab /></InSiteLanguage>}
         {activeTab === "medicalQuestions" && <MedicalQuestionsAdminTab key={reference} initialSearch={reference} />}
       </main>
     </div>

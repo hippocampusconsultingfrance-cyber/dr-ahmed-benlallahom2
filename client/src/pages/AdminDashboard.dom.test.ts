@@ -36,6 +36,8 @@ vi.mock("@/lib/trpc", async () => {
     get: (_target, key) => key === "useQuery" || key === "useInfiniteQuery" ? () => loading : key === "useMutation" ? () => idle : procedures(),
   });
   const adminSecurity = {
+    // The security tab's journal, still loading.
+    events: { useQuery: () => loading },
     status: {
       useQuery: (_input: unknown, options: { enabled: boolean }) => useQuery({
         queryKey: ["adminSecurity.status"],
@@ -60,6 +62,7 @@ vi.mock("@/lib/trpc", async () => {
 });
 
 const { default: AdminDashboard } = await import("./AdminDashboard");
+const { LanguageProvider } = await import("@/contexts/LanguageContext");
 
 const NAVIGATION = "Navigation des sections d’administration";
 
@@ -67,6 +70,13 @@ function mount() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(createElement(QueryClientProvider, { client }, createElement(AdminDashboard)));
 }
+/** The dashboard in the site's language provider, as App.tsx mounts it (A11Y-13). */
+function mountInSiteLanguage() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  return render(createElement(QueryClientProvider, { client }, createElement(LanguageProvider, null, createElement(AdminDashboard))));
+}
+/** Language a screen reader reads an element in: that of its nearest ancestor saying one. */
+const languageOf = (element: Element) => element.closest("[lang]")?.getAttribute("lang");
 const codeField = () => document.getElementById("admin-mfa-code") as HTMLInputElement;
 const validateButton = () => screen.getByRole("button", { name: "Valider le code" });
 
@@ -156,6 +166,30 @@ describe("double authentification de l’administration (navigateur simulé)", (
     expect(screen.queryByRole("heading", { name: "Validation de sécurité" })).toBeNull();
     // A11Y-12: the landmark of the tab bar has a name.
     expect(screen.getByRole("navigation", { name: "Sections" }).contains(screen.getByLabelText(NAVIGATION))).toBe(true);
+  });
+
+  it("dit le français de l’administration sur un site en anglais, et l’anglais des onglets traduits (A11Y-13)", async () => {
+    window.history.replaceState(null, "", "/admin?tab=security&lang=en");
+    mountInSiteLanguage();
+    const heading = await screen.findByRole("heading", { name: "Validation de sécurité" });
+    await waitFor(() => expect(document.documentElement.lang).toBe("en"));
+    expect(languageOf(heading)).toBe("fr");
+    expect(languageOf(codeField())).toBe("fr");
+
+    fireEvent.change(codeField(), { target: { value: "123456" } });
+    fireEvent.click(validateButton());
+    const navigation = await screen.findByLabelText(NAVIGATION);
+    expect(languageOf(navigation)).toBe("fr");
+    expect(languageOf(screen.getByRole("heading", { name: "Administration" }))).toBe("fr");
+    // The security tab is translated (ADM-07): its text is in the site's language, and says so.
+    expect(languageOf(screen.getByRole("status", { name: "Loading security log" }))).toBe("en");
+
+    // A tab written in French only stays French.
+    fireEvent.click(screen.getByRole("button", { name: "Disponibilités" }));
+    await waitFor(() => expect(screen.queryByRole("status", { name: "Loading security log" })).toBeNull());
+    expect(screen.getByRole("main").getAttribute("lang")).toBeNull();
+    expect(languageOf(screen.getByRole("main"))).toBe("fr");
+    expect(screen.getByRole("main").querySelector("[lang]")).toBeNull();
   });
 
   it("refuse un compte qui n’est pas administrateur sans même interroger la sécurité", async () => {
