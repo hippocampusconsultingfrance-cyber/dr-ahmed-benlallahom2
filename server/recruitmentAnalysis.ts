@@ -8,8 +8,7 @@ import { declaredCertificationNames, latestCertificationExpiry, sameRecruitmentF
 import { certificationDateIsCurrent, certificationExpiryInFrench } from "../shared/recruitmentFactOrigins";
 import { assertPdfDecompressionWithinLimits, DOCUMENT_DECOMPRESSION_LIMITS, truncateExtractedText } from "./documentDecompressionLimits";
 import { withoutInvisibleDocxText, type DocxUnverifiableReason } from "./docxVisibleText";
-import { docxWithLaidOutLineBreaks, joinMarkedLines } from "./docxLineBreaks";
-import { pdfStandardFontDataUrl, PdfReaderUnavailableError, readPdfIsolated, rowsTogether, textCellsAsLines, wrappedLinesTogether, type PdfTextReading } from "./pdfExtractionSandbox";
+import { pdfStandardFontDataUrl, PdfReaderUnavailableError, readPdfIsolated, type PdfTextReading } from "./pdfExtractionSandbox";
 import type { PdfUnverifiableReason } from "./pdfVisibleText";
 import { CV_ANALYSIS_STEP_MINIMUM_MS, ProcessingDeadlineError, stepTimeoutMs } from "./processingDeadline";
 import {
@@ -593,13 +592,6 @@ function incompleteExtractionReason(declared: Pick<RecruitmentDeclaredContext, "
   return "Score non présenté : l’extraction du document est incomplète, au moins une page nécessite une vérification manuelle. Revue humaine requise : ouvrir le CV.";
 }
 
-/** What the in-process reading uses of pdf-parse, as the isolated reader does (load and getPageText are private in its typings). */
-type PdfParserPages = {
-  load(): Promise<{ numPages: number; getPage(num: number): Promise<PdfParserPage> }>;
-  getPageText(page: { getViewport: PdfParserPage["getViewport"]; getTextContent(): Promise<unknown> }, params: object, total: number): Promise<string>;
-};
-type PdfParserPage = { getViewport(options: { scale: number }): unknown; getTextContent(): Promise<{ items: readonly unknown[] }>; cleanup(): void };
-
 async function createPdfParser(buffer: Buffer) {
   // pdf.js expects browser geometry primitives. The worker entrypoint installs
   // the Node-compatible canvas implementation and must load before pdf-parse.
@@ -746,25 +738,8 @@ async function extractCvDocumentUnbounded(buffer: Buffer, mimeType: string): Pro
         return readPdfIsolated(buffer, { kind: "text", first }, step.limits).then(reading => step.checkVisibility(reading), step.rethrow);
       },
       async (parser): Promise<PdfTextReading> => {
-        // What the isolated reader does, without the visibility check: a line drawn in pieces read as
-        // one line, a header or a footer at the edge of its page, a wide gap within a line as a line
-        // break, the lines a paragraph wraps onto as one (IA-04).
-        const reader = parser as unknown as PdfParserPages;
-        const doc = await reader.load();
-        const read: Array<{ num: number; viewport: { viewBox?: number[]; rotation?: number }; content: { items: readonly unknown[] } }> = [];
-        for (let num = 1; num <= Math.min(doc.numPages, first); num += 1) {
-          const page = await doc.getPage(num);
-          read.push({ num, viewport: page.getViewport({ scale: 1 }) as { viewBox?: number[]; rotation?: number }, content: await page.getTextContent() });
-          page.cleanup();
-        }
-        const contents = rowsTogether(read.map(page => page.content));
-        const pages: PdfTextReading["pages"] = [];
-        for (let index = 0; index < read.length; index += 1) {
-          const viewport = read[index]!.viewport;
-          const content = wrappedLinesTogether(textCellsAsLines(contents[index]!), { box: viewport.viewBox, rotation: viewport.rotation });
-          pages.push({ num: read[index]!.num, text: await reader.getPageText({ getViewport: () => read[index]!.viewport, getTextContent: async () => content }, {}, doc.numPages) });
-        }
-        return { total: Number.isInteger(doc.numPages) ? doc.numPages : null, pages };
+        const read = await parser.getText({ first });
+        return { total: Number.isInteger(read.total) ? read.total : null, pages: read.pages.map(page => ({ num: page.num, text: page.text })) };
       },
     );
     const pages = result.pages.map(page => ({ number: page.num, text: cleanText(page.text) }));
@@ -843,11 +818,8 @@ async function extractCvDocumentUnbounded(buffer: Buffer, mimeType: string): Pro
     // Word does not show before mammoth reads the file (IA-01).
     const visible = withoutInvisibleDocxText(buffer);
     const mammoth = (await import("mammoth")).default;
-    // The lines Word shows (IA-04): each tab a line break where the PDF of the document has a wide gap, a space elsewhere, each
-    // line break shown a line break, what Word hides of them nothing, and cells side by side on one line as one line.
-    const laidOut = docxWithLaidOutLineBreaks(visible.buffer);
-    const result = await mammoth.extractRawText({ buffer: laidOut.buffer });
-    const text = escapeCvPageMarkers(cleanText(joinMarkedLines(result.value, laidOut.marker)));
+    const result = await mammoth.extractRawText({ buffer: visible.buffer });
+    const text = escapeCvPageMarkers(cleanText(result.value));
     const invisibleText = invisibleTextSummary(visible.invisibleText, visible.unverifiableText, text.length);
     return { text, method: "docx", totalPages: null, ocrConfidence: null, ocrModelVersion: null, warnings: [...result.messages.map(message => `${message.type}:${message.message}`), ...invisibleTextWarnings(invisibleText)], invisibleText };
   }
@@ -855,7 +827,6 @@ async function extractCvDocumentUnbounded(buffer: Buffer, mimeType: string): Pro
   if (mimeType === "application/msword") {
     const WordExtractor = (await import("word-extractor")).default;
     const document = await new WordExtractor().extract(buffer);
-    // No layout to tell a wide tab from a narrow one: each tab a space, one line (IA-04).
     return { text: escapeCvPageMarkers(cleanText(document.getBody())), method: "doc", totalPages: null, ocrConfidence: null, ocrModelVersion: null, warnings: ["legacy_doc_format_limited_extraction"] };
   }
 
@@ -879,7 +850,7 @@ const normalizeEvidenceText = (value: string) =>
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLocaleLowerCase()
-    .replace(/[\s\u0085.,;:!?()[\]{}'"«»“”‘’/\\|_+=*•·—–\-،؛؟、。《》「」『』【】]+/g, " ")
+    .replace(/[\s.,;:!?()[\]{}'"«»“”‘’/\\|_+=*•·—–\-،؛؟、。《》「」『』【】]+/g, " ")
     .trim();
 
 /** Chinese and Japanese write words without spaces: a value with ideographs is looked up as is (INTL-02). */
@@ -1381,182 +1352,45 @@ function locationPage(sourceLocation: string) {
 }
 
 /**
- * What a quote cites (IA-04): the quote itself, normalized. Never the wording
- * of sourceLocation, which the AI writes freely (« page 1, en-tête » and
- * « page 1, rubrique Titre » cite the same sentence), nor the page: a footer
- * repeated on each page and cited page by page is still one sentence, and the
- * same CV gets the same score whether it has one page or four.
+ * Where a quote was read (IA-04): the quote, with the page it was checked on
+ * when the text has [PAGE n] markers. Never the wording of sourceLocation,
+ * which the AI writes freely: « page 1, en-tête » and « page 1, rubrique
+ * Titre » cite the same sentence. Without markers (a DOCX), the quote alone,
+ * whatever section the AI names.
  */
-const evidenceProvenance = (item: { evidence: string }) => normalizeEvidenceText(item.evidence);
-
-/**
- * Where a line of the CV ends (IA-04): only a line break, not the end of a sentence. The other characters of a line's end
- * (U+0085, U+2028, U+2029, \v, \f), which a viewer draws within a line, as a space, nothing or a sign, are read as spaces.
- */
-const LINE_END = /\r\n|[\n\r]/;
-/** A page marker the server writes before each page's text (never the document's, escaped by escapeCvPageMarkers). */
-const PAGE_MARKER_LINE = /^\s*\[PAGE\s+(\d+)\]\s*$/i;
-
-/**
- * The CV's text normalized as quotes are, as the lines of its pages (IA-04):
- * `text` is what normalizeEvidenceText makes of the whole text, so a quote
- * is found in it as verifyCvEvidence finds it; `starts` says where each line
- * starts in it, and `places` the place of the CV each line is, the same number
- * for the lines of one place. A line is a place, whatever its punctuation or
- * its length (« Médecin anesthésiste. Réanimateur. » is one place, as are its
- * parts): the extraction gives a paragraph on one line, in DOCX (mammoth) as in
- * PDF (wrappedLinesTogether), a line drawn in pieces on one line
- * (rowsTogether), and a line only at a line break or a gap as wide as a table
- * cell's. A line written on two pages or more is one place on all of them. So
- * are all the lines repeated at the edges of the pages, a header and a footer:
- * the first, or the last, line of two pages or more, of the same text numbers
- * aside (a page number). rowsTogether writes the rows of a PDF's header, or of
- * its footer, as one line at the edge of its page, which it finds by their
- * height on the page; the text a vision read (`edgeSeries`) has no heights, and
- * the lines at the same rank from the top, or from the bottom, among the first,
- * or the last, lines of their page written on another page too are its header
- * and its footer. The lines of the body keep their places, repeated or not (the
- * same role in each experience is one place, another line another, even last
- * on two pages).
- */
-function normalizedSourcePassages(sourceText: string, options: { edgeSeries?: boolean } = {}) {
-  const starts: number[] = [];
-  const lines: Array<{ normalized: string; masked: string; page: number | null }> = [];
-  let text = "";
-  let page: number | null = null;
-  for (const line of sourceText.split(LINE_END)) {
-    const marker = PAGE_MARKER_LINE.exec(line);
-    if (marker) page = Number(marker[1]);
-    const normalized = normalizeEvidenceText(line);
-    if (!normalized) continue;
-    if (text) text += " ";
-    starts.push(text.length);
-    text += normalized;
-    lines.push({ normalized, masked: normalized.replace(/\d+/g, "#"), page: marker ? null : page });
-  }
-  const places = lines.map((_, index) => index);
-  const placeOf = (index: number) => {
-    let root = index;
-    while (places[root] !== root) root = places[root]!;
-    for (let at = index; at !== root;) {
-      const next = places[at]!;
-      places[at] = root;
-      at = next;
-    }
-    return root;
-  };
-  const join = (left: number, right: number) => { places[placeOf(right)] = placeOf(left); };
-  const pagesOf = (key: "normalized" | "masked") => {
-    const pages = new Map<string, Set<number>>();
-    for (const line of lines) if (line.page !== null) pages.set(line[key], (pages.get(line[key]) ?? new Set()).add(line.page));
-    return pages;
-  };
-  const exactPages = pagesOf("normalized");
-  const maskedPages = pagesOf("masked");
-  // The same line on two pages or more: one place.
-  const firstWith = new Map<string, number>();
-  lines.forEach((line, index) => {
-    if (line.page === null || (exactPages.get(line.normalized)?.size ?? 0) < 2) return;
-    const first = firstWith.get(line.normalized);
-    if (first === undefined) firstWith.set(line.normalized, index);
-    else join(first, index);
-  });
-  // The lines at the edges of the pages, repeated at the same rank on two pages or more: one place, all of them.
-  // Each map is filled by push, never by copying a list in a loop: linear in the lines (IA-04, a CV of many lines).
-  const linesOf = new Map<number, number[]>();
-  for (let index = 0; index < lines.length; index += 1) {
-    const linePage = lines[index]!.page;
-    if (linePage === null) continue;
-    const onPage = linesOf.get(linePage);
-    if (onPage) onPage.push(index);
-    else linesOf.set(linePage, [index]);
-  }
-  const atRank = new Map<string, { pages: Set<number>; indexes: number[] }>();
-  const onOtherPages = (index: number) => (maskedPages.get(lines[index]!.masked)?.size ?? 0) >= 2;
-  linesOf.forEach((indexes, pageNumber) => {
-    for (const edge of ["top", "bottom"] as const) {
-      for (let rank = 0; rank < (options.edgeSeries ? indexes.length : Math.min(1, indexes.length)); rank += 1) {
-        const index = indexes[edge === "top" ? rank : indexes.length - 1 - rank]!;
-        if (!onOtherPages(index)) break;
-        const key = `${edge}:${rank}:${lines[index]!.masked}`;
-        const found = atRank.get(key);
-        if (found) {
-          found.pages.add(pageNumber);
-          found.indexes.push(index);
-        } else atRank.set(key, { pages: new Set([pageNumber]), indexes: [index] });
-      }
-    }
-  });
-  let running: number | undefined;
-  atRank.forEach(({ pages, indexes }) => {
-    if (pages.size < 2) return;
-    for (const index of indexes) {
-      if (running === undefined) running = index;
-      else join(running, index);
-    }
-  });
-  return { text, starts, places: lines.map((_, index) => placeOf(index)) };
-}
-type NormalizedSourcePassages = ReturnType<typeof normalizedSourcePassages>;
-
-/** The passage a position of the normalized text is in. */
-function passageAt(starts: number[], position: number) {
-  let low = 0;
-  let high = starts.length - 1;
-  while (low < high) {
-    const middle = (low + high + 1) >> 1;
-    if (starts[middle]! <= position) low = middle;
-    else high = middle - 1;
-  }
-  return low;
+function evidenceProvenance(item: { evidence: string; sourceLocation: string }, paged: boolean) {
+  return `${normalizeEvidenceText(item.evidence)}|${paged ? locationPage(item.sourceLocation) ?? "" : ""}`;
 }
 
-/** A normalized quote with the places of the CV each copy of it covers, and all those places. */
-type PlacedQuote = { quote: string; copies: number[][]; places: Set<number> };
+const hasPageMarkers = (sourceText: string) => /\[PAGE\s+\d+\]/i.test(sourceText);
 
-function placeQuote(source: NormalizedSourcePassages, quote: string): PlacedQuote {
-  const copies: number[][] = [];
-  const places = new Set<number>();
-  for (let index = quote ? source.text.indexOf(quote) : -1; index !== -1; index = source.text.indexOf(quote, index + 1)) {
-    const covered = new Set<number>();
-    for (let line = passageAt(source.starts, index); line <= passageAt(source.starts, index + quote.length - 1); line += 1) covered.add(source.places[line]!);
-    copies.push(Array.from(covered));
-    covered.forEach(place => places.add(place));
-  }
-  return { quote, copies, places };
+/** Where a normalized quote is written in the normalized text: the start and end of each place. */
+function quotePlaces(text: string, quote: string) {
+  const places: Array<[number, number]> = [];
+  for (let index = text.indexOf(quote); index !== -1 && quote; index = text.indexOf(quote, index + 1)) places.push([index, index + quote.length]);
+  return places;
 }
 
 /**
- * Two different quotes written in two places of the CV (IA-04): a copy of one
- * of them lies in places where the other is not. Two parts of one line
- * (« Médecin anesthésiste » and « réanimateur », or two of its sentences) are
- * one place, as is a header or footer repeated on each page, cited whole for
- * one field and in part for the other.
+ * Two different quotes written in two places of the text (IA-04): one of them
+ * is written somewhere that overlaps no place of the other. A header repeated
+ * on each page, cited whole for one field and in part (or overlapping) for the
+ * other, overlaps itself on every page: it stays one quote.
  */
-function quotesAreApart(left: PlacedQuote, right: PlacedQuote) {
-  if (left.quote === right.quote || left.copies.length === 0 || right.copies.length === 0) return false;
-  const copyOutside = (copies: number[][], otherPlaces: Set<number>) => copies.some(copy => copy.every(place => !otherPlaces.has(place)));
-  return copyOutside(left.copies, right.places) || copyOutside(right.copies, left.places);
+function quotesAreApart(text: string, left: string, right: string) {
+  if (left === right) return false;
+  const leftPlaces = quotePlaces(text, left);
+  const rightPlaces = quotePlaces(text, right);
+  const placeOutside = (places: Array<[number, number]>, others: Array<[number, number]>) =>
+    places.some(([start, end]) => others.every(([otherStart, otherEnd]) => end <= otherStart || otherEnd <= start));
+  return leftPlaces.length > 0 && rightPlaces.length > 0 &&
+    (placeOutside(leftPlaces, rightPlaces) || placeOutside(rightPlaces, leftPlaces));
 }
 
-/** Whether `count` of these quotes are written each in a place of the CV apart from the others' (IA-04). */
-function quotesInDistinctPlaces(quotes: PlacedQuote[], count: number) {
-  const placed = quotes.filter(item => item.copies.length > 0);
-  if (placed.length < count) return false;
-  const apart = placed.map(left => placed.map(right => quotesAreApart(left, right)));
-  const choose = (chosen: number[], from: number): boolean => {
-    if (chosen.length === count) return true;
-    for (let index = from; index < placed.length; index += 1)
-      if (chosen.every(other => apart[other]![index]) && choose([...chosen, index], index + 1)) return true;
-    return false;
-  };
-  return choose([], 0);
-}
-
-function distinctEvidence<T extends EvidenceBearing>(evidence: T[]): T[] {
+function distinctEvidence<T extends EvidenceBearing>(evidence: T[], paged: boolean): T[] {
   const unique = new Map<string, T>();
   for (const item of evidence) {
-    const key = evidenceProvenance(item);
+    const key = evidenceProvenance(item, paged);
     const existing = unique.get(key);
     if (!existing || (!isVerifiedFact(existing) && isVerifiedFact(item)))
       unique.set(key, item);
@@ -1588,8 +1422,9 @@ function verifiedScoreBreakdown(input: {
   experiences: NormalizedExperience[];
   languages: NormalizedLanguage[];
   certifications: NormalizedCertification[];
-  sourcePassages: NormalizedSourcePassages;
+  sourceText: string;
 }) {
+  const paged = hasPageMarkers(input.sourceText);
   const verifiedFields = input.fieldEvidence.filter(isVerifiedFact);
   const hasVerifiedField = (field: CvEvidenceField) =>
     verifiedFields.some(item => item.field === field);
@@ -1600,7 +1435,7 @@ function verifiedScoreBreakdown(input: {
   );
   const verifiedExperiences = distinctEvidence(distinctExperiencesByFact(
     input.experiences.filter(isVerifiedFact)
-  ));
+  ), paged);
   const languagePoints = new Map<string, number>();
   const proficiencyPoints: Record<NormalizedLanguage["proficiency"], number> = {
     basic: 3,
@@ -1630,12 +1465,10 @@ function verifiedScoreBreakdown(input: {
   const paramedicalDeclared = namesParamedicalProfession(input.targetSpecialty);
   const paramedicalTitle = !paramedicalDeclared && verifiedFields.some(item => item.field === "professionalTitle" && namesParamedicalProfession(item.value, paramedicalTerms));
   // IA-04: 15 points from one quote, 30 only from two different quotes written
-  // on two lines of the CV. The same sentence cited for the title and the
+  // in two places of the CV. The same sentence cited for the title and the
   // specialty counts once, whatever the wording of its place, on another page
-  // (a header repeated on each page), in part (« Médecin anesthésiste » out
-  // of « Titre : Médecin anesthésiste » when it is written nowhere else) or
-  // cut in two (« Médecin anesthésiste » and « réanimateur » of one line,
-  // whatever its punctuation).
+  // (a header repeated on each page) or in part (« Médecin anesthésiste » out
+  // of « Titre : Médecin anesthésiste » when it is written nowhere else).
   const specialtyQuotes = uniqueStrings(
     verifiedFields
       .filter(item =>
@@ -1645,8 +1478,9 @@ function verifiedScoreBreakdown(input: {
       )
       .map(item => normalizeEvidenceText(item.evidence))
   );
-  const twoSpecialtyQuotes = specialtyQuotes.length > 1 &&
-    quotesInDistinctPlaces(specialtyQuotes.map(quote => placeQuote(input.sourcePassages, quote)), 2);
+  const normalizedSource = specialtyQuotes.length > 1 ? normalizeEvidenceText(input.sourceText) : "";
+  const twoSpecialtyQuotes = specialtyQuotes.some((quote, index) =>
+    specialtyQuotes.slice(index + 1).some(other => quotesAreApart(normalizedSource, quote, other)));
   return {
     specialtyMatch: twoSpecialtyQuotes ? 30 : specialtyQuotes.length > 0 ? 15 : 0,
     experienceEvidence: Math.min(
@@ -1687,6 +1521,7 @@ export function normalizeRecruitmentAnalysis(
       `Confiance OCR insuffisante (${declared.extractionConfidence} %) : toutes les preuves nécessitent une vérification manuelle.`
     );
   }
+  const paged = hasPageMarkers(sourceText);
   // IA-07: on a scan, and on the pages the vision read again, a quote is found
   // in what the vision transcribed, not in the file: the admin is told to
   // compare it with the scan. The marking changes no score: whether the score
@@ -1884,13 +1719,12 @@ export function normalizeRecruitmentAnalysis(
       ...transcriptionMark(item.sourceLocation),
     }));
   const evidenceExperiences = distinctExperiencesByFact(normalizedExperiences);
-  const sourcePassages = normalizedSourcePassages(sourceText, { edgeSeries: declared.extractionMethod === "pdf_vision" });
   const allEvidence = distinctEvidence([
     ...evidenceExperiences,
     ...normalizedLanguages,
     ...certifications,
     ...fieldEvidence,
-  ]);
+  ], paged);
   const evidenceCoverage = evidenceCoverageOf(allEvidence);
   const uniqueContradictions = contradictions;
   const unverifiedCount =
@@ -1902,20 +1736,15 @@ export function normalizeRecruitmentAnalysis(
     experiences: normalizedExperiences,
     languages: normalizedLanguages,
     certifications,
-    sourcePassages,
+    sourceText,
   });
   const score = Object.values(scoreBreakdown).reduce(
     (total, value) => total + value,
     0
   );
-  // IA-04: three verified quotes written in three places of the CV, not three
-  // parts of one line, nor one footer cited on three pages.
   const scoreIsTrustworthy =
     !declared.extractionIncomplete &&
-    quotesInDistinctPlaces(
-      uniqueStrings(allEvidence.filter(isVerifiedFact).map(evidenceProvenance)).map(quote => placeQuote(sourcePassages, quote)),
-      3
-    ) &&
+    allEvidence.filter(isVerifiedFact).length >= 3 &&
     evidenceCoverage >= 80 &&
     uniqueContradictions.length === 0 &&
     scoreBreakdown.specialtyMatch > 0 &&
