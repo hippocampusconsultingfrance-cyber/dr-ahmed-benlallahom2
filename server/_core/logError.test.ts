@@ -77,6 +77,24 @@ describe("logError", () => {
     expect(JSON.stringify(warn.mock.calls)).not.toMatch(/synthetic-db-password|app_user/);
   });
 
+  it("garde lisibles les chemins d’un paquet scopé ou du store pnpm, où « @ » n’est pas une adresse", () => {
+    logError("[Reminder] Vercel cron error", new Error("Cannot find module '/var/task/node_modules/@vercel/blob/dist/index.js' imported from /var/task/api/index.js"));
+    logError("Invoice font unreadable", new Error("ENOENT: no such file or directory, open '/var/task/node_modules/.pnpm/pdfkit@0.17.2/node_modules/pdfkit/js/data/Helvetica.afm'"));
+    expect(loggedLines().map(line => line.message)).toEqual([
+      "Cannot find module '/var/task/node_modules/@vercel/blob/dist/index.js' imported from /var/task/api/index.js",
+      "ENOENT: no such file or directory, open '/var/task/node_modules/.pnpm/pdfkit@0.17.2/node_modules/pdfkit/js/data/Helvetica.afm'",
+    ]);
+  });
+
+  it("traite en un temps borné un très long message sans espace (jeton, corps base64)", () => {
+    const startedAt = performance.now();
+    logError("long token", new Error(`invalid token ${"A".repeat(50_000)}`));
+    logError("long spaces", new Error(`${" ".repeat(50_000)}x`));
+    // Read whole, these took seconds (quadratic patterns); read from their start, a few milliseconds.
+    expect(performance.now() - startedAt).toBeLessThan(100);
+    expect(loggedLines().map(line => line.message.length)).toEqual([300, 300]);
+  });
+
   it("coupe un message trop long et ne lit rien d’une valeur qui n’est pas une erreur", () => {
     logError("long", new Error("x".repeat(5_000)));
     logError("not an error", { message: "camille.candidate@example.test", params: ["secret"] });
@@ -104,15 +122,15 @@ describe("logError", () => {
 describe("logError dans tRPC", () => {
   it("une procédure journalise avec le x-vercel-id de sa requête, sans le recevoir", async () => {
     const appRouter = router({
-      candidate: publicProcedure.query(async () => {
+      lookup: publicProcedure.query(async () => {
         await Promise.resolve();
-        logError("candidate_database_operation_failed", failedQuery());
+        logError("[Test] Lookup failed", failedQuery());
         return "refused";
       }),
     });
     const caller = appRouter.createCaller(createTestContext({ req: { headers: { "x-vercel-id": "fra1::iad1::trpc-3" } } }));
-    await expect(caller.candidate()).resolves.toBe("refused");
-    expect(loggedLines()).toEqual([expect.objectContaining({ label: "candidate_database_operation_failed", code: "55P03", vercelId: "fra1::iad1::trpc-3" })]);
+    await expect(caller.lookup()).resolves.toBe("refused");
+    expect(loggedLines()).toEqual([expect.objectContaining({ label: "[Test] Lookup failed", code: "55P03", vercelId: "fra1::iad1::trpc-3" })]);
   });
 
   it("une erreur interne est journalisée sous la référence donnée à l’appelant, avec le x-vercel-id", () => {

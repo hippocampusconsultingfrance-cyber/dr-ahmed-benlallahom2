@@ -20,6 +20,7 @@ import {
   securityEvents,
 } from "../drizzle/schema";
 import { getDb } from "./db";
+import { logError } from "./_core/logError";
 import { CANDIDATE_DOCUMENT_ACCOUNT_FOREIGN_KEY, isForeignKeyViolation } from "./databaseConstraints";
 import { mutationRowCount } from "./dbMutation";
 import { hashSecurityValue } from "./candidateSecurity";
@@ -343,7 +344,7 @@ export async function eraseExpiredCandidateDocuments(input: { now?: Date; limit?
   try {
     await dependencies.storageDelete(documents.map(document => document.storageKey));
   } catch (error) {
-    console.error("[RecruitmentRetention] vault document deletion failed", error instanceof Error ? error.message : "unknown");
+    logError("[RecruitmentRetention] vault document deletion failed", error);
     return { deleted: 0, failed: documents.length };
   }
   const documentIds = documents.map(document => document.id);
@@ -413,7 +414,7 @@ export async function eraseInactiveCandidateAccounts(input: { now?: Date; limit?
       if (keys.size) storageObjectsDeleted += await dependencies.storageDelete(Array.from(keys));
     } catch (error) {
       failed += 1;
-      console.error("[RecruitmentRetention] inactive candidate account storage deletion failed", error instanceof Error ? error.message : "unknown");
+      logError("[RecruitmentRetention] inactive candidate account storage deletion failed", error);
       continue;
     }
     const documentIds = documents.map(document => document.id);

@@ -45,9 +45,9 @@ function fakeResponse() {
   return response;
 }
 
-async function call(path: string, query: Record<string, string> = {}, cookie = "") {
+async function call(path: string, query: Record<string, string> = {}, cookie = "", headers: Record<string, string> = {}) {
   const res = fakeResponse();
-  await handlers.get(path)!({ query, headers: { cookie } }, res);
+  await handlers.get(path)!({ query, headers: { cookie, ...headers } }, res);
   return res;
 }
 
@@ -121,5 +121,18 @@ describe("connexion Google Drive : double authentification administrateur", () =
     const callback = await call("/api/google-drive/oauth/callback", { code: "c", state: "signed-state" }, "__Host-google_drive_oauth_state=signed-state");
     expect(callback.statusCode).toBe(500);
     expect(mocks.calls).toEqual([]);
+  });
+
+  it("journalise l’échec du retour de Google sur une ligne JSON avec le x-vercel-id, sans le code d’autorisation (EXPL-11)", async () => {
+    mocks.context = { user: { openId: "owner", role: "admin" }, mfaVerified: true };
+    mocks.exchangeGoogleDriveAuthorizationCode.mockRejectedValueOnce(new Error("google_drive_token_invalid_grant"));
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const callback = await call("/api/google-drive/oauth/callback", { code: "4/synthetic-authorization-code", state: "signed-state" }, "__Host-google_drive_oauth_state=signed-state", { "x-vercel-id": "cdg1::iad1::drive-6" });
+    expect(callback.statusCode).toBe(500);
+    expect(consoleError.mock.calls.map(([line]) => JSON.parse(String(line)))).toEqual([
+      { label: "[GoogleDrive] OAuth callback failed", name: "Error", message: "google_drive_token_invalid_grant", vercelId: "cdg1::iad1::drive-6" },
+    ]);
+    expect(JSON.stringify(consoleError.mock.calls)).not.toContain("synthetic-authorization-code");
+    consoleError.mockRestore();
   });
 });

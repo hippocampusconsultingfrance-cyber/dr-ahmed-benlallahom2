@@ -4,6 +4,7 @@ import { CANDIDATE_DOCUMENT_ACTIVE_JOB_STATUSES } from "../shared/candidateDocum
 import { getDb } from "./db";
 import { mutationRowCount } from "./dbMutation";
 import { emailLanguageFor } from "./emailLanguage";
+import { logError } from "./_core/logError";
 import { notifyOwner } from "./_core/notification";
 import { runWithProcessingDeadline } from "./processingDeadline";
 import { PUBLIC_FORM_DAILY_VOLUME_THRESHOLDS, PUBLIC_FORM_VOLUME_LABELS, type PublicFormVolumeKind } from "./publicFormRateLimit";
@@ -18,10 +19,6 @@ export type ReminderWindow = { fromMs: number; toMs: number };
  * appointment falls into at least one run; `reminderSent` keeps it to one email.
  */
 export const DAILY_REMINDER_WINDOW: ReminderWindow = { fromMs: 1 * HOUR_MS, toMs: 30 * HOUR_MS };
-
-function safeErrorName(error: unknown) {
-  return error instanceof Error ? error.name : "UnknownError";
-}
 
 /**
  * A booking made this recently has just received its confirmation (RES-12):
@@ -119,16 +116,16 @@ export async function sendDueAppointmentReminders(window: ReminderWindow, now = 
       await sendReminderEmail(apt.customerEmail, apt.customerName, apt.trackingId, apt.appointmentDate, { language: emailLanguageFor(apt.language), idempotencyKey: patientEmailIdempotencyKey(`appointment-reminder-${apt.trackingId}`, apt.customerEmail) });
     } catch (e) {
       failed += 1;
-      console.error("[Reminder] Delivery failed:", safeErrorName(e));
+      logError("[Reminder] Delivery failed", e);
       await db.update(appointments).set({ reminderSent: 0 }).where(and(eq(appointments.id, apt.id), eq(appointments.reminderSent, REMINDER_RESERVED)))
-        .catch(releaseError => console.error("[Reminder] Claim release failed:", safeErrorName(releaseError)));
+        .catch(releaseError => logError("[Reminder] Claim release failed", releaseError));
       continue;
     }
     sent += 1;
     console.log("[Reminder] Sent successfully");
     // Left reserved if this fails: a later run takes it back under the same key.
     await db.update(appointments).set({ reminderSent: 1 }).where(and(eq(appointments.id, apt.id), eq(appointments.reminderSent, REMINDER_RESERVED)))
-      .catch(markError => console.error("[Reminder] Sent reminder not recorded:", safeErrorName(markError)));
+      .catch(markError => logError("[Reminder] Sent reminder not recorded", markError));
   }
 
   return { reminded: upcoming.length, sent, failed };
@@ -205,7 +202,7 @@ export async function requeuePaidAppointmentsWithoutFulfillment(limit = 25, now 
       await enqueueAppointmentFulfillment(appointment.id);
       requeued += 1;
     } catch (error) {
-      console.error("[AppointmentFulfillment] Missing post-payment jobs not queued:", safeErrorName(error));
+      logError("[AppointmentFulfillment] Missing post-payment jobs not queued", error);
     }
   }
   return { requeued };
@@ -216,14 +213,14 @@ export async function runAppointmentFulfillmentWorker(options: { batchSize: numb
   const recovery = await recoverStaleAppointmentFulfillmentJobs();
   // A failure here leaves the jobs already queued to their run.
   const missingJobs = await requeuePaidAppointmentsWithoutFulfillment().catch(error => {
-    console.error("[AppointmentFulfillment] Recovery of paid bookings without jobs failed:", safeErrorName(error));
+    logError("[AppointmentFulfillment] Recovery of paid bookings without jobs failed", error);
     return null;
   });
   const { processed, batches } = await drainInBatches(() => processDueAppointmentFulfillmentJobs(options.batchSize), options);
   // DATA-02: this job runs half a day after the reminder run, still within
   // the key's 24 hours: it takes back the reminders a stopped run left reserved.
   const reminderRecovery = await sendDueAppointmentReminders(DAILY_REMINDER_WINDOW, new Date(), { onlyReserved: true }).catch(error => {
-    console.error("[Reminder] Recovery of reserved reminders failed:", safeErrorName(error));
+    logError("[Reminder] Recovery of reserved reminders failed", error);
     return null;
   });
   return { recovery, missingJobs, processed, results: batches.flatMap(batch => batch.results), reminderRecovery };
@@ -242,12 +239,12 @@ export async function runCandidateDocumentProcessingWorker(options: { batchSize:
   // EXPL-12: a job a stopped run left "running" goes back to the queue first;
   // a failure here leaves the documents already queued to their analysis.
   const recovery = await recoverStaleCandidateDocumentJobs().catch(error => {
-    console.error("[CandidateDocumentProcessing] Interrupted job recovery failed:", safeErrorName(error));
+    logError("[CandidateDocumentProcessing] Interrupted job recovery failed", error);
     return { recovered: 0, exhausted: 0, closed: 0 };
   });
   // DATA-02: a document whose upload stopped before its job gets it first.
   const { recreated } = await recreateMissingCandidateDocumentAnalysisJobs().catch(error => {
-    console.error("[CandidateDocumentProcessing] Missing job recovery failed:", safeErrorName(error));
+    logError("[CandidateDocumentProcessing] Missing job recovery failed", error);
     return { recreated: 0 };
   });
   const { processed, batches } = await runWithProcessingDeadline(
@@ -331,7 +328,7 @@ async function dataIntegrityPending(db: Database, now: Date): Promise<DataIntegr
   const counted = (check: string, queries: () => Array<PromiseLike<unknown[]>>) => Promise.all(queries())
     .then(results => Math.min(limit, results.reduce((total, rows) => total + rows.length, 0)))
     .catch(error => {
-      console.error(`[SecurityReview] Data integrity check ${check} failed:`, safeErrorName(error));
+      logError(`[SecurityReview] Data integrity check ${check} failed`, error);
       return null;
     });
   const activeDocumentJobs = db.select({ documentId: candidateDocumentProcessingJobs.documentId }).from(candidateDocumentProcessingJobs)
@@ -398,7 +395,7 @@ const AWAITING_AI_CREDIT_CAP = 1_000;
  */
 async function ownerActionsPending() {
   const unavailable = <T>(fallback: T) => (error: unknown) => {
-    console.error("[SecurityReview] Pending-action check failed:", safeErrorName(error));
+    logError("[SecurityReview] Pending-action check failed", error);
     return fallback;
   };
   const [googleDriveReconnectRequired, cvAnalysesAwaitingAiCredit] = await Promise.all([

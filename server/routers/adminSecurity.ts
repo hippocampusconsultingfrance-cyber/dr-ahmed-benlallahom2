@@ -1,3 +1,4 @@
+import { logError } from "../_core/logError";
 import { protectedProcedure, router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -20,7 +21,7 @@ export const adminSecurityRouter = router({
       await issueAdminMfaChallenge({ openId: ctx.user.openId, email: ctx.user.email, req: ctx.req });
     } catch (error) {
       if (error instanceof AdminMfaRateLimitError) throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: ADMIN_MFA_RATE_LIMITED_MESSAGE });
-      console.error("[AdminMfa] Unable to issue a security code", error instanceof Error ? error.message : "unknown");
+      logError("[AdminMfa] Unable to issue a security code", error);
       throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Le code de sécurité n’a pas pu être envoyé. Réessayez dans quelques instants." });
     }
     return { success: true };

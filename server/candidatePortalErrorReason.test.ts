@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { DrizzleQueryError } from "drizzle-orm";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { TEST_PEPPER } from "./testSupport/candidatePortal";
 import { listen } from "./testSupport/candidateUploadApp";
 import { formatTrpcErrorShape, PublicErrorReason } from "./_core/trpc";
@@ -7,7 +8,8 @@ import { formatTrpcErrorShape, PublicErrorReason } from "./_core/trpc";
 // à côté du message français inchangé.
 
 process.env.CANDIDATE_AUTH_PEPPER ||= TEST_PEPPER;
-vi.mock("./db", () => ({ getDb: async () => null }));
+const database = vi.hoisted(() => ({ db: null as unknown }));
+vi.mock("./db", () => ({ getDb: async () => database.db }));
 vi.mock("@clerk/express", () => ({
   clerkMiddleware: () => (_req: unknown, _res: unknown, next: () => void) => next(),
   getAuth: () => ({ userId: null }),
@@ -44,5 +46,37 @@ describe("motif stable des refus de l’espace candidat", () => {
     });
     const conflict = { ...shape, data: { ...shape.data, code: "CONFLICT" } };
     expect(formatTrpcErrorShape(conflict, { code: "CONFLICT" })).toBe(conflict);
+  });
+});
+
+// EXPL-11 — une requête refusée par la base est journalisée sur une ligne JSON,
+// avec le x-vercel-id de la requête servie, sans ses paramètres (l’adresse cherchée).
+describe("journal d’une requête refusée dans l’espace candidat", () => {
+  afterEach(() => {
+    database.db = null;
+    vi.restoreAllMocks();
+  });
+
+  it("écrit une ligne : libellé, SQLSTATE, requête sans paramètres et x-vercel-id, et répond le motif stable", async () => {
+    const lockTimeout = Object.assign(new Error("canceling statement due to lock timeout"), { code: "55P03" });
+    const refused = new DrizzleQueryError('select "id", "email" from "candidate_accounts" where "candidate_accounts"."email" = $1', ["camille.candidate@example.test"], lockTimeout);
+    database.db = { select: () => ({ from: () => ({ where: () => ({ limit: () => Promise.reject(refused) }) }) }) };
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const input = encodeURIComponent(JSON.stringify({ json: { email: "camille.candidate@example.test", token: "activation-token-0123456789abcdef" } }));
+    const response = await fetch(`${baseUrl}/api/trpc/candidatePortal.activationDetails?input=${input}`, { headers: { "x-vercel-id": "cdg1::iad1::candidate-5" } });
+    const body = await response.json() as { error: { json: { data: { code: string; reason?: string } } } };
+
+    expect(response.status).toBe(500);
+    expect(body.error.json.data).toMatchObject({ code: "INTERNAL_SERVER_ERROR", reason: "candidate_service_unavailable" });
+    expect(consoleError.mock.calls.map(([line]) => JSON.parse(String(line)))).toEqual([{
+      label: "candidate_database_operation_failed",
+      name: "Error",
+      code: "55P03",
+      message: 'Failed query: select "id", "email" from "candidate_accounts" where "candidate_accounts"."email" = $1',
+      cause: "Error: canceling statement due to lock timeout",
+      vercelId: "cdg1::iad1::candidate-5",
+    }]);
+    expect(JSON.stringify(consoleError.mock.calls)).not.toMatch(/camille|params:/);
   });
 });

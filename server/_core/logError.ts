@@ -4,7 +4,7 @@ import type { IncomingHttpHeaders } from "node:http";
 type RequestWithHeaders = { headers?: IncomingHttpHeaders };
 
 export type LogErrorOptions = {
-  /** The short reference the caller was given (internalErrorReference). */
+  /** The short reference the caller was given (internalErrorReference), or that of the record a report to the owner names. */
   ref?: string;
   /** The request served, for its x-vercel-id. */
   req?: RequestWithHeaders;
@@ -12,11 +12,18 @@ export type LogErrorOptions = {
 };
 
 const MESSAGE_LIMIT = 300;
+// Only the start of a message is read: nothing past it is kept, and the
+// patterns below then take a bounded time on any message (a long token or
+// base64 body without spaces). An address that starts within the
+// MESSAGE_LIMIT characters kept is still read whole.
+const MESSAGE_READ_LIMIT = 1_000;
 // Where a library prints the values it was given after its text: Drizzle's
 // query parameters (emails, password or session hashes), neon's connection
 // string (the database password).
-const PRINTED_VALUES = /\s*(?:\bparams:|Connection string:)/;
-const EMAIL_ADDRESS = /[^\s@<>()[\]"'`,;:]+@[^\s@<>()[\]"'`,;:]+\.[a-z]{2,}/gi;
+const PRINTED_VALUES = /\bparams:|Connection string:/;
+// Neither side holds a slash: a path through a scoped package or pnpm's store
+// (node_modules/@vercel/blob, .pnpm/pdfkit@0.17.2/…) stays readable.
+const EMAIL_ADDRESS = /[^\s@<>()[\]"'`,;:/\\]+@[^\s@<>()[\]"'`,;:/\\]+\.[a-z]{2,}/gi;
 
 const requestLogStorage = new AsyncLocalStorage<{ vercelId?: string }>();
 
@@ -36,7 +43,9 @@ export function runWithRequestLog<T>(req: RequestWithHeaders | undefined, run: (
 }
 
 function safeMessage(message: string): string {
-  return message.split(PRINTED_VALUES)[0].replace(EMAIL_ADDRESS, "[email]").slice(0, MESSAGE_LIMIT);
+  const read = message.slice(0, MESSAGE_READ_LIMIT);
+  const printedAt = read.search(PRINTED_VALUES);
+  return (printedAt < 0 ? read : read.slice(0, printedAt).trimEnd()).replace(EMAIL_ADDRESS, "[email]").slice(0, MESSAGE_LIMIT);
 }
 
 function errorCode(error: unknown): string | undefined {

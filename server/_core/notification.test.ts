@@ -151,6 +151,23 @@ describe("notifyOwner", () => {
     expect(send).toHaveBeenCalledTimes(1);
   });
 
+  it("logs Resend's refusal on one JSON line, by its error name and without the address it repeats (EXPL-11)", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    send.mockResolvedValue({ data: null, error: { name: "validation_error", statusCode: 403, message: "You can only send testing emails to your own email address (owner.synthetic@example.test)." } });
+    const { notifyOwner } = await import("./notification");
+
+    await expect(notifyOwner({ title: "Nouveau message", content: "Référence C123" })).resolves.toBe(false);
+
+    expect(warn.mock.calls).toEqual([[expect.any(String)]]);
+    expect(JSON.parse(warn.mock.calls[0]![0] as string)).toEqual({
+      label: "[Notification] Resend rejected the owner notification",
+      name: "ResendError",
+      code: "validation_error",
+      message: "You can only send testing emails to your own email address ([email]).",
+    });
+    warn.mockRestore();
+  });
+
   it("logs a used-up Resend quota as a high-severity event, without an alert loop (ABUS-03)", async () => {
     send.mockResolvedValue({ data: null, error: { name: "daily_quota_exceeded", statusCode: 429, message: "You have reached your daily quota" } });
     const { notifyOwner } = await import("./notification");

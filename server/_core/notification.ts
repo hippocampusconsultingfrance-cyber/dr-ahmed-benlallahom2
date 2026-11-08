@@ -1,6 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { Resend } from "resend";
 import { startFitsDeadline } from "../processingDeadline";
+import { logError } from "./logError";
 import { reportResendQuotaError, resendDeliveryFailureCode, sendSlotBeforeNewTry, sendWithRateLimitRetry } from "./resendDelivery";
 
 export type NotificationPayload = {
@@ -212,7 +213,8 @@ export async function notifyOwner(
         ? resend.emails.send(message, { idempotencyKey })
         : resend.emails.send(message));
       if (!error) return true;
-      console.warn(`[Notification] Resend rejected the owner notification: ${error.message}`);
+      // Resend's answer is not an Error: logged under its name, its message without the address it may repeat.
+      logError("[Notification] Resend rejected the owner notification", Object.assign(new Error(error.message), { name: "ResendError", providerError: error }), { level: "warn" });
       // A used-up quota is logged as a high-severity event. Its owner alert,
       // refused in turn, logs one more event; the alert's slot, held during
       // the send, then stops the chain.
