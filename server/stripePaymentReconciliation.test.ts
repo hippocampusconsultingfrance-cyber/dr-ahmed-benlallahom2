@@ -3,7 +3,7 @@ import { PgDialect } from "drizzle-orm/pg-core";
 import Stripe from "stripe";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { appointmentFulfillmentJobs, appointments, availabilitySlots, blockedDates, securityEvents } from "../drizzle/schema";
-import type { TrpcContext } from "./_core/context";
+import { createTestContext } from "./testSupport/trpcContext";
 import { createInMemoryDrizzle, type InMemoryDrizzle } from "./testSupport/inMemoryDrizzle";
 import { listen } from "./testSupport/candidateUploadApp";
 
@@ -213,11 +213,7 @@ async function postEvent(type: string, object: Record<string, unknown>, id = `ev
 }
 
 function publicStatus() {
-  return appRouter.createCaller({
-    user: null,
-    req: { protocol: "https", headers: {}, ip: "192.0.2.10" } as unknown as TrpcContext["req"],
-    res: { clearCookie: vi.fn() } as unknown as TrpcContext["res"],
-  }).appointments.publicStatus({ trackingId: TRACKING_ID, sessionId: SESSION_ID });
+  return appRouter.createCaller(createTestContext({ req: { ip: "192.0.2.10" } })).appointments.publicStatus({ trackingId: TRACKING_ID, sessionId: SESSION_ID });
 }
 
 async function runHoldCleanup() {
@@ -236,11 +232,7 @@ const jobStates = () => db().rows(appointmentFulfillmentJobs).map(job => [job.jo
 const parisDay = (date: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris" }).format(date);
 
 function bookedSlots(date: Date) {
-  return appRouter.createCaller({
-    user: null,
-    req: { protocol: "https", headers: {}, ip: "192.0.2.10" } as unknown as TrpcContext["req"],
-    res: { clearCookie: vi.fn() } as unknown as TrpcContext["res"],
-  }).availability.getBookedSlots({ date: parisDay(date) });
+  return appRouter.createCaller(createTestContext({ req: { ip: "192.0.2.10" } })).availability.getBookedSlots({ date: parisDay(date) });
 }
 
 /** Half-hour slot three days ahead, as the booking page offers them, with the whole week open. */
@@ -253,11 +245,7 @@ function bookableSlot(offsetMinutes = 0) {
 }
 
 function book(appointmentDate: Date, customerEmail = "nouveau@example.test") {
-  return appRouter.createCaller({
-    user: null,
-    req: { protocol: "https", headers: { "x-forwarded-for": "192.0.2.20" }, ip: "192.0.2.20" } as unknown as TrpcContext["req"],
-    res: { clearCookie: vi.fn() } as unknown as TrpcContext["res"],
-  }).appointments.create({ customerName: "Nouveau Patient", customerEmail, customerPhone: "+33 6 12 34 56 78", appointmentDate: appointmentDate.toISOString(), requestDetails: "Demande d’avis" });
+  return appRouter.createCaller(createTestContext({ req: { headers: { "x-forwarded-for": "192.0.2.20" }, ip: "192.0.2.20" } })).appointments.create({ customerName: "Nouveau Patient", customerEmail, customerPhone: "+33 6 12 34 56 78", appointmentDate: appointmentDate.toISOString(), requestDetails: "Demande d’avis" });
 }
 
 /** HTTP code and stable reason of a refused booking, which the booking page translates (EN-06). */

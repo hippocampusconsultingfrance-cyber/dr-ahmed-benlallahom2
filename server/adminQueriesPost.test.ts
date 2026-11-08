@@ -113,7 +113,7 @@ describe("ADM-02 — requêtes de l’administration en POST", () => {
     // What a cross-site <form> can send without a CORS preflight: refused before the procedure runs.
     // tRPC alone would run a query sent as multipart/form-data (its type set by fetch, with the boundary).
     const form = () => { const body = new FormData(); body.set("search", "François"); body.set("0", batchBody); return body; };
-    const forgeries = [
+    const forgeries: Array<{ headers: Record<string, string>; body: string | FormData }> = [
       { headers: { "content-type": "text/plain" }, body: batchBody },
       { headers: { "content-type": "application/x-www-form-urlencoded" }, body: batchBody },
       { headers: {}, body: form() },

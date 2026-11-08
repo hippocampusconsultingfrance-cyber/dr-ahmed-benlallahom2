@@ -4,7 +4,7 @@ import { DrizzleQueryError, type SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import superjson from "superjson";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { TrpcContext } from "./_core/context";
+import { createTestContext } from "./testSupport/trpcContext";
 import { BOOKING_INVALID_NAME_MESSAGE, BOOKING_INVALID_PHONE_MESSAGE, BOOKING_REFUSAL_REASONS, BOOKING_TOO_SOON_MESSAGE } from "../shared/bookingPolicy";
 
 // EN-06 — refus de réservation : un motif stable accompagne le message français
@@ -104,11 +104,7 @@ async function postCreate(input: Record<string, unknown>, procedure = "appointme
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ 0: superjson.serialize(input) }),
     }),
-    createContext: (): TrpcContext => ({
-      user: null,
-      req: { protocol: "https", headers: {}, ip: "192.0.2.1" } as unknown as TrpcContext["req"],
-      res: { clearCookie: vi.fn() } as unknown as TrpcContext["res"],
-    }),
+    createContext: () => createTestContext({ req: { ip: "192.0.2.1" } }),
   });
   const [body] = await response.json() as Array<{ error?: { json: { message: string; data: { code: string; reason?: string } } }; result?: unknown }>;
   return body.error?.json ?? null;

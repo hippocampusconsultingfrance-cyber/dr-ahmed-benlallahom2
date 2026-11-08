@@ -831,15 +831,16 @@ const STRICT_CHECKS = ["noImplicitAny", "noImplicitThis", "strictNullChecks", "s
 /**
  * tsconfig.json, which no step's command shows either, read as TypeScript reads it (its
  * `extends`, `files`, `include` and `exclude`): `tsc --noEmit` checks the types of every
- * source file of client/src, server and shared, in strict mode. Not `include: []`, nor
- * `noCheck`, as `tsc --noCheck` is refused above, nor `strict: false` or one of its checks
- * turned off.
+ * source file of client/src, server and shared, and of every test file (CODE-03), in strict
+ * mode. Not `include: []`, nor `exclude` of the tests, nor `noCheck`, as `tsc --noCheck` is
+ * refused above, nor `strict: false` or one of its checks turned off.
  */
 function expectTypeScriptChecksEverySource(tsconfig: string) {
   const file = path.join(root, "tsconfig.json");
   const parsed = ts.parseJsonConfigFileContent(readJsonWithComments(file, tsconfig), ts.sys, root, undefined, file);
   const checked = new Set(parsed.fileNames.map(fromRoot));
   expect(repositorySources().filter(source => !checked.has(source)), "tsconfig.json: source files left out").toEqual([]);
+  expect(repositoryTests().filter(test => !checked.has(test)), "tsconfig.json: test files left out").toEqual([]);
   expect(parsed.options.noCheck ?? false, "tsconfig.json: noCheck").toBe(false);
   expect(parsed.options.strict ?? false, "tsconfig.json: strict").toBe(true);
   expect(STRICT_CHECKS.filter(option => parsed.options[option] === false), "tsconfig.json: strict checks turned off").toEqual([]);
@@ -1249,7 +1250,7 @@ describe("intégration continue GitHub", () => {
     const verify = (scripts: Record<string, string>, exceptions?: readonly NamedException[]) => () =>
       expectNoNeutralizedStep(FIXTURE_WORKFLOW, fixturePackageJson(scripts), exceptions);
     // A script that only names its tool, or runs another one.
-    for (const scripts of [{ check: "echo tsc --noEmit" }, { check: "true # tsc --noEmit" }, { check: "tsc" }, { "test:ci": "node scripts/run-tests.mjs" }, { knip: "echo knip" }]) {
+    for (const scripts of [{ check: "echo tsc --noEmit" }, { check: "true # tsc --noEmit" }, { check: "tsc" }, { "test:ci": "node scripts/run-tests.mjs" }, { knip: "echo knip" }] as Array<Record<string, string>>) {
       const [name] = Object.keys(scripts);
       expect(verify(scripts), name).toThrow(new RegExp(`^script "${name}": `));
     }
@@ -1271,7 +1272,7 @@ describe("intégration continue GitHub", () => {
       { "test:ci": "vitest run --reporter=dot" },
       { knip: "knip --reporter compact --no-progress" },
       { build: "NODE_ENV=production vite build && esbuild server/index.ts --outfile=api/index.js" },
-    ]) {
+    ] as Array<Record<string, string>>) {
       expect(verify(scripts), JSON.stringify(scripts)).not.toThrow();
     }
     // Through another script run alone, the tool itself still has to run, given nothing more.
@@ -1413,7 +1414,7 @@ describe("intégration continue GitHub", () => {
     }
     // A script the steps run changed, or one pnpm runs by itself. A script « vitest » runs in no step:
     // this check runs vitest by its file.
-    for (const scripts of [{ check: "ln -sf /bin/true node_modules/.bin/tsc && tsc --noEmit" }, { build: "vite build" }]) {
+    for (const scripts of [{ check: "ln -sf /bin/true node_modules/.bin/tsc && tsc --noEmit" }, { build: "vite build" }] as Array<Record<string, string>>) {
       expect(verify(workflow, scripts), JSON.stringify(scripts)).toThrow(/^package\.json: scripts the quality job runs: /);
     }
     expect(verify(workflow, { vitest: "node -e 0" })).not.toThrow();
@@ -1622,6 +1623,7 @@ describe("intégration continue GitHub", () => {
       ["files [] and include []", { files: [], include: [] }, {}],
       ["client/src only", { include: ["client/src/**/*"] }, {}],
       ["server excluded", { exclude: [...(tsconfig.exclude as string[]), "server/**"] }, {}],
+      ["tests excluded, as until CODE-03", { exclude: [...(tsconfig.exclude as string[]), "**/*.test.ts"] }, {}],
       ["noCheck", {}, { noCheck: true }],
     ] as const) {
       expect(() => expectTypeScriptChecksEverySource(tsconfigWith(changes, compilerOptions)), what).toThrow(/^tsconfig\.json: /);

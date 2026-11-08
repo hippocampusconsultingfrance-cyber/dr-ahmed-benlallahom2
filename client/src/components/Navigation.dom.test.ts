@@ -21,7 +21,7 @@ function Form() {
   const [name, setName] = useState("");
   return createElement("label", null, content.nav.getInTouch, createElement("input", { value: name, onChange: (event: { target: { value: string } }) => setName(event.target.value) }));
 }
-const mount = ({ withForm = false } = {}) => render(createElement(ThemeProvider, { defaultTheme: "dark", switchable: true }, createElement(LanguageProvider, null, createElement(Navigation), withForm ? createElement(Form) : null)));
+const mount = ({ withForm = false } = {}) => render(createElement(ThemeProvider, { defaultTheme: "dark", switchable: true, children: createElement(LanguageProvider, null, createElement(Navigation), withForm ? createElement(Form) : null) }));
 const openMobileMenu = () => fireEvent.click(screen.getByRole("button", { name: copy.openMenu }));
 const mainNavigation = () => screen.getByRole("navigation", { name: copy.mainNavigation });
 const mobileNavigation = () => screen.getByRole("navigation", { name: copy.mobileNavigation });

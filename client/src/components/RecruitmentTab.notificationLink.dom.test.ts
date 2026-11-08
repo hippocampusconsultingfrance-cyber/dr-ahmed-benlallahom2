@@ -55,7 +55,7 @@ const dossier = (id: number, trackingId: string) => ({
   cvOriginalName: "cv.pdf", cvSizeBytes: 120_000, fileValidationStatus: "accepted", fileSecurityScanVersion: null, createdAt: "2026-10-01T08:00:00.000Z", retentionUntil: null,
   certificationFacts: [], driveExport: null, emailDelivery: null, candidatePortalActive: false, candidatePortalInvitation: null, candidatePortalActivation: null,
 });
-const mount = (initialSearch?: string) => render(createElement(QueryClientProvider, { client: new QueryClient() }, createElement(RecruitmentTab, initialSearch ? { initialSearch } : {})));
+const mount = (initialSearch?: string) => render(createElement(QueryClientProvider, { client: new QueryClient() }, createElement<{ initialSearch?: string }>(RecruitmentTab, initialSearch ? { initialSearch } : {})));
 const card = (name: string) => screen.getByRole("heading", { name }).closest("article")!;
 const toggle = (name: string) => screen.getByRole("button", { name: new RegExp(`^${name}`) });
 

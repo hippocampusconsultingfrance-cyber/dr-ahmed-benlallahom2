@@ -49,7 +49,7 @@ function Preferences() {
   );
 }
 
-const mount = () => render(createElement(ThemeProvider, { defaultTheme: "dark", switchable: true }, createElement(LanguageProvider, null, createElement(Preferences), createElement(CookieConsent), createElement(AnalyticsConsent))));
+const mount = () => render(createElement(ThemeProvider, { defaultTheme: "dark", switchable: true, children: createElement(LanguageProvider, null, createElement(Preferences), createElement(CookieConsent), createElement(AnalyticsConsent)) }));
 
 afterEach(() => {
   cleanup();

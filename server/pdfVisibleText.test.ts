@@ -3,7 +3,7 @@ import PDFDocument from "pdfkit";
 import { PNG } from "pngjs";
 import { describe, expect, it } from "vitest";
 import { DOCUMENT_DECOMPRESSION_LIMITS } from "./documentDecompressionLimits";
-import { pdfStandardFontDataUrl, readPdfIsolated } from "./pdfExtractionSandbox";
+import { pdfStandardFontDataUrl, readPdfIsolated, type PdfTextReading } from "./pdfExtractionSandbox";
 import { visibleTextContent, type PdfVisibilityFindings } from "./pdfVisibleText";
 
 // IA-01, deuxième tour : l'encre est attribuée à chaque opération de texte de
@@ -89,8 +89,10 @@ describe("encre attribuée à chaque opération de texte (IA-01)", () => {
     const reading = await readPdfIsolated(await pdf(document => {
       visibleLines(document);
       document.fillColor("black").save().addContent("3 Tr");
-      CLAIMS.forEach((claim, index) => document.text(claim, 50, lineY(index), { lineBreak: false, horizontalScaling: 97 }));
-      NURSE_CV.forEach((line, index) => document.text(line, 50.35, lineY(index), { lineBreak: false, horizontalScaling: 97 }));
+      // pdfkit draws horizontalScaling, which its types do not list.
+      const narrower = { lineBreak: false, horizontalScaling: 97 };
+      CLAIMS.forEach((claim, index) => document.text(claim, 50, lineY(index), narrower));
+      NURSE_CV.forEach((line, index) => document.text(line, 50.35, lineY(index), narrower));
       document.addContent("0 Tr").restore();
     }), { kind: "text", first: 25 });
     const text = textOf(reading);
@@ -240,7 +242,7 @@ describe("encre attribuée à chaque opération de texte (IA-01)", () => {
     const quiet = await readPdfIsolated(file, { kind: "text", first: 25 }, limits);
     // The same file again while other threads keep the processor busy.
     const busy = Array.from({ length: 3 }, () => new Worker("const end = Date.now() + 3000; while (Date.now() < end) {}", { eval: true }));
-    let loaded: Awaited<ReturnType<typeof readPdfIsolated>>;
+    let loaded: PdfTextReading;
     try {
       loaded = await readPdfIsolated(file, { kind: "text", first: 25 }, limits);
     } finally {

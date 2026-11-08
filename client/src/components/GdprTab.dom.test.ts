@@ -55,7 +55,7 @@ describe("ADM-09 — demande ouverte depuis le lien d’une notification", () =>
     view.requests = [request(1, "GAAAA0001", "Personne Une"), request(2, "GBBBB0002", "Personne Deux")];
     const scrolled: Element[] = [];
     vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(function (this: Element) { scrolled.push(this); });
-    render(createElement(GdprTab, { reference: "GBBBB0002" }));
+    render(createElement<{ reference?: string }>(GdprTab, { reference: "GBBBB0002" }));
 
     const linked = screen.getByText("Personne Deux").closest("[aria-current]")!;
     expect(linked.getAttribute("aria-current")).toBe("true");
@@ -68,7 +68,7 @@ describe("ADM-09 — demande ouverte depuis le lien d’une notification", () =>
   it("ne déplace rien pour une référence qu’aucune demande affichée n’a", () => {
     view.requests = [request(1, "GAAAA0001", "Personne Une")];
     const scrollIntoView = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => undefined);
-    render(createElement(GdprTab, { reference: "GZZZZ9999" }));
+    render(createElement<{ reference?: string }>(GdprTab, { reference: "GZZZZ9999" }));
 
     expect(screen.getByText("Personne Une")).toBeTruthy();
     expect(document.querySelector("[aria-current]")).toBeNull();

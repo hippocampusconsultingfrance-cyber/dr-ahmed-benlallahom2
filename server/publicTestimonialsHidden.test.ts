@@ -1,17 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { PUBLIC_FEATURES, isPublicTestimonialsEnabled } from "../shared/publicFeatures";
-import type { TrpcContext } from "./_core/context";
+import { createTestContext } from "./testSupport/trpcContext";
 
 const getDbMock = vi.fn();
 vi.mock("./db", () => ({ getDb: (...args: unknown[]) => getDbMock(...args) }));
-
-function publicContext(): TrpcContext {
-  return {
-    user: null,
-    req: { protocol: "https", headers: {} } as TrpcContext["req"],
-    res: { clearCookie: vi.fn() } as unknown as TrpcContext["res"],
-  };
-}
 
 // Accueil, routeur et composants : client/src/publicTestimonials.render.test.ts ;
 // gestion dans l’administration : client/src/pages/AdminDashboard.tabs.test.ts.
@@ -25,7 +17,7 @@ describe("témoignages masqués du site public (M22 / LEGAL-08)", () => {
   it("ne publient plus rien par l'API publique, sans même interroger la base", async () => {
     const { appRouter } = await import("./routers");
     getDbMock.mockReset();
-    const caller = appRouter.createCaller(publicContext());
+    const caller = appRouter.createCaller(createTestContext());
 
     await expect(caller.testimonials.list({ language: "fr" })).resolves.toEqual([]);
     await expect(caller.testimonials.list({ language: "en", featured: 1 })).resolves.toEqual([]);

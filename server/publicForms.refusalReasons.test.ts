@@ -4,7 +4,7 @@ import { PgDialect } from "drizzle-orm/pg-core";
 import superjson from "superjson";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { securityEvents } from "../drizzle/schema";
-import type { TrpcContext } from "./_core/context";
+import { createTestContext } from "./testSupport/trpcContext";
 import { createInMemoryDrizzle, type InMemoryDrizzle } from "./testSupport/inMemoryDrizzle";
 
 // ABUS-01 — un message de contact ou une demande RGPD refusé porte un motif
@@ -55,11 +55,7 @@ async function post(kind: FormKind, input: Record<string, unknown>, req: { heade
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ 0: superjson.serialize(input) }),
     }),
-    createContext: (): TrpcContext => ({
-      user: null,
-      req: { protocol: "https", ...req } as unknown as TrpcContext["req"],
-      res: { clearCookie: vi.fn() } as unknown as TrpcContext["res"],
-    }),
+    createContext: () => createTestContext({ req }),
   });
   const [body] = await response.json() as Array<{ error?: { json: ErrorBody }; result?: unknown }>;
   return { status: response.status, error: body.error?.json ?? null };

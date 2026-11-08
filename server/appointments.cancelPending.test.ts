@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { appRouter, PUBLIC_FORM_RATE_LIMITS } from "./routers";
-import type { TrpcContext } from "./_core/context";
+import { createTestContext } from "./testSupport/trpcContext";
 import { appointments } from "../drizzle/schema";
 import { hashSecurityValue } from "./candidateSecurity";
 import { createInMemoryDrizzle } from "./testSupport/inMemoryDrizzle";
@@ -34,13 +34,7 @@ vi.mock("stripe", () => ({
   })),
 }));
 
-function publicContext(): TrpcContext {
-  return {
-    user: null,
-    req: { protocol: "https", headers: {} } as unknown as TrpcContext["req"],
-    res: { clearCookie: vi.fn() } as unknown as TrpcContext["res"],
-  };
-}
+const publicContext = (req: Record<string, unknown> = {}) => createTestContext({ req });
 
 function fakeDb() {
   const db = { update: vi.fn(() => ({ set: () => ({ where: () => ({ returning: async () => [{ customerEmail: "patient@example.test" }] }) }) })) };
@@ -138,7 +132,7 @@ describe("appointments.cancelPending — créneau libéré dans la base", () => 
     const bookingIp = `${PUBLIC_FORM_RATE_LIMITS.bookingIp.action}|ip:${hashSecurityValue(ip)}`;
     const bookingEmail = `${PUBLIC_FORM_RATE_LIMITS.bookingEmail.action}|email:patient@example.test`;
     const givenBack = `${PUBLIC_FORM_RATE_LIMITS.bookingGiveBackIp.action}|ip:${hashSecurityValue(ip)}`;
-    const cancelFrom = (sessionId = "cs_test_back") => appRouter.createCaller({ ...publicContext(), req: { protocol: "https", headers: {}, ip } as unknown as TrpcContext["req"] }).appointments.cancelPending({ sessionId });
+    const cancelFrom = (sessionId = "cs_test_back") => appRouter.createCaller(publicContext({ ip })).appointments.cancelPending({ sessionId });
     mocks.attempts.clear();
     mocks.attempts.set(bookingIp, 3);
     mocks.attempts.set(bookingEmail, 3);

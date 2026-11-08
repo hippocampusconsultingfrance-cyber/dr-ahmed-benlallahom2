@@ -532,7 +532,7 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
     const fakeTurnstile = "let rendered = 0; window.turnstile = { render(element, options) { rendered += 1; setTimeout(() => options.callback(`fake-turnstile-token-${rendered}-0123456789`), 0); return `widget-${rendered}`; }, remove() {}, reset() {} };";
     const { page, calls, alerts } = await open("/booking", bookingProcedures({ "appointments.create": () => refusals.shift() }), {
       language: "en",
-      beforeGoto: (page) => page.route("https://challenges.cloudflare.com/**", (request) => request.fulfill({ contentType: "text/javascript", body: fakeTurnstile })),
+      beforeGoto: async (page) => { await page.route("https://challenges.cloudflare.com/**", (request) => request.fulfill({ contentType: "text/javascript", body: fakeTurnstile })); },
     });
     await page.locator("#booking-name").fill("Test Patient");
     await page.locator("#booking-email").fill("patient@example.test");

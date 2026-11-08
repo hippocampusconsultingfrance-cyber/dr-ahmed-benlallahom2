@@ -821,7 +821,7 @@ describe("missions employeurs : classement, certifications et accord du candidat
     await expect(consent(candidate.id, "2026-10-18")).rejects.toMatchObject({ message: "La date de l’accord du candidat ne peut pas précéder la création de la mission, le 19/10/2026.", cause: { reason: "consent_before_mission", date: "2026-10-19" } });
     await expect(consent(latecomer.id, "2026-10-20")).rejects.toMatchObject({ message: "La date de l’accord du candidat ne peut pas précéder sa candidature, reçue le 21/10/2026.", cause: { reason: "consent_before_application", date: "2026-10-21" } });
     // What the browser receives, through the router's error formatter: the reason and the day in data.
-    const refused = await consent(candidate.id, "2026-10-18").catch((error: TRPCError) => error);
+    const refused = await consent(candidate.id, "2026-10-18").then(() => expect.fail("the consent should be refused"), (error: TRPCError) => error);
     expect(formatTrpcErrorShape({ message: refused.message, data: { code: refused.code } }, refused).data).toEqual({ code: "BAD_REQUEST", reason: "consent_before_mission", date: "2026-10-19" });
     // The same day is accepted.
     await consent(candidate.id, "2026-10-19");

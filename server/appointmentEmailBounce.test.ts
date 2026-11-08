@@ -154,7 +154,7 @@ describe("EXPL-13 — email patient refusé après acceptation", () => {
     const paid = seedAppointment("APTBOUNCE001");
     seedJob(paid.id, "owner", { status: "completed", attempts: 1 });
     seedJob(paid.id, "confirmation");
-    await processAppointmentFulfillmentNow(paid.id);
+    await processAppointmentFulfillmentNow(paid.id as number);
     const [confirmation] = state.sent;
     expect(confirmation).toMatchObject({ to: ["jeanne.typo@test.local"], tags: [{ name: "email_kind", value: "appointment_confirmation" }, { name: "appointment_ref", value: "APTBOUNCE001" }] });
     expect(job(paid.id, "confirmation")).toMatchObject({ status: "completed", last_error: null });

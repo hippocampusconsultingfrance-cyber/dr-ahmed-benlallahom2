@@ -1,6 +1,6 @@
 import type { SQL } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/neon-http";
-import { PgDialect } from "drizzle-orm/pg-core";
+import { PgDialect, type SelectedFields } from "drizzle-orm/pg-core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { cvApplications, cvProcessingJobs } from "../drizzle/schema";
 import { enqueueCvAnalysis } from "./recruitmentProcessing";
@@ -20,7 +20,7 @@ function enqueueDatabase(reads: JobRead[], jobRowCounts: number[]) {
   const jobWrites: Array<{ values: Record<string, unknown>; where: SQL }> = [];
   const applicationWrites: Array<{ values: Record<string, unknown>; where: SQL }> = [];
   const db = {
-    select: vi.fn((selection: { id: unknown }) => {
+    select: vi.fn((selection: SelectedFields) => {
       if (readIndex >= reads.length) return queryBuilder.select(selection);
       return {
         from: (table: unknown) => {

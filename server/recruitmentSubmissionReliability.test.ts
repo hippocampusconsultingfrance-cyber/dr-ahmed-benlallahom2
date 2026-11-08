@@ -56,7 +56,8 @@ const cv = validPdfBuffer();
 let baseUrl = "";
 let close: () => Promise<void> = async () => undefined;
 
-function db() { return state.db as InMemoryDrizzle; }
+/** The in-memory database, with the raw INSERT of the application row answered (beforeEach). */
+function db() { return state.db as InMemoryDrizzle & { execute: () => Promise<{ rows: Array<{ id: number }> }> }; }
 
 beforeAll(async () => {
   const listening = await listen((await createApp()) as never);

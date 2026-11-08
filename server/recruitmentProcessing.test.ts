@@ -3,7 +3,7 @@ import { drizzle } from "drizzle-orm/neon-http";
 import { and, eq } from "drizzle-orm";
 import { cvApplications } from "../drizzle/schema";
 import { analysisCompletionStatus, cvAnalysisEnqueueDisposition, cvExtractionPersistenceFields, didClaimProcessingJob, executeCvExternalPipeline, extractionMethodFor, recoveredCvAnalysisRetryIsCurrent, retryDelayMs } from "./recruitmentProcessing";
-import type { InvisibleTextSummary } from "./recruitmentAnalysis";
+import type { InvisibleTextSummary, RecruitmentAnalysisExecution, RecruitmentAnalysisResult } from "./recruitmentAnalysis";
 
 const checksum = "a".repeat(64);
 const input = {
@@ -23,7 +23,7 @@ const input = {
   message: null,
 };
 
-const analysis = {
+const analysis: RecruitmentAnalysisResult = {
   summary: "Profil professionnel vérifiable.",
   professionalTitle: "Anesthésiste",
   specialties: ["Anesthésie"],
@@ -53,14 +53,14 @@ const analysis = {
   reasoning: "Revue humaine requise.",
 };
 
-const analysisExecution = {
+const analysisExecution: RecruitmentAnalysisExecution = {
   result: analysis,
   model: "openai/gpt-5.6-sol",
   generationId: "generation-test",
   usage: { inputTokens: 120, outputTokens: 80, totalTokens: 200 },
 };
 
-const steps = {
+const steps: Parameters<typeof executeCvExternalPipeline>[1] = {
   download: async () => Buffer.alloc(320, 1),
   promote: async () => ({ key: "recruitment/cv/CV-001-cv.pdf" }),
   validate: () => ({ checksum, notes: "signature_verified", mimeType: "application/pdf", pageCount: 1, securityScanVersion: "document-safety-v2", warnings: [] }),
@@ -101,7 +101,8 @@ describe("règles déterministes du pipeline de traitement CV", () => {
   });
 
   it("n'affiche un job récupéré comme en attente que s'il n'a pas déjà été revendiqué", () => {
-    const db = drizzle.mock();
+    // A query builder without a connection, typed as the application's database.
+    const db = drizzle.mock() as unknown as Parameters<typeof recoveredCvAnalysisRetryIsCurrent>[0];
     const update = db.update(cvApplications).set({ analysisStatus: "queued" }).where(and(
       eq(cvApplications.id, 42),
       recoveredCvAnalysisRetryIsCurrent(db, 7, 1),

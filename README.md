@@ -31,7 +31,7 @@ pnpm dev                  # http://localhost:3000 (Express + Vite en mode middle
 | Commande | Rôle |
 | --- | --- |
 | `pnpm dev` | Serveur de développement |
-| `pnpm check` | Vérification TypeScript |
+| `pnpm check` | Vérification TypeScript, fichiers de test compris |
 | `pnpm test` | Suite Vitest complète (certains tests exigent des variables d'environnement, voir `.github/workflows/ci.yml`) |
 | `pnpm test:ci` | Suite utilisée par la CI |
 | `pnpm build` | Build Vite, pré-rendu SEO par page (`scripts/prerender-route-seo.ts`), bundle serveur `dist/index.js` et fonction Vercel `api/index.js` |

@@ -15,7 +15,7 @@ function latestPgSnapshot(): Snapshot {
   return JSON.parse(read(`drizzle/pg/meta/${String(last.idx).padStart(4, "0")}_snapshot.json`)) as Snapshot;
 }
 
-const schemaTables = Object.values(schema)
+const schemaTables = Object.values(schema as Record<string, unknown>)
   .filter((value): value is PgTable => value instanceof PgTable)
   .map(table => getTableConfig(table));
 

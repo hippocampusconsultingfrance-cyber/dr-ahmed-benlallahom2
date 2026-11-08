@@ -82,7 +82,7 @@ const EMPTY_STATE = "Shortlist assistée";
 const MISSION_GONE = "Cette mission n’existe plus : elle a été supprimée entre-temps.";
 
 function mount(client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } }), props: { reference?: string } = {}) {
-  render(createElement(QueryClientProvider, { client }, createElement(EmployerBriefsTab, props)));
+  render(createElement(QueryClientProvider, { client }, createElement<{ reference?: string }>(EmployerBriefsTab, props)));
   return client;
 }
 /** Opens a mission from the list on the left, as the admin does. */

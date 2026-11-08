@@ -170,7 +170,7 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
   });
 
   it("ne laisse pas les échecs de campagne évincer la file de reprise des confirmations", () => {
-    const query = buildFailedConfirmationRetryCandidateQuery(drizzle.mock()).toSQL();
+    const query = buildFailedConfirmationRetryCandidateQuery(drizzle.mock() as unknown as Parameters<typeof buildFailedConfirmationRetryCandidateQuery>[0]).toSQL();
     expect(query.sql).toContain('"recruitment_email_events"."payload" like');
     expect(query.sql).toContain('exists (select "id" from "recruitment_email_events" "confirmation_attempt_events"');
     expect(query.params).toEqual([
@@ -204,7 +204,9 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
       return match ? params[Number(match[1]) - 1] : undefined;
     };
 
-    vi.spyOn(db.session, "prepareQuery").mockImplementation(query => {
+    // Each query runs through the session's prepareQuery, which drizzle's types keep to itself.
+    const { session } = db as unknown as { session: { prepareQuery: (query: { sql: string; params: unknown[] }) => unknown } };
+    vi.spyOn(session, "prepareQuery").mockImplementation(query => {
       const prepared = {
         setToken: () => prepared,
         execute: async () => {

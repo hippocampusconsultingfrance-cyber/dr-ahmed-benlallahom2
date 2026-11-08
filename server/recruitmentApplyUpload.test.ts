@@ -133,7 +133,7 @@ describe("POST /api/recruitment/apply — réception du CV (multer) et validatio
     const countries = await apply({ cvs: [{ buffer: validPdfBuffer() }], fields: { targetCountries: JSON.stringify(tooManyCountries) } });
     expect(countries).toEqual({ status: 400, body: { error: "Vous pouvez sélectionner jusqu’à 18 pays ciblés.", code: "recruitment_target_countries_too_many" } });
 
-    for (const fields of [{ email: "pas-une-adresse" }, { gdprConsent: "0" }, { targetCountries: "[]" }]) {
+    for (const fields of [{ email: "pas-une-adresse" }, { gdprConsent: "0" }, { targetCountries: "[]" }] as Array<Record<string, string>>) {
       const invalid = await apply({ cvs: [{ buffer: validPdfBuffer() }], fields });
       expect(invalid, JSON.stringify(fields)).toMatchObject({ status: 400, body: { error: "Les informations de candidature sont invalides." } });
     }

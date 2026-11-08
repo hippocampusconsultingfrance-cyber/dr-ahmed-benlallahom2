@@ -33,9 +33,9 @@ const trpcClient = trpc.createClient({ links: [() => () => observable(() => () =
 function render(children: ReactNode, path = "/") {
   const queryClient = new QueryClient();
   return renderToStaticMarkup(
-    createElement(trpc.Provider, { client: trpcClient, queryClient },
+    createElement(trpc.Provider, { client: trpcClient, queryClient, children:
       createElement(QueryClientProvider, { client: queryClient },
-        createElement(Router, { ssrPath: path }, createElement(LanguageProvider, null, children)))),
+        createElement(Router, { ssrPath: path, children: createElement(LanguageProvider, null, children) })) }),
   );
 }
 

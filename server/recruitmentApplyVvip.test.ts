@@ -166,7 +166,6 @@ describe("INTL-03 — candidature VVIP avec plusieurs environnements", () => {
       expect(logged).not.toContain("confidentielle");
 
       expect(vvipSubmissionErrorMessage(result.body, "fr")).toBe("Les informations de candidature sont invalides.");
-      expect(vvipSubmissionErrorMessage(result.body, "en")).not.toBe(vvipOffshoreCopy.en.required);
       expect(vvipSubmissionErrorMessage(result.body, "en")).toBe("The application details are invalid.");
     } finally {
       warn.mockRestore();
@@ -185,7 +184,7 @@ describe("REC-03 — refus de la vraie route affichés par la page VVIP, traduit
       const shown = refusals.map(body => vvipSubmissionErrorMessage(body, language));
       expect(new Set(shown).size, language).toBe(refusals.length);
       for (const [index, message] of shown.entries()) {
-        expect([t.required, t.genericError, t.fileError], `${language}: ${String(refusals[index].code)}`).not.toContain(message);
+        expect([t.genericError, t.fileError], `${language}: ${String(refusals[index].code)}`).not.toContain(message);
         expect(message).not.toBe(refusals[index].error);
       }
     }

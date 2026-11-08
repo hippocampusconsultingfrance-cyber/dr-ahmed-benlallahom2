@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { TrpcContext } from "./_core/context";
+import { createTestContext } from "./testSupport/trpcContext";
 
 // BOOK-SUCCESS-UNVERIFIED (état réel sur la page de retour + email au patient),
 // BOOK-ERROR-MSG (Stripe indisponible), SEC-01 (aucun texte SQL/fournisseur au client).
@@ -36,11 +36,7 @@ import { handleCheckoutSessionCompleted } from "./appointmentPaymentWebhook";
 import { formatTrpcErrorShape, GENERIC_INTERNAL_ERROR_MESSAGE } from "./_core/trpc";
 
 function caller() {
-  return appRouter.createCaller({
-    user: null,
-    req: { protocol: "https", headers: {}, ip: "192.0.2.9" } as unknown as TrpcContext["req"],
-    res: { clearCookie: vi.fn() } as unknown as TrpcContext["res"],
-  });
+  return appRouter.createCaller(createTestContext({ req: { ip: "192.0.2.9" } }));
 }
 
 function dbReturning(appointment: Record<string, unknown> | null) {
