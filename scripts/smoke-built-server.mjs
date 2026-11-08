@@ -36,11 +36,12 @@ import { pathToFileURL } from "node:url";
  * et un code cohérent (200 seulement si tout est « ok »), puis une requête tRPC
  * anonyme, qui traverse clerkMiddleware.
  *
- * Le bundle garde en import("…") à la demande des paquets (stripe, pdf-parse,
- * mammoth…) : un paquet absent n'y échoue qu'à la première requête qui le
- * charge. Chacun doit donc se résoudre depuis le bundle, et les routes
- * principales sont appelées : webhook Stripe mal signé (400 attendu, et non le
- * 500 d'un SDK introuvable), webhook Resend sans signature (400), tâche
+ * Le bundle garde en import("…") à la demande des paquets (stripe, pdfkit,
+ * @vercel/blob, svix, pdf-parse, mammoth… : EXPL-15) : un paquet absent n'y
+ * échoue qu'à la première requête qui le charge. Chacun doit donc se résoudre
+ * depuis le bundle, et les routes principales sont appelées : webhook Stripe
+ * mal signé (400 attendu, et non le 500 d'un SDK introuvable), webhook Resend
+ * sans signature (400, et non le 500 d'un svix introuvable), tâche
  * planifiée avec le CRON_SECRET factice (403 sans lui ; avec lui, la tâche va
  * jusqu'à la base injoignable : 500 dont la trace, sous la même référence,
  * n'est pas une erreur de module), calcul public du prix d'une réservation
