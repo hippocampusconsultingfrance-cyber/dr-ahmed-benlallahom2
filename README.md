@@ -32,14 +32,15 @@ pnpm dev                  # http://localhost:3000 (Express + Vite en mode middle
 | --- | --- |
 | `pnpm dev` | Serveur de développement |
 | `pnpm check` | Vérification TypeScript, fichiers de test compris |
-| `pnpm test` | Suite Vitest complète (certains tests exigent des variables d'environnement, voir `.github/workflows/ci.yml`) |
-| `pnpm test:ci` | Suite utilisée par la CI |
+| `pnpm test` | Suite Vitest complète, sans aucun secret : `vitest.config.ts` donne aux tests les valeurs factices de la CI, une valeur posée dans l'environnement restant celle utilisée |
+| `pnpm test:ci` | Suite utilisée par la CI, la même : aucun fichier de test écarté |
 | `pnpm build` | Build Vite, pré-rendu SEO par page (`scripts/prerender-route-seo.ts`), bundle serveur `dist/index.js` et fonction Vercel `api/index.js` |
 | `pnpm start` | Lance le build Express (hébergement hors Vercel) |
 | `pnpm test:visual` | Régression visuelle (Playwright, Chromium trouvé seul ou donné par `CHROMIUM`) ; `pnpm test:visual:record` écrit les candidats dans `tmp/visual-regression` (ignoré par git) ou `VISUAL_BASELINE_DIR` |
 | `pnpm check:performance` | Build + budgets de performance |
 | `node scripts/smoke-built-server.mjs` | Après `pnpm build` : démarre `api/index.js` et `dist/index.js` avec des variables factices, sans lire `.env` ni joindre d'autre machine, vérifie que chaque paquet chargé à la demande se résout, puis appelle `/api/health`, une requête tRPC anonyme, le prix d'une réservation, les webhooks Stripe et Resend et une tâche planifiée (CI) |
 | `node scripts/check-migrations-in-sync.mjs` | Vérifie que `drizzle/pg` décrit exactement `drizzle/schema.ts` (CI) |
+| `node scripts/check-google-drive-oauth.mjs` | Contrôle manuel, hors CI : Google reconnaît `GOOGLE_DRIVE_CLIENT_ID` et `GOOGLE_DRIVE_CLIENT_SECRET` (environnement ou `.env`), sans émettre de jeton |
 
 ## Structure
 

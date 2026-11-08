@@ -11,7 +11,7 @@
     "knip": "knip",
     "format": "prettier --write .",
     "test": "vitest run",
-    "test:ci": "vitest run --exclude server/googleDriveOAuthCredentials.test.ts --exclude server/googleDriveExport.test.ts",
+    "test:ci": "vitest run",
     "test:visual": "node scripts/visual-regression.mjs",
     "test:visual:record": "VISUAL_BASELINE_MODE=record node scripts/visual-regression.mjs",
     "test:booking-keyboard": "node scripts/booking-keyboard-input.mjs",

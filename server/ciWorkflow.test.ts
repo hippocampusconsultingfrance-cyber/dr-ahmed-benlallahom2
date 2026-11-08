@@ -242,16 +242,11 @@ const OTHER_ARGUMENTS = "a tool given other arguments";
 /**
  * The lines the checks below leave out, each named by its step (`step "Verify TypeScript"`)
  * or script (`script "knip"`) and its exact text, with why that is no failure going
- * unnoticed. A line changed in any way is checked again.
+ * unnoticed. A line changed in any way is checked again. None since CODE-11: test:ci runs
+ * every test file, the check of Google's real OAuth endpoint having become a manual script
+ * (scripts/check-google-drive-oauth.mjs).
  */
-const NAMED_EXCEPTIONS: readonly NamedException[] = [
-  {
-    where: 'script "test:ci"',
-    line: "vitest run --exclude server/googleDriveOAuthCredentials.test.ts --exclude server/googleDriveExport.test.ts",
-    allows: OTHER_ARGUMENTS,
-    reason: "googleDriveOAuthCredentials.test.ts calls Google's real OAuth endpoint, which the CI must not reach; googleDriveExport.test.ts has been set aside since 6139269 (CODE-11 brings it back). Any other file left out changes the line.",
-  },
-];
+const NAMED_EXCEPTIONS: readonly NamedException[] = [];
 
 /** What in a command lets it pass though one of its commands fails, outside the lines named for it with a reason. */
 function silencersIn(command: string, where: string, silencers: readonly Silencer[], exceptions: readonly NamedException[]) {
@@ -554,10 +549,10 @@ const QUALITY_STEPS: readonly Readonly<Record<string, string>>[] = [
   { name: "Find unused files and dependencies", if: AFTER_BUILD, run: "pnpm knip" },
 ];
 
-/** The package.json scripts these steps run, each as it is: test:ci with the two files named above. */
+/** The package.json scripts these steps run, each as it is: test:ci leaving no test file out (CODE-11). */
 const QUALITY_SCRIPTS: Readonly<Record<string, string>> = {
   check: "tsc --noEmit",
-  "test:ci": "vitest run --exclude server/googleDriveOAuthCredentials.test.ts --exclude server/googleDriveExport.test.ts",
+  "test:ci": "vitest run",
   build: `NODE_ENV=production vite build && tsx scripts/prerender-route-seo.ts && esbuild server/_core/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist && esbuild server/vercelEntry.ts --platform=node --packages=external --bundle --format=esm --banner:js="import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" --outfile=api/index.js`,
   knip: "knip",
 };
@@ -689,6 +684,20 @@ import path from "path";
 
 const templateRoot = path.resolve(import.meta.dirname);
 
+// Dummy secrets, those of the CI, so that \`pnpm test\` passes on a fresh clone without any (CODE-11).
+// A value set in the environment is kept; with these, no test reaches a real service.
+const DUMMY_SECRETS = {
+  RESEND_API_KEY: "re_test_dummy_key_12345678",
+  STRIPE_SECRET_KEY: "sk_test_51N9oXjDummyKeyForContinuousIntegration000000",
+  TURNSTILE_SECRET_KEY: "1x00000000000000000000AA",
+  CANDIDATE_AUTH_PEPPER: "dummy_pepper_for_ci_testing_32_chars_long",
+  CANDIDATE_DOCUMENT_ENCRYPTION_KEY: "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=",
+  JWT_SECRET: "dummy_jwt_secret_for_ci_testing_32_chars_long",
+  GOOGLE_DRIVE_CLIENT_ID: "dummy_client_id",
+  GOOGLE_DRIVE_CLIENT_SECRET: "dummy_client_secret",
+  GOOGLE_DRIVE_CV_FOLDER_ID: "dummy_ci_folder_id",
+};
+
 export default defineConfig({
   root: templateRoot,
   // Même runtime JSX que l'application (@vitejs/plugin-react) pour les tests qui rendent des composants.
@@ -702,6 +711,7 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    env: Object.fromEntries(Object.entries(DUMMY_SECRETS).map(([name, dummy]) => [name, process.env[name] || dummy])),
     // Critical screens mounted by React with Testing Library declare \`// @vitest-environment happy-dom\`.
     // Their DOM loads no script, style sheet or frame and never navigates, so no test reaches the network.
     environmentOptions: {
@@ -1246,7 +1256,7 @@ describe("intégration continue GitHub", () => {
     expect(verify(FIXTURE_WORKFLOW, {}, undefined, { ".npmrc": "engine-strict=true\n", "pnpm-workspace.yaml": 'packages:\n  - "."\n' })).not.toThrow();
   });
 
-  it("n'accepte d'un script lancé par le job quality que son outil, seul ou avec une option qui ne change que l'affichage, hors la ligne nommée de test:ci (CODE-14)", () => {
+  it("n'accepte d'un script lancé par le job quality que son outil, seul ou avec une option qui ne change que l'affichage, hors une ligne nommée avec sa raison (CODE-14)", () => {
     const verify = (scripts: Record<string, string>, exceptions?: readonly NamedException[]) => () =>
       expectNoNeutralizedStep(FIXTURE_WORKFLOW, fixturePackageJson(scripts), exceptions);
     // A script that only names its tool, or runs another one.
@@ -1279,14 +1289,17 @@ describe("intégration continue GitHub", () => {
     expect(verify({ check: "pnpm run typecheck", typecheck: "tsc --noEmit" })).not.toThrow();
     expect(verify({ check: "pnpm run typecheck", typecheck: "echo tsc --noEmit" })).toThrow(/^script "check": /);
     expect(verify({ check: "pnpm run typecheck --noCheck", typecheck: "tsc --noEmit" })).toThrow(/^script "check": /);
-    // The exclusions of test:ci pass on their exact line, named with its reason, and for that check only.
-    const real = { "test:ci": NAMED_EXCEPTIONS[0]!.line };
-    expect(verify(real)).not.toThrow();
-    expect(verify(real, [])).toThrow(/^script "test:ci": /);
-    expect(verify(real, [{ ...NAMED_EXCEPTIONS[0]!, allows: "||" }])).toThrow(/^script "test:ci": /);
-    expect(verify(real, [{ ...NAMED_EXCEPTIONS[0]!, reason: " " }])).toThrow(/^script "test:ci": /);
-    expect(verify({ "test:ci": `${real["test:ci"]} --passWithNoTests` })).toThrow(/^script "test:ci": /);
-    expect(verify({ "test:ci": `${real["test:ci"]} || true` })).toThrow(/^script "test:ci": /);
+    // A file left out of test:ci, as two were until CODE-11, passes on its exact line only, named with
+    // its reason, and for that check only; the project names none.
+    const exclusion: NamedException = { where: 'script "test:ci"', line: "vitest run --exclude server/externalService.test.ts", allows: OTHER_ARGUMENTS, reason: "calls a real external service, which the CI must not reach" };
+    const excluding = { "test:ci": exclusion.line };
+    expect(NAMED_EXCEPTIONS).toEqual([]);
+    expect(verify(excluding, [exclusion])).not.toThrow();
+    expect(verify(excluding)).toThrow(/^script "test:ci": /);
+    expect(verify(excluding, [{ ...exclusion, allows: "||" }])).toThrow(/^script "test:ci": /);
+    expect(verify(excluding, [{ ...exclusion, reason: " " }])).toThrow(/^script "test:ci": /);
+    expect(verify({ "test:ci": `${exclusion.line} --passWithNoTests` }, [exclusion])).toThrow(/^script "test:ci": /);
+    expect(verify({ "test:ci": `${exclusion.line} || true` }, [exclusion])).toThrow(/^script "test:ci": /);
   });
 
   it("refuse un réglage de pnpm qui change le shell des scripts ou les saute, une fonction, un alias ou un fichier lu avant une commande, et ce qui change l'environnement des étapes suivantes (CODE-14)", () => {

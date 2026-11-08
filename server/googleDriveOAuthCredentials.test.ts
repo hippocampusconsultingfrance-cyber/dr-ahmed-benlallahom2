@@ -1,29 +1,56 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { checkGoogleDriveOAuthCredentials, GOOGLE_DRIVE_OAUTH_REDIRECT_URI, GOOGLE_OAUTH_TOKEN_URL } from "../scripts/check-google-drive-oauth.mjs";
+import { buildGoogleDriveAuthorizationUrl, createGoogleDriveOAuthState } from "./googleDriveExport";
 
-describe("identifiants OAuth Google Drive", () => {
-  it("sont reconnus par le point de terminaison OAuth sans émettre de jeton", async () => {
-    const clientId = process.env.GOOGLE_DRIVE_CLIENT_ID;
-    const clientSecret = process.env.GOOGLE_DRIVE_CLIENT_SECRET;
-    expect(clientId).toBeTruthy();
-    expect(clientSecret).toBeTruthy();
+// The check of the real credentials against Google is a manual script (CODE-11), which the
+// suite and the CI never run: here it is checked against a stand-in for Google's endpoint.
+const CREDENTIALS = { GOOGLE_DRIVE_CLIENT_ID: "synthetic-client.apps.googleusercontent.com", GOOGLE_DRIVE_CLIENT_SECRET: "synthetic-client-secret" };
 
-    const payload = new URLSearchParams({
-      client_id: clientId!,
-      client_secret: clientSecret!,
+const google = (status: number, body: unknown) => vi.fn(async (_url: string, _init: RequestInit) => Response.json(body, { status }));
+
+describe("contrôle manuel des identifiants OAuth Google Drive", () => {
+  it("envoie un code d’essai volontairement invalide, et tient les identifiants pour reconnus quand Google refuse ce code (invalid_grant)", async () => {
+    const fetchImpl = google(400, { error: "invalid_grant", error_description: "Malformed auth code." });
+
+    await expect(checkGoogleDriveOAuthCredentials({ environment: CREDENTIALS, fetchImpl })).resolves.toEqual({
+      ok: true,
+      message: "Identifiants OAuth Google Drive reconnus : le code d'essai est refusé comme prévu, aucun jeton n'est émis.",
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(url).toBe(GOOGLE_OAUTH_TOKEN_URL);
+    expect(init.method).toBe("POST");
+    expect(Object.fromEntries(new URLSearchParams(String(init.body)))).toEqual({
+      client_id: CREDENTIALS.GOOGLE_DRIVE_CLIENT_ID,
+      client_secret: CREDENTIALS.GOOGLE_DRIVE_CLIENT_SECRET,
       code: "credential-validation-probe",
       grant_type: "authorization_code",
-      redirect_uri: "https://drahmedbenlallahom.com/api/google-drive/oauth/callback",
+      redirect_uri: GOOGLE_DRIVE_OAUTH_REDIRECT_URI,
     });
-    const response = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: payload,
-    });
-    const result = await response.json() as { error?: string };
+  });
 
-    // The deliberately invalid authorization code must be rejected as a grant,
-    // never as a client authentication failure. No OAuth token is requested or stored.
-    expect(response.status).toBe(400);
-    expect(result.error).toBe("invalid_grant");
-  }, 15_000);
+  it("essaie l’adresse de retour que le site donne à Google lors de la connexion de Drive", () => {
+    const authorizationUrl = new URL(buildGoogleDriveAuthorizationUrl(createGoogleDriveOAuthState()));
+    expect(authorizationUrl.searchParams.get("redirect_uri")).toBe(GOOGLE_DRIVE_OAUTH_REDIRECT_URI);
+  });
+
+  it.each([
+    [401, { error: "invalid_client", error_description: "The OAuth client was not found." }, "HTTP 401, invalid_client"],
+    [400, { error: "redirect_uri_mismatch" }, "HTTP 400, redirect_uri_mismatch"],
+    [503, "Service Unavailable", "HTTP 503, réponse sans code d'erreur"],
+  ])("signale un refus de Google (HTTP %i) sans jamais recopier le secret", async (status, body, said) => {
+    const result = await checkGoogleDriveOAuthCredentials({ environment: CREDENTIALS, fetchImpl: google(status, body) });
+
+    expect(result).toEqual({ ok: false, message: `Identifiants OAuth Google Drive refusés : ${said}.` });
+    expect(result.message).not.toContain(CREDENTIALS.GOOGLE_DRIVE_CLIENT_SECRET);
+  });
+
+  it("ne joint pas Google quand un des identifiants manque", async () => {
+    const fetchImpl = google(400, { error: "invalid_grant" });
+
+    for (const environment of [{}, { GOOGLE_DRIVE_CLIENT_ID: CREDENTIALS.GOOGLE_DRIVE_CLIENT_ID }, { ...CREDENTIALS, GOOGLE_DRIVE_CLIENT_SECRET: "  " }]) {
+      await expect(checkGoogleDriveOAuthCredentials({ environment, fetchImpl })).resolves.toEqual({ ok: false, message: "GOOGLE_DRIVE_CLIENT_ID et GOOGLE_DRIVE_CLIENT_SECRET sont requis." });
+    }
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
 });
