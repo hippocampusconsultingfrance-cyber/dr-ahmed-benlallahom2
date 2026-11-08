@@ -55,6 +55,10 @@ function mount() {
   return render(createElement(QueryClientProvider, { client }, createElement(LanguageProvider, null, createElement(BookingPage))));
 }
 const field = (id: string) => document.getElementById(id) as HTMLInputElement;
+/** Niveaux des titres du contenu principal, dans l'ordre de lecture. */
+const headingLevels = () => [...document.getElementById("main-content")!.querySelectorAll("h1, h2, h3, h4, h5, h6")].map(heading => Number(heading.tagName.slice(1)));
+/** Réservation en attente de paiement gardée par l'onglet avant le départ vers Stripe. */
+const PENDING = { trackingId: "APTDOMPENDING1", checkoutSessionId: "cs_test_pending_dom", customerName: "Jeanne Martin", customerEmail: "jeanne@example.test", finalPrice: 100, appointmentDate: "2026-11-03T09:00:00.000Z", holdExpiresAt: "2026-11-02T07:25:00.000Z" };
 
 /** Fills the form and picks the first time of the first open day, as a patient would. */
 function fillForm() {
@@ -86,6 +90,7 @@ afterEach(() => {
   cleanup();
   localStorage.clear();
   sessionStorage.clear();
+  window.history.replaceState(null, "", "/");
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
@@ -381,7 +386,7 @@ describe("erreurs et repères du parcours de réservation (RES-10, A11Y-10, INTL
 
     // Tarif affiché : « Tarification » est un h2 sous le h1, et aucun titre ne précède le h1.
     expect(screen.getByRole("heading", { level: 2, name: content.pricing.title })).toBeTruthy();
-    const levels = [...document.getElementById("main-content")!.querySelectorAll("h1, h2, h3, h4, h5, h6")].map(heading => Number(heading.tagName.slice(1)));
+    const levels = headingLevels();
     expect(levels[0]).toBe(1);
     levels.forEach((level, index) => { if (index > 0) expect(level, `${levels}`).toBeLessThanOrEqual(levels[index - 1] + 1); });
   });
@@ -398,9 +403,25 @@ describe("erreurs et repères du parcours de réservation (RES-10, A11Y-10, INTL
   });
 
   it("place le focus sur le titre du paiement en attente retrouvé au retour de Stripe", async () => {
-    sessionStorage.setItem("booking:pending:v1", JSON.stringify({ trackingId: "APTDOMPENDING1", checkoutSessionId: "cs_test_pending_dom", customerName: "Jeanne Martin", customerEmail: "jeanne@example.test", finalPrice: 100, appointmentDate: "2026-11-03T09:00:00.000Z", holdExpiresAt: "2026-11-02T07:25:00.000Z" }));
+    sessionStorage.setItem("booking:pending:v1", JSON.stringify(PENDING));
     mount();
-    const title = await screen.findByRole("heading", { name: content.pending.title });
+    const card = await screen.findByRole("region", { name: content.pending.title });
+    const title = document.getElementById("pending-booking-title")!;
+    expect(card.contains(title)).toBe(true);
     await waitFor(() => expect(document.activeElement).toBe(title));
+  });
+
+  it.each([
+    ["paiement en attente", () => sessionStorage.setItem("booking:pending:v1", JSON.stringify(PENDING)), content.pending.title],
+    ["paiement confirmé", () => window.history.replaceState(null, "", "/booking?success=true&trackingId=APTDOMSUCCESS1"), content.paymentSuccess],
+    ["paiement annulé", () => window.history.replaceState(null, "", "/booking?canceled=true"), content.paymentCanceled],
+  ] as const)("%s au retour de Stripe : la carte, région nommée par son titre, ne place aucun titre avant le h1 (A11Y-15)", async (_state, arrive, title) => {
+    arrive();
+    mount();
+    const card = await screen.findByRole("region", { name: title });
+    expect(card.querySelector("h1, h2, h3, h4, h5, h6")).toBeNull();
+    const levels = headingLevels();
+    expect(levels[0], `${levels}`).toBe(1);
+    levels.forEach((level, index) => { if (index > 0) expect(level, `${levels}`).toBeLessThanOrEqual(levels[index - 1] + 1); });
   });
 });
