@@ -25,10 +25,10 @@ vi.mock("@clerk/express", () => ({
 }));
 vi.mock("./_core/notifications", async importOriginal => ({
   ...await importOriginal<typeof import("./_core/notifications")>(),
-  sendRecruitmentCampaignEmail: vi.fn(async (input: { candidateEmail: string }) => {
-    state.sentTo.push(input.candidateEmail);
-    return { id: `email-${state.sentTo.length}` };
-  }),
+  sendRecruitmentCampaignBatch: vi.fn(async (emails: Array<{ to: string }>) => ({
+    ids: emails.map(email => `email-${state.sentTo.push(email.to)}`),
+    error: null,
+  })),
 }));
 
 const { createApp } = await import("./_core/index");

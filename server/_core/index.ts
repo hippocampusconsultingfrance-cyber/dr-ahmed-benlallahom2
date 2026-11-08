@@ -14,6 +14,7 @@ import { createContext } from "./context";
 import { registerCandidateDocumentRoutes } from "../routes/candidateDocuments";
 import { registerClientBriefRoute } from "../routes/clientBriefs";
 import { registerRecruitmentApplyRoute } from "../routes/recruitmentApply";
+import { registerRecruitmentUnsubscribeRoute } from "../routes/recruitmentUnsubscribe";
 import { registerResendWebhookRoute } from "../routes/resendWebhook";
 import { PUBLIC_APP_ORIGIN } from "../routes/routeHelpers";
 import { registerScheduledJobRoutes } from "../routes/scheduled";
@@ -85,6 +86,8 @@ export async function createApp() {
   registerClientBriefRoute(app);
   registerRecruitmentApplyRoute(app);
   registerCandidateDocumentRoutes(app);
+  // One-click unsubscribe of the campaigns, posted by mail clients (RGPD-19).
+  registerRecruitmentUnsubscribeRoute(app);
 
   // /sitemap.xml is generated at build time into dist/public by
   // scripts/prerender-route-seo.ts from the prerendered routes (served by the

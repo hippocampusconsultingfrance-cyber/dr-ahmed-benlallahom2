@@ -17,7 +17,7 @@ import {
 import { storageGetSignedUrl } from "../../storage";
 import { canAdminDownloadCv, CV_DOWNLOAD_UNAVAILABLE_MESSAGE } from "../../recruitmentDownloadPolicy";
 import { eq, and, or, sql, desc, inArray, isNull, ne } from "drizzle-orm";
-import { sendRecruitmentTemplateEmail, type RecruitmentEmailLanguage, type RecruitmentEmailTemplate } from "../../_core/notifications";
+import { buildRecruitmentTemplateEmail, sendRecruitmentTemplateEmail, type RecruitmentEmailLanguage, type RecruitmentEmailTemplate } from "../../_core/notifications";
 import { logRecruitmentAction, matchesRecruitmentProfile, parseRecruitmentJsonArray, RECRUITMENT_PROFILE_SCAN_LIMIT, recordWithRecruitmentAudit, recruitmentAuditInsert, traceRecruitmentActionDone } from "../../recruitmentAudit";
 import { analysedLanguageNames } from "../../clientBriefMatching";
 import { certificationFactLabel, recruitmentFactLabel, type RecruitmentFact } from "../../../shared/recruitmentFactOrigins";
@@ -48,6 +48,23 @@ import { adminRecruitmentCampaignsRouter, adminRecruitmentOfferTemplatesRouter }
 import { adminRecruitmentCandidateRouter, adminRecruitmentFollowUpsRouter } from "./recruitmentCandidate";
 
 const CV_APPLICATION_STATUSES = ["new", "reviewing", "shortlisted", "placed", "rejected", "archived"] as const;
+
+/** An individual email of the composer: its candidate, template, language and free request. */
+const templateEmailInput = z.object({
+  id: z.number(),
+  template: z.enum(["profile_interest", "additional_information"]),
+  language: z.enum(["fr", "en"]).optional().default("fr"),
+  customRequest: z.string().trim().max(3000).optional(),
+});
+
+/** The first name and reference an individual email greets and quotes (MAIL-13). */
+async function templateEmailApplication(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const [application] = await db.select({ firstName: cvApplications.firstName, trackingId: cvApplications.trackingId }).from(cvApplications).where(eq(cvApplications.id, id)).limit(1);
+  if (!application) throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable" });
+  return application;
+}
 
 function csvCell(value: unknown): string {
   const text = value === null || value === undefined ? "" : String(value);
@@ -852,13 +869,31 @@ export const adminRecruitmentRouter = router({
       return { success: true, queued, processed: processing.processed, aiUnavailable };
     }),
 
+  /** The exact email the composer would send this candidate, rendered by its real builder (MAIL-13); nothing is sent nor recorded. */
+  previewTemplateEmail: adminProcedure
+    .input(templateEmailInput)
+    .query(async ({ input }) => {
+      const application = await templateEmailApplication(input.id);
+      const email = buildRecruitmentTemplateEmail(application.firstName, application.trackingId, input.template, { language: input.language, customRequest: input.customRequest });
+      return { subject: email.subject, html: email.html };
+    }),
+
+  /**
+   * « M'envoyer un test » (MAIL-13): the same email, to the verified address of
+   * the signed-in admin only; the candidate's application, status and journal
+   * are left as they are.
+   */
+  sendTemplateTest: adminProcedure
+    .input(templateEmailInput)
+    .mutation(async ({ input, ctx }) => {
+      if (!ctx.user.email) throw new TRPCError({ code: "BAD_REQUEST", message: "Aucune adresse email vérifiée n’est associée à votre compte administrateur." });
+      const application = await templateEmailApplication(input.id);
+      await sendRecruitmentTemplateEmail(ctx.user.email, application.firstName, application.trackingId, input.template, { language: input.language, customRequest: input.customRequest });
+      return { success: true, to: ctx.user.email };
+    }),
+
   sendTemplateEmail: adminProcedure
-    .input(z.object({
-      id: z.number(),
-      template: z.enum(["profile_interest", "additional_information"]),
-      language: z.enum(["fr", "en"]).optional().default("fr"),
-      customRequest: z.string().trim().max(3000).optional(),
-    }))
+    .input(templateEmailInput)
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new Error("Database connection failed");

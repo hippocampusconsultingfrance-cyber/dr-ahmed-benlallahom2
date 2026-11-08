@@ -1071,35 +1071,107 @@ export async function sendRecruitmentTemplateEmail(
   return { id: id ?? undefined };
 }
 
-export async function sendRecruitmentCampaignEmail(input: {
-  candidateEmail: string;
+export type RecruitmentCampaignEmailInput = {
   candidateFirstName: string;
   campaignTitle: string;
   subject: string;
   body: string;
   language: RecruitmentEmailLanguage;
+  /** The page of the link in the email, which asks for a confirmation. */
   unsubscribeUrl: string;
-  /** One per campaign recipient: a retried send never delivers the offer twice (DATA-05). */
-  idempotencyKey?: string;
-}): Promise<{ id?: string }> {
+  /** The address of the List-Unsubscribe header, which unsubscribes in one click (RGPD-19). */
+  oneClickUnsubscribeUrl: string;
+};
+
+/**
+ * One campaign email, as each recipient gets it: the HTML of the common
+ * frame, its plain-text part, and the headers of the one-click unsubscribe
+ * (RFC 8058, required by Gmail and Yahoo for bulk senders), proper to the
+ * recipient (RGPD-19). No mailto: in List-Unsubscribe until an unsubscribe
+ * mailbox exists (PUB-19).
+ */
+export function buildRecruitmentCampaignEmail(input: RecruitmentCampaignEmailInput) {
   const copy = input.language === "en"
-    ? { footer: "This offer concerns your professional profile.", unsubscribe: "Unsubscribe from future recruitment opportunities" }
-    : { footer: "Cette offre concerne votre profil professionnel.", unsubscribe: "Ne plus recevoir d’opportunités de recrutement" };
-  const { id, error } = await sendThroughResend({
-    from: FROM_EMAIL,
-    to: [input.candidateEmail],
-    replyTo: RECRUITMENT_REPLY_TO,
+    ? { footer: "This offer concerns your professional profile.", unsubscribe: "Unsubscribe from future recruitment opportunities", labelSeparator: ":" }
+    : { footer: "Cette offre concerne votre profil professionnel.", unsubscribe: "Ne plus recevoir d’opportunités de recrutement", labelSeparator: " :" };
+  const greeting = unverifiedRecipientGreeting(input.candidateFirstName, input.language);
+  return {
     subject: input.subject,
     html: buildHippocampusEmailShell(`
         <h2 style="color: #0891b2;">${escapeHtml(input.campaignTitle)}</h2>
-        <p>${escapeHtml(unverifiedRecipientGreeting(input.candidateFirstName, input.language))}</p>
+        <p>${escapeHtml(greeting)}</p>
         <p>${textToSafeHtml(input.body)}</p>
         <p style="color: #64748b;">${copy.footer}</p>
         <p style="font-size: 12px;"><a href="${escapeHtml(input.unsubscribeUrl)}" style="color: #0e7490;">${copy.unsubscribe}</a></p>
     `, input.language, { brand: "hippocampus", title: input.subject }),
+    text: `${input.campaignTitle}\n\n${greeting}\n\n${input.body}\n\n${copy.footer}\n\n${copy.unsubscribe}${copy.labelSeparator} ${input.unsubscribeUrl}\n\n${emailSignature("hippocampus")}`,
+    headers: {
+      "List-Unsubscribe": `<${input.oneClickUnsubscribeUrl}>`,
+      "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    },
+  };
+}
+
+export async function sendRecruitmentCampaignEmail(input: RecruitmentCampaignEmailInput & {
+  candidateEmail: string;
+  /** One per campaign recipient: a retried send never delivers the offer twice (DATA-05). */
+  idempotencyKey?: string;
+}): Promise<{ id?: string }> {
+  const email = buildRecruitmentCampaignEmail(input);
+  const { id, error } = await sendThroughResend({
+    from: FROM_EMAIL,
+    to: [input.candidateEmail],
+    replyTo: RECRUITMENT_REPLY_TO,
+    ...email,
   }, input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : undefined, "recruitment_campaign");
   if (error) throw new Error(`Resend campaign email failed: ${error.message}`);
   return { id: id ?? undefined };
+}
+
+/** Most emails Resend takes in one call of its batch endpoint, which takes no attachment (EXPL-08). */
+export const RESEND_BATCH_MAX_EMAILS = 100;
+
+export type RecruitmentCampaignBatchEmail = ReturnType<typeof buildRecruitmentCampaignEmail> & { to: string };
+
+export type RecruitmentCampaignBatchDelivery =
+  | { ids: Array<string | null>; error: null }
+  | {
+      ids: null;
+      error: { message: string; name?: string; statusCode?: number | null };
+      failureCode: ResendDeliveryFailureCode;
+      /** Refused for one of its messages (an address): sent alone, the others would pass (EXPL-02). */
+      messageRefused: boolean;
+      /** A used-up quota, or a rate limit asking for a longer wait than a request allows: nothing sent before it passes. */
+      retryLater: boolean;
+    };
+
+/**
+ * Up to 100 campaign emails in one call of Resend's batch endpoint (EXPL-08),
+ * each with its own unsubscribe headers. Its validation is strict: Resend
+ * takes them all or none, so an answer tells each email's fate, and `ids`
+ * follows the order of `emails`. One Idempotency-Key covers the call
+ * (resend.batch.send): the caller derives it from the recipients, so that the
+ * same recipients sent again within 24 hours get the first answer, not a
+ * second email. Same rate limit and quota handling as the other emails
+ * (ABUS-03). A network error is thrown: the batch may have left.
+ */
+export async function sendRecruitmentCampaignBatch(emails: RecruitmentCampaignBatchEmail[], idempotencyKey: string): Promise<RecruitmentCampaignBatchDelivery> {
+  if (!emails.length || emails.length > RESEND_BATCH_MAX_EMAILS) throw new Error("recruitment_campaign_batch_size");
+  const messages = emails.map(({ to, ...email }) => ({ from: FROM_EMAIL, to: [to], replyTo: RECRUITMENT_REPLY_TO, ...email }));
+  const response = await sendWithRateLimitRetry(() => getResendClient().batch.send(messages, { idempotencyKey }));
+  if (!response.error) {
+    const ids = response.data?.data ?? [];
+    return { ids: emails.map((_, index) => ids[index]?.id ?? null), error: null };
+  }
+  const failureCode = resendDeliveryFailureCode(response.error);
+  await reportResendQuotaError(response.error, "recruitment_campaign");
+  return {
+    ids: null,
+    error: response.error,
+    failureCode,
+    messageRefused: resendRefusedThisMessage(response.error),
+    retryLater: failureCode === "quota" || (failureCode === "rate_limited" && resendRetryAfterMs(response.headers) === null),
+  };
 }
 
 export type CandidatePortalAccessEmailContentInput = {

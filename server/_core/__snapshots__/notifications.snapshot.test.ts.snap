@@ -1,0 +1,1826 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`rendu des emails (MAIL-13) > bookingConfirmation (en) 1`] = `
+{
+  "html": "<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Booking confirmation - APTSNAPSHOT01</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f1f5f9;">
+    <div style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;color:#f1f5f9;mso-hide:all;">Appointment on Friday, 20 November 2026 at 10:00 (Paris time) – ref. APTSNAPSHOT01&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;background:#f1f5f9;">
+      <tr>
+        <td align="center" style="padding:24px 12px;">
+          <!--[if mso]><table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" align="center"><tr><td><![endif]-->
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;margin:0 auto;border-collapse:separate;background:#ffffff;border:1px solid #dbe4ee;border-radius:14px;overflow:hidden;font-family:Arial,sans-serif;color:#0f172a;">
+            <tr>
+              <td bgcolor="#071827" style="padding:18px 28px;background:#071827;border-bottom:3px solid #0891b2;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+                  <tr>
+                    <td style="padding:0 14px 0 0;vertical-align:middle;"><img src="https://drahmedbenlallahom.com/assets/abl-logo.svg" width="64" height="64" alt="" style="display:block;width:64px;height:64px;border:0;border-radius:8px;background:#ffffff;" /></td>
+                    <td style="vertical-align:middle;font-family:Arial,sans-serif;"><div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#38bdf8;">MD, DESAIC</div><div style="margin-top:5px;font-size:19px;font-weight:700;color:#ffffff;">Dr Ahmed Ben Lallahom</div></td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px;font-family:Arial,sans-serif;color:#0f172a;">
+      <h2 style="color: #0891b2;">Booking confirmation</h2>
+      <p>Hello Camille Martin,</p>
+      <p style="line-height:1.6;">Your payment has been received and your consultation with Dr Ahmed Ben Lallahom is confirmed. Your invoice is sent to you in a separate email.</p>
+      <div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;">
+        <ul style="list-style: none; padding: 0; margin: 0;">
+          <li style="padding: 4px 0;"><strong>Reference:</strong> APTSNAPSHOT01</li>
+          <li style="padding: 4px 0;"><strong>Date and time:</strong> Friday, 20 November 2026 at 10:00 (Paris time)</li>
+          <li style="padding: 4px 0;"><strong>Duration:</strong> 30 minutes</li>
+          <li style="padding: 4px 0;"><strong>Amount paid:</strong> €100.00</li>
+          <li style="padding: 4px 0;"><strong>Video call link:</strong> <a href="https://drahmedbenlallahom.com/visio/exemple">https://drahmedbenlallahom.com/visio/exemple</a></li>
+        </ul>
+      </div>
+      <p style="line-height:1.6;">Add to my calendar: open the attached file “consultation-APTSNAPSHOT01.ics” (Google Calendar, Outlook, Apple Calendar…).</p>
+      <p style="line-height:1.6;">Keep your reference: you will be asked for it with any question. This scheduled consultation does not replace emergency care: in an emergency, call the emergency services.</p>
+      
+      <p style="font-size:13px;line-height:1.55;color:#475569;">Cancellation: full refund if you cancel more than 24 hours before the appointment; after that, the booking cannot be refunded. To cancel, contact us quoting your reference.</p>
+      <p style="font-size:13px;line-height:1.55;color:#475569;">A question, a change or a cancellation? Write to us at <a href="mailto:executive.office@drahmedbenlallahom.com">executive.office@drahmedbenlallahom.com</a> or call <a href="tel:+33972152413">+33 9 72 15 24 13</a>, quoting your reference. You can also reply directly to this email.</p>
+    </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 28px;border-top:1px solid #e2e8f0;background:#f8fafc;font-family:Arial,sans-serif;font-size:12px;line-height:1.5;color:#64748b;">Dr Ahmed Ben Lallahom<br />Professional and confidential communication<br /><a href="https://drahmedbenlallahom.com/?lang=en" style="color:#0e7490;">Website</a> · <a href="https://drahmedbenlallahom.com/legal?tab=privacy&amp;lang=en" style="color:#0e7490;">Privacy policy</a></td>
+            </tr>
+          </table>
+          <!--[if mso]></td></tr></table><![endif]-->
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>",
+  "subject": "Booking confirmation - APTSNAPSHOT01",
+  "text": "Booking confirmation
+
+Hello Camille Martin,
+
+Your payment has been received and your consultation with Dr Ahmed Ben Lallahom is confirmed. Your invoice is sent to you in a separate email.
+
+Reference: APTSNAPSHOT01
+Date and time: Friday, 20 November 2026 at 10:00 (Paris time)
+Duration: 30 minutes
+Amount paid: €100.00
+Video call link: https://drahmedbenlallahom.com/visio/exemple
+
+Add to my calendar: open the attached file “consultation-APTSNAPSHOT01.ics” (Google Calendar, Outlook, Apple Calendar…).
+
+Keep your reference: you will be asked for it with any question. This scheduled consultation does not replace emergency care: in an emergency, call the emergency services.
+
+Cancellation: full refund if you cancel more than 24 hours before the appointment; after that, the booking cannot be refunded. To cancel, contact us quoting your reference.
+
+A question, a change or a cancellation? Write to us at executive.office@drahmedbenlallahom.com or call +33 9 72 15 24 13, quoting your reference. You can also reply directly to this email.
+
+Dr Ahmed Ben Lallahom
+
+[pièce jointe] consultation-APTSNAPSHOT01.ics (text/calendar; charset=utf-8; method=PUBLISH)",
+}
+`;
+
+exports[`rendu des emails (MAIL-13) > bookingConfirmation (fr) 1`] = `
+{
+  "html": "<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Confirmation de réservation - APTSNAPSHOT01</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f1f5f9;">
+    <div style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;color:#f1f5f9;mso-hide:all;">Rendez-vous le vendredi 20 novembre 2026 à 10:00 (heure de Paris) – réf. APTSNAPSHOT01&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;background:#f1f5f9;">
+      <tr>
+        <td align="center" style="padding:24px 12px;">
+          <!--[if mso]><table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" align="center"><tr><td><![endif]-->
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;margin:0 auto;border-collapse:separate;background:#ffffff;border:1px solid #dbe4ee;border-radius:14px;overflow:hidden;font-family:Arial,sans-serif;color:#0f172a;">
+            <tr>
+              <td bgcolor="#071827" style="padding:18px 28px;background:#071827;border-bottom:3px solid #0891b2;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+                  <tr>
+                    <td style="padding:0 14px 0 0;vertical-align:middle;"><img src="https://drahmedbenlallahom.com/assets/abl-logo.svg" width="64" height="64" alt="" style="display:block;width:64px;height:64px;border:0;border-radius:8px;background:#ffffff;" /></td>
+                    <td style="vertical-align:middle;font-family:Arial,sans-serif;"><div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#38bdf8;">MD, DESAIC</div><div style="margin-top:5px;font-size:19px;font-weight:700;color:#ffffff;">Dr Ahmed Ben Lallahom</div></td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px;font-family:Arial,sans-serif;color:#0f172a;">
+      <h2 style="color: #0891b2;">Confirmation de réservation</h2>
+      <p>Bonjour Camille Martin,</p>
+      <p style="line-height:1.6;">Votre paiement a bien été reçu et votre consultation avec le Dr Ahmed Ben Lallahom est confirmée. Votre facture vous est envoyée dans un email séparé.</p>
+      <div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;">
+        <ul style="list-style: none; padding: 0; margin: 0;">
+          <li style="padding: 4px 0;"><strong>Référence :</strong> APTSNAPSHOT01</li>
+          <li style="padding: 4px 0;"><strong>Date et heure :</strong> vendredi 20 novembre 2026 à 10:00 (heure de Paris)</li>
+          <li style="padding: 4px 0;"><strong>Durée :</strong> 30 minutes</li>
+          <li style="padding: 4px 0;"><strong>Montant payé :</strong> 100,00 €</li>
+          <li style="padding: 4px 0;"><strong>Lien de visioconférence :</strong> <a href="https://drahmedbenlallahom.com/visio/exemple">https://drahmedbenlallahom.com/visio/exemple</a></li>
+        </ul>
+      </div>
+      <p style="line-height:1.6;">Ajouter à mon agenda : ouvrez le fichier joint « consultation-APTSNAPSHOT01.ics » (Google Agenda, Outlook, Calendrier Apple…).</p>
+      <p style="line-height:1.6;">Conservez votre référence : elle vous sera demandée pour toute question. Cette consultation programmée ne remplace pas une prise en charge d’urgence : en cas d’urgence, appelez les secours.</p>
+      
+      <p style="font-size:13px;line-height:1.55;color:#475569;">Annulation : remboursement intégral si vous annulez plus de 24 heures avant le rendez-vous ; passé ce délai, la réservation n’est pas remboursable. Pour annuler, contactez-nous en indiquant votre référence.</p>
+      <p style="font-size:13px;line-height:1.55;color:#475569;">Une question, un report ou une annulation ? Écrivez-nous à <a href="mailto:executive.office@drahmedbenlallahom.com">executive.office@drahmedbenlallahom.com</a> ou appelez le <a href="tel:+33972152413">+33 9 72 15 24 13</a> en indiquant votre référence. Vous pouvez aussi répondre directement à cet email.</p>
+    </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 28px;border-top:1px solid #e2e8f0;background:#f8fafc;font-family:Arial,sans-serif;font-size:12px;line-height:1.5;color:#64748b;">Dr Ahmed Ben Lallahom<br />Communication professionnelle et confidentielle<br /><a href="https://drahmedbenlallahom.com/?lang=fr" style="color:#0e7490;">Site</a> · <a href="https://drahmedbenlallahom.com/legal?tab=privacy&amp;lang=fr" style="color:#0e7490;">Politique de confidentialité</a></td>
+            </tr>
+          </table>
+          <!--[if mso]></td></tr></table><![endif]-->
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>",
+  "subject": "Confirmation de réservation - APTSNAPSHOT01",
+  "text": "Confirmation de réservation
+
+Bonjour Camille Martin,
+
+Votre paiement a bien été reçu et votre consultation avec le Dr Ahmed Ben Lallahom est confirmée. Votre facture vous est envoyée dans un email séparé.
+
+Référence : APTSNAPSHOT01
+Date et heure : vendredi 20 novembre 2026 à 10:00 (heure de Paris)
+Durée : 30 minutes
+Montant payé : 100,00 €
+Lien de visioconférence : https://drahmedbenlallahom.com/visio/exemple
+
+Ajouter à mon agenda : ouvrez le fichier joint « consultation-APTSNAPSHOT01.ics » (Google Agenda, Outlook, Calendrier Apple…).
+
+Conservez votre référence : elle vous sera demandée pour toute question. Cette consultation programmée ne remplace pas une prise en charge d’urgence : en cas d’urgence, appelez les secours.
+
+Annulation : remboursement intégral si vous annulez plus de 24 heures avant le rendez-vous ; passé ce délai, la réservation n’est pas remboursable. Pour annuler, contactez-nous en indiquant votre référence.
+
+Une question, un report ou une annulation ? Écrivez-nous à executive.office@drahmedbenlallahom.com ou appelez le +33 9 72 15 24 13 en indiquant votre référence. Vous pouvez aussi répondre directement à cet email.
+
+Dr Ahmed Ben Lallahom
+
+[pièce jointe] consultation-APTSNAPSHOT01.ics (text/calendar; charset=utf-8; method=PUBLISH)",
+}
+`;
+
+exports[`rendu des emails (MAIL-13) > bookingReminder (en) 1`] = `
+{
+  "html": "<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Reminder - Your consultation is coming up (APTSNAPSHOT01)</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f1f5f9;">
+    <div style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;color:#f1f5f9;mso-hide:all;">Appointment on Friday, 20 November 2026 at 10:00 (Paris time) – ref. APTSNAPSHOT01&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;background:#f1f5f9;">
+      <tr>
+        <td align="center" style="padding:24px 12px;">
+          <!--[if mso]><table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" align="center"><tr><td><![endif]-->
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;margin:0 auto;border-collapse:separate;background:#ffffff;border:1px solid #dbe4ee;border-radius:14px;overflow:hidden;font-family:Arial,sans-serif;color:#0f172a;">
+            <tr>
+              <td bgcolor="#071827" style="padding:18px 28px;background:#071827;border-bottom:3px solid #0891b2;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+                  <tr>
+                    <td style="padding:0 14px 0 0;vertical-align:middle;"><img src="https://drahmedbenlallahom.com/assets/abl-logo.svg" width="64" height="64" alt="" style="display:block;width:64px;height:64px;border:0;border-radius:8px;background:#ffffff;" /></td>
+                    <td style="vertical-align:middle;font-family:Arial,sans-serif;"><div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#38bdf8;">MD, DESAIC</div><div style="margin-top:5px;font-size:19px;font-weight:700;color:#ffffff;">Dr Ahmed Ben Lallahom</div></td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px;font-family:Arial,sans-serif;color:#0f172a;">
+      <h2 style="color: #0891b2;">Reminder: your consultation is coming up</h2>
+      <p>Hello Camille Martin,</p>
+      <p style="line-height:1.6;">This is a reminder that your consultation with Dr Ahmed Ben Lallahom is scheduled for Friday, 20 November 2026 at 10:00 (Paris time).</p>
+      <div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;">
+        <ul style="list-style: none; padding: 0; margin: 0;">
+          <li style="padding: 4px 0;"><strong>Reference:</strong> APTSNAPSHOT01</li>
+          <li style="padding: 4px 0;"><strong>Date and time:</strong> Friday, 20 November 2026 at 10:00 (Paris time)</li>
+          
+        </ul>
+      </div>
+      <p style="line-height:1.6;">If you need to cancel or reschedule your appointment, please let us know as soon as possible using the details below.</p>
+      
+      <p style="font-size:13px;line-height:1.55;color:#475569;">Cancellation: full refund if you cancel more than 24 hours before the appointment; after that, the booking cannot be refunded. To cancel, contact us quoting your reference.</p>
+      <p style="font-size:13px;line-height:1.55;color:#475569;">A question, a change or a cancellation? Write to us at <a href="mailto:executive.office@drahmedbenlallahom.com">executive.office@drahmedbenlallahom.com</a> or call <a href="tel:+33972152413">+33 9 72 15 24 13</a>, quoting your reference. You can also reply directly to this email.</p>
+    </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 28px;border-top:1px solid #e2e8f0;background:#f8fafc;font-family:Arial,sans-serif;font-size:12px;line-height:1.5;color:#64748b;">Dr Ahmed Ben Lallahom<br />Professional and confidential communication<br /><a href="https://drahmedbenlallahom.com/?lang=en" style="color:#0e7490;">Website</a> · <a href="https://drahmedbenlallahom.com/legal?tab=privacy&amp;lang=en" style="color:#0e7490;">Privacy policy</a></td>
+            </tr>
+          </table>
+          <!--[if mso]></td></tr></table><![endif]-->
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>",
+  "subject": "Reminder - Your consultation is coming up (APTSNAPSHOT01)",
+  "text": "Reminder: your consultation is coming up
+
+Hello Camille Martin,
+
+This is a reminder that your consultation with Dr Ahmed Ben Lallahom is scheduled for Friday, 20 November 2026 at 10:00 (Paris time).
+
+Reference: APTSNAPSHOT01
+Date and time: Friday, 20 November 2026 at 10:00 (Paris time)
+
+If you need to cancel or reschedule your appointment, please let us know as soon as possible using the details below.
+
+Cancellation: full refund if you cancel more than 24 hours before the appointment; after that, the booking cannot be refunded. To cancel, contact us quoting your reference.
+
+A question, a change or a cancellation? Write to us at executive.office@drahmedbenlallahom.com or call +33 9 72 15 24 13, quoting your reference. You can also reply directly to this email.
+
+Dr Ahmed Ben Lallahom",
+}
+`;
+
+exports[`rendu des emails (MAIL-13) > bookingReminder (fr) 1`] = `
+{
+  "html": "<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Rappel - Votre consultation approche (APTSNAPSHOT01)</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f1f5f9;">
+    <div style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;color:#f1f5f9;mso-hide:all;">Rendez-vous le vendredi 20 novembre 2026 à 10:00 (heure de Paris) – réf. APTSNAPSHOT01&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;background:#f1f5f9;">
+      <tr>
+        <td align="center" style="padding:24px 12px;">
+          <!--[if mso]><table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" align="center"><tr><td><![endif]-->
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;margin:0 auto;border-collapse:separate;background:#ffffff;border:1px solid #dbe4ee;border-radius:14px;overflow:hidden;font-family:Arial,sans-serif;color:#0f172a;">
+            <tr>
+              <td bgcolor="#071827" style="padding:18px 28px;background:#071827;border-bottom:3px solid #0891b2;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+                  <tr>
+                    <td style="padding:0 14px 0 0;vertical-align:middle;"><img src="https://drahmedbenlallahom.com/assets/abl-logo.svg" width="64" height="64" alt="" style="display:block;width:64px;height:64px;border:0;border-radius:8px;background:#ffffff;" /></td>
+                    <td style="vertical-align:middle;font-family:Arial,sans-serif;"><div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#38bdf8;">MD, DESAIC</div><div style="margin-top:5px;font-size:19px;font-weight:700;color:#ffffff;">Dr Ahmed Ben Lallahom</div></td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px;font-family:Arial,sans-serif;color:#0f172a;">
+      <h2 style="color: #0891b2;">Rappel : votre consultation approche</h2>
+      <p>Bonjour Camille Martin,</p>
+      <p style="line-height:1.6;">Nous vous rappelons que votre consultation avec le Dr Ahmed Ben Lallahom est prévue le vendredi 20 novembre 2026 à 10:00 (heure de Paris).</p>
+      <div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;">
+        <ul style="list-style: none; padding: 0; margin: 0;">
+          <li style="padding: 4px 0;"><strong>Référence :</strong> APTSNAPSHOT01</li>
+          <li style="padding: 4px 0;"><strong>Date et heure :</strong> vendredi 20 novembre 2026 à 10:00 (heure de Paris)</li>
+          
+        </ul>
+      </div>
+      <p style="line-height:1.6;">Si vous devez annuler ou reporter votre rendez-vous, prévenez-nous dès que possible aux coordonnées ci-dessous.</p>
+      
+      <p style="font-size:13px;line-height:1.55;color:#475569;">Annulation : remboursement intégral si vous annulez plus de 24 heures avant le rendez-vous ; passé ce délai, la réservation n’est pas remboursable. Pour annuler, contactez-nous en indiquant votre référence.</p>
+      <p style="font-size:13px;line-height:1.55;color:#475569;">Une question, un report ou une annulation ? Écrivez-nous à <a href="mailto:executive.office@drahmedbenlallahom.com">executive.office@drahmedbenlallahom.com</a> ou appelez le <a href="tel:+33972152413">+33 9 72 15 24 13</a> en indiquant votre référence. Vous pouvez aussi répondre directement à cet email.</p>
+    </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 28px;border-top:1px solid #e2e8f0;background:#f8fafc;font-family:Arial,sans-serif;font-size:12px;line-height:1.5;color:#64748b;">Dr Ahmed Ben Lallahom<br />Communication professionnelle et confidentielle<br /><a href="https://drahmedbenlallahom.com/?lang=fr" style="color:#0e7490;">Site</a> · <a href="https://drahmedbenlallahom.com/legal?tab=privacy&amp;lang=fr" style="color:#0e7490;">Politique de confidentialité</a></td>
+            </tr>
+          </table>
+          <!--[if mso]></td></tr></table><![endif]-->
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>",
+  "subject": "Rappel - Votre consultation approche (APTSNAPSHOT01)",
+  "text": "Rappel : votre consultation approche
+
+Bonjour Camille Martin,
+
+Nous vous rappelons que votre consultation avec le Dr Ahmed Ben Lallahom est prévue le vendredi 20 novembre 2026 à 10:00 (heure de Paris).
+
+Référence : APTSNAPSHOT01
+Date et heure : vendredi 20 novembre 2026 à 10:00 (heure de Paris)
+
+Si vous devez annuler ou reporter votre rendez-vous, prévenez-nous dès que possible aux coordonnées ci-dessous.
+
+Annulation : remboursement intégral si vous annulez plus de 24 heures avant le rendez-vous ; passé ce délai, la réservation n’est pas remboursable. Pour annuler, contactez-nous en indiquant votre référence.
+
+Une question, un report ou une annulation ? Écrivez-nous à executive.office@drahmedbenlallahom.com ou appelez le +33 9 72 15 24 13 en indiquant votre référence. Vous pouvez aussi répondre directement à cet email.
+
+Dr Ahmed Ben Lallahom",
+}
+`;
+
+exports[`rendu des emails (MAIL-13) > candidatePortalInvite (en) 1`] = `
+{
+  "html": "<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Create your candidate portal — Hippocampus Consulting</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f1f5f9;">
+    <div style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;color:#f1f5f9;mso-hide:all;">Invitation link valid for 7 days.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;background:#f1f5f9;">
+      <tr>
+        <td align="center" style="padding:24px 12px;">
+          <!--[if mso]><table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" align="center"><tr><td><![endif]-->
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;margin:0 auto;border-collapse:separate;background:#ffffff;border:1px solid #dbe4ee;border-radius:14px;overflow:hidden;font-family:Arial,sans-serif;color:#0f172a;">
+            <tr>
+              <td bgcolor="#071827" style="padding:18px 28px;background:#071827;border-bottom:3px solid #0891b2;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+                  <tr>
+                    <td style="padding:0 14px 0 0;vertical-align:middle;"><img src="https://drahmedbenlallahom.com/assets/abl-logo.svg" width="64" height="64" alt="" style="display:block;width:64px;height:64px;border:0;border-radius:8px;background:#ffffff;" /></td>
+                    <td style="vertical-align:middle;font-family:Arial,sans-serif;"><div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#38bdf8;">ABL / HIPPOCAMPUS</div><div style="margin-top:5px;font-size:19px;font-weight:700;color:#ffffff;">Hippocampus Consulting</div></td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px;font-family:Arial,sans-serif;color:#0f172a;">
+        <h2 style="color:#0891b2;">Create your candidate portal</h2>
+        <p>Hello Camille,</p>
+        <p>Our team invites you to create your secure candidate portal to upload and track your administrative documents. After confirming your details, you will receive a link to activate your email address and choose your password.</p>
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:24px 0;border-collapse:separate;"><tr><td bgcolor="#0e7490" style="padding:12px 18px;border-radius:7px;background:#0e7490;"><a href="https://drahmedbenlallahom.com/candidate/access?invite=exemple&amp;lang=en" style="color:#ffffff;text-decoration:none;font-family:Arial,sans-serif;font-size:16px;font-weight:700;">Create my candidate portal</a></td></tr></table>
+        <p style="color:#64748b;font-size:13px;">This secure, personal link gives no access until your email address is activated and your password chosen. This invitation link is valid for 7 days. After that, you can still create your portal from the “Candidate portal” page of the website, with the same email address.</p>
+        <p style="color:#64748b;font-size:13px;">This email is sent by Hippocampus Consulting from recrutement@drahmedbenlallahom.com. If you cannot find this email, check your Spam or Junk folder, then add this address to your contacts.</p>
+    </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 28px;border-top:1px solid #e2e8f0;background:#f8fafc;font-family:Arial,sans-serif;font-size:12px;line-height:1.5;color:#64748b;">Hippocampus Consulting<br />Professional and confidential communication<br /><a href="https://drahmedbenlallahom.com/?lang=en" style="color:#0e7490;">Website</a> · <a href="https://drahmedbenlallahom.com/legal?tab=privacy&amp;lang=en" style="color:#0e7490;">Privacy policy</a></td>
+            </tr>
+          </table>
+          <!--[if mso]></td></tr></table><![endif]-->
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>",
+  "subject": "Create your candidate portal — Hippocampus Consulting",
+  "text": "Create your candidate portal
+
+Hello Camille,
+
+Our team invites you to create your secure candidate portal to upload and track your administrative documents. After confirming your details, you will receive a link to activate your email address and choose your password.
+
+https://drahmedbenlallahom.com/candidate/access?invite=exemple&lang=en
+
+This secure, personal link gives no access until your email address is activated and your password chosen. This invitation link is valid for 7 days. After that, you can still create your portal from the “Candidate portal” page of the website, with the same email address.
+
+This email is sent by Hippocampus Consulting from recrutement@drahmedbenlallahom.com. If you cannot find this email, check your Spam or Junk folder, then add this address to your contacts.",
+}
+`;
+
+exports[`rendu des emails (MAIL-13) > candidatePortalInvite (fr) 1`] = `
+{
+  "html": "<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Créez votre espace candidat — Hippocampus Consulting</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f1f5f9;">
+    <div style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;color:#f1f5f9;mso-hide:all;">Lien d’invitation valable 7 jours.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;background:#f1f5f9;">
+      <tr>
+        <td align="center" style="padding:24px 12px;">
+          <!--[if mso]><table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" align="center"><tr><td><![endif]-->
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;margin:0 auto;border-collapse:separate;background:#ffffff;border:1px solid #dbe4ee;border-radius:14px;overflow:hidden;font-family:Arial,sans-serif;color:#0f172a;">
+            <tr>
+              <td bgcolor="#071827" style="padding:18px 28px;background:#071827;border-bottom:3px solid #0891b2;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+                  <tr>
+                    <td style="padding:0 14px 0 0;vertical-align:middle;"><img src="https://drahmedbenlallahom.com/assets/abl-logo.svg" width="64" height="64" alt="" style="display:block;width:64px;height:64px;border:0;border-radius:8px;background:#ffffff;" /></td>
+                    <td style="vertical-align:middle;font-family:Arial,sans-serif;"><div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#38bdf8;">ABL / HIPPOCAMPUS</div><div style="margin-top:5px;font-size:19px;font-weight:700;color:#ffffff;">Hippocampus Consulting</div></td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px;font-family:Arial,sans-serif;color:#0f172a;">
+        <h2 style="color:#0891b2;">Créez votre espace candidat</h2>
+        <p>Bonjour Camille,</p>
+        <p>Notre équipe vous invite à créer votre espace candidat sécurisé pour déposer et suivre vos documents administratifs. Après avoir confirmé vos informations, vous recevrez un lien pour activer votre adresse email et choisir votre mot de passe.</p>
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:24px 0;border-collapse:separate;"><tr><td bgcolor="#0e7490" style="padding:12px 18px;border-radius:7px;background:#0e7490;"><a href="https://drahmedbenlallahom.com/candidate/access?invite=exemple" style="color:#ffffff;text-decoration:none;font-family:Arial,sans-serif;font-size:16px;font-weight:700;">Créer mon espace candidat</a></td></tr></table>
+        <p style="color:#64748b;font-size:13px;">Ce lien sécurisé et personnel ne donne aucun accès tant que votre adresse email n’est pas activée et votre mot de passe choisi. Ce lien d’invitation est valable 7 jours. Passé ce délai, vous pourrez toujours créer votre espace depuis la page « Espace candidat » du site, avec la même adresse email.</p>
+        <p style="color:#64748b;font-size:13px;">Cet email est envoyé par Hippocampus Consulting depuis recrutement@drahmedbenlallahom.com. Si vous ne retrouvez pas cet email, vérifiez votre dossier Spam ou Courriers indésirables, puis ajoutez cette adresse à vos contacts.</p>
+    </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 28px;border-top:1px solid #e2e8f0;background:#f8fafc;font-family:Arial,sans-serif;font-size:12px;line-height:1.5;color:#64748b;">Hippocampus Consulting<br />Communication professionnelle et confidentielle<br /><a href="https://drahmedbenlallahom.com/?lang=fr" style="color:#0e7490;">Site</a> · <a href="https://drahmedbenlallahom.com/legal?tab=privacy&amp;lang=fr" style="color:#0e7490;">Politique de confidentialité</a></td>
+            </tr>
+          </table>
+          <!--[if mso]></td></tr></table><![endif]-->
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>",
+  "subject": "Créez votre espace candidat — Hippocampus Consulting",
+  "text": "Créez votre espace candidat
+
+Bonjour Camille,
+
+Notre équipe vous invite à créer votre espace candidat sécurisé pour déposer et suivre vos documents administratifs. Après avoir confirmé vos informations, vous recevrez un lien pour activer votre adresse email et choisir votre mot de passe.
+
+https://drahmedbenlallahom.com/candidate/access?invite=exemple
+
+Ce lien sécurisé et personnel ne donne aucun accès tant que votre adresse email n’est pas activée et votre mot de passe choisi. Ce lien d’invitation est valable 7 jours. Passé ce délai, vous pourrez toujours créer votre espace depuis la page « Espace candidat » du site, avec la même adresse email.
+
+Cet email est envoyé par Hippocampus Consulting depuis recrutement@drahmedbenlallahom.com. Si vous ne retrouvez pas cet email, vérifiez votre dossier Spam ou Courriers indésirables, puis ajoutez cette adresse à vos contacts.",
+}
+`;
+
+exports[`rendu des emails (MAIL-13) > candidatePortalReset (en) 1`] = `
+{
+  "html": "<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Reset your password — Hippocampus Consulting</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f1f5f9;">
+    <div style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;color:#f1f5f9;mso-hide:all;">Personal link valid for 30 minutes.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;background:#f1f5f9;">
+      <tr>
+        <td align="center" style="padding:24px 12px;">
+          <!--[if mso]><table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" align="center"><tr><td><![endif]-->
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;margin:0 auto;border-collapse:separate;background:#ffffff;border:1px solid #dbe4ee;border-radius:14px;overflow:hidden;font-family:Arial,sans-serif;color:#0f172a;">
+            <tr>
+              <td bgcolor="#071827" style="padding:18px 28px;background:#071827;border-bottom:3px solid #0891b2;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+                  <tr>
+                    <td style="padding:0 14px 0 0;vertical-align:middle;"><img src="https://drahmedbenlallahom.com/assets/abl-logo.svg" width="64" height="64" alt="" style="display:block;width:64px;height:64px;border:0;border-radius:8px;background:#ffffff;" /></td>
+                    <td style="vertical-align:middle;font-family:Arial,sans-serif;"><div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#38bdf8;">ABL / HIPPOCAMPUS</div><div style="margin-top:5px;font-size:19px;font-weight:700;color:#ffffff;">Hippocampus Consulting</div></td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px;font-family:Arial,sans-serif;color:#0f172a;">
+        <h2 style="color:#0891b2;">Reset your password</h2>
+        <p>Hello Camille,</p>
+        <p>A password reset request has been received. Choose a new password by clicking the button below.</p>
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:24px 0;border-collapse:separate;"><tr><td bgcolor="#0e7490" style="padding:12px 18px;border-radius:7px;background:#0e7490;"><a href="https://drahmedbenlallahom.com/candidate/reset?token=exemple&amp;lang=en" style="color:#ffffff;text-decoration:none;font-family:Arial,sans-serif;font-size:16px;font-weight:700;">Reset my password</a></td></tr></table>
+        <p style="color:#64748b;font-size:13px;">This personal link is valid for 30 minutes. If you did not make this request, you can ignore this email.</p>
+        <p style="color:#64748b;font-size:13px;">This email is sent by Hippocampus Consulting from recrutement@drahmedbenlallahom.com. If you cannot find this email, check your Spam or Junk folder, then add this address to your contacts.</p>
+    </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 28px;border-top:1px solid #e2e8f0;background:#f8fafc;font-family:Arial,sans-serif;font-size:12px;line-height:1.5;color:#64748b;">Hippocampus Consulting<br />Professional and confidential communication<br /><a href="https://drahmedbenlallahom.com/?lang=en" style="color:#0e7490;">Website</a> · <a href="https://drahmedbenlallahom.com/legal?tab=privacy&amp;lang=en" style="color:#0e7490;">Privacy policy</a></td>
+            </tr>
+          </table>
+          <!--[if mso]></td></tr></table><![endif]-->
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>",
+  "subject": "Reset your password — Hippocampus Consulting",
+  "text": "Reset your password
+
+Hello Camille,
+
+A password reset request has been received. Choose a new password by clicking the button below.
+
+https://drahmedbenlallahom.com/candidate/reset?token=exemple&lang=en
+
+This personal link is valid for 30 minutes. If you did not make this request, you can ignore this email.
+
+This email is sent by Hippocampus Consulting from recrutement@drahmedbenlallahom.com. If you cannot find this email, check your Spam or Junk folder, then add this address to your contacts.",
+}
+`;
+
+exports[`rendu des emails (MAIL-13) > candidatePortalReset (fr) 1`] = `
+{
+  "html": "<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Réinitialisez votre mot de passe — Hippocampus Consulting</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f1f5f9;">
+    <div style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;color:#f1f5f9;mso-hide:all;">Lien personnel valable 30 minutes.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;background:#f1f5f9;">
+      <tr>
+        <td align="center" style="padding:24px 12px;">
+          <!--[if mso]><table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" align="center"><tr><td><![endif]-->
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;margin:0 auto;border-collapse:separate;background:#ffffff;border:1px solid #dbe4ee;border-radius:14px;overflow:hidden;font-family:Arial,sans-serif;color:#0f172a;">
+            <tr>
+              <td bgcolor="#071827" style="padding:18px 28px;background:#071827;border-bottom:3px solid #0891b2;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+                  <tr>
+                    <td style="padding:0 14px 0 0;vertical-align:middle;"><img src="https://drahmedbenlallahom.com/assets/abl-logo.svg" width="64" height="64" alt="" style="display:block;width:64px;height:64px;border:0;border-radius:8px;background:#ffffff;" /></td>
+                    <td style="vertical-align:middle;font-family:Arial,sans-serif;"><div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#38bdf8;">ABL / HIPPOCAMPUS</div><div style="margin-top:5px;font-size:19px;font-weight:700;color:#ffffff;">Hippocampus Consulting</div></td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px;font-family:Arial,sans-serif;color:#0f172a;">
+        <h2 style="color:#0891b2;">Réinitialisez votre mot de passe</h2>
+        <p>Bonjour Camille,</p>
+        <p>Une demande de réinitialisation a été reçue. Choisissez un nouveau mot de passe en cliquant sur le bouton ci-dessous.</p>
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:24px 0;border-collapse:separate;"><tr><td bgcolor="#0e7490" style="padding:12px 18px;border-radius:7px;background:#0e7490;"><a href="https://drahmedbenlallahom.com/candidate/reset?token=exemple" style="color:#ffffff;text-decoration:none;font-family:Arial,sans-serif;font-size:16px;font-weight:700;">Réinitialiser mon mot de passe</a></td></tr></table>
+        <p style="color:#64748b;font-size:13px;">Ce lien personnel est valable 30 minutes. Si vous n’êtes pas à l’origine de cette demande, vous pouvez ignorer cet email.</p>
+        <p style="color:#64748b;font-size:13px;">Cet email est envoyé par Hippocampus Consulting depuis recrutement@drahmedbenlallahom.com. Si vous ne retrouvez pas cet email, vérifiez votre dossier Spam ou Courriers indésirables, puis ajoutez cette adresse à vos contacts.</p>
+    </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 28px;border-top:1px solid #e2e8f0;background:#f8fafc;font-family:Arial,sans-serif;font-size:12px;line-height:1.5;color:#64748b;">Hippocampus Consulting<br />Communication professionnelle et confidentielle<br /><a href="https://drahmedbenlallahom.com/?lang=fr" style="color:#0e7490;">Site</a> · <a href="https://drahmedbenlallahom.com/legal?tab=privacy&amp;lang=fr" style="color:#0e7490;">Politique de confidentialité</a></td>
+            </tr>
+          </table>
+          <!--[if mso]></td></tr></table><![endif]-->
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>",
+  "subject": "Réinitialisez votre mot de passe — Hippocampus Consulting",
+  "text": "Réinitialisez votre mot de passe
+
+Bonjour Camille,
+
+Une demande de réinitialisation a été reçue. Choisissez un nouveau mot de passe en cliquant sur le bouton ci-dessous.
+
+https://drahmedbenlallahom.com/candidate/reset?token=exemple
+
+Ce lien personnel est valable 30 minutes. Si vous n’êtes pas à l’origine de cette demande, vous pouvez ignorer cet email.
+
+Cet email est envoyé par Hippocampus Consulting depuis recrutement@drahmedbenlallahom.com. Si vous ne retrouvez pas cet email, vérifiez votre dossier Spam ou Courriers indésirables, puis ajoutez cette adresse à vos contacts.",
+}
+`;
+
+exports[`rendu des emails (MAIL-13) > candidatePortalVerify (en) 1`] = `
+{
+  "html": "<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Confirm your email address — Hippocampus candidate portal</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f1f5f9;">
+    <div style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;color:#f1f5f9;mso-hide:all;">Personal link valid for 30 minutes, single use.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;background:#f1f5f9;">
+      <tr>
+        <td align="center" style="padding:24px 12px;">
+          <!--[if mso]><table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" align="center"><tr><td><![endif]-->
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;margin:0 auto;border-collapse:separate;background:#ffffff;border:1px solid #dbe4ee;border-radius:14px;overflow:hidden;font-family:Arial,sans-serif;color:#0f172a;">
+            <tr>
+              <td bgcolor="#071827" style="padding:18px 28px;background:#071827;border-bottom:3px solid #0891b2;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+                  <tr>
+                    <td style="padding:0 14px 0 0;vertical-align:middle;"><img src="https://drahmedbenlallahom.com/assets/abl-logo.svg" width="64" height="64" alt="" style="display:block;width:64px;height:64px;border:0;border-radius:8px;background:#ffffff;" /></td>
+                    <td style="vertical-align:middle;font-family:Arial,sans-serif;"><div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#38bdf8;">ABL / HIPPOCAMPUS</div><div style="margin-top:5px;font-size:19px;font-weight:700;color:#ffffff;">Hippocampus Consulting</div></td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px;font-family:Arial,sans-serif;color:#0f172a;">
+        <h2 style="color:#0891b2;">Confirm your email address</h2>
+        <p>Hello Camille,</p>
+        <p>You are receiving this email because a candidate portal has just been created with this address. To activate it, click the button below: you will confirm your email address and choose your password on the page that opens.</p>
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:24px 0;border-collapse:separate;"><tr><td bgcolor="#0e7490" style="padding:12px 18px;border-radius:7px;background:#0e7490;"><a href="https://drahmedbenlallahom.com/candidate/verify?token=exemple&amp;lang=en" style="color:#ffffff;text-decoration:none;font-family:Arial,sans-serif;font-size:16px;font-weight:700;">Confirm my email address and choose my password</a></td></tr></table>
+        <p style="color:#64748b;font-size:13px;">This personal link is valid for 30 minutes and can only be used once. If you did not request this candidate portal, ignore this email: no access will be activated and no password will be created.</p>
+        <p style="color:#64748b;font-size:13px;">This email is sent by Hippocampus Consulting from recrutement@drahmedbenlallahom.com. If you cannot find this email, check your Spam or Junk folder, then add this address to your contacts.</p>
+    </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 28px;border-top:1px solid #e2e8f0;background:#f8fafc;font-family:Arial,sans-serif;font-size:12px;line-height:1.5;color:#64748b;">Hippocampus Consulting<br />Professional and confidential communication<br /><a href="https://drahmedbenlallahom.com/?lang=en" style="color:#0e7490;">Website</a> · <a href="https://drahmedbenlallahom.com/legal?tab=privacy&amp;lang=en" style="color:#0e7490;">Privacy policy</a></td>
+            </tr>
+          </table>
+          <!--[if mso]></td></tr></table><![endif]-->
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>",
+  "subject": "Confirm your email address — Hippocampus candidate portal",
+  "text": "Confirm your email address
+
+Hello Camille,
+
+You are receiving this email because a candidate portal has just been created with this address. To activate it, click the button below: you will confirm your email address and choose your password on the page that opens.
+
+https://drahmedbenlallahom.com/candidate/verify?token=exemple&lang=en
+
+This personal link is valid for 30 minutes and can only be used once. If you did not request this candidate portal, ignore this email: no access will be activated and no password will be created.
+
+This email is sent by Hippocampus Consulting from recrutement@drahmedbenlallahom.com. If you cannot find this email, check your Spam or Junk folder, then add this address to your contacts.",
+}
+`;
+
+exports[`rendu des emails (MAIL-13) > candidatePortalVerify (fr) 1`] = `
+{
+  "html": "<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Confirmez votre adresse email — Espace candidat Hippocampus</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f1f5f9;">
+    <div style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;color:#f1f5f9;mso-hide:all;">Lien personnel valable 30 minutes, à usage unique.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;background:#f1f5f9;">
+      <tr>
+        <td align="center" style="padding:24px 12px;">
+          <!--[if mso]><table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" align="center"><tr><td><![endif]-->
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;margin:0 auto;border-collapse:separate;background:#ffffff;border:1px solid #dbe4ee;border-radius:14px;overflow:hidden;font-family:Arial,sans-serif;color:#0f172a;">
+            <tr>
+              <td bgcolor="#071827" style="padding:18px 28px;background:#071827;border-bottom:3px solid #0891b2;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+                  <tr>
+                    <td style="padding:0 14px 0 0;vertical-align:middle;"><img src="https://drahmedbenlallahom.com/assets/abl-logo.svg" width="64" height="64" alt="" style="display:block;width:64px;height:64px;border:0;border-radius:8px;background:#ffffff;" /></td>
+                    <td style="vertical-align:middle;font-family:Arial,sans-serif;"><div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#38bdf8;">ABL / HIPPOCAMPUS</div><div style="margin-top:5px;font-size:19px;font-weight:700;color:#ffffff;">Hippocampus Consulting</div></td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px;font-family:Arial,sans-serif;color:#0f172a;">
+        <h2 style="color:#0891b2;">Confirmez votre adresse email</h2>
+        <p>Bonjour Camille,</p>
+        <p>Vous recevez cet email parce qu’un espace candidat vient d’être créé avec cette adresse. Pour l’activer, cliquez sur le bouton ci-dessous : vous confirmerez votre adresse email et choisirez votre mot de passe sur la page qui s’ouvre.</p>
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:24px 0;border-collapse:separate;"><tr><td bgcolor="#0e7490" style="padding:12px 18px;border-radius:7px;background:#0e7490;"><a href="https://drahmedbenlallahom.com/candidate/verify?token=exemple" style="color:#ffffff;text-decoration:none;font-family:Arial,sans-serif;font-size:16px;font-weight:700;">Confirmer mon adresse email et choisir mon mot de passe</a></td></tr></table>
+        <p style="color:#64748b;font-size:13px;">Ce lien personnel est valable 30 minutes et ne peut servir qu’une fois. Si vous n’avez pas demandé cet espace candidat, ignorez cet email : aucun accès ne sera activé et aucun mot de passe ne sera créé.</p>
+        <p style="color:#64748b;font-size:13px;">Cet email est envoyé par Hippocampus Consulting depuis recrutement@drahmedbenlallahom.com. Si vous ne retrouvez pas cet email, vérifiez votre dossier Spam ou Courriers indésirables, puis ajoutez cette adresse à vos contacts.</p>
+    </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 28px;border-top:1px solid #e2e8f0;background:#f8fafc;font-family:Arial,sans-serif;font-size:12px;line-height:1.5;color:#64748b;">Hippocampus Consulting<br />Communication professionnelle et confidentielle<br /><a href="https://drahmedbenlallahom.com/?lang=fr" style="color:#0e7490;">Site</a> · <a href="https://drahmedbenlallahom.com/legal?tab=privacy&amp;lang=fr" style="color:#0e7490;">Politique de confidentialité</a></td>
+            </tr>
+          </table>
+          <!--[if mso]></td></tr></table><![endif]-->
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>",
+  "subject": "Confirmez votre adresse email — Espace candidat Hippocampus",
+  "text": "Confirmez votre adresse email
+
+Bonjour Camille,
+
+Vous recevez cet email parce qu’un espace candidat vient d’être créé avec cette adresse. Pour l’activer, cliquez sur le bouton ci-dessous : vous confirmerez votre adresse email et choisirez votre mot de passe sur la page qui s’ouvre.
+
+https://drahmedbenlallahom.com/candidate/verify?token=exemple
+
+Ce lien personnel est valable 30 minutes et ne peut servir qu’une fois. Si vous n’avez pas demandé cet espace candidat, ignorez cet email : aucun accès ne sera activé et aucun mot de passe ne sera créé.
+
+Cet email est envoyé par Hippocampus Consulting depuis recrutement@drahmedbenlallahom.com. Si vous ne retrouvez pas cet email, vérifiez votre dossier Spam ou Courriers indésirables, puis ajoutez cette adresse à vos contacts.",
+}
+`;
+
+exports[`rendu des emails (MAIL-13) > invoice (en) 1`] = `
+{
+  "html": "<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Invoice - Consultation APTSNAPSHOT01</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f1f5f9;">
+    <div style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;color:#f1f5f9;mso-hide:all;">Invoice F-2026-0042 – €100.00 – ref. APTSNAPSHOT01&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;background:#f1f5f9;">
+      <tr>
+        <td align="center" style="padding:24px 12px;">
+          <!--[if mso]><table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" align="center"><tr><td><![endif]-->
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;margin:0 auto;border-collapse:separate;background:#ffffff;border:1px solid #dbe4ee;border-radius:14px;overflow:hidden;font-family:Arial,sans-serif;color:#0f172a;">
+            <tr>
+              <td bgcolor="#071827" style="padding:18px 28px;background:#071827;border-bottom:3px solid #0891b2;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+                  <tr>
+                    <td style="padding:0 14px 0 0;vertical-align:middle;"><img src="https://drahmedbenlallahom.com/assets/abl-logo.svg" width="64" height="64" alt="" style="display:block;width:64px;height:64px;border:0;border-radius:8px;background:#ffffff;" /></td>
+                    <td style="vertical-align:middle;font-family:Arial,sans-serif;"><div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#38bdf8;">MD, DESAIC</div><div style="margin-top:5px;font-size:19px;font-weight:700;color:#ffffff;">Dr Ahmed Ben Lallahom</div></td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px;font-family:Arial,sans-serif;color:#0f172a;">
+      <h2 style="color: #0891b2;">Your invoice</h2>
+      <p>Hello Camille Martin,</p>
+      <p style="line-height:1.6;">Your invoice for your consultation with Dr Ahmed Ben Lallahom, issued in French as required by French law, is attached.</p>
+      <div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;">
+        <ul style="list-style: none; padding: 0; margin: 0;">
+          <li style="padding: 4px 0;"><strong>Invoice no.:</strong> F-2026-0042</li>
+          <li style="padding: 4px 0;"><strong>Reference:</strong> APTSNAPSHOT01</li>
+          <li style="padding: 4px 0;"><strong>Amount:</strong> €100.00</li>
+          <li style="padding: 4px 0;"><strong>Status:</strong> Paid</li>
+          
+        </ul>
+      </div>
+      <p style="line-height:1.6;">Thank you for your trust.</p>
+      
+      
+      <p style="font-size:13px;line-height:1.55;color:#475569;">A question, a change or a cancellation? Write to us at <a href="mailto:executive.office@drahmedbenlallahom.com">executive.office@drahmedbenlallahom.com</a> or call <a href="tel:+33972152413">+33 9 72 15 24 13</a>, quoting your reference. You can also reply directly to this email.</p>
+    </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 28px;border-top:1px solid #e2e8f0;background:#f8fafc;font-family:Arial,sans-serif;font-size:12px;line-height:1.5;color:#64748b;">Dr Ahmed Ben Lallahom<br />Professional and confidential communication<br /><a href="https://drahmedbenlallahom.com/?lang=en" style="color:#0e7490;">Website</a> · <a href="https://drahmedbenlallahom.com/legal?tab=privacy&amp;lang=en" style="color:#0e7490;">Privacy policy</a></td>
+            </tr>
+          </table>
+          <!--[if mso]></td></tr></table><![endif]-->
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>",
+  "subject": "Invoice - Consultation APTSNAPSHOT01",
+  "text": "Your invoice
+
+Hello Camille Martin,
+
+Your invoice for your consultation with Dr Ahmed Ben Lallahom, issued in French as required by French law, is attached.
+
+Invoice no.: F-2026-0042
+Reference: APTSNAPSHOT01
+Amount: €100.00
+Status: Paid
+
+Thank you for your trust.
+
+A question, a change or a cancellation? Write to us at executive.office@drahmedbenlallahom.com or call +33 9 72 15 24 13, quoting your reference. You can also reply directly to this email.
+
+Dr Ahmed Ben Lallahom",
+}
+`;
+
+exports[`rendu des emails (MAIL-13) > invoice (fr) 1`] = `
+{
+  "html": "<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Facture - Consultation APTSNAPSHOT01</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f1f5f9;">
+    <div style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;color:#f1f5f9;mso-hide:all;">Facture F-2026-0042 – 100,00 € – réf. APTSNAPSHOT01&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;background:#f1f5f9;">
+      <tr>
+        <td align="center" style="padding:24px 12px;">
+          <!--[if mso]><table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" align="center"><tr><td><![endif]-->
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;margin:0 auto;border-collapse:separate;background:#ffffff;border:1px solid #dbe4ee;border-radius:14px;overflow:hidden;font-family:Arial,sans-serif;color:#0f172a;">
+            <tr>
+              <td bgcolor="#071827" style="padding:18px 28px;background:#071827;border-bottom:3px solid #0891b2;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+                  <tr>
+                    <td style="padding:0 14px 0 0;vertical-align:middle;"><img src="https://drahmedbenlallahom.com/assets/abl-logo.svg" width="64" height="64" alt="" style="display:block;width:64px;height:64px;border:0;border-radius:8px;background:#ffffff;" /></td>
+                    <td style="vertical-align:middle;font-family:Arial,sans-serif;"><div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#38bdf8;">MD, DESAIC</div><div style="margin-top:5px;font-size:19px;font-weight:700;color:#ffffff;">Dr Ahmed Ben Lallahom</div></td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px;font-family:Arial,sans-serif;color:#0f172a;">
+      <h2 style="color: #0891b2;">Votre facture</h2>
+      <p>Bonjour Camille Martin,</p>
+      <p style="line-height:1.6;">Veuillez trouver ci-joint la facture de votre consultation avec le Dr Ahmed Ben Lallahom.</p>
+      <div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;">
+        <ul style="list-style: none; padding: 0; margin: 0;">
+          <li style="padding: 4px 0;"><strong>Facture n° :</strong> F-2026-0042</li>
+          <li style="padding: 4px 0;"><strong>Référence :</strong> APTSNAPSHOT01</li>
+          <li style="padding: 4px 0;"><strong>Montant :</strong> 100,00 €</li>
+          <li style="padding: 4px 0;"><strong>Statut :</strong> Payée</li>
+          
+        </ul>
+      </div>
+      <p style="line-height:1.6;">Merci de votre confiance.</p>
+      
+      
+      <p style="font-size:13px;line-height:1.55;color:#475569;">Une question, un report ou une annulation ? Écrivez-nous à <a href="mailto:executive.office@drahmedbenlallahom.com">executive.office@drahmedbenlallahom.com</a> ou appelez le <a href="tel:+33972152413">+33 9 72 15 24 13</a> en indiquant votre référence. Vous pouvez aussi répondre directement à cet email.</p>
+    </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 28px;border-top:1px solid #e2e8f0;background:#f8fafc;font-family:Arial,sans-serif;font-size:12px;line-height:1.5;color:#64748b;">Dr Ahmed Ben Lallahom<br />Communication professionnelle et confidentielle<br /><a href="https://drahmedbenlallahom.com/?lang=fr" style="color:#0e7490;">Site</a> · <a href="https://drahmedbenlallahom.com/legal?tab=privacy&amp;lang=fr" style="color:#0e7490;">Politique de confidentialité</a></td>
+            </tr>
+          </table>
+          <!--[if mso]></td></tr></table><![endif]-->
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>",
+  "subject": "Facture - Consultation APTSNAPSHOT01",
+  "text": "Votre facture
+
+Bonjour Camille Martin,
+
+Veuillez trouver ci-joint la facture de votre consultation avec le Dr Ahmed Ben Lallahom.
+
+Facture n° : F-2026-0042
+Référence : APTSNAPSHOT01
+Montant : 100,00 €
+Statut : Payée
+
+Merci de votre confiance.
+
+Une question, un report ou une annulation ? Écrivez-nous à executive.office@drahmedbenlallahom.com ou appelez le +33 9 72 15 24 13 en indiquant votre référence. Vous pouvez aussi répondre directement à cet email.
+
+Dr Ahmed Ben Lallahom",
+}
+`;
+
+exports[`rendu des emails (MAIL-13) > ownerClientBrief (fr) 1`] = `
+{
+  "from": "Hippocampus Consulting <recrutement@drahmedbenlallahom.com>",
+  "html": "<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8" /><title>[BRIEFSNAPSHOT01] Brief employeur – Clinique Exemple</title></head><body style="margin:0;padding:0;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;"><tr><td align="center"><!--[if mso]><table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" align="center"><tr><td><![endif]--><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;margin:0 auto;border-collapse:collapse;font-family:Arial,sans-serif;color:#0f172a"><tr><td bgcolor="#071827" style="padding:18px 22px;background:#071827;color:#ffffff;border-bottom:3px solid #0891b2"><strong>Hippocampus Consulting</strong></td></tr><tr><td style="padding:24px;border:1px solid #dbe4ee;border-top:0"><h2 style="margin-top:0;color:#0e7490">[BRIEFSNAPSHOT01] Brief employeur – Clinique Exemple</h2><div style="line-height:1.6">Reçu le : 8 novembre 2026 à 11:00<br />Organisation : Clinique Exemple<br />Contact : Service RH<br />Email : rh@example.test<br />Téléphone : non précisé<br />Environnement : Bloc opératoire<br />Spécialité recherchée : Anesthésie<br />Pays : Suisse<br />Certifications / exigences : non précisé<br />Calendrier : non précisé<br />Notes de l’employeur : non précisé<br />Langue de la page : non précisée<br /><br />Qualifier le brief et préparer la shortlist : https://drahmedbenlallahom.com/admin?tab=employerBriefs&amp;ref=BRIEFSNAPSHOT01 (onglet « Missions »).</div><p style="margin-top:24px;font-size:12px;color:#64748b">Notification privée générée par drahmedbenlallahom.com</p></td></tr></table><!--[if mso]></td></tr></table><![endif]--></td></tr></table></body></html>",
+  "replyTo": "hippocampusconsultingfrance@gmail.com",
+  "subject": "[BRIEFSNAPSHOT01] Brief employeur – Clinique Exemple",
+  "text": "[BRIEFSNAPSHOT01] Brief employeur – Clinique Exemple
+
+Reçu le : 8 novembre 2026 à 11:00
+Organisation : Clinique Exemple
+Contact : Service RH
+Email : rh@example.test
+Téléphone : non précisé
+Environnement : Bloc opératoire
+Spécialité recherchée : Anesthésie
+Pays : Suisse
+Certifications / exigences : non précisé
+Calendrier : non précisé
+Notes de l’employeur : non précisé
+Langue de la page : non précisée
+
+Qualifier le brief et préparer la shortlist : https://drahmedbenlallahom.com/admin?tab=employerBriefs&ref=BRIEFSNAPSHOT01 (onglet « Missions »).
+
+Notification privée générée par drahmedbenlallahom.com",
+  "to": [
+    "hippocampusconsultingfrance@gmail.com",
+  ],
+}
+`;
+
+exports[`rendu des emails (MAIL-13) > ownerMedicalQuestion (fr) 1`] = `
+{
+  "from": "Hippocampus Consulting <recrutement@drahmedbenlallahom.com>",
+  "html": "<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8" /><title>[QMEDSNAPSHOT01] Nouvelle question santé à traiter</title></head><body style="margin:0;padding:0;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;"><tr><td align="center"><!--[if mso]><table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" align="center"><tr><td><![endif]--><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;margin:0 auto;border-collapse:collapse;font-family:Arial,sans-serif;color:#0f172a"><tr><td bgcolor="#071827" style="padding:18px 22px;background:#071827;color:#ffffff;border-bottom:3px solid #0891b2"><strong>Hippocampus Consulting</strong></td></tr><tr><td style="padding:24px;border:1px solid #dbe4ee;border-top:0"><h2 style="margin-top:0;color:#0e7490">[QMEDSNAPSHOT01] Nouvelle question santé à traiter</h2><div style="line-height:1.6">Une nouvelle question a été déposée sur le service gratuit de questions santé.<br />Référence : QMEDSNAPSHOT01<br />Reçue le : 8 novembre 2026 à 11:00<br />Langue : EN · accord de publication anonymisée : oui<br /><br />Pour des raisons de confidentialité, la question et les coordonnées ne figurent pas dans cet email.<br />Consulter et répondre : https://drahmedbenlallahom.com/admin?tab=medicalQuestions&amp;ref=QMEDSNAPSHOT01 (onglet « Questions santé »).</div><p style="margin-top:24px;font-size:12px;color:#64748b">Notification privée générée par drahmedbenlallahom.com</p></td></tr></table><!--[if mso]></td></tr></table><![endif]--></td></tr></table></body></html>",
+  "replyTo": "hippocampusconsultingfrance@gmail.com",
+  "subject": "[QMEDSNAPSHOT01] Nouvelle question santé à traiter",
+  "text": "[QMEDSNAPSHOT01] Nouvelle question santé à traiter
+
+Une nouvelle question a été déposée sur le service gratuit de questions santé.
+Référence : QMEDSNAPSHOT01
+Reçue le : 8 novembre 2026 à 11:00
+Langue : EN · accord de publication anonymisée : oui
+
+Pour des raisons de confidentialité, la question et les coordonnées ne figurent pas dans cet email.
+Consulter et répondre : https://drahmedbenlallahom.com/admin?tab=medicalQuestions&ref=QMEDSNAPSHOT01 (onglet « Questions santé »).
+
+Notification privée générée par drahmedbenlallahom.com",
+  "to": [
+    "hippocampusconsultingfrance@gmail.com",
+  ],
+}
+`;
+
+exports[`rendu des emails (MAIL-13) > practitionerCancellation (en) 1`] = `
+{
+  "html": "<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cancellation of your consultation - APTSNAPSHOT01</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f1f5f9;">
+    <div style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;color:#f1f5f9;mso-hide:all;">Consultation cancelled – refund of €100.00 – ref. APTSNAPSHOT01&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;background:#f1f5f9;">
+      <tr>
+        <td align="center" style="padding:24px 12px;">
+          <!--[if mso]><table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" align="center"><tr><td><![endif]-->
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;margin:0 auto;border-collapse:separate;background:#ffffff;border:1px solid #dbe4ee;border-radius:14px;overflow:hidden;font-family:Arial,sans-serif;color:#0f172a;">
+            <tr>
+              <td bgcolor="#071827" style="padding:18px 28px;background:#071827;border-bottom:3px solid #0891b2;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+                  <tr>
+                    <td style="padding:0 14px 0 0;vertical-align:middle;"><img src="https://drahmedbenlallahom.com/assets/abl-logo.svg" width="64" height="64" alt="" style="display:block;width:64px;height:64px;border:0;border-radius:8px;background:#ffffff;" /></td>
+                    <td style="vertical-align:middle;font-family:Arial,sans-serif;"><div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#38bdf8;">MD, DESAIC</div><div style="margin-top:5px;font-size:19px;font-weight:700;color:#ffffff;">Dr Ahmed Ben Lallahom</div></td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px;font-family:Arial,sans-serif;color:#0f172a;">
+      <h2 style="color: #0891b2;">Cancellation of your consultation</h2>
+      <p>Hello Camille Martin,</p>
+      <p style="line-height:1.6;">We regret to inform you that your consultation had to be cancelled by the practitioner. The amount paid is refunded to you in full.</p>
+      <div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;">
+        <ul style="list-style: none; padding: 0; margin: 0;">
+          <li style="padding: 4px 0;"><strong>Reference:</strong> APTSNAPSHOT01</li>
+          <li style="padding: 4px 0;"><strong>Cancelled consultation:</strong> Friday, 20 November 2026 at 10:00 (Paris time)</li>
+          <li style="padding: 4px 0;"><strong>Reason:</strong> Indisponibilité</li>
+          <li style="padding: 4px 0;"><strong>Amount refunded:</strong> €100.00</li>
+          
+        </ul>
+      </div>
+      <p style="line-height:1.6;">The time it takes for the refund to appear on your account depends on your bank.</p>
+      <p style="line-height:1.6;">You can book a new slot at any time on the website. We apologise for the inconvenience.</p>
+      <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:8px 0 20px;border-collapse:separate;"><tr><td bgcolor="#0e7490" style="padding:12px 18px;border-radius:7px;background:#0e7490;"><a href="https://drahmedbenlallahom.com/booking?lang=en" style="color:#ffffff;text-decoration:none;font-family:Arial,sans-serif;font-size:16px;font-weight:700;">Choose a new slot</a></td></tr></table>
+      
+      <p style="font-size:13px;line-height:1.55;color:#475569;">A question, a change or a cancellation? Write to us at <a href="mailto:executive.office@drahmedbenlallahom.com">executive.office@drahmedbenlallahom.com</a> or call <a href="tel:+33972152413">+33 9 72 15 24 13</a>, quoting your reference. You can also reply directly to this email.</p>
+    </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 28px;border-top:1px solid #e2e8f0;background:#f8fafc;font-family:Arial,sans-serif;font-size:12px;line-height:1.5;color:#64748b;">Dr Ahmed Ben Lallahom<br />Professional and confidential communication<br /><a href="https://drahmedbenlallahom.com/?lang=en" style="color:#0e7490;">Website</a> · <a href="https://drahmedbenlallahom.com/legal?tab=privacy&amp;lang=en" style="color:#0e7490;">Privacy policy</a></td>
+            </tr>
+          </table>
+          <!--[if mso]></td></tr></table><![endif]-->
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>",
+  "subject": "Cancellation of your consultation - APTSNAPSHOT01",
+  "text": "Cancellation of your consultation
+
+Hello Camille Martin,
+
+We regret to inform you that your consultation had to be cancelled by the practitioner. The amount paid is refunded to you in full.
+
+Reference: APTSNAPSHOT01
+Cancelled consultation: Friday, 20 November 2026 at 10:00 (Paris time)
+Reason: Indisponibilité
+Amount refunded: €100.00
+
+The time it takes for the refund to appear on your account depends on your bank.
+
+You can book a new slot at any time on the website. We apologise for the inconvenience.
+
+Choose a new slot: https://drahmedbenlallahom.com/booking?lang=en
+
+A question, a change or a cancellation? Write to us at executive.office@drahmedbenlallahom.com or call +33 9 72 15 24 13, quoting your reference. You can also reply directly to this email.
+
+Dr Ahmed Ben Lallahom",
+}
+`;
+
+exports[`rendu des emails (MAIL-13) > practitionerCancellation (fr) 1`] = `
+{
+  "html": "<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Annulation de votre consultation - APTSNAPSHOT01</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f1f5f9;">
+    <div style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;color:#f1f5f9;mso-hide:all;">Consultation annulée – remboursement de 100,00 € – réf. APTSNAPSHOT01&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;background:#f1f5f9;">
+      <tr>
+        <td align="center" style="padding:24px 12px;">
+          <!--[if mso]><table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" align="center"><tr><td><![endif]-->
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;margin:0 auto;border-collapse:separate;background:#ffffff;border:1px solid #dbe4ee;border-radius:14px;overflow:hidden;font-family:Arial,sans-serif;color:#0f172a;">
+            <tr>
+              <td bgcolor="#071827" style="padding:18px 28px;background:#071827;border-bottom:3px solid #0891b2;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+                  <tr>
+                    <td style="padding:0 14px 0 0;vertical-align:middle;"><img src="https://drahmedbenlallahom.com/assets/abl-logo.svg" width="64" height="64" alt="" style="display:block;width:64px;height:64px;border:0;border-radius:8px;background:#ffffff;" /></td>
+                    <td style="vertical-align:middle;font-family:Arial,sans-serif;"><div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#38bdf8;">MD, DESAIC</div><div style="margin-top:5px;font-size:19px;font-weight:700;color:#ffffff;">Dr Ahmed Ben Lallahom</div></td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px;font-family:Arial,sans-serif;color:#0f172a;">
+      <h2 style="color: #0891b2;">Annulation de votre consultation</h2>
+      <p>Bonjour Camille Martin,</p>
+      <p style="line-height:1.6;">Nous sommes au regret de vous informer que votre consultation a dû être annulée par le praticien. Le montant payé vous est intégralement remboursé.</p>
+      <div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;">
+        <ul style="list-style: none; padding: 0; margin: 0;">
+          <li style="padding: 4px 0;"><strong>Référence :</strong> APTSNAPSHOT01</li>
+          <li style="padding: 4px 0;"><strong>Consultation annulée :</strong> vendredi 20 novembre 2026 à 10:00 (heure de Paris)</li>
+          <li style="padding: 4px 0;"><strong>Motif :</strong> Indisponibilité</li>
+          <li style="padding: 4px 0;"><strong>Montant remboursé :</strong> 100,00 €</li>
+          
+        </ul>
+      </div>
+      <p style="line-height:1.6;">Le délai d’apparition du remboursement sur votre compte dépend de votre établissement bancaire.</p>
+      <p style="line-height:1.6;">Vous pouvez réserver un nouveau créneau à tout moment sur le site. Nous vous prions de nous excuser pour ce contretemps.</p>
+      <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:8px 0 20px;border-collapse:separate;"><tr><td bgcolor="#0e7490" style="padding:12px 18px;border-radius:7px;background:#0e7490;"><a href="https://drahmedbenlallahom.com/booking?lang=fr" style="color:#ffffff;text-decoration:none;font-family:Arial,sans-serif;font-size:16px;font-weight:700;">Choisir un nouveau créneau</a></td></tr></table>
+      
+      <p style="font-size:13px;line-height:1.55;color:#475569;">Une question, un report ou une annulation ? Écrivez-nous à <a href="mailto:executive.office@drahmedbenlallahom.com">executive.office@drahmedbenlallahom.com</a> ou appelez le <a href="tel:+33972152413">+33 9 72 15 24 13</a> en indiquant votre référence. Vous pouvez aussi répondre directement à cet email.</p>
+    </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 28px;border-top:1px solid #e2e8f0;background:#f8fafc;font-family:Arial,sans-serif;font-size:12px;line-height:1.5;color:#64748b;">Dr Ahmed Ben Lallahom<br />Communication professionnelle et confidentielle<br /><a href="https://drahmedbenlallahom.com/?lang=fr" style="color:#0e7490;">Site</a> · <a href="https://drahmedbenlallahom.com/legal?tab=privacy&amp;lang=fr" style="color:#0e7490;">Politique de confidentialité</a></td>
+            </tr>
+          </table>
+          <!--[if mso]></td></tr></table><![endif]-->
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>",
+  "subject": "Annulation de votre consultation - APTSNAPSHOT01",
+  "text": "Annulation de votre consultation
+
+Bonjour Camille Martin,
+
+Nous sommes au regret de vous informer que votre consultation a dû être annulée par le praticien. Le montant payé vous est intégralement remboursé.
+
+Référence : APTSNAPSHOT01
+Consultation annulée : vendredi 20 novembre 2026 à 10:00 (heure de Paris)
+Motif : Indisponibilité
+Montant remboursé : 100,00 €
+
+Le délai d’apparition du remboursement sur votre compte dépend de votre établissement bancaire.
+
+Vous pouvez réserver un nouveau créneau à tout moment sur le site. Nous vous prions de nous excuser pour ce contretemps.
+
+Choisir un nouveau créneau : https://drahmedbenlallahom.com/booking?lang=fr
+
+Une question, un report ou une annulation ? Écrivez-nous à executive.office@drahmedbenlallahom.com ou appelez le +33 9 72 15 24 13 en indiquant votre référence. Vous pouvez aussi répondre directement à cet email.
+
+Dr Ahmed Ben Lallahom",
+}
+`;
+
+exports[`rendu des emails (MAIL-13) > recruitmentAdditionalInformation (en) 1`] = `
+{
+  "html": "<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Additional information requested for your application — CVSNAPSHOT01</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f1f5f9;">
+    <div style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;color:#f1f5f9;mso-hide:all;">To continue the human review of your application, please provide the additional professional information or documents requested by our team. Never send patient information or clinical records.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;background:#f1f5f9;">
+      <tr>
+        <td align="center" style="padding:24px 12px;">
+          <!--[if mso]><table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" align="center"><tr><td><![endif]-->
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;margin:0 auto;border-collapse:separate;background:#ffffff;border:1px solid #dbe4ee;border-radius:14px;overflow:hidden;font-family:Arial,sans-serif;color:#0f172a;">
+            <tr>
+              <td bgcolor="#071827" style="padding:18px 28px;background:#071827;border-bottom:3px solid #0891b2;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+                  <tr>
+                    <td style="padding:0 14px 0 0;vertical-align:middle;"><img src="https://drahmedbenlallahom.com/assets/abl-logo.svg" width="64" height="64" alt="" style="display:block;width:64px;height:64px;border:0;border-radius:8px;background:#ffffff;" /></td>
+                    <td style="vertical-align:middle;font-family:Arial,sans-serif;"><div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#38bdf8;">ABL / HIPPOCAMPUS</div><div style="margin-top:5px;font-size:19px;font-weight:700;color:#ffffff;">Hippocampus Consulting</div></td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px;font-family:Arial,sans-serif;color:#0f172a;">
+        <h2 style="color: #0891b2;">Hippocampus Consulting</h2>
+        <p>Hello Camille,</p>
+        <p>To continue the human review of your application, please provide the additional professional information or documents requested by our team. Never send patient information or clinical records.</p>
+        <div style="background: #f8fafc; border-radius: 8px; padding: 14px; margin: 16px 0;"><strong>Requested documents or information</strong><br />Diplôme<br />Attestation</div>
+        <p><strong>Reference:</strong> CVSNAPSHOT01</p>
+        <p>This message concerns your professional application only. You may request access, rectification or deletion of your data through our <a href="https://drahmedbenlallahom.com/gdpr?lang=en" style="color:#0e7490;">GDPR form</a>.</p>
+    </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 28px;border-top:1px solid #e2e8f0;background:#f8fafc;font-family:Arial,sans-serif;font-size:12px;line-height:1.5;color:#64748b;">Hippocampus Consulting<br />Professional and confidential communication<br /><a href="https://drahmedbenlallahom.com/?lang=en" style="color:#0e7490;">Website</a> · <a href="https://drahmedbenlallahom.com/legal?tab=privacy&amp;lang=en" style="color:#0e7490;">Privacy policy</a></td>
+            </tr>
+          </table>
+          <!--[if mso]></td></tr></table><![endif]-->
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>",
+  "subject": "Additional information requested for your application — CVSNAPSHOT01",
+}
+`;
+
+exports[`rendu des emails (MAIL-13) > recruitmentAdditionalInformation (fr) 1`] = `
+{
+  "html": "<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Complément d’information concernant votre candidature — CVSNAPSHOT01</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f1f5f9;">
+    <div style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;color:#f1f5f9;mso-hide:all;">Afin de poursuivre l’examen humain de votre candidature, merci de nous transmettre les informations ou documents professionnels complémentaires demandés par notre équipe. Ne transmettez jamais de données de patients ni de dossier clinique.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;background:#f1f5f9;">
+      <tr>
+        <td align="center" style="padding:24px 12px;">
+          <!--[if mso]><table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" align="center"><tr><td><![endif]-->
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;margin:0 auto;border-collapse:separate;background:#ffffff;border:1px solid #dbe4ee;border-radius:14px;overflow:hidden;font-family:Arial,sans-serif;color:#0f172a;">
+            <tr>
+              <td bgcolor="#071827" style="padding:18px 28px;background:#071827;border-bottom:3px solid #0891b2;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+                  <tr>
+                    <td style="padding:0 14px 0 0;vertical-align:middle;"><img src="https://drahmedbenlallahom.com/assets/abl-logo.svg" width="64" height="64" alt="" style="display:block;width:64px;height:64px;border:0;border-radius:8px;background:#ffffff;" /></td>
+                    <td style="vertical-align:middle;font-family:Arial,sans-serif;"><div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#38bdf8;">ABL / HIPPOCAMPUS</div><div style="margin-top:5px;font-size:19px;font-weight:700;color:#ffffff;">Hippocampus Consulting</div></td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px;font-family:Arial,sans-serif;color:#0f172a;">
+        <h2 style="color: #0891b2;">Hippocampus Consulting</h2>
+        <p>Bonjour Camille,</p>
+        <p>Afin de poursuivre l’examen humain de votre candidature, merci de nous transmettre les informations ou documents professionnels complémentaires demandés par notre équipe. Ne transmettez jamais de données de patients ni de dossier clinique.</p>
+        <div style="background: #f8fafc; border-radius: 8px; padding: 14px; margin: 16px 0;"><strong>Documents ou informations demandés</strong><br />Diplôme<br />Attestation</div>
+        <p><strong>Référence:</strong> CVSNAPSHOT01</p>
+        <p>Cette communication concerne uniquement votre candidature professionnelle. Vous pouvez demander l’accès, la rectification ou la suppression de vos données via notre <a href="https://drahmedbenlallahom.com/gdpr?lang=fr" style="color:#0e7490;">formulaire RGPD</a>.</p>
+    </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 28px;border-top:1px solid #e2e8f0;background:#f8fafc;font-family:Arial,sans-serif;font-size:12px;line-height:1.5;color:#64748b;">Hippocampus Consulting<br />Communication professionnelle et confidentielle<br /><a href="https://drahmedbenlallahom.com/?lang=fr" style="color:#0e7490;">Site</a> · <a href="https://drahmedbenlallahom.com/legal?tab=privacy&amp;lang=fr" style="color:#0e7490;">Politique de confidentialité</a></td>
+            </tr>
+          </table>
+          <!--[if mso]></td></tr></table><![endif]-->
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>",
+  "subject": "Complément d’information concernant votre candidature — CVSNAPSHOT01",
+}
+`;
+
+exports[`rendu des emails (MAIL-13) > recruitmentCampaign (en) 1`] = `
+{
+  "headers": {
+    "List-Unsubscribe": "<https://drahmedbenlallahom.com/api/recruitment/unsubscribe?token=exemple>",
+    "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+  },
+  "html": "<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Opportunité</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f1f5f9;">
+    
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;background:#f1f5f9;">
+      <tr>
+        <td align="center" style="padding:24px 12px;">
+          <!--[if mso]><table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" align="center"><tr><td><![endif]-->
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;margin:0 auto;border-collapse:separate;background:#ffffff;border:1px solid #dbe4ee;border-radius:14px;overflow:hidden;font-family:Arial,sans-serif;color:#0f172a;">
+            <tr>
+              <td bgcolor="#071827" style="padding:18px 28px;background:#071827;border-bottom:3px solid #0891b2;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+                  <tr>
+                    <td style="padding:0 14px 0 0;vertical-align:middle;"><img src="https://drahmedbenlallahom.com/assets/abl-logo.svg" width="64" height="64" alt="" style="display:block;width:64px;height:64px;border:0;border-radius:8px;background:#ffffff;" /></td>
+                    <td style="vertical-align:middle;font-family:Arial,sans-serif;"><div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#38bdf8;">ABL / HIPPOCAMPUS</div><div style="margin-top:5px;font-size:19px;font-weight:700;color:#ffffff;">Hippocampus Consulting</div></td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px;font-family:Arial,sans-serif;color:#0f172a;">
+        <h2 style="color: #0891b2;">Anesthésie – Canada</h2>
+        <p>Hello Camille,</p>
+        <p>Une mission de six mois.<br />Répondez par email.</p>
+        <p style="color: #64748b;">This offer concerns your professional profile.</p>
+        <p style="font-size: 12px;"><a href="https://drahmedbenlallahom.com/recruitment/unsubscribe?token=exemple" style="color: #0e7490;">Unsubscribe from future recruitment opportunities</a></p>
+    </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 28px;border-top:1px solid #e2e8f0;background:#f8fafc;font-family:Arial,sans-serif;font-size:12px;line-height:1.5;color:#64748b;">Hippocampus Consulting<br />Professional and confidential communication<br /><a href="https://drahmedbenlallahom.com/?lang=en" style="color:#0e7490;">Website</a> · <a href="https://drahmedbenlallahom.com/legal?tab=privacy&amp;lang=en" style="color:#0e7490;">Privacy policy</a></td>
+            </tr>
+          </table>
+          <!--[if mso]></td></tr></table><![endif]-->
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>",
+  "subject": "Opportunité",
+  "text": "Anesthésie – Canada
+
+Hello Camille,
+
+Une mission de six mois.
+Répondez par email.
+
+This offer concerns your professional profile.
+
+Unsubscribe from future recruitment opportunities: https://drahmedbenlallahom.com/recruitment/unsubscribe?token=exemple
+
+Hippocampus Consulting",
+}
+`;
+
+exports[`rendu des emails (MAIL-13) > recruitmentCampaign (fr) 1`] = `
+{
+  "headers": {
+    "List-Unsubscribe": "<https://drahmedbenlallahom.com/api/recruitment/unsubscribe?token=exemple>",
+    "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+  },
+  "html": "<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Opportunité</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f1f5f9;">
+    
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;background:#f1f5f9;">
+      <tr>
+        <td align="center" style="padding:24px 12px;">
+          <!--[if mso]><table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" align="center"><tr><td><![endif]-->
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;margin:0 auto;border-collapse:separate;background:#ffffff;border:1px solid #dbe4ee;border-radius:14px;overflow:hidden;font-family:Arial,sans-serif;color:#0f172a;">
+            <tr>
+              <td bgcolor="#071827" style="padding:18px 28px;background:#071827;border-bottom:3px solid #0891b2;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+                  <tr>
+                    <td style="padding:0 14px 0 0;vertical-align:middle;"><img src="https://drahmedbenlallahom.com/assets/abl-logo.svg" width="64" height="64" alt="" style="display:block;width:64px;height:64px;border:0;border-radius:8px;background:#ffffff;" /></td>
+                    <td style="vertical-align:middle;font-family:Arial,sans-serif;"><div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#38bdf8;">ABL / HIPPOCAMPUS</div><div style="margin-top:5px;font-size:19px;font-weight:700;color:#ffffff;">Hippocampus Consulting</div></td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px;font-family:Arial,sans-serif;color:#0f172a;">
+        <h2 style="color: #0891b2;">Anesthésie – Canada</h2>
+        <p>Bonjour Camille,</p>
+        <p>Une mission de six mois.<br />Répondez par email.</p>
+        <p style="color: #64748b;">Cette offre concerne votre profil professionnel.</p>
+        <p style="font-size: 12px;"><a href="https://drahmedbenlallahom.com/recruitment/unsubscribe?token=exemple" style="color: #0e7490;">Ne plus recevoir d’opportunités de recrutement</a></p>
+    </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 28px;border-top:1px solid #e2e8f0;background:#f8fafc;font-family:Arial,sans-serif;font-size:12px;line-height:1.5;color:#64748b;">Hippocampus Consulting<br />Communication professionnelle et confidentielle<br /><a href="https://drahmedbenlallahom.com/?lang=fr" style="color:#0e7490;">Site</a> · <a href="https://drahmedbenlallahom.com/legal?tab=privacy&amp;lang=fr" style="color:#0e7490;">Politique de confidentialité</a></td>
+            </tr>
+          </table>
+          <!--[if mso]></td></tr></table><![endif]-->
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>",
+  "subject": "Opportunité",
+  "text": "Anesthésie – Canada
+
+Bonjour Camille,
+
+Une mission de six mois.
+Répondez par email.
+
+Cette offre concerne votre profil professionnel.
+
+Ne plus recevoir d’opportunités de recrutement : https://drahmedbenlallahom.com/recruitment/unsubscribe?token=exemple
+
+Hippocampus Consulting",
+}
+`;
+
+exports[`rendu des emails (MAIL-13) > recruitmentProfileInterest (en) 1`] = `
+{
+  "html": "<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Your profile has caught our attention — CVSNAPSHOT01</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f1f5f9;">
+    <div style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;color:#f1f5f9;mso-hide:all;">Following an initial human review of your application, we would like to speak with you about international opportunities that may fit your profile. Please reply with your availability and an updated telephone number if applicable.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;background:#f1f5f9;">
+      <tr>
+        <td align="center" style="padding:24px 12px;">
+          <!--[if mso]><table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" align="center"><tr><td><![endif]-->
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;margin:0 auto;border-collapse:separate;background:#ffffff;border:1px solid #dbe4ee;border-radius:14px;overflow:hidden;font-family:Arial,sans-serif;color:#0f172a;">
+            <tr>
+              <td bgcolor="#071827" style="padding:18px 28px;background:#071827;border-bottom:3px solid #0891b2;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+                  <tr>
+                    <td style="padding:0 14px 0 0;vertical-align:middle;"><img src="https://drahmedbenlallahom.com/assets/abl-logo.svg" width="64" height="64" alt="" style="display:block;width:64px;height:64px;border:0;border-radius:8px;background:#ffffff;" /></td>
+                    <td style="vertical-align:middle;font-family:Arial,sans-serif;"><div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#38bdf8;">ABL / HIPPOCAMPUS</div><div style="margin-top:5px;font-size:19px;font-weight:700;color:#ffffff;">Hippocampus Consulting</div></td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px;font-family:Arial,sans-serif;color:#0f172a;">
+        <h2 style="color: #0891b2;">Hippocampus Consulting</h2>
+        <p>Hello Camille,</p>
+        <p>Following an initial human review of your application, we would like to speak with you about international opportunities that may fit your profile. Please reply with your availability and an updated telephone number if applicable.</p>
+        
+        <p><strong>Reference:</strong> CVSNAPSHOT01</p>
+        <p>This message concerns your professional application only. You may request access, rectification or deletion of your data through our <a href="https://drahmedbenlallahom.com/gdpr?lang=en" style="color:#0e7490;">GDPR form</a>.</p>
+    </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 28px;border-top:1px solid #e2e8f0;background:#f8fafc;font-family:Arial,sans-serif;font-size:12px;line-height:1.5;color:#64748b;">Hippocampus Consulting<br />Professional and confidential communication<br /><a href="https://drahmedbenlallahom.com/?lang=en" style="color:#0e7490;">Website</a> · <a href="https://drahmedbenlallahom.com/legal?tab=privacy&amp;lang=en" style="color:#0e7490;">Privacy policy</a></td>
+            </tr>
+          </table>
+          <!--[if mso]></td></tr></table><![endif]-->
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>",
+  "subject": "Your profile has caught our attention — CVSNAPSHOT01",
+}
+`;
+
+exports[`rendu des emails (MAIL-13) > recruitmentProfileInterest (fr) 1`] = `
+{
+  "html": "<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Votre profil nous intéresse — CVSNAPSHOT01</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f1f5f9;">
+    <div style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;color:#f1f5f9;mso-hide:all;">Après une première revue humaine de votre candidature, nous souhaiterions échanger avec vous au sujet des opportunités internationales susceptibles de correspondre à votre profil. Merci de nous répondre avec vos disponibilités et votre numéro de téléphone si celui-ci a changé.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;background:#f1f5f9;">
+      <tr>
+        <td align="center" style="padding:24px 12px;">
+          <!--[if mso]><table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" align="center"><tr><td><![endif]-->
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;margin:0 auto;border-collapse:separate;background:#ffffff;border:1px solid #dbe4ee;border-radius:14px;overflow:hidden;font-family:Arial,sans-serif;color:#0f172a;">
+            <tr>
+              <td bgcolor="#071827" style="padding:18px 28px;background:#071827;border-bottom:3px solid #0891b2;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+                  <tr>
+                    <td style="padding:0 14px 0 0;vertical-align:middle;"><img src="https://drahmedbenlallahom.com/assets/abl-logo.svg" width="64" height="64" alt="" style="display:block;width:64px;height:64px;border:0;border-radius:8px;background:#ffffff;" /></td>
+                    <td style="vertical-align:middle;font-family:Arial,sans-serif;"><div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#38bdf8;">ABL / HIPPOCAMPUS</div><div style="margin-top:5px;font-size:19px;font-weight:700;color:#ffffff;">Hippocampus Consulting</div></td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px;font-family:Arial,sans-serif;color:#0f172a;">
+        <h2 style="color: #0891b2;">Hippocampus Consulting</h2>
+        <p>Bonjour Camille,</p>
+        <p>Après une première revue humaine de votre candidature, nous souhaiterions échanger avec vous au sujet des opportunités internationales susceptibles de correspondre à votre profil. Merci de nous répondre avec vos disponibilités et votre numéro de téléphone si celui-ci a changé.</p>
+        
+        <p><strong>Référence:</strong> CVSNAPSHOT01</p>
+        <p>Cette communication concerne uniquement votre candidature professionnelle. Vous pouvez demander l’accès, la rectification ou la suppression de vos données via notre <a href="https://drahmedbenlallahom.com/gdpr?lang=fr" style="color:#0e7490;">formulaire RGPD</a>.</p>
+    </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 28px;border-top:1px solid #e2e8f0;background:#f8fafc;font-family:Arial,sans-serif;font-size:12px;line-height:1.5;color:#64748b;">Hippocampus Consulting<br />Communication professionnelle et confidentielle<br /><a href="https://drahmedbenlallahom.com/?lang=fr" style="color:#0e7490;">Site</a> · <a href="https://drahmedbenlallahom.com/legal?tab=privacy&amp;lang=fr" style="color:#0e7490;">Politique de confidentialité</a></td>
+            </tr>
+          </table>
+          <!--[if mso]></td></tr></table><![endif]-->
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>",
+  "subject": "Votre profil nous intéresse — CVSNAPSHOT01",
+}
+`;
+
+exports[`rendu des emails (MAIL-13) > refund (en) 1`] = `
+{
+  "html": "<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Refund confirmed - APTSNAPSHOT01</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f1f5f9;">
+    <div style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;color:#f1f5f9;mso-hide:all;">Refund of €100.00 – ref. APTSNAPSHOT01&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;background:#f1f5f9;">
+      <tr>
+        <td align="center" style="padding:24px 12px;">
+          <!--[if mso]><table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" align="center"><tr><td><![endif]-->
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;margin:0 auto;border-collapse:separate;background:#ffffff;border:1px solid #dbe4ee;border-radius:14px;overflow:hidden;font-family:Arial,sans-serif;color:#0f172a;">
+            <tr>
+              <td bgcolor="#071827" style="padding:18px 28px;background:#071827;border-bottom:3px solid #0891b2;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+                  <tr>
+                    <td style="padding:0 14px 0 0;vertical-align:middle;"><img src="https://drahmedbenlallahom.com/assets/abl-logo.svg" width="64" height="64" alt="" style="display:block;width:64px;height:64px;border:0;border-radius:8px;background:#ffffff;" /></td>
+                    <td style="vertical-align:middle;font-family:Arial,sans-serif;"><div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#38bdf8;">MD, DESAIC</div><div style="margin-top:5px;font-size:19px;font-weight:700;color:#ffffff;">Dr Ahmed Ben Lallahom</div></td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px;font-family:Arial,sans-serif;color:#0f172a;">
+      <h2 style="color: #0891b2;">Refund confirmation</h2>
+      <p>Hello Camille Martin,</p>
+      <p style="line-height:1.6;">The refund of your consultation has been recorded.</p>
+      <div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;">
+        <ul style="list-style: none; padding: 0; margin: 0;">
+          <li style="padding: 4px 0;"><strong>Reference:</strong> APTSNAPSHOT01</li>
+          <li style="padding: 4px 0;"><strong>Original consultation:</strong> Friday, 20 November 2026 at 10:00 (Paris time)</li>
+          <li style="padding: 4px 0;"><strong>Amount refunded:</strong> €100.00</li>
+          
+        </ul>
+      </div>
+      <p style="line-height:1.6;">The time it takes for the refund to appear on your account depends on your bank.</p>
+      
+      
+      <p style="font-size:13px;line-height:1.55;color:#475569;">A question, a change or a cancellation? Write to us at <a href="mailto:executive.office@drahmedbenlallahom.com">executive.office@drahmedbenlallahom.com</a> or call <a href="tel:+33972152413">+33 9 72 15 24 13</a>, quoting your reference. You can also reply directly to this email.</p>
+    </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 28px;border-top:1px solid #e2e8f0;background:#f8fafc;font-family:Arial,sans-serif;font-size:12px;line-height:1.5;color:#64748b;">Dr Ahmed Ben Lallahom<br />Professional and confidential communication<br /><a href="https://drahmedbenlallahom.com/?lang=en" style="color:#0e7490;">Website</a> · <a href="https://drahmedbenlallahom.com/legal?tab=privacy&amp;lang=en" style="color:#0e7490;">Privacy policy</a></td>
+            </tr>
+          </table>
+          <!--[if mso]></td></tr></table><![endif]-->
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>",
+  "subject": "Refund confirmed - APTSNAPSHOT01",
+  "text": "Refund confirmation
+
+Hello Camille Martin,
+
+The refund of your consultation has been recorded.
+
+Reference: APTSNAPSHOT01
+Original consultation: Friday, 20 November 2026 at 10:00 (Paris time)
+Amount refunded: €100.00
+
+The time it takes for the refund to appear on your account depends on your bank.
+
+A question, a change or a cancellation? Write to us at executive.office@drahmedbenlallahom.com or call +33 9 72 15 24 13, quoting your reference. You can also reply directly to this email.
+
+Dr Ahmed Ben Lallahom",
+}
+`;
+
+exports[`rendu des emails (MAIL-13) > refund (fr) 1`] = `
+{
+  "html": "<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Remboursement confirmé - APTSNAPSHOT01</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f1f5f9;">
+    <div style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;color:#f1f5f9;mso-hide:all;">Remboursement de 100,00 € – réf. APTSNAPSHOT01&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;background:#f1f5f9;">
+      <tr>
+        <td align="center" style="padding:24px 12px;">
+          <!--[if mso]><table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" align="center"><tr><td><![endif]-->
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;margin:0 auto;border-collapse:separate;background:#ffffff;border:1px solid #dbe4ee;border-radius:14px;overflow:hidden;font-family:Arial,sans-serif;color:#0f172a;">
+            <tr>
+              <td bgcolor="#071827" style="padding:18px 28px;background:#071827;border-bottom:3px solid #0891b2;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+                  <tr>
+                    <td style="padding:0 14px 0 0;vertical-align:middle;"><img src="https://drahmedbenlallahom.com/assets/abl-logo.svg" width="64" height="64" alt="" style="display:block;width:64px;height:64px;border:0;border-radius:8px;background:#ffffff;" /></td>
+                    <td style="vertical-align:middle;font-family:Arial,sans-serif;"><div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#38bdf8;">MD, DESAIC</div><div style="margin-top:5px;font-size:19px;font-weight:700;color:#ffffff;">Dr Ahmed Ben Lallahom</div></td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px;font-family:Arial,sans-serif;color:#0f172a;">
+      <h2 style="color: #0891b2;">Confirmation de remboursement</h2>
+      <p>Bonjour Camille Martin,</p>
+      <p style="line-height:1.6;">Le remboursement de votre consultation a été enregistré.</p>
+      <div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;">
+        <ul style="list-style: none; padding: 0; margin: 0;">
+          <li style="padding: 4px 0;"><strong>Référence :</strong> APTSNAPSHOT01</li>
+          <li style="padding: 4px 0;"><strong>Consultation initiale :</strong> vendredi 20 novembre 2026 à 10:00 (heure de Paris)</li>
+          <li style="padding: 4px 0;"><strong>Montant remboursé :</strong> 100,00 €</li>
+          
+        </ul>
+      </div>
+      <p style="line-height:1.6;">Le délai d’apparition du remboursement sur votre compte dépend de votre établissement bancaire.</p>
+      
+      
+      <p style="font-size:13px;line-height:1.55;color:#475569;">Une question, un report ou une annulation ? Écrivez-nous à <a href="mailto:executive.office@drahmedbenlallahom.com">executive.office@drahmedbenlallahom.com</a> ou appelez le <a href="tel:+33972152413">+33 9 72 15 24 13</a> en indiquant votre référence. Vous pouvez aussi répondre directement à cet email.</p>
+    </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 28px;border-top:1px solid #e2e8f0;background:#f8fafc;font-family:Arial,sans-serif;font-size:12px;line-height:1.5;color:#64748b;">Dr Ahmed Ben Lallahom<br />Communication professionnelle et confidentielle<br /><a href="https://drahmedbenlallahom.com/?lang=fr" style="color:#0e7490;">Site</a> · <a href="https://drahmedbenlallahom.com/legal?tab=privacy&amp;lang=fr" style="color:#0e7490;">Politique de confidentialité</a></td>
+            </tr>
+          </table>
+          <!--[if mso]></td></tr></table><![endif]-->
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>",
+  "subject": "Remboursement confirmé - APTSNAPSHOT01",
+  "text": "Confirmation de remboursement
+
+Bonjour Camille Martin,
+
+Le remboursement de votre consultation a été enregistré.
+
+Référence : APTSNAPSHOT01
+Consultation initiale : vendredi 20 novembre 2026 à 10:00 (heure de Paris)
+Montant remboursé : 100,00 €
+
+Le délai d’apparition du remboursement sur votre compte dépend de votre établissement bancaire.
+
+Une question, un report ou une annulation ? Écrivez-nous à executive.office@drahmedbenlallahom.com ou appelez le +33 9 72 15 24 13 en indiquant votre référence. Vous pouvez aussi répondre directement à cet email.
+
+Dr Ahmed Ben Lallahom",
+}
+`;
+
+exports[`rendu des emails (MAIL-13) > unconfirmablePayment (en) 1`] = `
+{
+  "html": "<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Your payment has been received: we will sort out your booking - APTSNAPSHOT01</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f1f5f9;">
+    <div style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;color:#f1f5f9;mso-hide:all;">Your payment has been received, we will sort out your booking – ref. APTSNAPSHOT01&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;background:#f1f5f9;">
+      <tr>
+        <td align="center" style="padding:24px 12px;">
+          <!--[if mso]><table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" align="center"><tr><td><![endif]-->
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;margin:0 auto;border-collapse:separate;background:#ffffff;border:1px solid #dbe4ee;border-radius:14px;overflow:hidden;font-family:Arial,sans-serif;color:#0f172a;">
+            <tr>
+              <td bgcolor="#071827" style="padding:18px 28px;background:#071827;border-bottom:3px solid #0891b2;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+                  <tr>
+                    <td style="padding:0 14px 0 0;vertical-align:middle;"><img src="https://drahmedbenlallahom.com/assets/abl-logo.svg" width="64" height="64" alt="" style="display:block;width:64px;height:64px;border:0;border-radius:8px;background:#ffffff;" /></td>
+                    <td style="vertical-align:middle;font-family:Arial,sans-serif;"><div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#38bdf8;">MD, DESAIC</div><div style="margin-top:5px;font-size:19px;font-weight:700;color:#ffffff;">Dr Ahmed Ben Lallahom</div></td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px;font-family:Arial,sans-serif;color:#0f172a;">
+      <h2 style="color: #0891b2;">Your payment has been received, we will sort out your booking</h2>
+      <p>Hello Camille Martin,</p>
+      <p style="line-height:1.6;">Your payment has been received, but the chosen slot could not be confirmed to you automatically: the temporary booking had expired or the slot was no longer available at the time of payment.</p>
+      <p style="line-height:1.6;">Our team has been notified and will contact you to refund you in full or offer you another slot. You have nothing more to pay.</p>
+      <div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;">
+        <ul style="list-style: none; padding: 0; margin: 0;">
+          <li style="padding: 4px 0;"><strong>Reference:</strong> APTSNAPSHOT01</li>
+          <li style="padding: 4px 0;"><strong>Requested slot:</strong> Friday, 20 November 2026 at 10:00 (Paris time)</li>
+          <li style="padding: 4px 0;"><strong>Amount received:</strong> €100.00</li>
+          
+        </ul>
+      </div>
+      
+      
+      
+      <p style="font-size:13px;line-height:1.55;color:#475569;">A question, a change or a cancellation? Write to us at <a href="mailto:executive.office@drahmedbenlallahom.com">executive.office@drahmedbenlallahom.com</a> or call <a href="tel:+33972152413">+33 9 72 15 24 13</a>, quoting your reference. You can also reply directly to this email.</p>
+    </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 28px;border-top:1px solid #e2e8f0;background:#f8fafc;font-family:Arial,sans-serif;font-size:12px;line-height:1.5;color:#64748b;">Dr Ahmed Ben Lallahom<br />Professional and confidential communication<br /><a href="https://drahmedbenlallahom.com/?lang=en" style="color:#0e7490;">Website</a> · <a href="https://drahmedbenlallahom.com/legal?tab=privacy&amp;lang=en" style="color:#0e7490;">Privacy policy</a></td>
+            </tr>
+          </table>
+          <!--[if mso]></td></tr></table><![endif]-->
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>",
+  "subject": "Your payment has been received: we will sort out your booking - APTSNAPSHOT01",
+  "text": "Your payment has been received, we will sort out your booking
+
+Hello Camille Martin,
+
+Your payment has been received, but the chosen slot could not be confirmed to you automatically: the temporary booking had expired or the slot was no longer available at the time of payment.
+
+Our team has been notified and will contact you to refund you in full or offer you another slot. You have nothing more to pay.
+
+Reference: APTSNAPSHOT01
+Requested slot: Friday, 20 November 2026 at 10:00 (Paris time)
+Amount received: €100.00
+
+A question, a change or a cancellation? Write to us at executive.office@drahmedbenlallahom.com or call +33 9 72 15 24 13, quoting your reference. You can also reply directly to this email.
+
+Dr Ahmed Ben Lallahom",
+}
+`;
+
+exports[`rendu des emails (MAIL-13) > unconfirmablePayment (fr) 1`] = `
+{
+  "html": "<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Votre paiement a été reçu : réservation à régulariser - APTSNAPSHOT01</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f1f5f9;">
+    <div style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;color:#f1f5f9;mso-hide:all;">Votre paiement a été reçu, réservation à régulariser – réf. APTSNAPSHOT01&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;background:#f1f5f9;">
+      <tr>
+        <td align="center" style="padding:24px 12px;">
+          <!--[if mso]><table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" align="center"><tr><td><![endif]-->
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;margin:0 auto;border-collapse:separate;background:#ffffff;border:1px solid #dbe4ee;border-radius:14px;overflow:hidden;font-family:Arial,sans-serif;color:#0f172a;">
+            <tr>
+              <td bgcolor="#071827" style="padding:18px 28px;background:#071827;border-bottom:3px solid #0891b2;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+                  <tr>
+                    <td style="padding:0 14px 0 0;vertical-align:middle;"><img src="https://drahmedbenlallahom.com/assets/abl-logo.svg" width="64" height="64" alt="" style="display:block;width:64px;height:64px;border:0;border-radius:8px;background:#ffffff;" /></td>
+                    <td style="vertical-align:middle;font-family:Arial,sans-serif;"><div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#38bdf8;">MD, DESAIC</div><div style="margin-top:5px;font-size:19px;font-weight:700;color:#ffffff;">Dr Ahmed Ben Lallahom</div></td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px;font-family:Arial,sans-serif;color:#0f172a;">
+      <h2 style="color: #0891b2;">Votre paiement a été reçu, réservation à régulariser</h2>
+      <p>Bonjour Camille Martin,</p>
+      <p style="line-height:1.6;">Votre paiement a bien été reçu, mais le créneau choisi n’a pas pu vous être confirmé automatiquement : la réservation temporaire avait expiré ou le créneau n’était plus disponible au moment du paiement.</p>
+      <p style="line-height:1.6;">Notre équipe a été prévenue et vous contactera pour vous rembourser intégralement ou vous proposer un autre créneau. Vous n’avez rien à payer de plus.</p>
+      <div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;">
+        <ul style="list-style: none; padding: 0; margin: 0;">
+          <li style="padding: 4px 0;"><strong>Référence :</strong> APTSNAPSHOT01</li>
+          <li style="padding: 4px 0;"><strong>Créneau demandé :</strong> vendredi 20 novembre 2026 à 10:00 (heure de Paris)</li>
+          <li style="padding: 4px 0;"><strong>Montant reçu :</strong> 100,00 €</li>
+          
+        </ul>
+      </div>
+      
+      
+      
+      <p style="font-size:13px;line-height:1.55;color:#475569;">Une question, un report ou une annulation ? Écrivez-nous à <a href="mailto:executive.office@drahmedbenlallahom.com">executive.office@drahmedbenlallahom.com</a> ou appelez le <a href="tel:+33972152413">+33 9 72 15 24 13</a> en indiquant votre référence. Vous pouvez aussi répondre directement à cet email.</p>
+    </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 28px;border-top:1px solid #e2e8f0;background:#f8fafc;font-family:Arial,sans-serif;font-size:12px;line-height:1.5;color:#64748b;">Dr Ahmed Ben Lallahom<br />Communication professionnelle et confidentielle<br /><a href="https://drahmedbenlallahom.com/?lang=fr" style="color:#0e7490;">Site</a> · <a href="https://drahmedbenlallahom.com/legal?tab=privacy&amp;lang=fr" style="color:#0e7490;">Politique de confidentialité</a></td>
+            </tr>
+          </table>
+          <!--[if mso]></td></tr></table><![endif]-->
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>",
+  "subject": "Votre paiement a été reçu : réservation à régulariser - APTSNAPSHOT01",
+  "text": "Votre paiement a été reçu, réservation à régulariser
+
+Bonjour Camille Martin,
+
+Votre paiement a bien été reçu, mais le créneau choisi n’a pas pu vous être confirmé automatiquement : la réservation temporaire avait expiré ou le créneau n’était plus disponible au moment du paiement.
+
+Notre équipe a été prévenue et vous contactera pour vous rembourser intégralement ou vous proposer un autre créneau. Vous n’avez rien à payer de plus.
+
+Référence : APTSNAPSHOT01
+Créneau demandé : vendredi 20 novembre 2026 à 10:00 (heure de Paris)
+Montant reçu : 100,00 €
+
+Une question, un report ou une annulation ? Écrivez-nous à executive.office@drahmedbenlallahom.com ou appelez le +33 9 72 15 24 13 en indiquant votre référence. Vous pouvez aussi répondre directement à cet email.
+
+Dr Ahmed Ben Lallahom",
+}
+`;
+
+exports[`rendu des emails (MAIL-13) > unconfirmedPaymentRefund (en) 1`] = `
+{
+  "html": "<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Refund of your payment - APTSNAPSHOT01</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f1f5f9;">
+    <div style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;color:#f1f5f9;mso-hide:all;">Refund of €100.00 – ref. APTSNAPSHOT01&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;background:#f1f5f9;">
+      <tr>
+        <td align="center" style="padding:24px 12px;">
+          <!--[if mso]><table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" align="center"><tr><td><![endif]-->
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;margin:0 auto;border-collapse:separate;background:#ffffff;border:1px solid #dbe4ee;border-radius:14px;overflow:hidden;font-family:Arial,sans-serif;color:#0f172a;">
+            <tr>
+              <td bgcolor="#071827" style="padding:18px 28px;background:#071827;border-bottom:3px solid #0891b2;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+                  <tr>
+                    <td style="padding:0 14px 0 0;vertical-align:middle;"><img src="https://drahmedbenlallahom.com/assets/abl-logo.svg" width="64" height="64" alt="" style="display:block;width:64px;height:64px;border:0;border-radius:8px;background:#ffffff;" /></td>
+                    <td style="vertical-align:middle;font-family:Arial,sans-serif;"><div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#38bdf8;">MD, DESAIC</div><div style="margin-top:5px;font-size:19px;font-weight:700;color:#ffffff;">Dr Ahmed Ben Lallahom</div></td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px;font-family:Arial,sans-serif;color:#0f172a;">
+      <h2 style="color: #0891b2;">Refund of your payment</h2>
+      <p>Hello Camille Martin,</p>
+      <p style="line-height:1.6;">Your payment was received when the slot was no longer reserved in your name (temporary booking expired or cancelled). It is refunded to you in full.</p>
+      <div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;">
+        <ul style="list-style: none; padding: 0; margin: 0;">
+          <li style="padding: 4px 0;"><strong>Reference:</strong> APTSNAPSHOT01</li>
+          <li style="padding: 4px 0;"><strong>Requested slot:</strong> Friday, 20 November 2026 at 10:00 (Paris time)</li>
+          <li style="padding: 4px 0;"><strong>Amount refunded:</strong> €100.00</li>
+          
+        </ul>
+      </div>
+      <p style="line-height:1.6;">The time it takes for the refund to appear on your account depends on your bank.</p>
+      
+      
+      <p style="font-size:13px;line-height:1.55;color:#475569;">A question, a change or a cancellation? Write to us at <a href="mailto:executive.office@drahmedbenlallahom.com">executive.office@drahmedbenlallahom.com</a> or call <a href="tel:+33972152413">+33 9 72 15 24 13</a>, quoting your reference. You can also reply directly to this email.</p>
+    </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 28px;border-top:1px solid #e2e8f0;background:#f8fafc;font-family:Arial,sans-serif;font-size:12px;line-height:1.5;color:#64748b;">Dr Ahmed Ben Lallahom<br />Professional and confidential communication<br /><a href="https://drahmedbenlallahom.com/?lang=en" style="color:#0e7490;">Website</a> · <a href="https://drahmedbenlallahom.com/legal?tab=privacy&amp;lang=en" style="color:#0e7490;">Privacy policy</a></td>
+            </tr>
+          </table>
+          <!--[if mso]></td></tr></table><![endif]-->
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>",
+  "subject": "Refund of your payment - APTSNAPSHOT01",
+  "text": "Refund of your payment
+
+Hello Camille Martin,
+
+Your payment was received when the slot was no longer reserved in your name (temporary booking expired or cancelled). It is refunded to you in full.
+
+Reference: APTSNAPSHOT01
+Requested slot: Friday, 20 November 2026 at 10:00 (Paris time)
+Amount refunded: €100.00
+
+The time it takes for the refund to appear on your account depends on your bank.
+
+A question, a change or a cancellation? Write to us at executive.office@drahmedbenlallahom.com or call +33 9 72 15 24 13, quoting your reference. You can also reply directly to this email.
+
+Dr Ahmed Ben Lallahom",
+}
+`;
+
+exports[`rendu des emails (MAIL-13) > unconfirmedPaymentRefund (fr) 1`] = `
+{
+  "html": "<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Remboursement de votre paiement - APTSNAPSHOT01</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f1f5f9;">
+    <div style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;color:#f1f5f9;mso-hide:all;">Remboursement de 100,00 € – réf. APTSNAPSHOT01&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;background:#f1f5f9;">
+      <tr>
+        <td align="center" style="padding:24px 12px;">
+          <!--[if mso]><table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" align="center"><tr><td><![endif]-->
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;margin:0 auto;border-collapse:separate;background:#ffffff;border:1px solid #dbe4ee;border-radius:14px;overflow:hidden;font-family:Arial,sans-serif;color:#0f172a;">
+            <tr>
+              <td bgcolor="#071827" style="padding:18px 28px;background:#071827;border-bottom:3px solid #0891b2;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+                  <tr>
+                    <td style="padding:0 14px 0 0;vertical-align:middle;"><img src="https://drahmedbenlallahom.com/assets/abl-logo.svg" width="64" height="64" alt="" style="display:block;width:64px;height:64px;border:0;border-radius:8px;background:#ffffff;" /></td>
+                    <td style="vertical-align:middle;font-family:Arial,sans-serif;"><div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#38bdf8;">MD, DESAIC</div><div style="margin-top:5px;font-size:19px;font-weight:700;color:#ffffff;">Dr Ahmed Ben Lallahom</div></td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px;font-family:Arial,sans-serif;color:#0f172a;">
+      <h2 style="color: #0891b2;">Remboursement de votre paiement</h2>
+      <p>Bonjour Camille Martin,</p>
+      <p style="line-height:1.6;">Votre paiement a été reçu alors que le créneau n’était plus réservé à votre nom (réservation temporaire expirée ou annulée). Il vous est intégralement remboursé.</p>
+      <div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;">
+        <ul style="list-style: none; padding: 0; margin: 0;">
+          <li style="padding: 4px 0;"><strong>Référence :</strong> APTSNAPSHOT01</li>
+          <li style="padding: 4px 0;"><strong>Créneau demandé :</strong> vendredi 20 novembre 2026 à 10:00 (heure de Paris)</li>
+          <li style="padding: 4px 0;"><strong>Montant remboursé :</strong> 100,00 €</li>
+          
+        </ul>
+      </div>
+      <p style="line-height:1.6;">Le délai d’apparition du remboursement sur votre compte dépend de votre établissement bancaire.</p>
+      
+      
+      <p style="font-size:13px;line-height:1.55;color:#475569;">Une question, un report ou une annulation ? Écrivez-nous à <a href="mailto:executive.office@drahmedbenlallahom.com">executive.office@drahmedbenlallahom.com</a> ou appelez le <a href="tel:+33972152413">+33 9 72 15 24 13</a> en indiquant votre référence. Vous pouvez aussi répondre directement à cet email.</p>
+    </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 28px;border-top:1px solid #e2e8f0;background:#f8fafc;font-family:Arial,sans-serif;font-size:12px;line-height:1.5;color:#64748b;">Dr Ahmed Ben Lallahom<br />Communication professionnelle et confidentielle<br /><a href="https://drahmedbenlallahom.com/?lang=fr" style="color:#0e7490;">Site</a> · <a href="https://drahmedbenlallahom.com/legal?tab=privacy&amp;lang=fr" style="color:#0e7490;">Politique de confidentialité</a></td>
+            </tr>
+          </table>
+          <!--[if mso]></td></tr></table><![endif]-->
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>",
+  "subject": "Remboursement de votre paiement - APTSNAPSHOT01",
+  "text": "Remboursement de votre paiement
+
+Bonjour Camille Martin,
+
+Votre paiement a été reçu alors que le créneau n’était plus réservé à votre nom (réservation temporaire expirée ou annulée). Il vous est intégralement remboursé.
+
+Référence : APTSNAPSHOT01
+Créneau demandé : vendredi 20 novembre 2026 à 10:00 (heure de Paris)
+Montant remboursé : 100,00 €
+
+Le délai d’apparition du remboursement sur votre compte dépend de votre établissement bancaire.
+
+Une question, un report ou une annulation ? Écrivez-nous à executive.office@drahmedbenlallahom.com ou appelez le +33 9 72 15 24 13 en indiquant votre référence. Vous pouvez aussi répondre directement à cet email.
+
+Dr Ahmed Ben Lallahom",
+}
+`;
