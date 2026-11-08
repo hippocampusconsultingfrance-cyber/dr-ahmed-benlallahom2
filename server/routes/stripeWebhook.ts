@@ -1,7 +1,6 @@
 import express, { type Express } from "express";
 import type Stripe from "stripe";
-import { internalErrorSummary } from "../_core/trpc";
-import { safeErrorName } from "./routeHelpers";
+import { logError } from "../_core/logError";
 
 /** Verifies the signature on the raw body: createApp registers it before express.json(). */
 export function registerStripeWebhookRoute(app: Express) {
@@ -17,7 +16,7 @@ export function registerStripeWebhookRoute(app: Express) {
       const { default: StripeSdk } = await import("stripe");
       stripe = new StripeSdk(process.env.STRIPE_SECRET_KEY || "");
     } catch (error) {
-      console.error("Stripe webhook unavailable", internalErrorSummary(error));
+      logError("Stripe webhook unavailable", error, { req });
       return res.status(500).json({ error: "Webhook unavailable" });
     }
 
@@ -25,7 +24,7 @@ export function registerStripeWebhookRoute(app: Express) {
     try {
       event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
     } catch (error) {
-      console.error("Stripe webhook signature validation failed", safeErrorName(error));
+      logError("Stripe webhook signature validation failed", error, { req });
       return res.status(400).json({ error: "Invalid webhook" });
     }
 
@@ -78,7 +77,7 @@ export function registerStripeWebhookRoute(app: Express) {
 
       res.json({ received: true });
     } catch (error) {
-      console.error("Stripe webhook processing failed", safeErrorName(error));
+      logError("Stripe webhook processing failed", error, { req });
       res.status(500).json({ received: false });
     }
   });

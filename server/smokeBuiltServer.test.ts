@@ -87,7 +87,7 @@ const server = createServer(async (req, res) => {
     // The failed run pings its monitor, as runMonitoredScheduledJob does.
     const monitor = process.env.HEALTHCHECK_URL_RECRUITMENT_PROCESSING;
     if (monitor) await fetch(\`\${monitor}/fail\`).catch(() => undefined);
-    console.error(${JSON.stringify(`[RecruitmentProcessing] Vercel cron error ref=abcd1234 ${options.cronTrace ?? "Error: Failed query: select 1"}`)});
+    console.error(${JSON.stringify(JSON.stringify({ label: "[RecruitmentProcessing] Vercel cron error", ref: "abcd1234", name: "Error", message: options.cronTrace ?? "Failed query: select 1" }))});
     return json(res, 500, { error: "scheduled_job_failed", reference: "abcd1234" });
   }
   json(res, 404, { error: "not_found" });

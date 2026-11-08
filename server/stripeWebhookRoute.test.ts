@@ -86,7 +86,8 @@ describe("POST /api/stripe/webhook — corps brut et signature Stripe", () => {
     delete process.env.STRIPE_SECRET_KEY;
     try {
       expect(await postWebhook(payload, signature)).toEqual({ status: 500, body: { error: "Webhook unavailable" } });
-      expect(error).toHaveBeenCalledWith("Stripe webhook unavailable", expect.stringMatching(/apiKey/));
+      expect(error).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(error.mock.calls[0]![0] as string)).toMatchObject({ label: "Stripe webhook unavailable", name: "Error", message: expect.stringMatching(/apiKey/) });
     } finally {
       process.env.STRIPE_SECRET_KEY = secretKey;
       error.mockRestore();

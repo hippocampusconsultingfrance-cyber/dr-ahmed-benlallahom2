@@ -1,20 +1,19 @@
-import type { Express, Response } from "express";
+import type { Express, Request, Response } from "express";
 import { requireVercelCron } from "../_core/cronAuth";
+import { logError, runWithRequestLog } from "../_core/logError";
 import { runMonitoredScheduledJob } from "../_core/scheduledJobMonitor";
-import { internalErrorReference, internalErrorSummary } from "../_core/trpc";
-import { postgresErrorCode } from "../languageColumns";
+import { internalErrorReference } from "../_core/trpc";
 import { getStripeClient } from "../routers";
-import { safeErrorName } from "./routeHelpers";
 
 /**
  * Failed scheduled job: the caller gets a generic error and a short reference,
  * never the error message (Drizzle puts the whole SQL and its parameters in
- * it). The server log keeps the detail under that reference, without the
- * query parameters, like tRPC internal errors, and the SQLSTATE if any.
+ * it). The server log keeps the detail under that reference (logError: without
+ * the query parameters, like tRPC internal errors, with the SQLSTATE if any).
  */
-function sendScheduledJobFailure(res: Response, logPrefix: string, error: unknown) {
+function sendScheduledJobFailure(req: Request, res: Response, label: string, error: unknown) {
   const reference = internalErrorReference();
-  console.error(`${logPrefix} ref=${reference}`, internalErrorSummary(error), postgresErrorCode(error) ?? "");
+  logError(label, error, { ref: reference, req });
   return res.status(500).json({ error: "scheduled_job_failed", reference, timestamp: new Date().toISOString() });
 }
 
@@ -29,13 +28,13 @@ type ScheduledJobResult = { httpStatus?: number } & Record<string, unknown>;
  */
 export function registerScheduledJobRoutes(app: Express) {
   function registerScheduledJob(path: string, label: string, run: () => Promise<ScheduledJobResult>) {
-    app.get(path, requireVercelCron, async (_req, res) => {
+    app.get(path, requireVercelCron, async (req, res) => {
       try {
-        const { httpStatus, ...result } = await runMonitoredScheduledJob(path, run);
+        const { httpStatus, ...result } = await runWithRequestLog(req, () => runMonitoredScheduledJob(path, run));
         if (httpStatus) return res.status(httpStatus).json(result);
         return res.json({ ok: true, scheduler: "vercel-cron", ...result });
       } catch (error) {
-        return sendScheduledJobFailure(res, `[${label}] Vercel cron error`, error);
+        return sendScheduledJobFailure(req, res, `[${label}] Vercel cron error`, error);
       }
     });
   }
@@ -54,7 +53,7 @@ export function registerScheduledJobRoutes(app: Express) {
     // DATA-02: CVs stored by an application whose row was never written.
     const { removeOrphanApplicationCvFiles } = await import("../recruitmentOrphanCvCleanup");
     const orphanCvFiles = await removeOrphanApplicationCvFiles().catch(error => {
-      console.error("[RecruitmentRetention] Orphan CV cleanup failed:", safeErrorName(error));
+      logError("[RecruitmentRetention] Orphan CV cleanup failed", error);
       return null;
     });
     return { ...retention, orphanCvFiles };
@@ -64,12 +63,12 @@ export function registerScheduledJobRoutes(app: Express) {
   // (RECRUITMENT_PROCESSING_BUDGET): a shorter monitor ping leaves more of the
   // 60 s function limit to the work (EXPL-03).
   const recruitmentProcessingMonitor = { timeoutMs: 1_500 };
-  app.get("/api/scheduled/recruitment-processing", requireVercelCron, async (_req, res) => {
+  app.get("/api/scheduled/recruitment-processing", requireVercelCron, async (req, res) => {
     try {
       // Drains every queue within a time budget: confirmation-email retries and
       // Drive copies first, then CV analyses (none started after ~25 s).
       const { runRecruitmentProcessingWorker } = await import("../recruitmentProcessingWorker");
-      const summary = await runMonitoredScheduledJob("/api/scheduled/recruitment-processing", () => runRecruitmentProcessingWorker(), recruitmentProcessingMonitor);
+      const summary = await runWithRequestLog(req, () => runMonitoredScheduledJob("/api/scheduled/recruitment-processing", () => runRecruitmentProcessingWorker(), recruitmentProcessingMonitor));
       console.info("[RecruitmentProcessing] Vercel cron summary", {
         elapsedMs: summary.elapsedMs,
         analysisRecovery: summary.analysisRecovery,
@@ -82,7 +81,7 @@ export function registerScheduledJobRoutes(app: Express) {
       });
       return res.json({ ok: true, scheduler: "vercel-cron", ...summary });
     } catch (error) {
-      return sendScheduledJobFailure(res, "[RecruitmentProcessing] Vercel cron error", error);
+      return sendScheduledJobFailure(req, res, "[RecruitmentProcessing] Vercel cron error", error);
     }
   });
 

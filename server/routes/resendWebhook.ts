@@ -1,7 +1,7 @@
 import express, { type Express } from "express";
 import { Webhook } from "svix";
 import { recordResendEmailEvent } from "../resendWebhookEvents";
-import { safeErrorName } from "./routeHelpers";
+import { logError } from "../_core/logError";
 
 /** Verifies the Svix signature on the raw body: createApp registers it before express.json(). */
 export function registerResendWebhookRoute(app: Express) {
@@ -28,7 +28,7 @@ export function registerResendWebhookRoute(app: Express) {
       const { duplicate } = await recordResendEmailEvent({ providerEventId, event: { type: event.type, created_at: event.created_at, data: event.data }, payload });
       res.status(200).json(duplicate ? { received: true, duplicate: true } : { received: true });
     } catch (error) {
-      console.error("Resend webhook verification failed:", safeErrorName(error));
+      logError("Resend webhook verification failed", error, { req });
       res.status(400).send("Invalid Resend webhook");
     }
   });

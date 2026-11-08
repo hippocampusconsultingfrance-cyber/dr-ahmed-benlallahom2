@@ -61,35 +61,41 @@ function failedReminderQuery() {
   );
 }
 
-async function call(path: string, init: { authorization?: string } = {}) {
+const VERCEL_ID = "cdg1::iad1::synthetic-request";
+
+async function call(path: string, init: { authorization?: string; vercelId?: string } = {}) {
   const response = await fetch(`${baseUrl}${path}`, {
-    headers: init.authorization ? { authorization: init.authorization } : {},
+    headers: { ...init.authorization ? { authorization: init.authorization } : {}, ...init.vercelId ? { "x-vercel-id": init.vercelId } : {} },
   });
   const text = await response.text();
   return { status: response.status, text, body: JSON.parse(text) as Record<string, unknown> };
 }
 
-function expectGenericFailure(result: Awaited<ReturnType<typeof call>>, logPrefix: string) {
+function expectGenericFailure(result: Awaited<ReturnType<typeof call>>, label: string) {
   expect(result.status).toBe(500);
   expect(result.body).toEqual({ error: "scheduled_job_failed", reference: expect.stringMatching(/^[0-9a-f]{8}$/), timestamp: expect.any(String) });
   // Nothing of the query reaches the caller.
   expect(result.text).not.toMatch(/select|appointments|tracking_id|patient\.synthetique|Failed query/);
-  // The server log keeps it, under the same reference, without the parameters.
+  // The server log keeps it on one JSON line (logError), under the same
+  // reference and the request's x-vercel-id, without the parameters.
   expect(consoleError).toHaveBeenCalledTimes(1);
-  const [prefix, summary, code] = consoleError.mock.calls[0] as [string, string, string];
-  expect(prefix).toBe(`${logPrefix} ref=${result.body.reference}`);
-  return { summary, code };
+  const [line, ...rest] = consoleError.mock.calls[0] as [string];
+  expect(rest).toEqual([]);
+  expect(line).not.toContain("\n");
+  const logged = JSON.parse(line) as Record<string, string>;
+  expect(logged).toMatchObject({ label, ref: result.body.reference, vercelId: VERCEL_ID });
+  expect(line).not.toMatch(/patient\.synthetique|2026-10-27T01|params:/);
+  return logged;
 }
 
 describe("tâches planifiées en échec : réponse générique, détail au journal", () => {
   it("Vercel Cron : 500 avec une référence, la requête SQL et son code au journal seulement", async () => {
     mocks.sendDueAppointmentReminders.mockRejectedValueOnce(failedReminderQuery());
-    const result = await call("/api/scheduled/reminder", { authorization: `Bearer ${CRON_SECRET}` });
-    const { summary, code } = expectGenericFailure(result, "[Reminder] Vercel cron error");
-    expect(summary).toContain('Failed query: select "id", "tracking_id"');
-    expect(summary).not.toContain("patient.synthetique");
-    expect(summary).not.toContain("params:");
-    expect(code).toBe("55P03");
+    const result = await call("/api/scheduled/reminder", { authorization: `Bearer ${CRON_SECRET}`, vercelId: VERCEL_ID });
+    const logged = expectGenericFailure(result, "[Reminder] Vercel cron error");
+    expect(logged.message).toBe('Failed query: select "id", "tracking_id", "customer_name", "customer_email" from "appointments" where "appointments"."appointment_date" between $1 and $2');
+    expect(logged.cause).toBe("Error: canceling statement due to lock timeout");
+    expect(logged.code).toBe("55P03");
   });
 
   it("garde les réponses d’une tâche réussie et le refus d’un appel non authentifié", async () => {
@@ -117,7 +123,7 @@ describe("tâches planifiées en échec : réponse générique, détail au journ
 
   it("traitement des candidatures : même réponse générique", async () => {
     mocks.runRecruitmentProcessingWorker.mockRejectedValueOnce(failedReminderQuery());
-    const result = await call("/api/scheduled/recruitment-processing", { authorization: `Bearer ${CRON_SECRET}` });
+    const result = await call("/api/scheduled/recruitment-processing", { authorization: `Bearer ${CRON_SECRET}`, vercelId: VERCEL_ID });
     expect(expectGenericFailure(result, "[RecruitmentProcessing] Vercel cron error").code).toBe("55P03");
   });
 });

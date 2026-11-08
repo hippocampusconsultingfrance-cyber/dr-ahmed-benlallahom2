@@ -1,6 +1,7 @@
 import { parse as parseCookieHeader } from "cookie";
 import type { Express, Request, Response } from "express";
 import { createContext } from "./_core/context";
+import { logError } from "./_core/logError";
 import { notifyOwner } from "./_core/notification";
 import { logSecurityEvent, requestIpHash } from "./candidateSecurity";
 import { buildGoogleDriveAuthorizationUrl, createGoogleDriveOAuthState, exchangeGoogleDriveAuthorizationCode, googleDriveExportStatus, requeueGoogleDriveExportsAfterReconnection, saveGoogleDriveConnection, verifyGoogleDriveOAuthState } from "./googleDriveExport";
@@ -54,8 +55,8 @@ async function recordGoogleDriveConnection(input: { openId: string; req: Request
       ipHash: requestIpHash(input.req.headers as Record<string, unknown>),
       metadata: { grantedScopes: input.grantedScopes ?? null, connectedAt: at.toISOString() },
     });
-  } catch {
-    console.error("[GoogleDrive] Unable to record the connection security event");
+  } catch (error) {
+    logError("[GoogleDrive] Unable to record the connection security event", error, { req: input.req });
   }
   await notifyOwner({
     title: input.reconnection ? "Sécurité : Google Drive reconnecté à l’administration" : "Sécurité : Google Drive connecté à l’administration",
@@ -77,7 +78,7 @@ export function registerGoogleDriveOAuthRoutes(app: Express) {
       res.cookie(STATE_COOKIE, state, { httpOnly: true, secure: true, sameSite: "lax", path: "/", maxAge: 10 * 60_000 });
       return res.redirect(302, buildGoogleDriveAuthorizationUrl(state));
     } catch (error) {
-      console.error("[GoogleDrive] OAuth start failed", error);
+      logError("[GoogleDrive] OAuth start failed", error, { req });
       return res.status(500).send("La connexion Google Drive n’a pas pu être démarrée.");
     }
   });
@@ -97,14 +98,14 @@ export function registerGoogleDriveOAuthRoutes(app: Express) {
       const reconnection = await googleDriveExportStatus().then(status => status.connected).catch(() => false);
       await saveGoogleDriveConnection({ authorizedByOpenId: authorization.openId, refreshToken: tokens.refresh_token!, grantedScopes: tokens.scope });
       // The copies stopped by a refused token start again with the new one (REC-09).
-      const { requeued: requeuedExports } = await requeueGoogleDriveExportsAfterReconnection().catch(() => {
-        console.error("[GoogleDrive] Unable to requeue the copies stopped by a token error");
+      const { requeued: requeuedExports } = await requeueGoogleDriveExportsAfterReconnection().catch(error => {
+        logError("[GoogleDrive] Unable to requeue the copies stopped by a token error", error, { req });
         return { requeued: 0 };
       });
       await recordGoogleDriveConnection({ openId: authorization.openId, req, reconnection, grantedScopes: tokens.scope, requeuedExports });
       return res.redirect(302, "/admin?googleDrive=connected");
     } catch (error) {
-      console.error("[GoogleDrive] OAuth callback failed", error);
+      logError("[GoogleDrive] OAuth callback failed", error, { req });
       return res.status(500).send("La connexion Google Drive n’a pas pu être finalisée. Vérifiez l’URI de redirection et que l’API Google Drive est activée.");
     }
   });
