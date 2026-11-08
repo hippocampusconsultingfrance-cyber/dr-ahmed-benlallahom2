@@ -36,7 +36,7 @@ pnpm dev                  # http://localhost:3000 (Express + Vite en mode middle
 | `pnpm test:ci` | Suite utilisée par la CI |
 | `pnpm build` | Build Vite, pré-rendu SEO par page (`scripts/prerender-route-seo.ts`), bundle serveur `dist/index.js` et fonction Vercel `api/index.js` |
 | `pnpm start` | Lance le build Express (hébergement hors Vercel) |
-| `pnpm test:visual` | Régression visuelle (Playwright) |
+| `pnpm test:visual` | Régression visuelle (Playwright, Chromium trouvé seul ou donné par `CHROMIUM`) ; `pnpm test:visual:record` écrit les candidats dans `tmp/visual-regression` (ignoré par git) ou `VISUAL_BASELINE_DIR` |
 | `pnpm check:performance` | Build + budgets de performance |
 | `node scripts/smoke-built-server.mjs` | Après `pnpm build` : démarre `api/index.js` et `dist/index.js` avec des variables factices, sans lire `.env` ni joindre d'autre machine, vérifie que chaque paquet chargé à la demande se résout, puis appelle `/api/health`, une requête tRPC anonyme, le prix d'une réservation, les webhooks Stripe et Resend et une tâche planifiée (CI) |
 | `node scripts/check-migrations-in-sync.mjs` | Vérifie que `drizzle/pg` décrit exactement `drizzle/schema.ts` (CI) |

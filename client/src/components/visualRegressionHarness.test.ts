@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { baselineKeys, fetchBaseline, scenarios } from "../../../scripts/visual-regression.mjs";
+import { baselineKeys, candidateDirectory, fetchBaseline, findChromium, scenarios } from "../../../scripts/visual-regression.mjs";
 
 const FORGE_ENVIRONMENT = { BUILT_IN_FORGE_API_URL: "https://forge.test/api/", BUILT_IN_FORGE_API_KEY: "synthetic-forge-key" };
 
@@ -54,5 +54,22 @@ describe("harness de régression visuelle", () => {
     expect(fetchImpl).not.toHaveBeenCalled();
     await expect(fetchBaseline("home-desktop_1d3eca43.png", { environment: FORGE_ENVIRONMENT, fetchImpl })).rejects.toThrow("home-desktop_1d3eca43.png : URL signée refusée par Forge (403).");
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("enregistre les candidats dans le dépôt, sous tmp/ que git ignore, ou dans VISUAL_BASELINE_DIR, jamais dans un dossier de l’ancien hébergeur (CODE-17)", () => {
+    const root = process.cwd();
+    expect(candidateDirectory({})).toBe(path.join(root, "tmp", "visual-regression"));
+    expect(candidateDirectory({ VISUAL_BASELINE_DIR: "  " })).toBe(path.join(root, "tmp", "visual-regression"));
+    expect(candidateDirectory({ VISUAL_BASELINE_DIR: "captures/candidats" })).toBe(path.join(root, "captures", "candidats"));
+    expect(candidateDirectory({ VISUAL_BASELINE_DIR: "/srv/etalons" })).toBe(path.resolve("/srv/etalons"));
+  });
+
+  it("prend le Chromium de CHROMIUM, puis celui de Playwright, puis celui du système, et dit clairement qu’il n’y en a aucun (CODE-17)", () => {
+    const noPlaywrightBrowser = () => { throw new Error("no Chromium for this platform"); };
+    expect(findChromium({ CHROMIUM: " /opt/chrome/chrome " }, () => false, noPlaywrightBrowser)).toBe("/opt/chrome/chrome");
+    expect(findChromium({}, file => file === "/cache/ms-playwright/chrome", () => "/cache/ms-playwright/chrome")).toBe("/cache/ms-playwright/chrome");
+    expect(findChromium({}, file => file === "/usr/bin/chromium" || file === "/usr/bin/google-chrome", noPlaywrightBrowser)).toBe("/usr/bin/chromium");
+    expect(findChromium({}, file => file === "/usr/bin/google-chrome", () => "/cache/ms-playwright/absent")).toBe("/usr/bin/google-chrome");
+    expect(() => findChromium({}, () => false, noPlaywrightBrowser)).toThrow("Aucun Chromium trouvé : indiquez son chemin dans CHROMIUM");
   });
 });

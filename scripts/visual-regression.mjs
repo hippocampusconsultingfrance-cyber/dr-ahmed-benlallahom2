@@ -1,14 +1,43 @@
+import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { chromium } from "playwright-core";
 import pixelmatch from "pixelmatch";
 import { PNG } from "pngjs";
 
 const baseUrl = (process.env.VISUAL_TEST_BASE_URL ?? "http://127.0.0.1:3000").replace(/\/$/, "");
 const recordMode = process.env.VISUAL_BASELINE_MODE === "record";
-const outputDirectory = process.env.VISUAL_BASELINE_DIR ?? "/home/ubuntu/webdev-static-assets/visual-regression";
 const mismatchLimit = 0.008;
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+/**
+ * Dossier où `pnpm test:visual:record` écrit les candidats à examiner (CODE-17) :
+ * VISUAL_BASELINE_DIR, sinon tmp/visual-regression dans le dépôt, que git ignore,
+ * sur n'importe quelle machine (et non plus un dossier de l'ancien hébergeur Manus).
+ */
+export function candidateDirectory(environment = process.env) {
+  return path.resolve(root, environment.VISUAL_BASELINE_DIR?.trim() || "tmp/visual-regression");
+}
+
+/**
+ * Chromium des captures, trouvé comme dans client/src/publicPages.browser.test.ts : CHROMIUM,
+ * puis celui de Playwright, puis celui du système (/usr/bin/chromium, /usr/bin/google-chrome).
+ * Sans aucun, le script le dit avant toute capture.
+ */
+export function findChromium(environment = process.env, exists = existsSync, bundled = () => chromium.executablePath()) {
+  if (environment.CHROMIUM?.trim()) return environment.CHROMIUM.trim();
+  let installed;
+  try {
+    installed = bundled();
+  } catch {
+    // Pas de Chromium Playwright connu pour cette plateforme : restent ceux du système.
+  }
+  const found = [installed, "/usr/bin/chromium", "/usr/bin/google-chrome"].find(candidate => candidate && exists(candidate));
+  if (!found) throw new Error("Aucun Chromium trouvé : indiquez son chemin dans CHROMIUM (CHROMIUM=/chemin/vers/chrome pnpm test:visual).");
+  return found;
+}
 
 const desktop = { width: 1280, height: 720 };
 const mobile = { width: 375, height: 812 };
@@ -95,6 +124,8 @@ export const baselineKeys = {
 /**
  * Lit un étalon publié : une URL signée demandée à Forge avec les BUILT_IN_FORGE_*
  * de l'environnement local (jamais envoyés au serveur testé), puis l'image.
+ * @param {string} key
+ * @param {{ environment?: Record<string, string | undefined>, fetchImpl?: (input: URL | string, init?: RequestInit) => Promise<Response> }} [options]
  */
 export async function fetchBaseline(key, { environment = process.env, fetchImpl = fetch } = {}) {
   const apiUrl = environment.BUILT_IN_FORGE_API_URL?.trim();
@@ -144,11 +175,12 @@ async function captureScenario(browser, scenario) {
 }
 
 async function recordBaselines(browser) {
+  const outputDirectory = candidateDirectory();
   await mkdir(outputDirectory, { recursive: true });
   for (const scenario of scenarios) {
     const screenshot = await captureScenario(browser, scenario);
     await writeFile(path.join(outputDirectory, `${scenario.id}.png`), screenshot);
-    console.log(`Étalon enregistré : ${scenario.id}`);
+    console.log(`Étalon candidat enregistré : ${path.relative(root, path.join(outputDirectory, `${scenario.id}.png`))}`);
   }
 }
 
@@ -180,7 +212,7 @@ async function compareBaselines(browser) {
 async function main() {
   // Les BUILT_IN_FORGE_* du .env local, comme le serveur (pnpm dev) les lit.
   await import("dotenv/config");
-  const browser = await chromium.launch({ executablePath: "/usr/bin/chromium", headless: true, args: ["--font-render-hinting=none"] });
+  const browser = await chromium.launch({ executablePath: findChromium(), headless: true, args: ["--font-render-hinting=none"] });
   try {
     if (recordMode) await recordBaselines(browser);
     else await compareBaselines(browser);
