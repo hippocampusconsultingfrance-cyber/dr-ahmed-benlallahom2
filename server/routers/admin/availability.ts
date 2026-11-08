@@ -3,7 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getDb } from "../../db";
 import { appointments, availabilitySlots, blockedDates } from "../../../drizzle/schema";
-import { eq, and, asc, gte, inArray, lt, sql } from "drizzle-orm";
+import { eq, and, asc, gte, inArray, lt, ne, sql } from "drizzle-orm";
 import { securityEventInsert } from "../../candidateSecurity";
 import { PARIS_TIME_ZONE, parisDateKey, calendarDateInput, getParisDateRange, timeToMinutes } from "../parisTime";
 
@@ -14,6 +14,11 @@ const MAX_BLOCKED_PERIOD_DAYS = 366;
 const PAID_APPOINTMENTS_LISTED = 20;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** How many calendar days from `from` to `to`, both included, counted without listing them. */
+function calendarDayCount(from: string, to: string) {
+  return (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / DAY_MS + 1;
+}
 
 /** The calendar days from `from` to `to`, both included (YYYY-MM-DD, days of Paris). */
 function calendarDaysBetween(from: string, to: string) {
@@ -26,6 +31,13 @@ function calendarDaysBetween(from: string, to: string) {
 const parisDay = new Intl.DateTimeFormat("fr-FR", { timeZone: PARIS_TIME_ZONE, day: "2-digit", month: "2-digit", year: "numeric" });
 const parisTime = new Intl.DateTimeFormat("fr-FR", { timeZone: PARIS_TIME_ZONE, hour: "2-digit", minute: "2-digit" });
 const paidAppointmentInPeriod = (apt: { trackingId: string; appointmentDate: Date }) => `${apt.trackingId} le ${parisDay.format(apt.appointmentDate)} à ${parisTime.format(apt.appointmentDate)}`;
+
+/**
+ * ADM-21: bookings are suspended when every weekly slot is inactive: the public
+ * site offers none and refuses a booking (server/routers/availability.ts,
+ * appointments.ts). Only setBookingsSuspended sets is_active.
+ */
+const areBookingsSuspended = (slots: Array<{ isActive: number }>) => slots.length > 0 && slots.every(slot => slot.isActive === 0);
 
 // Availability management
 export const adminAvailabilityRouter = router({
@@ -64,8 +76,39 @@ export const adminAvailabilityRouter = router({
       )).limit(1);
       if (duplicate) throw new TRPCError({ code: "CONFLICT", message: "Ce créneau existe déjà." });
 
-      await db.insert(availabilitySlots).values(input);
+      // ADM-21: a slot added while bookings are suspended opens with the others, at their resumption.
+      const suspended = areBookingsSuspended(await db.select({ isActive: availabilitySlots.isActive }).from(availabilitySlots));
+      await db.insert(availabilitySlots).values({ ...input, isActive: suspended ? 0 : 1 });
       return { success: true };
+    }),
+
+  /**
+   * ADM-21: every weekly slot closed to booking at once, or reopened at once,
+   * with its audit line in the same batch (DATA-01). The appointments already
+   * booked, or held for their payment, are kept; the slots and blocked dates
+   * stay as they are.
+   */
+  setBookingsSuspended: adminProcedure
+    .input(z.object({ suspended: z.boolean() }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database connection failed");
+
+      const slots = await db.select({ isActive: availabilitySlots.isActive }).from(availabilitySlots);
+      if (slots.length === 0) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Aucun créneau hebdomadaire n’est configuré : il n’y a pas de réservations à suspendre ou à reprendre." });
+      }
+      if (areBookingsSuspended(slots) === input.suspended) {
+        throw new TRPCError({ code: "CONFLICT", message: input.suspended ? "Les réservations sont déjà suspendues." : "Les réservations sont déjà ouvertes." });
+      }
+
+      const isActive = input.suspended ? 0 : 1;
+      await db.batch([
+        // Every slot: those not yet in that state.
+        db.update(availabilitySlots).set({ isActive }).where(ne(availabilitySlots.isActive, isActive)),
+        securityEventInsert(db, { actorKind: "admin", actorReference: ctx.user.openId, category: input.suspended ? "admin_bookings_suspended" : "admin_bookings_resumed", outcome: "allowed", metadata: { slots: slots.length } }),
+      ]);
+      return { success: true, suspended: input.suspended, slots: slots.length };
     }),
 
   deleteSlot: adminProcedure
@@ -154,10 +197,11 @@ export const adminAvailabilityRouter = router({
       if (input.from < parisDateKey(new Date())) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Cette période commence dans le passé : choisissez un premier jour à partir d’aujourd’hui." });
       }
-      const days = calendarDaysBetween(input.from, input.to);
-      if (days.length > MAX_BLOCKED_PERIOD_DAYS) {
+      // Counted before the days are listed: a period up to 9999 would list millions of them.
+      if (calendarDayCount(input.from, input.to) > MAX_BLOCKED_PERIOD_DAYS) {
         throw new TRPCError({ code: "BAD_REQUEST", message: `Une période compte ${MAX_BLOCKED_PERIOD_DAYS} jours au plus : bloquez-la en plusieurs fois.` });
       }
+      const days = calendarDaysBetween(input.from, input.to);
       const db = await getDb();
       if (!db) throw new Error("Database connection failed");
 

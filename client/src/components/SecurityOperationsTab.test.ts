@@ -122,14 +122,19 @@ describe("ADM-07 / A11Y-12 / ADM-21 — date, gravité et période bloquée", ()
     expect(html).toMatch(/<div class="[^"]*text-orange-700 [^"]*">2 événement\(s\) à examiner<\/div>/);
   });
 
-  it("nomme la période bloquée dans les disponibilités, dans chaque langue", () => {
-    view.events = [event(1, "admin_blocked_period_added", null)];
-    const labels = { fr: "Période bloquée dans les disponibilités", en: "Period blocked in the availability", de: "Zeitraum in den Verfügbarkeiten gesperrt", zh: "已在可预约时间中屏蔽一段时期" };
-    for (const [language, label] of Object.entries(labels)) {
+  it("nomme la période bloquée et la suspension puis la reprise des réservations, dans chaque langue", () => {
+    view.events = [event(1, "admin_blocked_period_added", null), event(2, "admin_bookings_suspended", null), event(3, "admin_bookings_resumed", null)];
+    const labels = {
+      fr: ["Période bloquée dans les disponibilités", "Réservations en ligne suspendues", "Réservations en ligne reprises"],
+      en: ["Period blocked in the availability", "Online bookings suspended", "Online bookings resumed"],
+      de: ["Zeitraum in den Verfügbarkeiten gesperrt", "Online-Buchungen ausgesetzt", "Online-Buchungen wieder aufgenommen"],
+      zh: ["已在可预约时间中屏蔽一段时期", "已暂停在线预约", "已恢复在线预约"],
+    };
+    for (const [language, expected] of Object.entries(labels)) {
       view.language = language;
       const html = renderToStaticMarkup(createElement(SecurityOperationsTab));
-      expect(html).toContain(label);
-      expect(html).not.toContain("admin blocked period");
+      for (const label of expected) expect(html).toContain(label);
+      expect(html).not.toMatch(/admin blocked period|admin bookings/);
     }
   });
 });

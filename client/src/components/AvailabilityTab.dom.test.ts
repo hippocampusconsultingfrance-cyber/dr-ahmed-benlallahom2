@@ -9,16 +9,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // (ADM-11), une liste qui n’a pas pu être chargée le dit au lieu de paraître
 // vide, avec « Réessayer », et la suppression d’un créneau refusée le dit
 // (ADM-10). Une période de congés se bloque en une fois, après un seul
-// avertissement qui liste ses rendez-vous payés (ADM-21), et le bouton de
-// déblocage, une icône, porte un nom (A11Y-12).
+// avertissement qui liste ses rendez-vous payés (ADM-21), les réservations se
+// suspendent et reprennent en une fois, après confirmation (ADM-21), et le
+// bouton de déblocage, une icône, porte un nom (A11Y-12).
 
 type List<T> = { data: T[] | undefined; isLoading: boolean; error: { message: string } | null; refetch: ReturnType<typeof vi.fn>; isFetching: boolean };
 const list = <T,>(data: T[] | undefined, error: { message: string } | null = null): List<T> => ({ data, isLoading: false, error, refetch: vi.fn(), isFetching: false });
 
 const view = vi.hoisted(() => ({
-  slots: null as unknown as List<{ id: number; dayOfWeek: number; startTime: string; endTime: string }>,
+  slots: null as unknown as List<{ id: number; dayOfWeek: number; startTime: string; endTime: string; isActive: number }>,
   blockedDates: null as unknown as List<{ id: number; date: string; reason: string | null }>,
-  calls: { deleteSlot: [] as unknown[], removeBlockedDate: [] as unknown[], addBlockedDate: [] as unknown[], addBlockedPeriod: [] as unknown[] },
+  calls: { deleteSlot: [] as unknown[], removeBlockedDate: [] as unknown[], addBlockedDate: [] as unknown[], addBlockedPeriod: [] as unknown[], setBookingsSuspended: [] as unknown[] },
   refusal: null as null | string,
   /** The server's answer to the next « Bloquer » of a period: thrown when it is an error. */
   periodAnswers: [] as unknown[],
@@ -36,6 +37,7 @@ vi.mock("@/lib/trpc", async () => {
         if (answer instanceof Error) throw answer;
         return answer;
       }
+      if (name === "setBookingsSuspended") return { success: true, ...(input as { suspended: boolean }), slots: 1 };
       return { success: true, paidAppointments: [] };
     },
     ...options,
@@ -52,6 +54,7 @@ vi.mock("@/lib/trpc", async () => {
           addBlockedDate: { useMutation: fakeMutation("addBlockedDate") },
           addBlockedPeriod: { useMutation: fakeMutation("addBlockedPeriod") },
           removeBlockedDate: { useMutation: fakeMutation("removeBlockedDate") },
+          setBookingsSuspended: { useMutation: fakeMutation("setBookingsSuspended") },
         },
       },
     },
@@ -69,9 +72,9 @@ function mount() {
 }
 
 beforeEach(() => {
-  view.slots = list([{ id: 1, dayOfWeek: 4, startTime: "09:00", endTime: "12:00" }]);
+  view.slots = list([{ id: 1, dayOfWeek: 4, startTime: "09:00", endTime: "12:00", isActive: 1 }]);
   view.blockedDates = list([{ id: 9, date: "2026-12-24", reason: "Congés" }]);
-  view.calls = { deleteSlot: [], removeBlockedDate: [], addBlockedDate: [], addBlockedPeriod: [] };
+  view.calls = { deleteSlot: [], removeBlockedDate: [], addBlockedDate: [], addBlockedPeriod: [], setBookingsSuspended: [] };
   view.refusal = null;
   view.periodAnswers = [];
   view.toasts = [];
@@ -211,5 +214,54 @@ describe("bloquer une période (ADM-21)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Ajouter un créneau" }));
     const days = Array.from(document.querySelectorAll("select option"), option => [option.textContent, (option as HTMLOptionElement).value]);
     expect(days).toEqual([["Lundi", "1"], ["Mardi", "2"], ["Mercredi", "3"], ["Jeudi", "4"], ["Vendredi", "5"], ["Samedi", "6"], ["Dimanche", "0"]]);
+  });
+});
+
+describe("suspendre et reprendre les réservations (ADM-21)", () => {
+  const SUSPENDED = "Réservations en ligne suspendues : le site ne propose aucun créneau, y compris ceux ajoutés depuis. Les rendez-vous déjà pris sont conservés.";
+
+  it("suspend tous les créneaux après une confirmation qui dit que les rendez-vous pris restent ; refusée, rien n’est fait", async () => {
+    mount();
+    expect(screen.queryByText(SUSPENDED)).toBeNull();
+    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false);
+    fireEvent.click(screen.getByRole("button", { name: "Suspendre les réservations" }));
+    expect(confirm.mock.calls[0]![0]).toContain("Le site ne proposera plus aucun créneau jusqu’à leur reprise. Les rendez-vous déjà pris, ou en attente de paiement, sont conservés");
+    expect(view.calls.setBookingsSuspended).toEqual([]);
+
+    confirm.mockReturnValueOnce(true);
+    fireEvent.click(screen.getByRole("button", { name: "Suspendre les réservations" }));
+    await waitFor(() => expect(view.toasts).toEqual([["success", "Réservations suspendues : le site ne propose plus aucun créneau."]]));
+    expect(view.calls.setBookingsSuspended).toEqual([{ suspended: true }]);
+  });
+
+  it("dit la suspension quand tous les créneaux sont fermés, et les rouvre ensemble après confirmation", async () => {
+    view.slots = list([{ id: 1, dayOfWeek: 4, startTime: "09:00", endTime: "12:00", isActive: 0 }, { id: 2, dayOfWeek: 5, startTime: "09:00", endTime: "10:00", isActive: 0 }]);
+    mount();
+    expect(screen.getByText(SUSPENDED)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Suspendre les réservations" })).toBeNull();
+
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    fireEvent.click(screen.getByRole("button", { name: "Reprendre les réservations" }));
+    expect(confirm.mock.calls[0]![0]).toContain("Les créneaux hebdomadaires pourront de nouveau être réservés par les patients, hors dates bloquées.");
+    await waitFor(() => expect(view.toasts).toEqual([["success", "Réservations reprises : les créneaux hebdomadaires sont de nouveau proposés."]]));
+    expect(view.calls.setBookingsSuspended).toEqual([{ suspended: false }]);
+  });
+
+  it("ne propose rien à suspendre sans créneau, ni quand la liste n’a pas pu être lue", () => {
+    view.slots = list([]);
+    mount();
+    expect(screen.queryByRole("button", { name: /(Suspendre|Reprendre) les réservations/ })).toBeNull();
+    cleanup();
+    view.slots = list(undefined, { message: "Délai dépassé" });
+    mount();
+    expect(screen.queryByRole("button", { name: /(Suspendre|Reprendre) les réservations/ })).toBeNull();
+  });
+
+  it("dit le refus du serveur", async () => {
+    view.refusal = "Validation de sécurité administrateur requise (10003)";
+    mount();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    fireEvent.click(screen.getByRole("button", { name: "Suspendre les réservations" }));
+    await waitFor(() => expect(view.toasts).toEqual([["error", "Validation de sécurité administrateur requise (10003)"]]));
   });
 });

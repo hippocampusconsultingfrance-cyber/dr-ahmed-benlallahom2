@@ -1,10 +1,11 @@
 import { trpc } from "@/lib/trpc";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { XCircle, Plus, Trash } from "lucide-react";
+import { XCircle, Plus, Trash, PauseCircle, PlayCircle } from "lucide-react";
 import { toast } from "sonner";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { AdminErrorState } from "@/components/AdminStatePanel";
+import { ADMIN_BADGE_TONES } from "@/components/AdminStatusBadge";
 
 const EMPTY_BLOCK_FORM = { date: "", to: "", reason: "" };
 
@@ -84,6 +85,23 @@ export default function AvailabilityTab() {
     else blockDate.mutate({ date: blockForm.date, reason });
   };
 
+  // ADM-21: every weekly slot closed, or reopened, at once.
+  const bookingsSuspended = !!slots && slots.length > 0 && slots.every(slot => slot.isActive === 0);
+  const setBookingsSuspended = trpc.admin.availability.setBookingsSuspended.useMutation({
+    onSuccess: ({ suspended }) => {
+      toast.success(suspended ? "Réservations suspendues : le site ne propose plus aucun créneau." : "Réservations reprises : les créneaux hebdomadaires sont de nouveau proposés.");
+      utils.admin.availability.listSlots.invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const toggleBookings = () => {
+    const question = bookingsSuspended
+      ? "Reprendre les réservations en ligne ? Les créneaux hebdomadaires pourront de nouveau être réservés par les patients, hors dates bloquées."
+      : "Suspendre les réservations en ligne ? Le site ne proposera plus aucun créneau jusqu’à leur reprise. Les rendez-vous déjà pris, ou en attente de paiement, sont conservés : annulez-les depuis l’onglet Réservations si besoin.";
+    if (!window.confirm(question)) return;
+    setBookingsSuspended.mutate({ suspended: !bookingsSuspended });
+  };
+
   const unblockDate = trpc.admin.availability.removeBlockedDate.useMutation({
     onSuccess: () => {
       toast.success("Date débloquée");
@@ -104,11 +122,26 @@ export default function AvailabilityTab() {
       <section>
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h3 className="text-lg font-semibold text-foreground">Créneaux hebdomadaires</h3>
-          <Button size="sm" className="min-h-10 w-full sm:w-auto sm:min-h-0" onClick={() => setShowSlotForm(!showSlotForm)}>
-            <Plus className="w-4 h-4 mr-2" />
-            Ajouter un créneau
-          </Button>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            {/* ADM-21: closes or reopens every slot at once; a slot added meanwhile waits for the resumption. */}
+            {!slotsError && slots && slots.length > 0 && (
+              <Button size="sm" variant="outline" className="min-h-10 w-full sm:w-auto sm:min-h-0" onClick={toggleBookings} disabled={setBookingsSuspended.isPending}>
+                {bookingsSuspended ? <PlayCircle className="w-4 h-4 mr-2" aria-hidden="true" /> : <PauseCircle className="w-4 h-4 mr-2" aria-hidden="true" />}
+                {bookingsSuspended ? "Reprendre les réservations" : "Suspendre les réservations"}
+              </Button>
+            )}
+            <Button size="sm" className="min-h-10 w-full sm:w-auto sm:min-h-0" onClick={() => setShowSlotForm(!showSlotForm)}>
+              <Plus className="w-4 h-4 mr-2" />
+              Ajouter un créneau
+            </Button>
+          </div>
         </div>
+
+        {bookingsSuspended && (
+          <p className={`mb-4 rounded-lg border p-3 text-sm ${ADMIN_BADGE_TONES.warning}`}>
+            Réservations en ligne suspendues : le site ne propose aucun créneau, y compris ceux ajoutés depuis. Les rendez-vous déjà pris sont conservés.
+          </p>
+        )}
 
         {showSlotForm && (
           <div className="bg-card border border-border rounded-lg p-4 mb-4">
