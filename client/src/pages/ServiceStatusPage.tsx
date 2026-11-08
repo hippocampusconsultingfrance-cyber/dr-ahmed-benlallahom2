@@ -4,12 +4,11 @@ import LanguageMenu from "@/components/LanguageMenu";
 import { ManageCookiesButton } from "@/components/CookieConsent";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { AlertTriangle, Home, RefreshCw, Wrench } from "lucide-react";
-import { useLocation } from "wouter";
+import { Link } from "wouter";
 import { getServiceStatusContent, type ServiceStatusKind, type ServiceStatusLocale } from "./serviceStatusContent";
 
 export default function ServiceStatusPage({ kind }: { kind: ServiceStatusKind }) {
   const { language } = useLanguage();
-  const [, setLocation] = useLocation();
   const copy = getServiceStatusContent(kind, language as ServiceStatusLocale);
   const Icon = kind === "maintenance" ? Wrench : AlertTriangle;
   const code = kind === "maintenance" ? "MAINTENANCE" : "500";
@@ -27,7 +26,7 @@ export default function ServiceStatusPage({ kind }: { kind: ServiceStatusKind })
         <h1 className="mt-4 font-display text-2xl font-semibold text-foreground sm:text-3xl">{copy.title}</h1>
         <p className="mx-auto mt-4 max-w-md text-base leading-relaxed text-muted-foreground">{copy.description}</p>
         <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
-          <Button className="min-h-11" onClick={() => setLocation("/")}><Home className="mr-2 h-4 w-4" />{copy.home}</Button>
+          <Button asChild className="min-h-11"><Link href="/"><Home className="mr-2 h-4 w-4" />{copy.home}</Link></Button>
           <Button className="min-h-11" variant="outline" onClick={() => window.location.reload()}><RefreshCw className="mr-2 h-4 w-4" />{copy.retry}</Button>
         </div>
       </section>
