@@ -1352,17 +1352,13 @@ function locationPage(sourceLocation: string) {
 }
 
 /**
- * Where a quote was read (IA-04): the quote, with the page it was checked on
- * when the text has [PAGE n] markers. Never the wording of sourceLocation,
- * which the AI writes freely: « page 1, en-tête » and « page 1, rubrique
- * Titre » cite the same sentence. Without markers (a DOCX), the quote alone,
- * whatever section the AI names.
+ * What a quote cites (IA-04): the quote itself, normalized. Never the wording
+ * of sourceLocation, which the AI writes freely (« page 1, en-tête » and
+ * « page 1, rubrique Titre » cite the same sentence), nor its page: a header
+ * or a footer repeated on each page, cited page by page, is one sentence, and
+ * the same quote written on two pages is one place, as it is in a DOCX.
  */
-function evidenceProvenance(item: { evidence: string; sourceLocation: string }, paged: boolean) {
-  return `${normalizeEvidenceText(item.evidence)}|${paged ? locationPage(item.sourceLocation) ?? "" : ""}`;
-}
-
-const hasPageMarkers = (sourceText: string) => /\[PAGE\s+\d+\]/i.test(sourceText);
+const evidenceProvenance = (item: { evidence: string }) => normalizeEvidenceText(item.evidence);
 
 /** Where a normalized quote is written in the normalized text: the start and end of each place. */
 function quotePlaces(text: string, quote: string) {
@@ -1387,10 +1383,10 @@ function quotesAreApart(text: string, left: string, right: string) {
     (placeOutside(leftPlaces, rightPlaces) || placeOutside(rightPlaces, leftPlaces));
 }
 
-function distinctEvidence<T extends EvidenceBearing>(evidence: T[], paged: boolean): T[] {
+function distinctEvidence<T extends EvidenceBearing>(evidence: T[]): T[] {
   const unique = new Map<string, T>();
   for (const item of evidence) {
-    const key = evidenceProvenance(item, paged);
+    const key = evidenceProvenance(item);
     const existing = unique.get(key);
     if (!existing || (!isVerifiedFact(existing) && isVerifiedFact(item)))
       unique.set(key, item);
@@ -1424,7 +1420,6 @@ function verifiedScoreBreakdown(input: {
   certifications: NormalizedCertification[];
   sourceText: string;
 }) {
-  const paged = hasPageMarkers(input.sourceText);
   const verifiedFields = input.fieldEvidence.filter(isVerifiedFact);
   const hasVerifiedField = (field: CvEvidenceField) =>
     verifiedFields.some(item => item.field === field);
@@ -1435,7 +1430,7 @@ function verifiedScoreBreakdown(input: {
   );
   const verifiedExperiences = distinctEvidence(distinctExperiencesByFact(
     input.experiences.filter(isVerifiedFact)
-  ), paged);
+  ));
   const languagePoints = new Map<string, number>();
   const proficiencyPoints: Record<NormalizedLanguage["proficiency"], number> = {
     basic: 3,
@@ -1521,7 +1516,6 @@ export function normalizeRecruitmentAnalysis(
       `Confiance OCR insuffisante (${declared.extractionConfidence} %) : toutes les preuves nécessitent une vérification manuelle.`
     );
   }
-  const paged = hasPageMarkers(sourceText);
   // IA-07: on a scan, and on the pages the vision read again, a quote is found
   // in what the vision transcribed, not in the file: the admin is told to
   // compare it with the scan. The marking changes no score: whether the score
@@ -1724,7 +1718,7 @@ export function normalizeRecruitmentAnalysis(
     ...normalizedLanguages,
     ...certifications,
     ...fieldEvidence,
-  ], paged);
+  ]);
   const evidenceCoverage = evidenceCoverageOf(allEvidence);
   const uniqueContradictions = contradictions;
   const unverifiedCount =

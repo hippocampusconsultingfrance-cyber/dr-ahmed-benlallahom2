@@ -1281,6 +1281,48 @@ describe("dossier d’un CV qui cache du texte, de bout en bout (IA-01)", () => 
     expect(String(dossier(id).ai_weaknesses)).not.toContain("texte invisible");
   }, PDF_TEST_TIMEOUT_MS);
 
+  it("pied de page répété sur les 4 pages d’un PDF et cité page par page pour chaque champ : un seul endroit, 15 points et pas de score, comme le même CV en DOCX (IA-04)", async () => {
+    const footer = "Médecin anesthésiste-réanimateur – 10 ans d’expérience – Licence DHA – Anglais courant";
+    const rubrics = ["Expérience : CHU de Lyon, service d’anesthésie", "Formation : Faculté de médecine de Lyon", "Publications : anesthésie locorégionale", "Références : sur demande"];
+    const pagedPdf = () => pdf(document => rubrics.forEach((rubric, index) => {
+      if (index > 0) document.addPage();
+      document.fontSize(11).fillColor("black").text("Dr Camille Martin", 50, 60, { lineBreak: false });
+      document.text(rubric, 50, 90, { lineBreak: false });
+      document.fontSize(9).text(footer, 50, 770, { lineBreak: false });
+    }));
+    // The same CV in Word: the footer written at the end of each page of the body.
+    const pagedDocx = () => docx(rubrics.map((rubric, index) =>
+      `${index > 0 ? '<w:p><w:r><w:br w:type="page"/></w:r></w:p>' : ""}${paragraph("Dr Camille Martin")}${paragraph(rubric)}${paragraph(footer)}`).join(""));
+    // Every fact quoted from the footer, each under another page (a DOCX has none: under another section).
+    const reading = (location: (page: number) => string) => aiReading({
+      professionalTitle: "Médecin anesthésiste-réanimateur", specialties: ["Médecin anesthésiste-réanimateur"], yearsExperience: 10,
+      normalizedLanguages: [{ language: "Anglais", proficiency: "fluent", ...quote(footer, location(4)) }],
+      certifications: [{ name: "Licence DHA", issuingBody: null, country: null, expiresAt: null, ...quote(footer, location(1)) }],
+      fieldEvidence: [
+        { field: "professionalTitle", value: "Médecin anesthésiste-réanimateur", ...quote(footer, location(1)) },
+        { field: "specialty", value: "Médecin anesthésiste-réanimateur", ...quote(footer, location(2)) },
+        { field: "yearsExperience", value: "10 ans", ...quote(footer, location(3)) },
+      ],
+    });
+    const read: Array<{ score: unknown; specialtyMatch: number; verified: boolean[] }> = [];
+    for (const [file, mimeType, location] of [
+      [await pagedPdf(), "application/pdf", (page: number) => `page ${page}, pied de page`],
+      [pagedDocx(), DOCX, (page: number) => `rubrique ${rubrics[page - 1]!.split(" :")[0]}`],
+    ] as const) {
+      state.prompts = [];
+      state.reading = reading(location);
+      const id = seedDossier(file, mimeType);
+      await processDueCvAnalysisJobs(5);
+      expect(normalized(state.prompts[0]!)).toContain(footer);
+      const extracted = JSON.parse(String(dossier(id).ai_extracted_skills));
+      read.push({ score: dossier(id).ai_score, specialtyMatch: extracted.scoreBreakdown.specialtyMatch, verified: extracted.fieldEvidence.map((item: { evidenceVerified: boolean }) => item.evidenceVerified) });
+    }
+    const [fromPdf, fromDocx] = read as [typeof read[number], typeof read[number]];
+    // Before: the footer was a place on each page of the PDF, 45 points and a score; one place in the DOCX.
+    expect(fromPdf).toEqual({ score: null, specialtyMatch: 15, verified: [true, true, true] });
+    expect(fromDocx).toEqual(fromPdf);
+  }, PDF_TEST_TIMEOUT_MS);
+
   it("CV lisible qui cache aussi une phrase : au-delà de 30 caractères, revue humaine sans score ni faits structurés", async () => {
     state.reading = honestReading;
     const id = seedDossier(await pdf(document => {

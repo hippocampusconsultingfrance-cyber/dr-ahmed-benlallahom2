@@ -674,6 +674,51 @@ describe("une même citation ne compte qu’une fois (IA-04)", () => {
     const ownLine = `[PAGE 1]\n${header}\n${skillLine}\n[PAGE 2]\n${header}\nPoste actuel : ${title}`;
     expect(normalizeRecruitmentAnalysis(quotedTwice([header, "page 1"], [title, "page 2"]), ownLine, declared).scoreBreakdown.specialtyMatch).toBe(30);
   });
+
+  // A quote is one place whatever page it is cited on, as in a DOCX, which has no pages.
+  const FOOTER = "Médecin anesthésiste-réanimateur – 10 ans d’expérience – Licence DHA – Anglais courant";
+  /** Every fact quoted from the footer, each under another page (the audit's footer cited page by page). */
+  const footerPageByPage = (pages: number[]) => analysisFixture({
+    professionalTitle: title, specialties: [title], yearsExperience: 10, skills: [],
+    normalizedExperiences: [],
+    normalizedLanguages: [{ language: "Anglais", proficiency: "fluent", evidence: FOOTER, sourceLocation: `page ${pages[3 % pages.length]}`, confidence: 95 }],
+    certifications: [{ name: "Licence DHA", issuingBody: null, country: null, expiresAt: null, evidence: FOOTER, sourceLocation: `page ${pages[0]}`, confidence: 95 }],
+    fieldEvidence: [
+      { field: "professionalTitle", value: title, evidence: FOOTER, sourceLocation: `page ${pages[0]}, pied de page`, confidence: 95 },
+      { field: "specialty", value: title, evidence: FOOTER, sourceLocation: `page ${pages[1 % pages.length]}, pied de page`, confidence: 95 },
+      { field: "yearsExperience", value: "10 ans", evidence: FOOTER, sourceLocation: `page ${pages[2 % pages.length]}, pied de page`, confidence: 95 },
+    ],
+  });
+  const pagesWith = (footer: (page: number) => string) => [1, 2, 3, 4]
+    .map(page => `[PAGE ${page}]\nDr Camille Martin\n${["Expérience", "Formation", "Publications", "Références"][page - 1]} : rubrique de la page ${page}\n${footer(page)}`).join("\n");
+
+  it("un pied de page répété sur chaque page et cité page par page pour chaque champ est un seul endroit : 15 points, pas de score", () => {
+    const result = normalizeRecruitmentAnalysis(footerPageByPage([1, 2, 3, 4]), pagesWith(() => FOOTER), declared);
+    expect(result.fieldEvidence.every(item => item.evidenceVerified)).toBe(true);
+    expect(result.scoreBreakdown.specialtyMatch).toBe(15);
+    // Before: the same sentence was a place on each page, 45 and a score.
+    expect(result.relevanceScore).toBeNull();
+    // Cited on one page only: the same.
+    expect(normalizeRecruitmentAnalysis(footerPageByPage([1]), pagesWith(() => FOOTER), declared).relevanceScore).toBeNull();
+  });
+
+  it("un pied de page numéroté page par page (« 2 / 4 ») est encore une seule ligne sur toutes ses pages", () => {
+    const result = normalizeRecruitmentAnalysis(footerPageByPage([1, 2, 3, 4]), pagesWith(page => `${FOOTER} – ${page} / 4`), declared);
+    expect(result.scoreBreakdown.specialtyMatch).toBe(15);
+    expect(result.relevanceScore).toBeNull();
+  });
+
+  it("la même citation écrite sur deux pages, dans deux lignes différentes, est aussi un seul endroit, comme dans un DOCX", () => {
+    const body = `[PAGE 1]\nDr Camille Martin\n${title}, CHU de Lyon\n${skillLine}\n[PAGE 2]\nPoste actuel : ${title}\nLangues : anglais courant`;
+    const result = normalizeRecruitmentAnalysis(quotedTwice([title, "page 1"], [title, "page 2"]), body, declared);
+    expect(result.fieldEvidence.every(item => item.evidenceVerified)).toBe(true);
+    expect(result.scoreBreakdown.specialtyMatch).toBe(15);
+    // Before: two places, a score of 20. Two different quotes on two pages stay two places: 30 points and a score.
+    expect(result.relevanceScore).toBeNull();
+    const other = normalizeRecruitmentAnalysis(quotedTwice([`${title}, CHU de Lyon`, "page 1"], [`Poste actuel : ${title}`, "page 2"]), body, declared);
+    expect(other.scoreBreakdown.specialtyMatch).toBe(30);
+    expect(other.relevanceScore).toBe(35);
+  });
 });
 
 describe("données du candidat entre les balises du serveur (IA-05)", () => {
