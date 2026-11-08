@@ -580,10 +580,42 @@ Les 169 constats restants ont été triés dans le code actuel. Pour chacun, la 
   - passée en anglais, la page d'accueil a son titre et sa description en anglais, et le français pré-rendu ne change pas (EN-10) ;
   - l'allemand tient à 320 px, le menu « Affichage » se ferme quand le focus en sort, et un téléphone de réservation qui contient un caractère de contrôle reçoit le message traduit ;
   - `pnpm start` et `pnpm dev` redirigent aussi `/booking/` vers `/booking`, comme Vercel.
-- **IA des CV et admin** : un second tour de corrections est en cours. Le premier correctif d'IA-04 et d'IA-02 ne tient pas encore dans trois cas : un pied de page écrit en phrases, un CV à deux colonnes en PDF, et une mention comme « obligatoire » ou une variété comme « Golfe » après un tiret. Restent aussi les téléphones internationaux groupés par trois dans l'export (ADM-26) et deux contournements du contrôle de la CI (CODE-14).
+- **Admin et CI** (corrigés en deux tours et fusionnés le 7 novembre) :
+  - les téléphones de l'export restent du texte dans Calc en anglais, français et allemand, et plusieurs numéros saisis dans un champ sont séparés (ADM-26) ;
+  - la copie en pleine chasse d'un mot de passe compromis est refusée à la réinitialisation comme à la connexion, et les apostrophes typographiques sont confondues dans les filtres (INTL-12) ;
+  - le lien d'une notification ouvre sa question santé ou sa candidature (ADM-09) ;
+  - le contrôle de la CI s'exécute avant tout code du dépôt : installation sans scripts ni pnpmfile, fichiers du contrôle épinglés par leur empreinte, chaque paquet vérifié contre le registre (CODE-14).
+- **IA des CV** : un troisième tour est en cours. IA-02 (une mention comme « obligatoire » ou une variété comme « Golfe » après un tiret) et IA-05 (balises écrites en caractères d'étiquette, en chevrons voisins ou avec des remplissages hangul) sont validés. Pour IA-04, chaque correctif d'un cas en a cassé un voisin (tabulations, paragraphes longs, postes répétés d'une page à l'autre, ligne dessinée en morceaux). Trois conceptions indépendantes de « l'endroit » d'une preuve ont donc été comparées sur tous les cas connus. La meilleure est en cours d'implémentation, et deux vérificateurs la contrôleront : l'un sur les attaques, l'autre sur la parité PDF/DOCX des CV honnêtes.
 - **Laissés à votre décision** : la base réglée à l'heure de Paris (DATA-13, `SHOW timezone` sur Neon) ; les langues écrites en anglais dans l'export en français, qui relèvent du format d'export (INTL-10).
 
-**Vagues 3 à 6** : à faire. Elles couvrent le gabarit des emails, les finitions de l'admin, la FAQ, la recherche et la 404, le typage des tests, le premier affichage, l'accueil, les campagnes, les journaux, le poids du serveur, les pays et fichiers, le tarif et l'heure de Paris, l'effacement RGPD, la sécurité de l'admin, les tests de bout en bout et la mise en forme du code.
+**Vague 3 (fusionnée le 8 novembre)** :
+
+| ID | État | Reste à faire |
+|---|---|---|
+| MAIL-07, MAIL-09, MAIL-10, MAIL-11, MAIL-12 | ✅ gabarit commun titré dans la langue de l'email, en table centrée de 600 px qu'Outlook respecte ; en-tête et signature « Dr Ahmed Ben Lallahom » (réservation, questions santé) ou « Hippocampus Consulting » (recrutement) ; pied de page traduit avec le site et la politique de confidentialité ; boutons sur une cellule #0e7490 (5,4:1 avec le blanc) ; sauts de ligne gardés ; aperçu dans la boîte de réception sans contenu médical ni texte libre ; « Choisir un nouveau créneau » dans l'annulation ; liens vers le formulaire RGPD ; réponse santé dans la langue de la question | Essai réel dans Outlook, Gmail et Apple Mail, mode sombre compris |
+| A11Y-21 | ✅ nouvelle facture déclarée en français, avec son titre affiché ; facture archivée renvoyée telle quelle ; emails dans `<html lang>` avec un `<title>` | — |
+| RGPD-24 | ⏳ « Candidature reçue » donne la durée de conservation codée (2 ans après la dernière activité) et reprend mot pour mot la phrase de la politique sur l'analyse automatisée, avec les liens vers la politique et le formulaire RGPD | Avec l'avocat : la phrase sur la présentation du profil aux établissements clients (RGPD-03), et cette durée dans la section 4 de la politique |
+| ADM-07, A11Y-12 | ✅ statuts en clair sur un badge unique lisible en thème clair, en français dans les onglets écrits en français ; dates de Paris, fuseau indiqué ; boutons-icônes et barre d'onglets nommés ; code de sécurité dans un formulaire que la touche Entrée envoie | — |
+| ADM-19 | ⏳ documents du coffre groupés par candidat, avec « Voir la candidature » | Email au candidat dont un document est refusé ; façon d'être prévenu d'un dépôt (propositions ci-dessous) |
+| ADM-21 | ✅ « Bloquer une période » (366 jours au plus) en une confirmation qui liste les rendez-vous payés, écrite d'un seul coup avec sa ligne d'audit ; créneaux triés ; dates bloquées passées masquées ; suspension et reprise des réservations en ligne, qui ferment et rouvrent les créneaux hebdomadaires, sans changement de schéma | — |
+| SEOP-03, A11Y-15, A11Y-20, A11Y-17 | ✅ réponses de la FAQ dans la page et publiées en FAQPage ; titres sans saut ; seul le nombre de résultats annoncé ; focus sur le titre de la nouvelle page après un changement de page ; vrais liens vers les autres pages | — |
+| PUB-14 | ⏳ « 15 (SAMU) ou 112 » dans les quatre langues ; « Je suis soignant : postuler » | Écrire les 6 à 10 nouvelles questions de la FAQ |
+| PUB-28 | ✅ recherche sans résultat : vrais liens ; plusieurs mots : repli sur les pages qui en contiennent au moins un ; « annuler » et « remboursement » trouvés | — |
+| CODE-03, CODE-11, CODE-17 | ✅ `pnpm check` vérifie aussi les tests (ES2022, `noUnusedLocals`), avec un contexte tRPC de test commun ; `pnpm test` passe sans secrets ; `test:ci` n'écarte plus aucun fichier ; scripts périmés retirés ; régression visuelle réparée | Où publier les images de référence, aujourd'hui sur le stockage Forge de Manus |
+| CODE-10 | ⏳ protections des formulaires publics (anti-robot et seuils) testées en mode production ; plus aucune protection ne dépend de `NODE_ENV=test` | Trois raccourcis `VITEST` restent pour les tests |
+| SEOP-07 | ⏳ mesuré : aucun préchargement de police n'améliore le LCP médian (il l'aggrave dans 14 paires de mesures sur 15), rien n'est gardé | PageSpeed Insights sur une preview Vercel |
+
+- **À vous** :
+  - avec l'avocat, la phrase de « Candidature reçue » sur la présentation du profil aux établissements clients (RGPD-03), et la durée de conservation du recrutement dans la politique (section 4), que l'email donne désormais ;
+  - un essai réel des emails dans Outlook, Gmail et Apple Mail, mode sombre compris ;
+  - l'email au candidat dont un document est refusé (ADM-19), à envoyer ou non, et avec ou sans motif visible du candidat, distinct de la note interne. Proposition : objet « Un document de votre dossier est à renouveler » ; texte « Bonjour {prénom}, le document « {nom du fichier} » ({catégorie}) déposé dans votre espace candidat n'a pas pu être accepté. Merci d'en déposer une nouvelle version depuis votre espace : {lien}. {Motif facultatif}. Cordialement. » ;
+  - la façon d'être prévenu d'un dépôt (ADM-19) : une ligne par dépôt dans la notification immédiate existante (« Nouveau document déposé : {catégorie} — {candidat} »), ou rien, en gardant le filtre « À revoir » ;
+  - les 6 à 10 nouvelles questions de la FAQ (PUB-14). Sujets proposés : remboursements (selon les CGV), déroulé de la consultation, langues proposées, lien avec la consultation pré-anesthésique (à valider médicalement), gratuité pour les soignants, délai d'une shortlist, pays et postes, facture ;
+  - PageSpeed Insights sur une preview Vercel (SEOP-07) ;
+  - où publier les images de référence de la régression visuelle, aujourd'hui lues sur le stockage Forge de Manus (CODE-17).
+- **Au déploiement** : un email ou une facture renvoyés juste après, sous la même clé d'idempotence Resend (moins de 24 h), ont un HTML ou un PDF différent de la première tentative. Resend peut alors répondre 409.
+
+**Vagues 4 à 6** : à faire. Elles couvrent l'accueil, les campagnes, les journaux, le poids du serveur, les pays et fichiers, le tarif et l'heure de Paris, l'effacement RGPD, la sécurité de l'admin, les tests de bout en bout et la mise en forme du code.
 
 ### À faire de votre côté
 - **Comptes et secrets, tout de suite** :
