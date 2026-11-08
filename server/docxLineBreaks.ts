@@ -29,9 +29,10 @@ import { DOCX_FONT_ALIASES, DOCX_FONT_AS_BASE, DOCX_FONT_AS_BEFORE, DOCX_FONT_AS
  *   (DOCX_FONT_METRICS) in both, or, for a font not measured, Liberation Sans
  *   Narrow and the bound of the fonts it may be, the narrow one at
  *   NARROW_SHARE of its widths (kerning); an ideograph one em, kana and hangul
- *   at most one, a letter of Arabic or Hebrew between a fifth of an em and an
- *   em (the tab then decided by one stop in both), a picture in the line its
- *   extent; it is a line break when wide in both, a space otherwise, and
+ *   at most one, a letter of Arabic or Hebrew from a fifth of an em up to the
+ *   widest its form is drawn in the usual faces (ARABIC_FORM_EM; an em at least
+ *   in a font not known), the tab then decided by one stop in both; a picture
+ *   in the line its extent; it is a line break when wide in both, a space otherwise, and
  *   always a space when what comes before it on its line, or the text it
  *   aligns, cannot be measured (a font of no bound, w:fitText, a floating
  *   picture, an object, a field's result, w:ptab, w:sym, a character no metric
@@ -46,8 +47,14 @@ import { DOCX_FONT_ALIASES, DOCX_FONT_AS_BASE, DOCX_FONT_AS_BEFORE, DOCX_FONT_AS
  *   style may hide some cells' text (w:tblStylePr) has each row on one line.
  *   Cells and paragraphs laid out right to left (w:bidiVisual, w:bidi) are
  *   placed so;
- * - frames (w:framePr) side by side at one height are read as cells are, and
- *   text boxes drawn in a paragraph's line, of one line each, with its text.
+ * - frames (w:framePr) side by side at one height, placed by w:x or by their
+ *   alignment, are read as cells are, a drop cap with the paragraph it opens;
+ *   text boxes drawn in a paragraph's line, of one line each, with its text,
+ *   and floating ones side by side at one height as cells are; the columns of
+ *   a section, each of one line at the top of the page, as cells are;
+ * - of a mc:AlternateContent, the line breaks, tabs and paragraph ends of its
+ *   mc:Fallback (what mammoth reads) that the mc:Choice Word draws has not,
+ *   of the same letters, are a space.
  * WordprocessingML is read under whatever prefix the file binds to it, as
  * mammoth reads it. The markers that join lines are drawn anew at each reading
  * (the document cannot write them) and read back by joinMarkedLines. Past a
@@ -81,14 +88,77 @@ const NAMESPACES: Record<string, string> = {
 /** Characters a CJK font draws one em wide (ideographs, full width forms), and those of a script it may draw narrower (kana, hangul). */
 const FULL_WIDTH = new RegExp("[\\u1100-\\u115f\\u2e80-\\u303f\\u3400-\\u4dbf\\u4e00-\\u9fff\\ua960-\\ua97f\\uf900-\\ufaff\\ufe30-\\ufe4f\\uff01-\\uff60\\uffe0-\\uffe6\\u{20000}-\\u{3ffff}]", "u");
 const KANA_OR_HANGUL = /[\u3040-\u30ff\u31f0-\u31ff\uac00-\ud7af]/;
-/** Letters of Arabic and Hebrew: no metric, between a fifth of an em and an em wide whatever their font; their marks, none. */
+/**
+ * Letters of Arabic and Hebrew: no metric, at least a fifth of an em wide whatever their font; their marks, none. At most, by the
+ * form the letter takes (joined to the next letter, its initial or medial form; else its final or isolated form, as the letters
+ * that never join the next one take), the widest of DejaVu Sans, DejaVu Sans Bold and FreeSerif draw, a twentieth of an em more
+ * (ARABIC_FORM_EM: seen 1.05 em joined and 1.45 em at the end of a word, beh 0.45 and 1.1…): LibreOffice draws a font it lacks
+ * (Arial, Calibri…) in DejaVu Sans, and the usual faces Word draws Arabic in (Arial, Times New Roman, Tahoma, Segoe UI) are no
+ * wider. A letter not listed, the widest; a Hebrew letter or a digit, HEBREW_LETTER_EM; and in a font this reading neither measures nor
+ * bounds (a display or calligraphic face), never less than an em.
+ */
 const RIGHT_TO_LEFT_LETTER = /[\u0590-\u05ff\u0600-\u06ff\u0700-\u074f\u0750-\u077f\u08a0-\u08ff\ufb1d-\ufdff\ufe70-\ufeff]/;
+const ARABIC_FORM_EM: ReadonlyArray<readonly [letters: RegExp, joined: number, final: number]> = [
+  // Never joined to the next letter: alef, dal, thal, reh, zain, waw, teh marbuta, hamza, yeh barree, and their variants.
+  [/[\u0621-\u0625\u0627\u0629\u062f-\u0632\u0648\u0671-\u0677\u0688-\u0699\u06c0\u06c3-\u06cb\u06cd\u06cf\u06d2\u06d3\u06d5]/, 0.75, 0.75],
+  [/[\u0626\u0628\u062a\u062b\u0644\u0646\u0649\u064a\u066e\u0678-\u0680\u06b5-\u06bd\u06cc\u06ce\u06d0\u06d1]/, 0.45, 1.1],
+  [/[\u062c-\u062e\u0681-\u0687]/, 0.75, 0.75],
+  [/[\u0633-\u0636\u069a-\u069e\u06fa\u06fb]/, 1.05, 1.45],
+  [/[\u0637\u0638\u069f]/, 1.0, 1.1],
+  [/[\u0639\u063a\u06a0\u06fc]/, 0.75, 0.75],
+  [/[\u0641\u06a1-\u06a6]/, 0.75, 1.25],
+  [/[\u0642\u066f\u06a7\u06a8]/, 0.75, 0.95],
+  [/[\u0643\u06a9-\u06b4]/, 0.65, 1.1],
+  [/[\u0645]/, 0.7, 0.85],
+  [/[\u0647\u06be\u06c1\u06c2]/, 0.75, 1.0],
+];
+const WIDEST_ARABIC_EM = 1.45;
+/** Hebrew letters (of one form; DejaVu Sans Bold's widest, 0.76 em) and Arabic digits. */
+const HEBREW_LETTER_EM = 0.8;
+const HEBREW_OR_DIGIT = /[\u0590-\u05ff\ufb1d-\ufb4f\u0660-\u0669\u06f0-\u06f9]/;
+/** The Arabic letters joined to the letter after them, in an initial or medial form, unless at the end of their word. */
+const JOINING_LETTER = /[\u0626\u0628\u062a-\u062e\u0633-\u063a\u0640-\u0647\u0649\u064a\u066e\u066f\u0678-\u0687\u069a-\u06bf\u06c1\u06c2\u06cc\u06ce\u06d0\u06d1\u06fa-\u06fc\u0750-\u077f]/;
+/** The letters an Arabic letter joins to when they follow it: a word goes on. */
+const ARABIC_LETTER = /[\u0620-\u064a\u066e-\u06d3\u06fa-\u06fc\u0750-\u077f\u08a0-\u08ff]/;
+/** The widest a letter of Arabic or Hebrew may be, in em, in this form; the widest Arabic for any other (a presentation form, a sign). */
+function rightToLeftBound(character: string, joined: boolean) {
+  if (HEBREW_OR_DIGIT.test(character)) return HEBREW_LETTER_EM;
+  const form = ARABIC_LETTER.test(character) ? ARABIC_FORM_EM.find(([letters]) => letters.test(character)) : undefined;
+  if (!form) return WIDEST_ARABIC_EM;
+  return joined && JOINING_LETTER.test(character) ? form[1] : form[2];
+}
 const MARK = new RegExp("\\p{M}", "u");
 /** A box's width in points, from a VML style (« width:9.9pt »); null when not given in a length. */
 const UNITS: Record<string, number> = { pt: 1, in: 72, cm: 72 / 2.54, mm: 72 / 25.4, px: 0.75, pc: 12 };
 function styleWidth(style: string | undefined) {
   const match = /(?:^|;)\s*width\s*:\s*([\d.]+)\s*(pt|in|cm|mm|px|pc)?\s*(?:;|$)/i.exec(style ?? "");
   return match ? Number(match[1]) * UNITS[(match[2] ?? "px").toLowerCase()]! : null;
+}
+/** A VML length in points (« 12pt », « 1.5cm », « 20 » in pixels); null when it is not one. */
+function vmlLength(value: string | undefined) {
+  const match = /^\s*(-?[\d.]+)\s*(pt|in|cm|mm|px|pc)?\s*$/i.exec(value ?? "");
+  return match ? Number(match[1]) * UNITS[(match[2] ?? "px").toLowerCase()]! : null;
+}
+/**
+ * A floating VML text box's place from its style (margin-left or left, margin-top or top, width) and its insets (v:textbox inset,
+ * Word's 7.2 pt and 3.6 pt when none): its left edge, its top, its width, the frames they are measured from; none when one is not
+ * a length, or the box is placed by an alignment (mso-position-horizontal) or turned.
+ */
+function floatingPlace(style: string | undefined, inset: string | undefined) {
+  const properties = new Map<string, string>();
+  for (const part of (style ?? "").split(";")) {
+    const colon = part.indexOf(":");
+    if (colon > 0) properties.set(part.slice(0, colon).trim().toLowerCase(), part.slice(colon + 1).trim());
+  }
+  const left = vmlLength(properties.get("margin-left") ?? properties.get("left") ?? "0");
+  const top = vmlLength(properties.get("margin-top") ?? properties.get("top") ?? "0");
+  const width = vmlLength(properties.get("width"));
+  if (left === null || top === null || width === null || !(width > 0)) return undefined;
+  if (!["", "absolute"].includes((properties.get("mso-position-horizontal") ?? "").toLowerCase()) || Number(properties.get("rotation") ?? 0) !== 0) return undefined;
+  const [insetLeft, insetTop, insetRight] = (inset ?? "7.2pt,3.6pt,7.2pt,3.6pt").split(",").map(value => vmlLength(value.trim() || "0"));
+  if (insetLeft === null || insetTop === null || insetRight === null || insetLeft === undefined || insetTop === undefined || insetRight === undefined) return undefined;
+  const frame = `${properties.get("mso-position-horizontal-relative") ?? "text"}|${properties.get("mso-position-vertical-relative") ?? "text"}`;
+  return { left, top, width, frame, inset: [insetLeft, insetTop, insetRight] as [number, number, number] };
 }
 const SUBSTITUTES = new Set<string>([...Object.values(DOCX_SUBSTITUTE_FONTS), "listed-typewriter"].filter(key => key !== DOCX_SUBSTITUTE_FONTS.sans && key !== DOCX_SUBSTITUTE_FONTS.serif && key !== DOCX_SUBSTITUTE_FONTS.typewriter));
 /** A line's end written in a run's text, literal or as a character reference: never a line of its own (\r, as LibreOffice shows it, aside). */
@@ -149,7 +219,7 @@ type RunFormat = {
   csFont?: string; sizeCs?: number;
 };
 /** A frame's place (w:framePr): its left edge and width in points, what they are measured from, and its height as written. */
-type Frame = { x?: number; width?: number; hAnchor: string; xAlign?: string; height: string };
+type Frame = { x?: number; width?: number; hAnchor: string; xAlign?: string; height: string; dropCap?: string };
 type ParagraphFormat = {
   left?: number; right?: number; firstLine?: number; align?: string; tabs?: Array<[number, string]>; before?: string; after?: string; line?: string; lineRule?: string;
   numbered?: boolean; unmeasured?: boolean; bidi?: boolean; frame?: Frame;
@@ -291,6 +361,7 @@ function readFormat(tag: Tag, parent: string, grandParent: string, run: RunForma
         x: attribute(tag, "w:xAlign") === undefined ? twips(attribute(tag, "w:x")) : undefined, width: width && width > 0 ? width : undefined,
         hAnchor: attribute(tag, "w:hAnchor") ?? "column", xAlign: attribute(tag, "w:xAlign"),
         height: `${attribute(tag, "w:vAnchor") ?? "margin"}|${attribute(tag, "w:y") ?? ""}|${attribute(tag, "w:yAlign") ?? ""}`,
+        dropCap: attribute(tag, "w:dropCap"),
       };
     } else if (tag.name === "w:textDirection") paragraph.unmeasured = true;
   } else if (parent === "w:numPr" && grandParent === "w:pPr" && tag.name === "w:numId") paragraph.numbered = value !== "0";
@@ -376,15 +447,18 @@ function tabStops(formats: ParagraphFormat[]) {
 type Piece =
   | { kind: "text"; text: string; format: RunFormat; opaque: boolean }
   | { kind: "tab"; start: number; end: number; prefix: string }
-  | { kind: "break" }
+  /** A line break shown; `column`: a column break (w:br w:type="column"), the write of its line break. */
+  | { kind: "break"; column?: Write }
   | { kind: "opaque" }
   /** A picture or a shape in the line, as wide as its extent (null when not known, or floating). */
   | { kind: "box"; width: number | null };
 /** A paragraph of the XML: where its content starts (after its properties) and its end tag, the prefix it is written with. */
 type Paragraph = {
   prefix: string; contentStart: number; end: number; pStyle?: string; own: ParagraphFormat; mark: RunFormat; pieces: Piece[]; runs: RunFormat[];
-  text: boolean; container: Container; table: Table | null; row: number | null; inTextBox: boolean;
+  text: boolean; container: Container; table: Table | null; row: number | null; inTextBox: boolean; section: number;
 };
+/** A section's properties (w:sectPr): its columns (w:cols and their w:col), how it starts (w:type), its page and margins. */
+type Section = { cols?: Tag; columns: Tag[]; type?: string; pageSize?: Tag; pageMargins?: Tag; bidi: boolean };
 /** A logical paragraph laid out in a measure: its lines, the width of its first, its size, and whether all of it was measured. */
 type Laid = { lines: number; width: number; size: number; measured: boolean; known: boolean };
 /** Paragraphs Word shows as one, the marks of all but the last hidden: what is laid out, and what lies on a cell's lines. */
@@ -392,12 +466,83 @@ type Logical = { parts: Paragraph[]; text: boolean; laid?: Record<Measure, Laid>
 type Measure = "narrow" | "wide";
 type Container = { kind: "body" | "cell" | "box"; pending: Logical | null; cell: Cell | null; box?: Box };
 /** A text box's content, the paragraph it is drawn in, and whether it lies in that paragraph's line (inline) or floats. */
-type Box = { host: Paragraph | undefined; inline: boolean; logicals: Logical[] };
+/** `place`: a floating VML box's place, in points, from its style: its left edge, its top, its width, what they are measured from, its insets. */
+type Box = { host: Paragraph | undefined; inline: boolean; logicals: Logical[]; place?: { left: number; top: number; width: number; frame: string; inset: [number, number, number] } };
 type Cell = { width: number | null; span: number; margins: TableFormat; paragraphs: Logical[]; nested: boolean; vAlign: string; unmeasured: boolean };
 type Row = { cells: Cell[]; gridBefore: number; table: Table };
 type Table = { grid: number[]; margins: TableFormat; style?: string; row: Row | null; conditionallyHidden: boolean; rightToLeft: boolean };
 /** A replacement of the XML between two offsets. */
 type Write = { start: number; end: number; text: string };
+
+/** Namespaces of Office and of the standard: Word draws a mc:Choice that requires only those (docxVisibleText's list holds them). */
+const OFFICE_NAMESPACE = /^(http:\/\/schemas\.microsoft\.com\/office\/|http:\/\/schemas\.openxmlformats\.org\/|http:\/\/purl\.oclc\.org\/ooxml\/|urn:schemas-microsoft-com:)/;
+
+/**
+ * The line breaks (w:br, w:cr), tabs and paragraph ends of the mc:Fallback of each mc:AlternateContent (what mammoth reads) that
+ * the mc:Choice Word draws has not where it has the same letters (its text without whitespace, as docxVisibleText compares them):
+ * Word draws its choice, a line where the fallback has several. Each is given by where its tag starts in the XML: the breaks and
+ * tabs to write as a space, the ends of paragraph to read with the next paragraph. The choice drawn is the first whose namespaces
+ * are all Office's or the standard's, or that requires none (one Word may draw); none (Word draws the fallback), one of other
+ * letters, or an alternate content within another one leaves the fallback as it is.
+ */
+function alternateBreaks(xml: string) {
+  type Branch = { choice: boolean; drawn: boolean; letters: number; breaks: Array<{ letters: number; start: number; end: boolean }>; nested: boolean };
+  const spaced = new Set<number>();
+  const joined = new Set<number>();
+  if (!/AlternateContent/.test(xml)) return { spaced, joined };
+  const open: Array<{ branches: Branch[]; depth: number }> = [];
+  const path: string[] = [];
+  let textStart = -1;
+  let skipping = 0;
+  const next = tagReader(xml);
+  for (let tag = next(); tag; tag = next()) {
+    const branch = open.length ? open[open.length - 1]!.branches.at(-1) : undefined;
+    const inBranch = branch && path.length > open[open.length - 1]!.depth + 1;
+    if (tag.closing) {
+      const depth = path.length;
+      path.pop();
+      if (skipping > 0) {
+        if (tag.name === "w:del" || tag.name === "w:moveFrom" || FORMER.test(tag.name)) skipping -= 1;
+        continue;
+      }
+      if (tag.name === "w:t" && textStart >= 0 && branch) branch.letters += textOf(xml.slice(textStart, tag.start)).replace(/\s+/g, "").length;
+      if (tag.name === "w:t") textStart = -1;
+      else if (tag.name === "w:p" && inBranch && branch) branch.breaks.push({ letters: branch.letters, start: tag.start, end: true });
+      else if (tag.name === "mc:AlternateContent" && open.length && depth === open[open.length - 1]!.depth) {
+        const { branches } = open.pop()!;
+        const fallback = branches.find(item => !item.choice);
+        const drawn = branches.find(item => item.choice && item.drawn);
+        if (!fallback || !drawn || fallback.nested || drawn.nested || fallback.letters !== drawn.letters) continue;
+        const kept = new Set(drawn.breaks.map(item => item.letters));
+        for (const item of fallback.breaks) {
+          if (item.letters <= 0 || item.letters >= fallback.letters || kept.has(item.letters)) continue;
+          (item.end ? joined : spaced).add(item.start);
+        }
+      }
+      continue;
+    }
+    if (!tag.selfClosing) path.push(tag.name);
+    if (skipping > 0 || tag.name === "w:del" || tag.name === "w:moveFrom" || FORMER.test(tag.name)) {
+      if (!tag.selfClosing) skipping += 1;
+      continue;
+    }
+    if (tag.name === "mc:AlternateContent") {
+      if (branch) branch.nested = true;
+      if (!tag.selfClosing) open.push({ branches: [], depth: path.length });
+    } else if ((tag.name === "mc:Choice" || tag.name === "mc:Fallback") && open.length && path.length === open[open.length - 1]!.depth + 1) {
+      const required = (attribute(tag, "Requires") ?? "").split(/\s+/).filter(Boolean).map(prefix => tag.scope.get(prefix) ?? "");
+      const branches = open[open.length - 1]!.branches;
+      const choice = tag.name === "mc:Choice";
+      // Word draws the first choice it understands: the next ones are never drawn.
+      const earlier = branches.some(item => item.choice && item.drawn);
+      branches.push({ choice, drawn: choice && !earlier && required.every(namespace => OFFICE_NAMESPACE.test(namespace)), letters: 0, breaks: [], nested: false });
+    } else if (tag.name === "w:t" && branch) textStart = tag.selfClosing ? -1 : tag.end;
+    else if ((tag.name === "w:br" || tag.name === "w:cr" || tag.name === "w:tab") && path[path.length - (tag.selfClosing ? 1 : 2)] === "w:r" && branch) {
+      branch.breaks.push({ letters: branch.letters, start: tag.start, end: false });
+    }
+  }
+  return { spaced, joined };
+}
 
 /** The markers of one reading: random, so that no text of the document is one. */
 function markersOf(xml: string) {
@@ -414,6 +559,7 @@ function markersOf(xml: string) {
  */
 function laidOutLineBreaks(xml: string, parts: { styles?: string; settings?: string; theme?: string }, marker: string, units: number) {
   const { styles, defaults, defaultParagraph, defaultTable } = readStyles(parts.styles);
+  const alternate = alternateBreaks(xml);
   const defaultTab = twips(/<(?:\w+:)?defaultTabStop\b[^>]*\b(?:\w+:)?val\s*=\s*"(\d+)"/.exec(parts.settings ?? "")?.[1]) || DEFAULT_TAB_STOP_PT;
   const themeFonts = new Map<string, string | undefined>();
   const themeFont = (name: string | undefined) => {
@@ -480,15 +626,28 @@ function laidOutLineBreaks(xml: string, parts: { styles?: string; settings?: str
   };
   /** A run of a complex script (w:cs, w:rtl): its text in its complex script font and size. */
   const complex = (format: RunFormat) => Boolean(format.cs || format.rtl);
-  const advance = (character: string, format: RunFormat, measure: Measure): number | null => {
+  /** Whether the fonts that may draw a run's Arabic or Hebrew are all fonts this reading measures (not a bound nor a substitute). */
+  const usualRightToLeftFonts = (format: RunFormat) => {
+    const names = [format.csFont, ...fontsOf(format)].filter((name): name is string => Boolean(name));
+    return names.length > 0 && names.every(name => {
+      const measures = measuresOf(name);
+      return measures !== null && measures.narrow === measures.wide;
+    });
+  };
+  /** `atWordEnd`: no letter it joins to follows it (its final or isolated form). */
+  const advance = (character: string, format: RunFormat, measure: Measure, atWordEnd = true): number | null => {
     const index = MEASURED_INDEX.get(character);
     if (index === undefined) {
       // No metric: an ideograph is one em in a CJK font, kana and hangul at most; a letter of Arabic or Hebrew lies between a fifth
-      // of an em and an em, its marks over it (bounds that only tell a gap wide in both measures).
+      // of an em and its bound, its marks over it (bounds that only tell a gap wide in both measures).
       if (MARK.test(character)) return 0;
       if (FULL_WIDTH.test(character)) return 1;
       if (KANA_OR_HANGUL.test(character)) return measure === "wide" ? 1 : 0.8;
-      if (RIGHT_TO_LEFT_LETTER.test(character)) return measure === "wide" ? 1 : 0.2;
+      if (RIGHT_TO_LEFT_LETTER.test(character)) {
+        if (measure === "narrow") return 0.2;
+        const bound = rightToLeftBound(character, !atWordEnd);
+        return usualRightToLeftFonts(format) ? bound : Math.max(1, bound);
+      }
       return null;
     }
     const style: FontStyle = format.bold ? (format.italic ? "boldItalic" : "bold") : format.italic ? "italic" : "regular";
@@ -513,8 +672,13 @@ function laidOutLineBreaks(xml: string, parts: { styles?: string; settings?: str
     const sizeCs = format.sizeCs ?? size;
     const shown = format.caps || (measure === "wide" && format.smallCaps) ? text.toUpperCase() : text;
     let width = 0;
-    for (const character of Array.from(shown)) {
-      const value = advance(character, format, measure);
+    const characters = Array.from(shown);
+    for (let at = 0; at < characters.length; at += 1) {
+      const character = characters[at]!;
+      let next = at + 1;
+      while (next < characters.length && MARK.test(characters[next]!)) next += 1;
+      // At the end of a run, a letter is taken at its end of word: its widest form.
+      const value = advance(character, format, measure, !(next < characters.length && ARABIC_LETTER.test(characters[next]!)));
       if (value === null) return null;
       width += value * (complex(format) || RIGHT_TO_LEFT_LETTER.test(character) ? sizeCs : size) * (format.scale ?? 1) + (format.spacing ?? 0);
     }
@@ -786,72 +950,222 @@ function laidOutLineBreaks(xml: string, parts: { styles?: string; settings?: str
 
   /**
    * Paragraphs in frames (w:framePr) at one height side by side, one after the other in the document, with no wide gap between their
-   * texts in one measure at least, as cells are: one line. A gap not measured (a frame placed by its alignment, a text not
-   * measured) is never wide; the paragraphs of one frame (the same place) are lines of their own. Joined whatever the budget.
+   * texts in one measure at least, as cells are: one line. A frame is placed by its w:x, or by its alignment (w:xAlign: left,
+   * right, centre, inside or outside) in the page, its margins or its column, of its width (w:w, else its text's); its text in it
+   * by its indent and its alignment. A gap not measured (a text not measured, a place not known) is never wide; the paragraphs of
+   * one frame (the same place) are lines of their own. A drop cap (w:dropCap) is read with the paragraph it opens. Joined whatever
+   * the budget.
    */
   const joinFrames = (all: Logical[]) => {
-    type Framed = { logical: Logical; frame: Frame; left: number };
+    type Framed = { logical: Logical; frame: Frame; merged: ParagraphFormat };
     const runs: Framed[][] = [];
     let previous: Framed | null = null;
+    let dropCap: Logical | null = null;
     for (const logical of all) {
       const first = logical.parts[0]!;
       const { merged } = paragraphFormat(first);
-      const frame = logical.text && !first.inTextBox && first.container.kind === "body" ? merged.frame : undefined;
+      const inBody = !first.inTextBox && first.container.kind === "body";
+      // A drop cap opens the next paragraph of text of the body; a table or a text box in between, none.
+      if (dropCap && logical.text) {
+        const parts = dropCap.parts;
+        const end = parts[parts.length - 1]!;
+        if (inBody) kept.push({ start: end.end, end: end.end, text: markerRun(end, "S") });
+        dropCap = null;
+      }
+      const frame = logical.text && inBody ? merged.frame : undefined;
+      if (frame && (frame.dropCap === "drop" || frame.dropCap === "margin")) {
+        dropCap = logical;
+        previous = null;
+        continue;
+      }
       if (!frame) {
         if (logical.text) previous = null;
         continue;
       }
-      const framed = { logical, frame, left: merged.left ?? 0 };
+      const framed = { logical, frame, merged };
       if (previous && previous.frame.height === frame.height) runs[runs.length - 1]!.push(framed);
       else runs.push([framed]);
       previous = framed;
     }
+    const marginLeft = marginOf("left", 72) + marginOf("gutter", 0);
+    const marginRight = marginOf("right", 72);
+    /** Where a frame's text starts and ends on the page in a measure; NaN where not known. */
+    const placedText = (framed: Framed, measure: Measure) => {
+      const laid = framed.logical.laid?.[measure];
+      if (!laid?.known) return { start: Number.NaN, end: Number.NaN };
+      const { frame, merged } = framed;
+      const [areaLeft, areaRight] = frame.hAnchor === "page" ? [0, pageWidth] : frame.hAnchor === "margin" ? [marginLeft, pageWidth - marginRight] : [marginLeft, marginLeft + textWidth];
+      const indent = (merged.left ?? 0) + (merged.firstLine ?? 0);
+      const width = frame.width ?? indent + laid.width + (merged.right ?? 0);
+      const align = frame.xAlign;
+      const x = frame.x !== undefined ? areaLeft + frame.x
+        : align === "left" || align === "inside" ? areaLeft
+        : align === "right" || align === "outside" ? areaRight - width
+        : align === "center" ? (areaLeft + areaRight - width) / 2 : Number.NaN;
+      const jc = merged.align ?? "left";
+      const start = merged.bidi ? Number.NaN : jc === "right" || jc === "end" ? x + width - (merged.right ?? 0) - laid.width : jc === "center" ? x + (width - laid.width) / 2 : x + indent;
+      return { start, end: start + laid.width };
+    };
     for (const run of runs) {
       if (run.length < 2) continue;
-      const gaps: Array<{ widths: Record<Measure, number>; em: number; stacked: boolean }> = [];
+      const gaps: Array<{ widths: Record<Measure, number>; stacked: boolean }> = [];
+      const ems: number[] = [];
       for (let index = 1; index < run.length; index += 1) {
         const [one, other] = [run[index - 1]!, run[index]!];
         const stacked = one.frame.x === other.frame.x && one.frame.xAlign === other.frame.xAlign && one.frame.hAnchor === other.frame.hAnchor;
         const widths = { narrow: NaN, wide: NaN };
-        const known = one.frame.x !== undefined && other.frame.x !== undefined && one.frame.hAnchor === other.frame.hAnchor;
         for (const measure of ["narrow", "wide"] as const) {
-          const [laidOne, laidOther] = [one.logical.laid?.[measure], other.logical.laid?.[measure]];
-          if (!known || !laidOne?.known || !laidOther?.known) continue;
-          const [start, end] = [one.frame.x! + one.left, other.frame.x! + other.left];
-          widths[measure] = start <= end ? end - (start + laidOne.width) : start - (end + laidOther.width);
+          const [first, second] = [placedText(one, measure), placedText(other, measure)];
+          widths[measure] = first.start <= second.start ? second.start - first.end : first.start - second.end;
         }
-        gaps.push({ widths, em: Math.max(one.logical.laid?.narrow.size ?? DEFAULT_SIZE_PT, other.logical.laid?.narrow.size ?? DEFAULT_SIZE_PT), stacked });
+        gaps.push({ widths, stacked });
+        ems.push(Math.max(one.logical.laid?.narrow.size ?? DEFAULT_SIZE_PT, other.logical.laid?.narrow.size ?? DEFAULT_SIZE_PT));
       }
-      // Wide in a measure as textCellsAsLines reads a gap: the other gaps of the run, its widest and the next, found once.
-      const widest = { narrow: { widest: 0, count: 0, next: 0 }, wide: { widest: 0, count: 0, next: 0 } };
-      for (const gap of gaps) {
-        for (const measure of ["narrow", "wide"] as const) {
-          const width = gap.widths[measure];
-          const seen = widest[measure];
-          if (!(width > 0)) continue;
-          if (width > seen.widest) [seen.next, seen.widest, seen.count] = [seen.widest, width, 1];
-          else if (width === seen.widest) seen.count += 1;
-          else seen.next = Math.max(seen.next, width);
-        }
-      }
+      // Wide in a measure as textCellsAsLines reads a gap: the other gaps of the run, its widest and the next.
+      const wide = { narrow: wideAmong(gaps.map(gap => gap.widths.narrow), ems), wide: wideAmong(gaps.map(gap => gap.widths.wide), ems) };
       gaps.forEach((gap, index) => {
-        const wideIn = (measure: Measure) => {
-          const width = gap.widths[measure];
-          const seen = widest[measure];
-          const others = width === seen.widest && seen.count === 1 ? seen.next : seen.widest;
-          return width >= CELL_GAP_EM * gap.em && (width >= OTHER_GAPS_FACTOR * others || width >= LONE_CELL_GAP_EM * gap.em);
-        };
-        if (gap.stacked || (wideIn("narrow") && wideIn("wide"))) return;
+        if (gap.stacked || (wide.narrow[index] && wide.wide[index])) return;
         const parts = run[index]!.logical.parts;
         const end = parts[parts.length - 1]!;
         kept.push({ start: end.end, end: end.end, text: markerRun(end, "S") });
       });
     }
   };
+  /** Whether a gap is wide among these gaps as textCellsAsLines reads one, in a measure: the run's widest gap and the next. */
+  const wideAmong = (widths: number[], ems: number[]) => {
+    let widest = 0;
+    let count = 0;
+    let next = 0;
+    for (const width of widths) {
+      if (!(width > 0)) continue;
+      if (width > widest) [next, widest, count] = [widest, width, 1];
+      else if (width === widest) count += 1;
+      else next = Math.max(next, width);
+    }
+    return widths.map((width, at) => {
+      const others = width === widest && count === 1 ? next : widest;
+      return width >= CELL_GAP_EM * ems[at]! && (width >= OTHER_GAPS_FACTOR * others || width >= LONE_CELL_GAP_EM * ems[at]!);
+    });
+  };
+  /**
+   * The columns of a section (w:cols of two or more) side by side at the top of their page: the text of each column (up to a column
+   * break, w:br w:type="column"; or each paragraph of a section whose columns Word balances, the next section starting on its page),
+   * when one line of one paragraph, read on one line with the next column's when no wide gap lies between their texts in one
+   * measure at least (where each column starts, from w:cols; the text placed in it by its indents and alignment), at the same height
+   * (no empty line above either, their spacing before within half an em), as cells and frames are; a gap not measured is never
+   * wide. A section with a table, a frame or a text box, or laid out right to left, is left as it is. Joined whatever the budget.
+   */
+  const joinColumns = () => {
+    sections.forEach((definition, number) => {
+      const cols = definition.cols;
+      const listed = definition.columns.map(column => ({ width: twips(attribute(column, "w:w")) ?? Number.NaN, space: twips(attribute(column, "w:space")) ?? 0 }));
+      const equal = listed.length === 0 || !cols || !["0", "false", "off"].includes((attribute(cols, "w:equalWidth") ?? "1").toLowerCase());
+      const count = equal ? Math.floor(Number((cols && attribute(cols, "w:num")) ?? 1)) || 1 : listed.length;
+      if (count < 2 || count > 45 || definition.bidi) return;
+      const inSection = paragraphs.filter(paragraph => paragraph.section === number);
+      if (inSection.some(paragraph => paragraph.container.kind !== "body" || paragraph.inTextBox || paragraphFormat(paragraph).merged.frame)) return;
+      const size = definition.pageSize ?? pageSize;
+      const margins = definition.pageMargins ?? pageMargins;
+      const margin = (side: string, fallback: number) => (margins && twips(attribute(margins, `w:${side}`))) ?? fallback;
+      const left = margin("left", 72) + margin("gutter", 0);
+      const width = ((size && twips(attribute(size, "w:w"))) ?? 612) - margin("left", 72) - margin("right", 72) - margin("gutter", 0);
+      const lefts: number[] = [];
+      const widths: number[] = [];
+      if (equal) {
+        const space = (cols && twips(attribute(cols, "w:space"))) ?? 36;
+        const each = (width - (count - 1) * space) / count;
+        for (let at = 0; at < count; at += 1) {
+          lefts.push(left + at * (each + space));
+          widths.push(each);
+        }
+      } else {
+        let at = left;
+        for (const column of listed) {
+          lefts.push(at);
+          widths.push(column.width);
+          at += column.width + column.space;
+        }
+      }
+      type Segment = { paragraph: Paragraph; pieces: Piece[]; start: boolean };
+      type Column = { segments: Segment[]; before?: Write };
+      let chunks: Column[] = [{ segments: [] }];
+      for (const paragraph of inSection) {
+        let from = 0;
+        paragraph.pieces.forEach((piece, at) => {
+          if (piece.kind !== "break" || !piece.column) return;
+          chunks[chunks.length - 1]!.segments.push({ paragraph, pieces: paragraph.pieces.slice(from, at), start: from === 0 });
+          chunks.push({ segments: [], before: piece.column });
+          from = at + 1;
+        });
+        chunks[chunks.length - 1]!.segments.push({ paragraph, pieces: paragraph.pieces.slice(from), start: from === 0 });
+      }
+      const shown = (segment: Segment) => segment.pieces.some(piece => piece.kind === "text" && !hidden(piece.format) && piece.text.trim() !== "");
+      if (chunks.length === 1) {
+        if (sections[number + 1]?.type !== "continuous") return;
+        chunks = inSection.filter(paragraph => paragraph.text).map(paragraph => ({ segments: [{ paragraph, pieces: paragraph.pieces, start: true }] }));
+        if (chunks.length > count) return;
+      }
+      // Each column's one line: where its text starts and ends in its column in each measure, its size and its spacing before.
+      const placed = chunks.map((chunk, index) => {
+        const texts = chunk.segments.filter(shown);
+        if (texts.length !== 1 || chunk.segments.indexOf(texts[0]!) !== chunk.segments.findIndex(segment => segment.paragraph === texts[0]!.paragraph)) return null;
+        const segment = texts[0]!;
+        if (chunk.segments.slice(0, chunk.segments.indexOf(segment)).some(other => other.paragraph !== segment.paragraph)) return null;
+        if (segment.pieces.some(piece => piece.kind === "break")) return null;
+        const { merged } = paragraphFormat(segment.paragraph);
+        const column = widths[index % count]!;
+        const indent = (merged.left ?? 0) + (segment.start ? merged.firstLine ?? 0 : 0);
+        const end = merged.right ?? 0;
+        let em = 0;
+        const span: Record<Measure, { start: number; end: number }> = { narrow: { start: Number.NaN, end: Number.NaN }, wide: { start: Number.NaN, end: Number.NaN } };
+        for (const measure of ["narrow", "wide"] as const) {
+          let text = 0;
+          for (const piece of segment.pieces) {
+            if (piece.kind === "text") {
+              const own = piece.opaque || !measurable(piece.format) ? null : widthOf(piece.text, piece.format, measure);
+              text = own === null ? Number.NaN : text + own;
+              if (!hidden(piece.format) && piece.text.trim()) em = Math.max(em, (complex(piece.format) ? piece.format.sizeCs ?? piece.format.size : piece.format.size) ?? DEFAULT_SIZE_PT);
+            } else if (piece.kind === "box") text = piece.width === null ? Number.NaN : text + piece.width;
+            else text = Number.NaN;
+          }
+          if (measure === "narrow" && text > column - indent - end + 0.01) return null;
+          const align = merged.align ?? "left";
+          const start = merged.bidi ? Number.NaN : align === "center" ? indent + (column - indent - end - text) / 2 : align === "right" || align === "end" ? column - end - text : indent;
+          span[measure] = { start: lefts[index % count]! + start, end: lefts[index % count]! + start + text };
+        }
+        return { span, em: em || DEFAULT_SIZE_PT, before: twips(merged.before) ?? 0, segment };
+      });
+      // Side by side: two columns of the same page row.
+      const pairs: number[] = [];
+      for (let index = 0; index + 1 < chunks.length; index += 1) if ((index + 1) % count !== 0 && placed[index] && placed[index + 1]) pairs.push(index);
+      if (pairs.length === 0) return;
+      const gaps = { narrow: [] as number[], wide: [] as number[] };
+      const ems: number[] = [];
+      for (const index of pairs) {
+        const [one, other] = [placed[index]!, placed[index + 1]!];
+        const em = Math.max(one.em, other.em);
+        ems.push(em);
+        // Not at one height: apart.
+        const level = Math.abs(one.before - other.before) <= 0.5 * em;
+        for (const measure of ["narrow", "wide"] as const) gaps[measure].push(level ? other.span[measure].start - one.span[measure].end : Number.POSITIVE_INFINITY);
+      }
+      const wide = { narrow: wideAmong(gaps.narrow, ems), wide: wideAmong(gaps.wide, ems) };
+      pairs.forEach((index, at) => {
+        if (wide.narrow[at] && wide.wide[at]) return;
+        const [one, other] = [placed[index]!.segment, placed[index + 1]!.segment];
+        const columnBreak = chunks[index + 1]!.before;
+        if (columnBreak) columnBreak.text = one.paragraph === other.paragraph ? written(one.paragraph.prefix, " ") : "";
+        if (one.paragraph !== other.paragraph) kept.push({ start: one.paragraph.end, end: one.paragraph.end, text: markerRun(one.paragraph, "S") });
+      });
+    });
+  };
   /**
    * Text boxes drawn in the line of a paragraph (inline: wp:inline, or a VML shape not placed), each of one paragraph of text on one
-   * line: read on one line with the paragraph's text, as they are shown (mammoth writes them after it, a line each). Joined
-   * whatever the budget; a paragraph with a box of more lines, or floating, is left as it is.
+   * line: read on one line with the paragraph's text, as they are shown (mammoth writes them after it, a line each). Floating VML
+   * boxes of one paragraph (its host holding no text of its own), each of one paragraph of text on one line in its width, placed in
+   * the same frames at one height (their tops within half an em): read on one line, as cells and frames are, where no wide gap lies
+   * between their texts in one measure at least (from each box's left edge, insets and alignment); when they lie apart, only those
+   * side by side in the order they are written. Joined whatever the budget; a paragraph with a box of more lines is left as it is.
    */
   const joinBoxes = (all: Box[], every: Logical[]) => {
     const byHost = new Map<Paragraph, Box[]>();
@@ -866,7 +1180,48 @@ function laidOutLineBreaks(xml: string, parts: { styles?: string; settings?: str
     byHost.forEach((hosted, host) => {
       if (host.inTextBox || !alone.has(host)) return;
       const lines = hosted.map(box => box.logicals.filter(logical => logical.text));
-      if (!hosted.every((box, at) => box.inline && lines[at]!.length === 1 && (lines[at]![0]!.laid?.narrow.lines ?? 1) === 1 && lines[at]![0]!.parts.length === 1)) return;
+      const oneLine = (at: number) => lines[at]!.length === 1 && (lines[at]![0]!.laid?.narrow.lines ?? 1) === 1 && lines[at]![0]!.parts.length === 1;
+      if (!host.text && hosted.length > 1 && hosted.every((box, at) => !box.inline && box.place && box.place.frame === hosted[0]!.place!.frame && oneLine(at))) {
+        // Floating boxes: each one's text where it lies in its box, the boxes left to right.
+        const placed = hosted.map((box, at) => {
+          const logical = lines[at]![0]!;
+          const { merged } = paragraphFormat(logical.parts[0]!);
+          const place = box.place!;
+          const inner = place.width - place.inset[0] - place.inset[2];
+          const span = (measure: Measure) => {
+            const width = logical.laid?.[measure].known ? logical.laid[measure].width : Number.NaN;
+            const indent = (merged.left ?? 0) + (merged.firstLine ?? 0);
+            const jc = merged.align ?? "left";
+            const start = place.left + place.inset[0] + (merged.bidi ? Number.NaN : jc === "right" || jc === "end" ? inner - (merged.right ?? 0) - width : jc === "center" ? (inner - width) / 2 : indent);
+            return { start, end: start + width };
+          };
+          const fits = !(logical.laid?.narrow.known && logical.laid.narrow.width > inner + 0.01);
+          return { at, logical, top: place.top + place.inset[1], spans: { narrow: span("narrow"), wide: span("wide") }, em: logical.laid?.narrow.size ?? DEFAULT_SIZE_PT, fits };
+        });
+        if (!placed.every(item => item.fits)) return;
+        const ordered = [...placed].sort((left, right) => left.spans.narrow.start - right.spans.narrow.start || left.at - right.at);
+        const gaps = { narrow: [] as number[], wide: [] as number[] };
+        const ems: number[] = [];
+        for (let index = 1; index < ordered.length; index += 1) {
+          const [one, other] = [ordered[index - 1]!, ordered[index]!];
+          const em = Math.max(one.em, other.em);
+          ems.push(em);
+          const level = Math.abs(one.top - other.top) <= 0.5 * em;
+          for (const measure of ["narrow", "wide"] as const) gaps[measure].push(level ? other.spans[measure].start - one.spans[measure].end : Number.POSITIVE_INFINITY);
+        }
+        const wide = { narrow: wideAmong(gaps.narrow, ems), wide: wideAmong(gaps.wide, ems) };
+        const together = ems.map((_, index) => !(wide.narrow[index] && wide.wide[index]));
+        // Boxes side by side read together where written one after the other, or all of them when all lie on one line.
+        const all = together.every(Boolean);
+        ordered.slice(0, -1).forEach((item, index) => {
+          const next = ordered[index + 1]!;
+          if (!together[index] || (!all && next.at !== item.at + 1)) return;
+          const end = (all ? placed[index]! : item).logical.parts[0]!;
+          kept.push({ start: end.end, end: end.end, text: markerRun(end, "S") });
+        });
+        return;
+      }
+      if (!hosted.every((box, at) => box.inline && oneLine(at))) return;
       kept.push({ start: host.end, end: host.end, text: markerRun(host, "S") });
       lines.slice(0, -1).forEach(([logical]) => {
         const end = logical!.parts[0]!;
@@ -885,6 +1240,10 @@ function laidOutLineBreaks(xml: string, parts: { styles?: string; settings?: str
   const rows: Row[] = [];
   const outerRows = new Map<number, Paragraph[]>();
   let rowCount = 0;
+  /** The sections read, by number: a paragraph's is the one whose w:sectPr ends it or comes after it. */
+  const sections: Section[] = [];
+  let section: { definition: Section; inParagraph: boolean } | null = null;
+  let sectionNumber = 0;
   let outerRow: number | null = null;
   let skipping = 0;
   let textStart = -1;
@@ -893,6 +1252,9 @@ function laidOutLineBreaks(xml: string, parts: { styles?: string; settings?: str
   /** The picture or shape of the run being read, sized by its extent or its style; whether the shape read last lies in the line. */
   let drawing: { piece: Piece & { kind: "box" }; decided: boolean } | null = null;
   let shapeInline: boolean | null = null;
+  /** The style and the insets of the VML shape read last, for the place of its text box. */
+  let shapeStyle: string | undefined;
+  let shapeInset: string | undefined;
   const boxes: Box[] = [];
   /** Elements whose replacement ends at their end tag. */
   const closing: Array<{ name: string; write: { end: number } }> = [];
@@ -961,6 +1323,8 @@ function laidOutLineBreaks(xml: string, parts: { styles?: string; settings?: str
         const mark = runFormatOf(paragraph, paragraph.mark);
         if (hidden(mark) || mark.deleted) container.pending = logical;
         else settle(logical);
+        // Of a mc:Fallback, a paragraph's end where the mc:Choice Word draws goes on along its line: read with the next paragraph.
+        if (alternate.joined.has(tag.start)) kept.push({ start: paragraph.end, end: paragraph.end, text: markerRun(paragraph, "S") });
       } else if (tag.name === "w:tc" || tag.name === "w:txbxContent") {
         const container = containers.pop();
         if (container) flush(container);
@@ -979,7 +1343,11 @@ function laidOutLineBreaks(xml: string, parts: { styles?: string; settings?: str
         if (table) table.row = null;
         if (tables.length === 1) outerRow = null;
       } else if (tag.name === "w:tbl") tables.pop();
-      else if (tag.name === "w:drawing" || tag.name === "w:pict") drawing = null;
+      else if (tag.name === "w:sectPr" && section) {
+        sections[sectionNumber] = section.definition;
+        if (section.inParagraph) sectionNumber += 1;
+        section = null;
+      } else if (tag.name === "w:drawing" || tag.name === "w:pict") drawing = null;
       else if (tag.name === "w:r") paragraph?.runs.pop();
       else if (tag.name === "w:fldSimple") fieldResult = Math.max(0, fieldResult - 1);
       continue;
@@ -998,7 +1366,21 @@ function laidOutLineBreaks(xml: string, parts: { styles?: string; settings?: str
     const paragraph = open[open.length - 1];
     const container = containers[containers.length - 1]!;
     const table = tables[tables.length - 1];
-    if (tag.name === "w:tbl") {
+    if (tag.name === "w:sectPr") {
+      section = { definition: { columns: [], bidi: false }, inParagraph: path.includes("w:pPr") && paragraph !== undefined };
+      if (tag.selfClosing) {
+        sections[sectionNumber] = section.definition;
+        if (section.inParagraph) sectionNumber += 1;
+        section = null;
+      }
+    } else if (section && parent === "w:sectPr") {
+      if (tag.name === "w:cols") section.definition.cols = tag;
+      else if (tag.name === "w:type") section.definition.type = attribute(tag, "w:val");
+      else if (tag.name === "w:pgSz") section.definition.pageSize = tag;
+      else if (tag.name === "w:pgMar") section.definition.pageMargins = tag;
+      else if (tag.name === "w:bidi") section.definition.bidi = onOff(tag);
+    } else if (section && parent === "w:cols" && tag.name === "w:col") section.definition.columns.push(tag);
+    else if (tag.name === "w:tbl") {
       flush(container);
       if (container.cell) container.cell.nested = true;
       tables.push({ grid: [], margins: {}, row: null, conditionallyHidden: false, rightToLeft: false });
@@ -1021,7 +1403,7 @@ function laidOutLineBreaks(xml: string, parts: { styles?: string; settings?: str
       containers.push({ kind: "cell", pending: null, cell });
     } else if (tag.name === "w:txbxContent") {
       flush(container);
-      const box: Box = { host: paragraph, inline: shapeInline ?? false, logicals: [] };
+      const box: Box = { host: paragraph, inline: shapeInline ?? false, logicals: [], place: shapeInline === false ? floatingPlace(shapeStyle, shapeInset) : undefined };
       boxes.push(box);
       containers.push({ kind: "box", pending: null, cell: null, box });
     } else if (parent === "w:tcMar" && grandParent === "w:tcPr" && container.cell) readFormat(tag, "w:tblCellMar", "w:tblPr", {}, {}, container.cell.margins);
@@ -1036,6 +1418,7 @@ function laidOutLineBreaks(xml: string, parts: { styles?: string; settings?: str
       const created: Paragraph = {
         prefix: tag.prefix, contentStart: tag.end, end: tag.end, own: {}, mark: {}, pieces: [], runs: [], text: false, container,
         table: container.kind === "cell" ? table ?? null : null, row: outerRow, inTextBox: containers.some(value => value.kind === "box"),
+        section: sectionNumber,
       };
       if (outerRow !== null) {
         const inRow = outerRows.get(outerRow);
@@ -1055,10 +1438,13 @@ function laidOutLineBreaks(xml: string, parts: { styles?: string; settings?: str
     } else if (tag.name === "wp:extent" && parent === "wp:inline") {
       const width = Number(attribute(tag, "cx")) / 12700;
       if (drawing && !drawing.decided && width > 0) [drawing.piece.width, drawing.decided] = [width, true];
-    } else if (tag.name.startsWith("v:") && path.includes("w:pict") && attribute(tag, "style") !== undefined) {
+    } else if (tag.name === "v:textbox" && path.includes("w:pict")) shapeInset = attribute(tag, "inset");
+    else if (tag.name.startsWith("v:") && path.includes("w:pict") && attribute(tag, "style") !== undefined) {
       // A VML shape: in the line unless placed (position:absolute), as wide as its style says.
       const style = attribute(tag, "style");
       shapeInline = !/position\s*:\s*absolute/i.test(style ?? "");
+      shapeStyle = style;
+      shapeInset = undefined;
       if (drawing && !drawing.decided) [drawing.piece.width, drawing.decided] = [shapeInline ? styleWidth(style) : null, true];
     } else if (tag.name === "w:pPr" && parent === "w:p") {
       if (tag.selfClosing) paragraph.contentStart = tag.end;
@@ -1083,7 +1469,11 @@ function laidOutLineBreaks(xml: string, parts: { styles?: string; settings?: str
         // In a table whose style may hide some cells' text: a space, never a line break.
         const doubtful = paragraph.table?.conditionallyHidden ?? false;
         if (hidden(format) || fields.includes("instruction")) replace("", true);
-        else if (tag.name === "w:tab") {
+        else if (alternate.spaced.has(tag.start)) {
+          // Of a mc:Fallback, where the mc:Choice Word draws goes on along its line: a space.
+          paragraph.pieces.push({ kind: "text", text: " ", format, opaque: false });
+          replace(written(tag.prefix, " "), true);
+        } else if (tag.name === "w:tab") {
           const piece = { kind: "tab" as const, start: tag.start, end: tag.end, prefix: tag.prefix };
           if (!tag.selfClosing) closing.push({ name: tag.name, write: piece });
           paragraph.pieces.push(piece);
@@ -1092,8 +1482,8 @@ function laidOutLineBreaks(xml: string, parts: { styles?: string; settings?: str
           paragraph.pieces.push({ kind: "opaque" });
           replace(written(tag.prefix, " "), true);
         } else {
-          paragraph.pieces.push({ kind: "break" });
-          replace(written(tag.prefix, "&#10;"), true);
+          const write = replace(written(tag.prefix, "&#10;"), true);
+          paragraph.pieces.push(tag.name === "w:br" && attribute(tag, "w:type") === "column" ? { kind: "break", column: write } : { kind: "break" });
         }
       } else if (tag.name === "w:noBreakHyphen") paragraph.pieces.push({ kind: "text", text: "\u2011", format, opaque: fieldResult > 0 });
       else if (tag.name === "w:softHyphen") paragraph.pieces.push({ kind: "text", text: "\u00ad", format, opaque: fieldResult > 0 });
@@ -1133,6 +1523,7 @@ function laidOutLineBreaks(xml: string, parts: { styles?: string; settings?: str
   }
   joinFrames(logicals);
   joinBoxes(boxes, logicals);
+  joinColumns();
   const writes = [...kept];
   const oneLine = (inRow: Paragraph[]) => inRow.slice(0, -1).forEach(paragraph => writes.push({ start: paragraph.end, end: paragraph.end, text: markerRun(paragraph, "S") }));
   if (budget >= 0) {
@@ -1229,11 +1620,11 @@ export function docxWithLaidOutLineBreaks(buffer: Buffer, limits = DOCUMENT_DECO
   const folder = main.includes("/") ? main.slice(0, main.lastIndexOf("/")) : "";
   const relationships = parts.get(`${folder ? `${folder}/` : ""}_rels/${main.slice(folder ? folder.length + 1 : 0)}.rels`)?.toString("utf8");
   const part = (type: string, fallback: string) => parts.get(target(relationships, type, folder) ?? fallback)?.toString("utf8");
-  // Nothing to write without a tab, a line break, a table, a frame, a text box, a line's end written in a run's text, or text Word
-  // may hide (a paragraph mark, of its style).
+  // Nothing to write without a tab, a line break, a table, a frame, a text box, an alternate content, columns, a line's end written
+  // in a run's text, or text Word may hide (a paragraph mark, of its style).
   const hides = /vanish|specVanish|webHidden/;
   const lineEnds = /&#(?:x0*(?:a|b|c|85|2028|2029)|0*(?:10|11|12|133|8232|8233));|[\u0085\u2028\u2029\v\f]|<(?:[\w.-]+:)?t\b[^>]*>[^<]*\n/i;
-  if (!/[<:](?:tab|br|cr|ptab|tbl|del|moveFrom|framePr|txbxContent)\b/.test(xml) && !lineEnds.test(xml) && !hides.test(xml) && !hides.test(part("styles", "word/styles.xml") ?? "")) return { buffer, marker: "" };
+  if (!/[<:](?:tab|br|cr|ptab|tbl|del|moveFrom|framePr|txbxContent|AlternateContent|cols)\b/.test(xml) && !lineEnds.test(xml) && !hides.test(xml) && !hides.test(part("styles", "word/styles.xml") ?? "")) return { buffer, marker: "" };
   const marker = markersOf(xml);
   const writes = laidOutLineBreaks(xml, { styles: part("styles", "word/styles.xml"), settings: part("settings", "word/settings.xml"), theme: part("theme", "word/theme/theme1.xml") }, marker, limits.docxLayoutWorkUnits);
   const laidOut = applied(xml, writes);

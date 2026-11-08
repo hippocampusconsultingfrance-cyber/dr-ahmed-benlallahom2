@@ -149,7 +149,12 @@ export function textCellsAsLines<Content extends { items: readonly unknown[] }>(
  * italic, does not move a baseline), each item in its own baseline's frame and
  * in the frame of its orientation (the items whose baselines turn by less than
  * half a degree from the next one's), the text of a row in either being of one
- * row. A row falls into segments at each wide gap between two of its texts
+ * row; and a piece of text that goes on from where another ends along its
+ * baseline (within two and a half em along it and half an em across, their
+ * baselines turning by three degrees at most from each other) is of its row,
+ * read in the frame of the orientation most of its texts are of: a line drawn
+ * wavy, as a staircase, or each piece turned its own way, which a reader sees
+ * as one line, is one row. A row falls into segments at each wide gap between two of its texts
  * along it (cells of a table row, columns side by side), as textCellsAsLines
  * reads them: from one em, twice as wide as any other gap of the row or from
  * two and a half em; a whitespace item of pdf.js, as wide as the gap between
@@ -158,11 +163,15 @@ export function textCellsAsLines<Content extends { items: readonly unknown[] }>(
  * whose pieces are drawn between those of other rows, apart by an end of line,
  * or out of their order along the row, is brought back together where its
  * first piece is drawn, in its order along the row (right to left when it
- * holds Arabic or Hebrew): it is one line, as when it is drawn at once. A row
- * of the same text at the same height on two pages or more, above all other
- * text of its page or under it (a header, a footer), numbers aside (a page
- * number), is put at the start or the end of its page, the rows of each edge
- * one line, top row first: the
+ * holds Arabic or Hebrew), each piece level on its first piece's baseline:
+ * it is one line, as when it is drawn at once. A row of the same text on two
+ * pages or more, at the same height or at the same rank from the page's edge
+ * up to an em higher or lower (a block set a few points higher on each page),
+ * above all other text of its page or under it (a header, a footer), with the
+ * rows of the same text numbers aside (a page number) between such rows or at
+ * the edge before one of them, is put at the start or the end of its page, the
+ * rows of each edge one line, top row first; a row of the body that differs
+ * from another page's only by its numbers never is: the
  * first and the last line of the pages are those normalizedSourcePassages
  * counts as one place when they repeat; a page of such rows only is left as it
  * is, and a row of the body stays where it is. Only the order and the place of
@@ -183,6 +192,16 @@ export function rowsTogether<Content extends { items: readonly unknown[] }>(cont
   const LEVEL = Math.PI / 1800;
   /** Pieces out of their order along the row by more than half an em are drawn out of order. */
   const ORDER_SLACK_EM = 0.5;
+  /**
+   * A piece goes on from another when it starts within half an em across the other's baseline from where it ends, their baselines
+   * turning by three degrees at most from each other (pdf.js keeps a line drawn at once on one line up to half an em up or down).
+   */
+  const PIECE_RISE_EM = 0.5;
+  const PIECE_TURN = Math.PI / 60;
+  /** The comparisons a page may spend looking for the pieces that go on from others. */
+  const PIECE_BUDGET = 400_000;
+  /** A row of a header or a footer at the same rank from its page's edge, set up to an em higher or lower from a page to another. */
+  const EDGE_SHIFT_EM = 1;
   const RIGHT_TO_LEFT = new RegExp("[\\p{Script=Arabic}\\p{Script=Hebrew}]", "u");
   type Item = { str?: unknown; width?: unknown; height?: unknown; hasEOL?: unknown; transform?: unknown };
   type Member = { item: Item; index: number; e: number; f: number; angle: number; x: number; y: number };
@@ -249,65 +268,123 @@ export function rowsTogether<Content extends { items: readonly unknown[] }>(cont
       const at = textOf(item) === "" ? null : placeOf(item);
       if (at) placed.push({ item, index, ...at });
     });
-    // The orientations: the items by the turn of their baseline, apart where it turns by more than TURN from the one before.
+    // The orientations: the items by the turn of their baseline, apart where it turns by more than TURN from the one before, each
+    // with the turn of its middle item.
     placed.sort((left, right) => left.angle - right.angle || left.index - right.index);
-    const orientations: Array<typeof placed> = [];
-    for (const one of placed) {
-      const orientation = orientations[orientations.length - 1];
-      if (orientation && one.angle - orientation[orientation.length - 1]!.angle <= TURN) orientation.push(one);
-      else orientations.push([one]);
+    const orientationOf: number[] = [];
+    const references: number[] = [];
+    const writtenIn: number[] = [];
+    placed.forEach((one, at) => {
+      if (at === 0 || one.angle - placed[at - 1]!.angle > TURN) {
+        references.push(0);
+        writtenIn.push(0);
+      }
+      orientationOf.push(references.length - 1);
+      if (written(one.item)) writtenIn[writtenIn.length - 1] = writtenIn[writtenIn.length - 1]! + 1;
+    });
+    for (let orientation = 0, from = 0; orientation < references.length; orientation += 1) {
+      let to = from;
+      while (to < placed.length && orientationOf[to] === orientation) to += 1;
+      references[orientation] = placed[(from + to) >> 1]!.angle;
+      from = to;
     }
-    let main: typeof placed | undefined;
-    let mainCount = -1;
-    for (const orientation of orientations) {
-      let count = 0;
-      for (const one of orientation) if (written(one.item)) count += 1;
-      if (count > mainCount) [main, mainCount] = [orientation, count];
-    }
-    const result: Row[] = [];
-    for (const orientation of orientations) {
-      const reference = orientation[orientation.length >> 1]!.angle;
-      // Rows twice, each item in its own baseline's frame (a line drawn turned) and in its orientation's (pieces turned each their
-      // way along one baseline): the items of a row in either are of one row.
-      const parent = orientation.map((_, at) => at);
-      const find = (at: number) => {
-        let root = at;
-        while (parent[root] !== root) root = parent[root]!;
-        while (parent[at] !== root) [parent[at], at] = [root, parent[at]!];
-        return root;
-      };
+    let main = -1;
+    writtenIn.forEach((count, orientation) => { if (main < 0 || count > writtenIn[main]!) main = orientation; });
+    const parent = placed.map((_, at) => at);
+    const find = (at: number) => {
+      let root = at;
+      while (parent[root] !== root) root = parent[root]!;
+      while (parent[at] !== root) [parent[at], at] = [root, parent[at]!];
+      return root;
+    };
+    const join = (left: number, right: number) => { parent[find(left)] = find(right); };
+    // Rows twice in each orientation, each item in its own baseline's frame (a line drawn turned) and in its orientation's (pieces
+    // turned each their way along one baseline): the items of a row in either are of one row.
+    for (let orientation = 0, from = 0; orientation < references.length; orientation += 1) {
+      let to = from;
+      while (to < placed.length && orientationOf[to] === orientation) to += 1;
       for (const own of [true, false]) {
-        const order = orientation.map((one, at) => ({ at, y: frame(one.e, one.f, own ? one.angle : reference).y, tolerance: Math.max(0.5, 0.2 * heightOf(one.item)) }));
+        const order: Array<{ at: number; y: number; tolerance: number }> = [];
+        for (let at = from; at < to; at += 1) {
+          const one = placed[at]!;
+          order.push({ at, y: frame(one.e, one.f, own ? one.angle : references[orientation]!).y, tolerance: Math.max(0.5, 0.2 * heightOf(one.item)) });
+        }
         order.sort((left, right) => left.y - right.y);
         let first: (typeof order)[number] | undefined;
         for (const one of order) {
-          if (first && Math.abs(one.y - first.y) <= first.tolerance) parent[find(one.at)] = find(first.at);
+          if (first && Math.abs(one.y - first.y) <= first.tolerance) join(one.at, first.at);
           else first = one;
         }
       }
-      const byRoot = new Map<number, Member[]>();
-      orientation.forEach((one, at) => {
-        const member = { ...one, ...frame(one.e, one.f, reference) };
-        const root = find(at);
-        const found = byRoot.get(root);
-        if (found) found.push(member);
-        else byRoot.set(root, [member]);
-      });
-      byRoot.forEach(members => {
-        members.sort((left, right) => left.x - right.x || left.index - right.index);
-        let height = 0;
-        let key = "";
-        let y = Infinity;
-        for (const member of members) {
-          if (written(member.item)) height = Math.max(height, heightOf(member.item));
-          y = Math.min(y, member.y);
-          key += textOf(member.item);
-        }
-        key = key.replace(/\s+/g, "").toLowerCase();
-        // Numbers aside: a page number in a footer.
-        if (key !== "") result.push({ y, height, key, masked: key.replace(/\d+/g, "#"), angle: reference, main: orientation === main, members, segments: segmentsOf(members, height || 1) });
-      });
+      from = to;
     }
+    // And a piece of text that goes on from where another ends along its baseline, within a gap a row can hold without a wide one
+    // (two and a half em) and half an em across it, their baselines turning by three degrees at most from each other: of its row,
+    // whatever the order they are drawn in, so that a line drawn wavy, as a staircase, or each piece turned its own way by a
+    // fraction of a degree or a few is one row. Looked for among the pieces sorted by height, PIECE_BUDGET comparisons at most.
+    const texts = placed.map((_, at) => at).filter(at => written(placed[at]!.item) && heightOf(placed[at]!.item) > 0);
+    texts.sort((left, right) => placed[left]!.f - placed[right]!.f);
+    let work = 0;
+    for (const at of texts) {
+      if (work > PIECE_BUDGET) break;
+      const one = placed[at]!;
+      const height = heightOf(one.item);
+      const [cos, sin] = [Math.cos(one.angle), Math.sin(one.angle)];
+      const endE = one.e + widthOf(one.item) * cos;
+      const endF = one.f + widthOf(one.item) * sin;
+      // A next piece up to twice as high: its start within this reach of this piece's end, up or down the page.
+      const reach = 2 * height * (PIECE_RISE_EM + (LONE_CELL_GAP_EM + PIECE_RISE_EM) * Math.abs(sin));
+      let low = 0;
+      let high = texts.length;
+      while (low < high) {
+        const middle = (low + high) >> 1;
+        if (placed[texts[middle]!]!.f < endF - reach) low = middle + 1;
+        else high = middle;
+      }
+      for (let next = low; next < texts.length && placed[texts[next]!]!.f <= endF + reach; next += 1) {
+        work += 1;
+        const other = placed[texts[next]!]!;
+        if (texts[next] === at || Math.abs(other.angle - one.angle) > PIECE_TURN) continue;
+        const em = Math.max(height, heightOf(other.item));
+        const [dE, dF] = [other.e - endE, other.f - endF];
+        const along = dE * cos + dF * sin;
+        if (along < -PIECE_RISE_EM * em || along > LONE_CELL_GAP_EM * em || Math.abs(dF * cos - dE * sin) > PIECE_RISE_EM * em) continue;
+        join(at, texts[next]!);
+      }
+    }
+    const byRoot = new Map<number, number[]>();
+    placed.forEach((_, at) => {
+      const root = find(at);
+      const found = byRoot.get(root);
+      if (found) found.push(at);
+      else byRoot.set(root, [at]);
+    });
+    const result: Row[] = [];
+    byRoot.forEach(members => {
+      // The row's orientation: the one most of its texts are of (the first of them on a tie), in whose frame it is read.
+      const tally = new Map<number, number>();
+      let orientation = orientationOf[members[0]!]!;
+      for (const at of members) {
+        if (!written(placed[at]!.item)) continue;
+        const count = (tally.get(orientationOf[at]!) ?? 0) + 1;
+        tally.set(orientationOf[at]!, count);
+        if (count > (tally.get(orientation) ?? 0)) orientation = orientationOf[at]!;
+      }
+      const reference = references[orientation]!;
+      const row = members.map(at => ({ ...placed[at]!, ...frame(placed[at]!.e, placed[at]!.f, reference) }));
+      row.sort((left, right) => left.x - right.x || left.index - right.index);
+      let height = 0;
+      let key = "";
+      let y = Infinity;
+      for (const member of row) {
+        if (written(member.item)) height = Math.max(height, heightOf(member.item));
+        y = Math.min(y, member.y);
+        key += textOf(member.item);
+      }
+      key = key.replace(/\s+/g, "").toLowerCase();
+      // Numbers aside: a page number in a footer.
+      if (key !== "") result.push({ y, height, key, masked: key.replace(/\d+/g, "#"), angle: reference, main: orientation === main, members: row, segments: segmentsOf(row, height || 1) });
+    });
     return result;
   };
   const pages = contents.map(content => rowsOf(content.items as readonly Item[]));
@@ -343,6 +420,29 @@ export function rowsTogether<Content extends { items: readonly unknown[] }>(cont
     }
     return false;
   };
+  // Where each row's text lies at each rank from the top and from the bottom of its page, as it is and numbers aside: a header or
+  // a footer set a few points higher or lower on each page keeps its rank.
+  const ranks = new Map<string, Array<{ page: number; y: number; height: number }>>();
+  const rankOf = new Map<Row, { top: number; bottom: number }>();
+  pages.forEach((rows, page) => {
+    const sorted = rows.filter(row => row.main).sort((left, right) => right.y - left.y);
+    sorted.forEach((row, rank) => {
+      const place = { top: rank, bottom: sorted.length - 1 - rank };
+      rankOf.set(row, place);
+      for (const key of [`t${place.top}=${row.key}`, `t${place.top}#${row.masked}`, `b${place.bottom}=${row.key}`, `b${place.bottom}#${row.masked}`]) {
+        const found = ranks.get(key);
+        if (found) found.push({ page, y: row.y, height: row.height });
+        else ranks.set(key, [{ page, y: row.y, height: row.height }]);
+      }
+    });
+  });
+  /** Whether a row's text is at its rank from this edge on another page too, at most EDGE_SHIFT_EM higher or lower. */
+  const atRank = (row: Row, page: number, side: "t" | "b", numbersAside: boolean) => {
+    const place = rankOf.get(row);
+    if (!place) return false;
+    const found = ranks.get(`${side}${side === "t" ? place.top : place.bottom}${numbersAside ? `#${row.masked}` : `=${row.key}`}`) ?? [];
+    return found.some(other => other.page !== page && Math.abs(other.y - row.y) <= EDGE_SHIFT_EM * Math.max(1, row.height, other.height));
+  };
   /** A line's texts in their order along it: right to left when it holds Arabic or Hebrew. */
   const inLineOrder = (members: Member[]) => {
     const texts = members.filter(member => written(member.item));
@@ -362,23 +462,34 @@ export function rowsTogether<Content extends { items: readonly unknown[] }>(cont
       bottom = Math.min(bottom, row.y);
     }
     const byHeight = (left: Row, right: Row) => right.y - left.y;
-    // A header or a footer lies above or under the body of its page: a page of repeated rows only is left as it is. Each goes on
-    // from the edge with the rows of the same text numbers aside at the same height on another page (a numbered line), each within
-    // two and a half lines of the one before; one of its rows at least is of the same text at the same height on another page.
+    // A header or a footer lies above or under the body of its page: a page of repeated rows only is left as it is. Each is the rows
+    // from the edge of the same text on another page, at the same height or at the same rank from that edge up to an em higher or
+    // lower (a block set a few points higher on each page), each within two and a half lines of the one before; and between them,
+    // or at the edge before them, rows of the same text numbers aside (a page number), each followed by such a row within the next
+    // two: never a row of the body that differs from another page's only by its numbers (« service 13 », « service 25 »).
     const main = rows.filter(row => row.main).sort(byHeight);
-    const edge = (seed: Set<Row>, inward: Row[]) => {
+    const edge = (inward: Row[], side: "t" | "b") => {
+      const repeated = (row: Row) => candidates.has(row) || atRank(row, page, side, false);
+      const numbered = (row: Row) => elsewhere(row, page, true) || atRank(row, page, side, true);
+      const near = (one: Row, other: Row) => Math.abs(one.y - other.y) <= 2.5 * Math.max(one.height, other.height, 1);
       const block: Row[] = [];
-      for (const row of inward) {
+      for (let at = 0; at < inward.length; at += 1) {
+        const row = inward[at]!;
         const previous = block[block.length - 1];
-        const near = !previous || Math.abs(previous.y - row.y) <= 2.5 * Math.max(previous.height, row.height, 1);
-        if (!near || !(seed.has(row) || elsewhere(row, page, true))) break;
+        if (previous && !near(previous, row)) break;
+        if (repeated(row)) {
+          block.push(row);
+          continue;
+        }
+        let seen = false;
+        for (let next = at + 1; next <= at + 2 && next < inward.length && near(inward[next - 1]!, inward[next]!); next += 1) if (repeated(inward[next]!)) seen = true;
+        if (!seen || !numbered(row)) break;
         block.push(row);
       }
-      // Rows of the same text numbers aside only go with a row of the same text at the same height on another page.
-      return block.some(row => seed.has(row)) ? block : [];
+      return block;
     };
-    let header = body ? edge(candidates, main) : [];
-    let footer = body ? edge(candidates, [...main].reverse()).reverse() : [];
+    let header = body ? edge(main, "t") : [];
+    let footer = body ? edge([...main].reverse(), "b").reverse() : [];
     if (header.length + footer.length >= main.length) [header, footer] = [[], []];
     const running = new Set([...header, ...footer]);
     // How many items with text, and how many ends of line, come before each index: a segment is scattered when another's text, or
@@ -439,6 +550,13 @@ export function rowsTogether<Content extends { items: readonly unknown[] }>(cont
         if (angle !== 0) return [matrix[0], matrix[1], matrix[2], matrix[3], headMatrix[4], headMatrix[5]];
         return [matrix[0], matrix[1], matrix[2], matrix[3], x, headMatrix[5]];
       };
+      /** A piece of a level line drawn on another baseline or turned its own way: on the first piece's baseline, level, at its place along it. */
+      const level = (member: Member) => {
+        const matrix = member.item.transform as number[];
+        if (member.angle === 0 && matrix[5] === headMatrix[5]) return matrix;
+        const [a, b, c, d] = matrix as [number, number, number, number];
+        return member.angle === 0 ? [a, b, c, d, matrix[4], headMatrix[5]] : [Math.hypot(a, b), 0, 0, Math.hypot(c, d), member.x, headMatrix[5]];
+      };
       ordered.forEach((member, at) => {
         const previous = ordered[at - 1];
         const matrix = member.item.transform as number[];
@@ -450,11 +568,12 @@ export function rowsTogether<Content extends { items: readonly unknown[] }>(cont
           const end = left.x + widthOf(left.item);
           const gap = laidOut ? (spaced ? 0 : 0.25 * em) : right.x - end;
           if (!spaced && gap > (laidOut ? 0 : SPACE_EM * em)) {
-            result.push({ str: " ", width: gap, height: 0, transform: laidOut || angle !== 0 ? placed(matrix, cursor) : [matrix[0], matrix[1], matrix[2], matrix[3], end, matrix[5]], hasEOL: false });
+            const own = level(member);
+            result.push({ str: " ", width: gap, height: 0, transform: laidOut || angle !== 0 ? placed(matrix, cursor) : [own[0], own[1], own[2], own[3], end, own[5]], hasEOL: false });
           }
           cursor += Math.max(0, gap);
         }
-        const transform = laidOut || angle !== 0 ? placed(matrix, cursor) : member.item.transform;
+        const transform = laidOut || angle !== 0 ? placed(matrix, cursor) : level(member);
         result.push({ ...member.item, transform, hasEOL: at === ordered.length - 1 });
         cursor += widthOf(member.item);
       });
@@ -497,11 +616,12 @@ export function rowsTogether<Content extends { items: readonly unknown[] }>(cont
  * edge when the column is filled to three fifths. Lines aligned on their right
  * (a right-aligned block, Arabic or Hebrew) are full when the word would not
  * have fitted on their left, up to the page's left edge or a column there;
- * centred ones when it would not have fitted in the page's width. A line that
- * starts as a paragraph does (a capital, a number before a colon) is joined
- * only where a wrap is told from a paragraph: paragraph spacing seen on the
- * page and a wrap in lower case at that height, a pitch tighter than around
- * it, a paragraph already wrapped onto the line above, or a column beside it.
+ * centred ones when it would not have fitted in the page's width. A line is
+ * joined whatever it starts with (a capital, a proper noun, a label): a
+ * paragraph whose lines wrap before a capital is one place in the DOCX, and
+ * where no paragraph spacing tells a wrap from a new paragraph the PDF counts
+ * no more places than the DOCX would (two paragraphs of a DOCX without
+ * spacing, the first one full, are then one place in the PDF: the safe side).
  * Level text only, a shear aside (an italic drawn slanted). pdf-parse breaks a line at
  * an end of line or when the height changes (getPageText): the continuation
  * is moved after the line on its baseline, a space between them (none after
@@ -644,8 +764,6 @@ export function wrappedLinesTogether<Content extends { items: readonly unknown[]
     const unit = rightToLeft ? (/\S+$/.exec(text)?.[0] ?? text) : /^[぀-ヿ㐀-䶿一-鿿豈-﫿]/.test(text) ? text.slice(0, 1) : (/^\S*?[-‐‑/](?=\S)|^\S+/.exec(text)?.[0] ?? text);
     return (Number(item.width) || 0) * (unit.length / Math.max(1, textOf(item).length));
   };
-  // A line that starts as a paragraph does: with a capital, or a date or a number before a colon (« Spécialité : », « 2012-2024 : »).
-  const startsParagraph = new RegExp("^[^\\p{L}\\p{N}]*(?:\\p{Lu}|\\p{N}[^:]{0,24}\\s:\\s)", "u");
   // After a hyphen or an ideograph, a wrapped line goes on without a space.
   const unspaced = /[-‐‑/぀-ヿ㐀-䶿一-鿿豈-﫿]\s*$/;
   const listItem = /^\s*(?:[•●▪■◦‣∙·*–—-](?:\s|$)|\d{1,2}[.)](?:\s|$)|[a-z][.)]\s)/i;
@@ -663,19 +781,6 @@ export function wrappedLinesTogether<Content extends { items: readonly unknown[]
     }
     return null;
   };
-  // The heights at which a line is seen wrapped onto the next one: under it at a line's pitch, on its left edge, going on with a
-  // word in lower case or after a hyphen.
-  const wrapsSeen = new Set<number>();
-  const lowerCaseWord = new RegExp("^[^\\p{L}\\p{N}]*\\p{Ll}[\\p{L}’'-]*(?:[\\s,;)]|$)", "u");
-  for (let index = 1; index < lines.length; index += 1) {
-    const [above, under] = [lines[index - 1], lines[index]];
-    if (!above || !under || !same(above.height, under.height) || Math.abs(above.x - under.x) > Math.max(1, 0.1 * above.height)) continue;
-    const drop = above.y - under.y;
-    if (drop <= 0.5 * above.height || drop > WRAP_PITCH_EM * above.height) continue;
-    // A word in lower case, not an address (« karim.haddad@… »), after a line not ended by a full stop.
-    if (/[.!?:;]\s*$/.test(textOf(items[above.last]!))) continue;
-    if (lowerCaseWord.test(textOf(items[under.first]!)) || /[-‐]\s*$/.test(textOf(items[above.last]!))) wrapsSeen.add(Math.round(above.height * 2) / 2);
-  }
   // Each line's predecessor in its paragraph, if any: the line before it, past the lines of a column on its right (a table row
   // drawn row by row); and the first line of the paragraph each line is in.
   const previousOf = new Map<number, number>();
@@ -706,11 +811,6 @@ export function wrappedLinesTogether<Content extends { items: readonly unknown[]
     let rowLeft = Infinity;
     band(byY, line => line.y, above.y - 0.2 * em, above.y + 0.2 * em, line => { rowLeft = Math.min(rowLeft, line.x); });
     const first = !previousOf.has(at);
-    // A line that starts as a paragraph does is joined only where wrapped lines are told from paragraphs: paragraph spacing seen on
-    // the page (or around these lines) and the tighter pitch here, or a paragraph already wrapped onto the line above.
-    // A line in a column beside another (a table cell) may start so too, the column's edge telling how full the line was.
-    const told = (pitch.spaced && wrapsSeen.has(Math.round(above.height * 2) / 2) && drop <= pitch.tightest + Math.max(PITCH_SLACK, 0.05 * em)) || tighter || !first;
-    const startsAsParagraph = !told && startsParagraph.test(textOf(items[RIGHT_TO_LEFT.test(textOf(items[under.rightmost]!)) ? under.rightmost : under.first]!));
     const edge = Math.max(1, 0.1 * em);
     // Lines aligned on their right (right-aligned, or of a right-to-left script): the same right edge, the left one no other line's,
     // and either the left edges apart or the right one another line's too (a block aligned on the page's right margin).
@@ -732,7 +832,7 @@ export function wrappedLinesTogether<Content extends { items: readonly unknown[]
     const space = unspaced.test(textOf(items[above.last]!)) ? 0 : 0.25 * em;
     if (centred) {
       // Full when the next line's first word would not have fitted in the page's width.
-      if (!startsAsParagraph && above.right - above.x + space + firstWord(under) > pageRight - pageLeft - em) {
+      if (above.right - above.x + space + firstWord(under) > pageRight - pageLeft - em) {
         previousOf.set(index, at);
         taken.add(at);
         paragraphOf[index] = paragraphOf[at]!;
@@ -747,7 +847,6 @@ export function wrappedLinesTogether<Content extends { items: readonly unknown[]
       band(byY, line => line.y, under.y - 0.5 * em, top + 0.5 * em, line => {
         if (line !== above && line !== under && line.right <= Math.min(above.x, under.x) - 0.5) near = Math.max(near, line.right + 0.5 * em);
       });
-      if (startsAsParagraph && near <= pageLeft + 0.01) continue;
       if (above.x - space - firstWord(under) < near + 0.5 * em) {
         previousOf.set(index, at);
         taken.add(at);
@@ -774,7 +873,6 @@ export function wrappedLinesTogether<Content extends { items: readonly unknown[]
     // column beside it (the margins of two cells); without a column beside it and with paragraph spacing seen on the page, the
     // widest line of that left edge when it fills three fifths of that room (a text box, a narrower block).
     const besideColumn = room < pageRight - 0.01;
-    if (startsAsParagraph && !besideColumn) continue;
     const right = (!besideColumn && pitch.spaced && widest - under.x >= FILLED * (room - under.x) ? Math.min(widest, room) : room) - 0.5 * em;
     if (above.right + space + firstWord(under) > right) {
       previousOf.set(index, at);

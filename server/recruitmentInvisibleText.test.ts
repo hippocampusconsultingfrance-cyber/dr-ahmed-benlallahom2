@@ -1458,8 +1458,8 @@ describe("dossier d’un CV qui cache du texte, de bout en bout (IA-01)", () => 
         }),
         docx: () => docx(paragraph(name) + [title, specialty].map(line => `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:t xml:space="preserve">{{${line}}}</w:t></w:r></w:p>`).join("") + rest.map(line => paragraph(line)).join("")),
       },
-      // The title's line full, the specialty's paragraph under it at the same pitch: nothing tells a wrap from a new paragraph
-      // (IA04-P1-LIGNE-PLEINE, IA04-R4-LIGNE-LARGE; before: one line in PDF, 15 points).
+      // The title's line full, the specialty's paragraph under it at the same pitch: nothing tells a wrap from a new paragraph, the
+      // PDF reads them as one paragraph (IA04-R5-MAJUSCULE: one place, never more than the DOCX's; an owner's decision, the safe side).
       fullLine: {
         pdf: () => pdf(document => {
           document.fontSize(11).fillColor("black").text(name, 50, 60, { lineBreak: false });
@@ -1509,8 +1509,12 @@ describe("dossier d’un CV qui cache du texte, de bout en bout (IA-01)", () => 
         // Before: « Médecin anesthésiste-réanimateurSpécialité : anesthésie-réanimation », 15 points in DOCX, 30 in PDF.
         expect(lines(fromDocx.text)).toEqual(expect.arrayContaining([title, specialty]));
       } else if (cv === "fullLine") {
+        // Two paragraphs in DOCX, 30 points; one line in PDF, as one paragraph wrapped before a capital (IA04-R5-MAJUSCULE), 15.
         expect(lines(fromDocx.text)).toEqual(expect.arrayContaining([fullTitle, specialty]));
-        expect(lines(fromPdf.text)).toEqual(expect.arrayContaining([fullTitle, specialty]));
+        expect(lines(fromPdf.text)).toContain(`${fullTitle} ${specialty}`);
+        expect(fromPdf.breakdown.specialtyMatch).toBe(15);
+        expect(fromDocx.breakdown.specialtyMatch).toBe(30);
+        continue;
       } else if (cv === "squeezed") {
         // Before (843ab77): a line of more than 100 characters counted as the two of a page of 100, 30 points in both.
         expect(lines(fromDocx.text)).toContain(longLine);
@@ -1577,6 +1581,93 @@ describe("dossier d’un CV qui cache du texte, de bout en bout (IA-01)", () => 
     // Before: the pieces were as many lines, grouped differently on each page: 30 points of specialty and a score of 60.
     expect(skills.scoreBreakdown.specialtyMatch).toBe(15);
     expect(dossier(id).ai_score).toBeNull();
+  }, PDF_TEST_TIMEOUT_MS);
+
+  it("CV d’infirmier dont la seule ligne de revendications se lit d’un tenant mais se dessine ou s’écrit en morceaux : 15 points de spécialité et aucun score, en PDF comme en DOCX (IA04-R5)", async () => {
+    const pieces = ["Médecin anesthésiste ·", "Réanimateur ·", "10 ans d’expérience ·", "Licence DHA ·", "Anglais courant"];
+    const body = ["Karim Benali", "Infirmier diplômé d’État", "2014-2024 : Infirmier, Clinique du Parc, Lyon", "Soins infirmiers : service 1", "Surveillance post-opératoire : service 2"];
+    const tasks = (page: number) => ["Soins infirmiers", "Surveillance post-opératoire", "Préparation des traitements"].map((task, index) => `${task} : service ${page * 12 + index + 1}`);
+    /** The pieces between the body's lines, each raised (pt) and turned (degrees) its own way: one line to the eye. */
+    const wavy = (rises: number[], degrees: number[]) => pdf(document => {
+      document.fontSize(11);
+      const xs = pieces.reduce<number[]>((at, piece, index) => [...at, index === 0 ? 50 : at[index - 1]! + document.widthOfString(`${pieces[index - 1]!} `)], []);
+      body.forEach((line, index) => {
+        document.save();
+        document.rotate(-degrees[index]!, { origin: [xs[index]!, 400] });
+        document.fontSize(11).fillColor("black").text(pieces[index]!, xs[index]!, 400 - rises[index]!, { lineBreak: false });
+        document.restore();
+        document.fontSize(11).fillColor("black").text(line, 50, 80 + index * 20, { lineBreak: false });
+      });
+    });
+    /** Three pages, the claims a block of three lines at the top or the bottom of each, set `shift` pt lower on each page. */
+    const block = ["Médecin anesthésiste.", "Réanimateur. 10 ans d’expérience.", "Licence DHA. Anglais courant."];
+    const edges = (where: "header" | "footer", shift: number) => pdf(document => [0, 1, 2].forEach(page => {
+      if (page > 0) document.addPage();
+      block.forEach((line, index) => document.fontSize(9).fillColor("black").text(line, 50, (where === "header" ? 30 : 760) + page * shift + index * 12, { lineBreak: false }));
+      // The body right under the header, its rows of pages 2 and 3 alike numbers aside.
+      [...(page === 0 ? body.slice(0, 3) : []), ...tasks(page)].forEach((line, index) => document.fontSize(11).fillColor("black").text(line, 50, 68 + index * 18, { lineBreak: false }));
+    }));
+    /** One paragraph of four full lines, each wrap before a capital. */
+    const measure = new PDFDocument({ size: "A4" }).fontSize(11);
+    const full = (start: string, next: string) => {
+      let line = start;
+      while (measure.widthOfString(`${line} ${next}`) <= 489.5) line = line.replace(/,? (?=[^ ]+$)/, ", et ");
+      return line;
+    };
+    const paragraphLines = [
+      full("Infirmier diplômé d’État au CHU de Rouen, avec le Médecin anesthésiste", "Réanimateur,"),
+      full("Réanimateur, 10 ans d’expérience en salle de réveil et au bloc opératoire,", "Licence"),
+      full("Licence DHA pour la surveillance des patients opérés après leur intervention,", "Anglais"),
+      "Anglais courant.",
+    ];
+    const capitals = pdf(document => {
+      document.fontSize(11).fillColor("black").text("Karim Benali", 50, 60, { lineBreak: false });
+      paragraphLines.forEach((line, index) => document.text(line, 50, 90 + index * 13.5, { lineBreak: false }));
+    });
+    const run = (text: string) => `<w:r><w:t xml:space="preserve">{{${text}}}</w:t></w:r>`;
+    const head = body.slice(0, 3).map(line => paragraph(line)).join("");
+    const line = pieces.join(" ");
+    const sectionEnd = (cols: string) => `<w:p><w:pPr><w:sectPr><w:type w:val="continuous"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="0" w:footer="0" w:gutter="0"/>${cols}</w:sectPr></w:pPr></w:p>`;
+    // Liberation Sans 11 pt: each piece's width and a space, in twips.
+    const widths = pieces.map(piece => Math.ceil((measure.widthOfString(`${piece} `) * 20)) + 1);
+    const cols = `<w:cols w:num="5" w:space="0" w:equalWidth="0">${widths.map(width => `<w:col w:w="${width}" w:space="0"/>`).join("")}</w:cols>`;
+    const boxes = pieces.reduce<{ at: number; xml: string }>(({ at, xml }, piece, index) => ({
+      at: at + widths[index]! / 20,
+      xml: `${xml}<w:r><w:pict><v:shape style="position:absolute;margin-left:${at.toFixed(1)}pt;margin-top:4pt;width:${(widths[index]! / 20).toFixed(1)}pt;height:16pt;mso-position-horizontal-relative:text;mso-position-vertical-relative:text" stroked="f" filled="f"><v:textbox inset="0,0,0,0"><w:txbxContent>${paragraph(`${piece} `)}</w:txbxContent></v:textbox></v:shape></w:pict></w:r>`,
+    }), { at: 0, xml: "" }).xml;
+    const font = '<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Helvetica" w:hAnsi="Helvetica"/><w:sz w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults>';
+    const files: Array<[string, Buffer, string]> = [
+      // Before (2e58bec): a line, a row or a place per piece, 30 specialty points and a score of 60 (null and 30 for the footer of two lines).
+      ["vague", await wavy([0, 2.4, 0, 2.4, 0], [0, 0, 0, 0, 0]), "application/pdf"],
+      ["escalier", await wavy([0, 2.4, 4.8, 2.4, 0], [0, 0, 0, 0, 0]), "application/pdf"],
+      ["angles", await wavy([0, 0, 0, 0, 0], [0, 0.6, 0, 1, 0]), "application/pdf"],
+      ["pied-decale", await edges("footer", -3), "application/pdf"],
+      ["entete-decale", await edges("header", 3), "application/pdf"],
+      ["entete-temoin", await edges("header", 0), "application/pdf"],
+      ["majuscules", await capitals, "application/pdf"],
+      ["choix", docx(head + `<w:p><mc:AlternateContent><mc:Choice Requires="w14">${run(line)}</mc:Choice><mc:Fallback><w:r>${pieces.map(piece => `<w:t xml:space="preserve">{{${piece}}}</w:t>`).join("<w:br/>")}</w:r></mc:Fallback></mc:AlternateContent></w:p>`, font), DOCX],
+      ["colonnes", docx(head + sectionEnd("") + `<w:p>${pieces.map(piece => run(`${piece} `)).join('<w:r><w:br w:type="column"/></w:r>')}</w:p>` + sectionEnd(cols) + paragraph("Soins infirmiers : service 1"), font), DOCX],
+      ["zones", docx(head + `<w:p>${boxes}</w:p>` + paragraph("Soins infirmiers : service 1"), font), DOCX],
+      ["lettrine", docx(head + `<w:p><w:pPr><w:framePr w:dropCap="drop" w:lines="1" w:wrap="around" w:vAnchor="text" w:hAnchor="text"/></w:pPr>${run(`${pieces[0]!} `)}</w:p>` + paragraph(pieces.slice(1).join(" ")), font), DOCX],
+    ];
+    for (const [name, file, mimeType] of files) {
+      const location = mimeType === DOCX ? "section Profil" : "page 1";
+      state.reading = aiReading({
+        professionalTitle: "Médecin anesthésiste", specialties: ["Réanimateur"], yearsExperience: 10,
+        normalizedLanguages: [{ language: "Anglais", proficiency: "fluent", ...quote("Anglais courant", location) }],
+        certifications: [{ name: "Licence DHA", issuingBody: null, country: null, expiresAt: null, ...quote("Licence DHA", location) }],
+        fieldEvidence: [
+          { field: "professionalTitle", value: "Médecin anesthésiste", ...quote("Médecin anesthésiste", location) },
+          { field: "specialty", value: "Réanimateur", ...quote("Réanimateur", location) },
+          { field: "yearsExperience", value: "10 ans", ...quote("10 ans d’expérience", location) },
+        ],
+      });
+      const id = seedDossier(file, mimeType);
+      await processDueCvAnalysisJobs(5);
+      const skills = JSON.parse(String(dossier(id).ai_extracted_skills));
+      expect(skills.scoreBreakdown.specialtyMatch, name).toBe(15);
+      expect(dossier(id).ai_score, name).toBeNull();
+    }
   }, PDF_TEST_TIMEOUT_MS);
 
   it("CV lisible qui cache aussi une phrase : au-delà de 30 caractères, revue humaine sans score ni faits structurés", async () => {

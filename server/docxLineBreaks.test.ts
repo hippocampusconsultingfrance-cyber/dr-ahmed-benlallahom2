@@ -255,9 +255,85 @@ describe("ce que Word ne montre pas d’un champ, les fins de ligne écrites dan
     // Before: mammoth wrote each box's paragraph after the paragraph that draws it, a line each.
     expect((await read(docx(paragraph(claims.map(text => box(text)).join("")))))).toHaveLength(1);
     expect((await read(docx(paragraph(box(claims[0]!) + run(" Réanimateur · Licence DHA")))))[0]!.replace(/\s+/g, " ")).toBe("Réanimateur · Licence DHA Médecin anesthésiste ·");
-    // Floating boxes are placed anywhere: lines of their own.
-    const floating = claims.map(text => box(text, "position:absolute;margin-left:0;margin-top:0;width:120pt;height:16pt")).join("");
-    expect(await read(docx(paragraph(floating)))).toHaveLength(3);
+    // Floating boxes edge to edge at one height (IA04-R5-CADRES-BIS): one line. Before (2e58bec): a line each, 30 points and a score.
+    const at = (text: string, left: number, top = 4, width = 120) => box(text, `position:absolute;margin-left:${left}pt;margin-top:${top}pt;width:${width}pt;height:16pt;mso-position-horizontal-relative:text;mso-position-vertical-relative:text`);
+    // Arial 11 pt: the claims are 113.1, 69.7 and 64.2 pt wide; each box as wide as its claim and a space.
+    const lefts = [0, 116, 189];
+    const sizes = [116, 73, 75];
+    const floating = claims.map((text, index) => at(text, lefts[index]!, 4, sizes[index])).join("");
+    expect((await read(docx(paragraph(floating)))).map(line => line.replace(/\s+/g, " "))).toEqual(["Médecin anesthésiste · Réanimateur · Licence DHA"]);
+    // Drawn in another order than they lie: still one line, as they are shown.
+    expect(await read(docx(paragraph(at(claims[2]!, 189, 4, 75) + at(claims[0]!, 0) + at(claims[1]!, 116, 4, 75))))).toHaveLength(1);
+    // At heights a line apart, or far apart on a line, or too narrow for their text: lines of their own.
+    expect(await read(docx(paragraph(claims.map((text, index) => at(text, lefts[index]!, 4 + index * 16)).join(""))))).toHaveLength(3);
+    expect(await read(docx(paragraph(at(claims[0]!, 0) + at(claims[1]!, 340))))).toHaveLength(2);
+    expect(await read(docx(paragraph(at(claims[0]!, 0, 4, 40) + at(claims[1]!, 40, 4, 40))))).toHaveLength(2);
+  });
+
+  it("une lettrine se lit avec le paragraphe qu’elle ouvre ; des cadres alignés à gauche et à droite de la marge, loin l’un de l’autre, restent deux lignes (IA04-R5-CADRES-BIS, IA04-R5-CADRES-ALIGN)", async () => {
+    // A drop cap in the text or in the margin, one line high. Before (2e58bec): its own line, 30 specialty points.
+    for (const kind of ["drop", "margin"]) {
+      const dropCap = paragraph(run("Médecin anesthésiste · "), `<w:framePr w:dropCap="${kind}" w:lines="1" w:wrap="around" w:vAnchor="text" w:hAnchor="text"/>`);
+      expect((await read(docx(dropCap + paragraph(run("Réanimateur · Licence DHA"))))).map(line => line.replace(/\s+/g, " ")), kind).toEqual(["Médecin anesthésiste · Réanimateur · Licence DHA"]);
+    }
+    // Title and specialty in frames of known widths aligned on the left and on the right margin: placed, far apart, two lines.
+    // Before (2e58bec): a frame placed by its alignment was never apart, one line, 15 points in DOCX and 30 in PDF.
+    const aligned = (text: string, align: string, width: number) => paragraph(run(text), `<w:framePr w:w="${width}" w:wrap="around" w:vAnchor="text" w:hAnchor="margin" w:xAlign="${align}" w:y="1"/>`);
+    expect(await read(docx(aligned("Médecin anesthésiste-réanimateur", "left", 4800) + aligned("Spécialité : anesthésie-réanimation", "right", 4200)))).toEqual(["Médecin anesthésiste-réanimateur", "Spécialité : anesthésie-réanimation"]);
+    // Aligned right after the other, a centred frame next to a left one: one line where no wide gap lies between them.
+    const centred = paragraph(run("Réanimateur"), '<w:framePr w:w="9638" w:wrap="around" w:vAnchor="text" w:hAnchor="margin" w:xAlign="center" w:y="1"/><w:jc w:val="center"/>');
+    expect(await read(docx(aligned("Médecin", "left", 900) + centred))).toHaveLength(2);
+    const near = (text: string, x: number, width: number) => paragraph(run(text), `<w:framePr w:w="${width}" w:wrap="around" w:vAnchor="text" w:hAnchor="margin" w:x="${x}" w:y="1"/>`);
+    expect(await read(docx(aligned("Médecin anesthésiste · ", "left", 2400) + near("Réanimateur", 2400, 1450)))).toHaveLength(1);
+  });
+
+  it("d’un contenu alternatif, lit les sauts de ligne et les fins de paragraphe du choix que Word dessine, pas ceux du repli (IA04-R5-ALTERNATIF)", async () => {
+    const line = claims.join(" ");
+    const alternate = (choice: string, fallback: string, requires = "w14") => `<mc:AlternateContent xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" xmlns:x="urn:example:other"><mc:Choice Requires="${requires}">${choice}</mc:Choice><mc:Fallback>${fallback}</mc:Fallback></mc:AlternateContent>`;
+    const broken = `<w:r>${claims.map(text => `<w:t xml:space="preserve">${escape(text)}</w:t>`).join("<w:br/>")}</w:r>`;
+    // The choice one line, the fallback (what mammoth reads) the same letters with line breaks, or a paragraph each. Before
+    // (2e58bec): three lines, 30 points and a score of 60.
+    expect(await read(docx(paragraph(alternate(run(line), broken))))).toEqual([claims.join(" ")]);
+    expect((await read(docx(alternate(paragraph(run(line)), claims.map(text => paragraph(run(text))).join(""))))).map(line => line.replace(/\s+/g, " "))).toEqual([claims.join(" ")]);
+    // The choice with the same breaks, a choice Word does not understand (it draws the fallback), or of other letters: the fallback's.
+    expect(await read(docx(paragraph(alternate(broken, broken))))).toEqual(claims);
+    expect(await read(docx(paragraph(alternate(run(line), broken, "x"))))).toEqual(claims);
+    expect(await read(docx(paragraph(alternate(run("Autre texte"), broken))))).toEqual(claims);
+  });
+
+  it("les colonnes d’une section côte à côte, chacune d’une ligne, à une même hauteur et sans grand écart : une ligne (IA04-R5-COLONNES)", async () => {
+    const pieces = ["Médecin anesthésiste · ", "Réanimateur · ", "Licence DHA"];
+    // Arial 11 pt: each column as wide as its piece, no space between them.
+    const widths = [2400, 1450, 5788];
+    const columnsXml = (count: number, space = 0, list = true) => `<w:cols w:num="${count}" w:space="${space}"${list ? ` w:equalWidth="0">${widths.slice(0, count).map(width => `<w:col w:w="${width}" w:space="${space}"/>`).join("")}</w:cols>` : "/>"}`;
+    const ending = (cols: string, type = "continuous") => `<w:p><w:pPr><w:sectPr><w:type w:val="${type}"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="0" w:footer="0" w:gutter="0"/>${cols}</w:sectPr></w:pPr></w:p>`;
+    const columnBreak = '<w:r><w:br w:type="column"/></w:r>';
+    const head = paragraph(run("Karim Benali")) + ending("");
+    const after = paragraph(run("Soins infirmiers"));
+    // A column break after each piece, in one paragraph or a paragraph each. Before (2e58bec): a line each, 30 points and a score.
+    const oneParagraph = paragraph(pieces.map(run).join(columnBreak));
+    expect((await read(docx(head + oneParagraph + ending(columnsXml(3)) + after))).map(line => line.replace(/\s+/g, " "))).toEqual(["Karim Benali", "Médecin anesthésiste · Réanimateur · Licence DHA", "Soins infirmiers"]);
+    const paragraphs = pieces.map((piece, index) => paragraph((index ? columnBreak : "") + run(piece))).join("");
+    expect((await read(docx(head + paragraphs + ending(columnsXml(3)) + after))).map(line => line.replace(/\s+/g, " "))).toEqual(["Karim Benali", "Médecin anesthésiste · Réanimateur · Licence DHA", "Soins infirmiers"]);
+    // Columns Word balances (the next section starts on the same page), a paragraph each: one line too.
+    const balanced = pieces.map(piece => paragraph(run(piece))).join("");
+    expect(await read(docx(head + balanced + ending(columnsXml(3)) + after.replace("<w:p>", '<w:p><w:pPr><w:sectPr><w:type w:val="continuous"/></w:sectPr></w:pPr>')))).toHaveLength(3);
+    // Two equal columns far apart (the text of each short), or columns of several lines each: lines of their own.
+    expect(await read(docx(head + paragraph(run("Titre") + columnBreak + run("Spécialité")) + ending(columnsXml(2, 720, false)) + after))).toEqual(["Karim Benali", "Titre", "Spécialité", "Soins infirmiers"]);
+    const long = paragraph(run("Médecin anesthésiste-réanimateur, praticien hospitalier au CHU de Lyon depuis 2012, bloc opératoire") + columnBreak + run("Réanimateur"));
+    expect(await read(docx(head + long + ending(columnsXml(2, 0, false)) + after))).toHaveLength(4);
+  });
+
+  it("une ligne arabe de longueur courante, puis une tabulation droite à la marge : un saut de ligne, comme l’écart du PDF (IA04-P1-DOCX-NONMESURE)", async () => {
+    // Arial 11 pt, right to left, A4: the title and the specialty at a right stop at the margin, an em or more apart however the
+    // letters are drawn (each letter by its form, as wide as DejaVu Sans Bold draws it at most). Before (2e58bec): an em a letter, the
+    // texts wider than the line, a space: one line in DOCX, PDF 47 and DOCX 32.
+    const arabic = (title: string, specialty: string) => paragraph(run(title, "<w:rtl/>") + tab() + run(specialty, "<w:rtl/>"), `${stops([9072, "right"])}<w:bidi/>`);
+    expect(await read(docx(arabic("استشاري التخدير والعناية المركزة", "التخصص: تخدير وإنعاش")))).toEqual(["استشاري التخدير والعناية المركزة", "التخصص: تخدير وإنعاش"]);
+    // In a font this reading does not know, and when the texts fill the line: a space.
+    const unknown = paragraph(run("استشاري التخدير والعناية المركزة", '<w:rFonts w:ascii="Diwani Letter" w:hAnsi="Diwani Letter" w:cs="Diwani Letter"/><w:rtl/>') + tab() + run("التخصص: تخدير وإنعاش", '<w:rFonts w:ascii="Diwani Letter" w:hAnsi="Diwani Letter" w:cs="Diwani Letter"/><w:rtl/>'), `${stops([9072, "right"])}<w:bidi/>`);
+    expect(await read(docx(unknown))).toHaveLength(1);
+    expect(await read(docx(arabic("استشاري التخدير والعناية المركزة والطوارئ وطب الأطفال", "التخصص: تخدير وعناية مركزة وطب الطوارئ")))).toHaveLength(1);
   });
 
   it("les idéogrammes, l’arabe, une image en ligne mesurés : une tabulation large et des cellules écartées restent des lignes, comme dans le PDF (IA04-P1-DOCX-NONMESURE)", async () => {

@@ -210,6 +210,75 @@ describe("ligne dessinée en morceaux entre les autres lignes lue d’un tenant,
     rowsTogether(pages).forEach((content, index) => expect(read(content)).toBe(`Soins ${index + 1}\nTransmissions ${index + 1}\nMédecin · CV Réanimateur · Licence · page ${index + 1}\n`));
   });
 
+  it("rassemble une ligne dont les morceaux montent ou descendent d’une fraction d’em, ou tournent chacun de quelques dixièmes de degré, comme une ligne (IA04-R5-LIGNE-DE-BASE)", () => {
+    // The nurse's line drawn piece by piece between the body's lines, each piece raised or turned its own way: one line to the eye.
+    const drawn = (pieces: Array<{ str: string; transform: number[] }>) => ({ items: pieces.flatMap((item, index) => [{ ...at(item.str, 0, 0), transform: item.transform }, end, body(`Soins ${index}`, 780 - index * 20)]) });
+    const along = [50, 95, 160];
+    // Raised alternately by 2.4 pt (0.27 em of 9 pt), or as a staircase of 2.4 then 4.8 pt. Before (2e58bec): a row per height, a
+    // line per piece, 30 points and a score of 60.
+    for (const rises of [[0, 2.4, 0], [0, 2.4, 4.8], [4.4, 0, 4.4]]) {
+      const page = drawn(footer.map((str, index) => ({ str, transform: [9, 0, 0, 9, along[index]!, 300 + rises[index]!] })));
+      const [content] = rowsTogether([page]);
+      expect(read(content!), rises.join(",")).toBe("Médecin Réanimateur Licence\nSoins 0\nSoins 1\nSoins 2\n");
+      // Each piece written level on the first one's baseline.
+      const placed = (content!.items as Array<{ str: string; transform: number[] }>).filter(item => footer.includes(item.str));
+      expect(placed.map(item => item.transform[5])).toEqual([300 + rises[0]!, 300 + rises[0]!, 300 + rises[0]!]);
+    }
+    // Each piece turned around its own start by 0 and 0.6 degree, by 1 degree, or by more and more (0, 1.2, 2.4 degrees).
+    for (const degrees of [[0, 0.6, 0], [0, 1, 0], [0, 1.2, 2.4]]) {
+      const page = drawn(footer.map((str, index) => {
+        const angle = (degrees[index]! * Math.PI) / 180;
+        return { str, transform: [9 * Math.cos(angle), 9 * Math.sin(angle), -9 * Math.sin(angle), 9 * Math.cos(angle), along[index]!, 300] };
+      }));
+      const [content] = rowsTogether([page]);
+      expect(read(content!), degrees.join(",")).toBe("Médecin Réanimateur Licence\nSoins 0\nSoins 1\nSoins 2\n");
+      expect((content!.items as Array<{ str: string; transform: number[] }>).filter(item => footer.includes(item.str)).every(item => item.transform[1] === 0)).toBe(true);
+    }
+    // Raised by more than half an em, or turned by more than three degrees, or after a gap of more than two and a half em: lines of
+    // their own, as pdf.js reads them when drawn at once.
+    const apart = [
+      drawn(footer.map((str, index) => ({ str, transform: [9, 0, 0, 9, along[index]!, 300 + (index % 2) * 5] }))),
+      drawn(footer.map((str, index) => ({ str, transform: [9, 0, 0, 9, along[index]! + index * 30, 300 + (index % 2) * 2] }))),
+    ];
+    for (const page of apart) expect(read(rowsTogether([page])[0]!)).not.toContain("Médecin Réanimateur Licence");
+    // Two lines of a paragraph one under the other, and two columns side by side on slightly different baselines, stay lines.
+    const paragraph = { items: [at("Médecin anesthésiste depuis 2012", 50, 300, true), at("Réanimateur", 50, 289, true)] };
+    expect(rowsTogether([paragraph])[0]).toBe(paragraph);
+  });
+
+  it("écrit un pied de page ou un en-tête de plusieurs rangées, placé quelques points plus haut sur chaque page, sur une ligne au bord de chaque page (IA04-R5-PIEDS-DECALES)", () => {
+    const block = ["Médecin anesthésiste.", "Réanimateur. 10 ans.", "Licence DHA."];
+    const page = (number: number, shift: number, where: "footer" | "header", extra: string[] = []) => ({ items: [
+      ...[...block, ...extra].map((line, index) => at(line, 50, (where === "footer" ? 60 : 815) + number * shift - index * 12, true)),
+      ...["Soins", "Transmissions", "Pansements"].map((task, index) => body(`${task} : service ${number * 12 + index + 1}`, 780 - index * 18)),
+    ] });
+    const lines = (content: { items: readonly unknown[] }) => read(content).split("\n").filter(Boolean);
+    // A footer set 1.5 or 3 pt higher on each page, numbered or not, and a header set 3 pt lower. Before (2e58bec): a row of the
+    // block found at the same height on no other page, its rows lines of their own (60 and 30 specialty points).
+    for (const [shift, where, extra] of [[1.5, "footer", []], [3, "footer", []], [3, "footer", ["Page"]], [-3, "header", []]] as const) {
+      const pages = [0, 1, 2].map(number => page(number, shift, where, extra.map(text => `${text} ${number + 1} / 3`)));
+      rowsTogether(pages).forEach((content, number) => {
+        const written = lines(content);
+        const edge = where === "footer" ? written[written.length - 1] : written[0];
+        expect(edge, `${shift} ${where} ${number}`).toBe([...block, ...extra.map(text => `${text} ${number + 1} / 3`)].join(" "));
+        expect(written).toHaveLength(4);
+      });
+    }
+    // The same header at the same height on each page, the body's rows alike numbers aside (« service 13 », « service 25 »): the
+    // header one line, the body's rows left where they are. Before (2e58bec): the body's rows taken into the header, the block
+    // then the whole page and dropped, the header three lines.
+    const pages = [0, 1, 2].map(number => page(number, 0, "header"));
+    rowsTogether(pages).forEach(content => {
+      const written = lines(content);
+      expect(written[0]).toBe(block.join(" "));
+      expect(written.slice(1).map(line => line.split(" ")[0])).toEqual(["Soins", "Transmissions", "Pansements"]);
+    });
+    // The same body lines at the same rank from the bottom of two pages, a page of lines apart in height: lines of the body.
+    const roles = (height: number) => ({ items: [body("CHU, praticien hospitalier", height + 40), body("Médecin anesthésiste-réanimateur", height + 20), body("Pôle anesthésie-réanimation", height)] });
+    const bodies = [roles(467.7), roles(587.9)];
+    expect(rowsTogether(bodies)).toEqual(bodies);
+  });
+
   it("met une ligne d’arabe ou d’hébreu rassemblée dans l’ordre de droite à gauche", () => {
     // « طبيب تخدير » (anaesthetist): its first word on the right, drawn after the second, the body's line between them.
     const page = { items: [at("تخدير", 100, 300), end, body("Karim Benali", 780), at("طبيب", 128, 300, true)] };
@@ -303,15 +372,28 @@ describe("lignes d’un paragraphe coupées faute de place lues comme une ligne 
     expect(read(rows).split("\n").slice(0, 4)).toEqual(["الوظيفة", "طبيب تخدير وإنعاش", "التخصص", "تخدير وإنعاش"]);
   });
 
-  it("ne rejoint pas une ligne qui commence comme un paragraphe (une capitale, un libellé) quand rien ne distingue l’interligne d’un saut de paragraphe ; la rejoint dans une colonne étroite ou après une ligne déjà coupée (IA04-R4-LIGNE-LARGE, IA04-P1-LIGNE-PLEINE)", () => {
-    // Paragraphs without spacing: a full line, then the next paragraph. Before (d1fe5af): joined, PDF 40 and DOCX 55.
-    const nextParagraph = [...line(full, 90, 700), ...line("Spécialité : anesthésie-réanimation", 90, 685.4), ...line("Anesthésie-réanimation, réanimation polyvalente", 90, 670.8), ...line("2012-2024 : CHU de Lyon", 90, 656.2)];
-    expect(read(nextParagraph)).toBe(`${full}\nSpécialité : anesthésie-réanimation\nAnesthésie-réanimation, réanimation polyvalente\n2012-2024 : CHU de Lyon\n`);
-    const fullOnly = [...line(full, 90, 700), ...line("Anesthésie-réanimation, réanimation polyvalente", 90, 685.4)];
-    expect(read(fullOnly)).toBe(`${full}\nAnesthésie-réanimation, réanimation polyvalente\n`);
-    // A paragraph already wrapped onto the line above, or a narrow cell beside another column, goes on with a capital.
-    const wrapped = [...line(full, 90, 700), ...line("réanimation polyvalente et gardes de nuit, encadrement des internes au CHU de", 90, 685.4), ...line("Lyon.", 90, 670.8)];
-    expect(read(wrapped)).toBe(`${full} réanimation polyvalente et gardes de nuit, encadrement des internes au CHU de Lyon.\n`);
+  it("rejoint une ligne qui commence par une capitale ou un libellé quand rien ne distingue un retour à la ligne d’un nouveau paragraphe : le PDF ne compte pas plus d’endroits que le DOCX (IA04-R5-MAJUSCULE)", () => {
+    // The nurse's claims in one paragraph of four lines without spacing, each wrap before a capital. Before (2e58bec): a line each,
+    // 30 specialty points and a score of 60 in PDF, the DOCX's paragraph one line (15 points).
+    const nurse = [
+      "Infirmier diplômé d’État au CHU de Rouen, avec le Médecin anesthésiste responsable",
+      "Réanimateur, 10 ans d’expérience en salle de réveil et au bloc opératoire, gardes",
+      "Licence DHA pour la surveillance des patients opérés après leur intervention, de",
+      "Anglais courant.",
+    ];
+    const items = nurse.flatMap((text, index) => line(text, 90, 700 - index * 14.6));
+    expect(read(items)).toBe(`${nurse.join(" ")}\n`);
+    // A proper noun after the wrap (« Royal / London Hospital »), as the DOCX's one paragraph: one line.
+    const profile = [...line("Consultant anaesthetist since 2012, adult intensive care at the Royal Free and", 90, 700), ...line("London Hospital, specialty Anaesthesia.", 90, 685.4)];
+    expect(read(profile)).toBe("Consultant anaesthetist since 2012, adult intensive care at the Royal Free and London Hospital, specialty Anaesthesia.\n");
+    // Two paragraphs without spacing, the first one full: nothing tells them from a wrapped one, they are one line (the safe side,
+    // an owner's decision: one place where the DOCX has two).
+    const twoParagraphs = [...line(full, 90, 700), ...line("Spécialité : anesthésie-réanimation", 90, 685.4)];
+    expect(read(twoParagraphs)).toBe(`${full} Spécialité : anesthésie-réanimation\n`);
+    // With paragraph spacing seen, a new paragraph under the wider pitch stays a line; a short line is never joined.
+    const spaced = [...line(full, 90, 700), ...line("réanimation polyvalente.", 90, 685.4), ...line("Spécialité : anesthésie-réanimation", 90, 660.8)];
+    expect(read(spaced)).toBe(`${full} réanimation polyvalente.\nSpécialité : anesthésie-réanimation\n`);
+    // A narrow cell beside another column goes on with a capital, as before.
     const cell = [...line("Médecin anesthésiste", 90, 700), ...line("2012-2024 : Praticien hospitalier", 232, 700), ...line("Réanimateur", 90, 685.4), ...line("Anglais courant (C1)", 90, 660.8)];
     expect(read(cell)).toContain("Médecin anesthésiste Réanimateur\n");
   });
