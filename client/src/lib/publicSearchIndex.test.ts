@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { publicSearchIndex, searchPublicPages } from "./publicSearchIndex";
+import { publicSearchIndex, publicShortcuts, searchPublicPages } from "./publicSearchIndex";
 import { getSitemapRoutes } from "../../../server/routeSeo";
 
 const hrefs = (query: string, language: "fr" | "en" | "de" | "zh") => searchPublicPages(query, language).map(result => result.entry.href);
@@ -72,5 +72,48 @@ describe("index enrichi (PUB-SEARCH-01)", () => {
   it("ne propose pas les témoignages tant qu'ils sont masqués", () => {
     expect(publicSearchIndex.some(entry => entry.href === "/testimonials")).toBe(false);
     expect(hrefs("témoignages", "fr")).toEqual([]);
+  });
+});
+
+describe("recherche sans résultat (PUB-28)", () => {
+  it("mène « annuler » et « remboursement » à la FAQ et à la réservation, en français et en anglais", () => {
+    for (const [query, language] of [["annuler", "fr"], ["annulé", "fr"], ["remboursement", "fr"], ["rembourser", "fr"], ["cancel", "en"], ["cancelled", "en"], ["refund", "en"], ["reimbursement", "en"], ["stornieren", "de"], ["取消", "zh"]] as const) {
+      const results = searchPublicPages(query, language);
+      expect(results.map(result => result.entry.href).slice(0, 2).sort(), `${language}:${query}`).toEqual(["/booking", "/faq"]);
+      expect(results.every(result => !result.partial), `${language}:${query}`).toBe(true);
+    }
+  });
+
+  it("garde le classement des pages qui contiennent tous les mots", () => {
+    const results = searchPublicPages("espace candidat", "fr");
+    expect(results[0]?.entry.href).toBe("/candidate/access");
+    expect(results.every(result => !result.partial && result.matchedTerms === 2)).toBe(true);
+  });
+
+  it("sans page qui contienne tous les mots, propose celles qui en contiennent au moins un, classées par score", () => {
+    for (const [query, expected] of [["recrutement Dubai", "/recruitment"], ["opération enfant", "/questions-anesthesie"]] as const) {
+      const results = searchPublicPages(query, "fr");
+      expect(results[0]?.entry.href, query).toBe(expected);
+      expect(results.every(result => result.partial && result.matchedTerms === 1), query).toBe(true);
+      const scores = results.map(result => result.score);
+      expect(scores, query).toEqual([...scores].sort((left, right) => right - left));
+    }
+  });
+
+  it("ne se rabat pas sur les mots d’une ou deux lettres, présents dans presque toutes les pages", () => {
+    expect(hrefs("la zzzz", "fr")).toEqual([]);
+    expect(hrefs("à de zzzz", "fr")).toEqual([]);
+    expect(hrefs("zzzz", "fr")).toEqual([]);
+    // Un mot chinois de deux caractères reste un vrai mot.
+    expect(hrefs("麻醉 zzzz", "zh")).toContain("/questions-anesthesie");
+  });
+
+  it("propose comme raccourcis de vraies pages du site, nommées dans les 4 langues", () => {
+    const routes = new Set([...getSitemapRoutes(), "/#contact"]);
+    expect(publicShortcuts.links.map(link => link.href)).toEqual(["/booking", "/questions-anesthesie", "/recruitment", "/employers", "/#contact"]);
+    for (const link of publicShortcuts.links) {
+      expect(routes.has(link.href), link.href).toBe(true);
+      for (const language of ["fr", "en", "de", "zh"] as const) expect(link.label[language], `${link.href} ${language}`).toBeTruthy();
+    }
   });
 });
