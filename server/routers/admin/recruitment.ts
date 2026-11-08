@@ -240,18 +240,46 @@ function severalPhoneNumbersAsText(value: string): string | null {
       if (extension(part)) return part;
       if (!variant(parts[index + 1])) return phoneAsText(part);
       // Before a variant, a number is set apart even if it is text on its own, its « 00 » not: either would make a fraction (« 0661 234567 / 91 », « 00 33612345678 / 02 »).
-      return (severalPhoneNumbersAsText(part) ?? phoneDigitsSetApart(part)).replace(/^00 /, "00");
+      // Groups after it make none (« 00 33471234567 802 / 03 »).
+      return phoneNumberThenGroupsAsText(part) ?? (severalPhoneNumbersAsText(part) ?? phoneDigitsSetApart(part)).replace(/^00 /, "00");
     }).join(joint);
     return spreadsheetMayReadAsNumberOrDate(written) ? null : written;
   }
   return null;
 }
 
+/**
+ * The fewest digits of a whole phone number, its « 00 » for « + » aside, before groups of three typed after a space:
+ * nine, a national number with its trunk « 0 » or an international one after its country code (« 0612345678 913 »,
+ * « +33471234567 802 »). A shorter first part is that of a single number grouped by three, as French writes it
+ * (« 0612 345 678 », « 0034 612 345 678 »), which cannot be told from a number and its extension
+ * (« 0712 345 678 211 »).
+ */
+const WHOLE_PHONE_NUMBER_DIGITS = 9;
+
+/** A number, then groups of three after a space or a no-break space, as French groups thousands (SPREADSHEET_LOCALES), signs around them. */
+const PHONE_NUMBER_THEN_GROUPS = new RegExp(String.raw`^(\D*\d+)((?:${SPREADSHEET_LOCALES[1].group}\d{3})+)\D*$`);
+
+/**
+ * A whole number then groups of three after a space, which French reads as one number only because of those groups:
+ * an extension (« 0612345678 913 », « +33471234567 802 »), or a second number grouped by three
+ * (« 0471234594 612 345 678 »). The number is written as it would be alone, then the groups as typed, their space or
+ * no-break space kept (« 06 12 34 56 78 913 », « 00 33471234567 802 », « 04 71 23 45 94 612 345 678 »), so that
+ * setting the digits apart never runs the extension into the number nor shifts its pairs
+ * (« 0 61 23 45 67 89 13 »). Null for another value, or if the value so written could still be read as a number (ADM-26).
+ */
+function phoneNumberThenGroupsAsText(value: string): string | null {
+  const [, number, groups] = PHONE_NUMBER_THEN_GROUPS.exec(value) ?? [];
+  if (number === undefined || groups === undefined || phoneNumberDigits(number) < WHOLE_PHONE_NUMBER_DIGITS) return null;
+  const written = phoneDigitsSetApart(number) + groups;
+  return spreadsheetMayReadAsNumberOrDate(written) ? null : written;
+}
+
 /** A phone number, « + » already written « 00 », as text for a spreadsheet: see csvPhoneValue. */
 function phoneAsText(written: string): string {
   if (SPREADSHEET_SCIENTIFIC.test(written)) return `'${written}`;
   if (!spreadsheetMayReadAsNumberOrDate(written)) return written;
-  return severalPhoneNumbersAsText(written) ?? phoneDigitsSetApart(written);
+  return severalPhoneNumbersAsText(written) ?? phoneNumberThenGroupsAsText(written) ?? phoneDigitsSetApart(written);
 }
 
 /**
@@ -276,8 +304,11 @@ function phoneAsText(written: string): string {
  * written on its own, their « / » or « , » kept (« 0612345678,0698765432 »,
  * « 0661 234567/91 » and « +33471234567,802 » give
  * « 06 12 34 56 78, 06 98 76 54 32 », « 06 61 23 45 67 / 91 » and
- * « 00 33471234567, 802 »: severalPhoneNumbersAsText). The other columns keep
- * the protection.
+ * « 00 33471234567, 802 »: severalPhoneNumbersAsText). A whole number and the
+ * groups of three after its space, which French reads as thousands, leave
+ * likewise, the groups as typed (« 0612345678 913 » and « +33471234567 802 »
+ * give « 06 12 34 56 78 913 » and « 00 33471234567 802 »:
+ * phoneNumberThenGroupsAsText). The other columns keep the protection.
  */
 function csvPhoneValue(phone: string | null) {
   if (!phone) return phone;

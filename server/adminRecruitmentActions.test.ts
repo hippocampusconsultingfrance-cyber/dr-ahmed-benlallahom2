@@ -496,6 +496,44 @@ describe("actions d’administration du recrutement", () => {
     expect(phones((await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number })).csv)).toEqual(expected);
   });
 
+  it("garde l’espace et le groupe de trois chiffres qu’un numéro entier suivi de son poste fait lire comme un nombre en français, sans décaler ses paires (ADM-26)", async () => {
+    // Calc in French read « 0612345678 913 » as 612345678913, and the export ran the extension into the number, its pairs
+    // shifted: « 0 61 23 45 67 89 13 »; « +33471234567 802 » gave « 00 33471234567802 ».
+    const typed = {
+      // Read as a number in French: the number written as it would be alone, then its space and its groups as typed.
+      "0612345678 913": "06 12 34 56 78 913",
+      "0471234567 802": "04 71 23 45 67 802",
+      "+33471234567 802": "00 33471234567 802",
+      "0612345678\u00a0913": "06 12 34 56 78\u00a0913",
+      "+12025550143 123": "00 12025550143 123",
+      "0791234567 132": "07 91 23 45 67 132",
+      "0471234594 612 345 678": "04 71 23 45 94 612 345 678",
+      "(0612345678 913)": "06 12 34 56 78 913",
+      "0612345678 913/14": "06 12 34 56 78 913 / 14",
+      "0612345678 913,802": "06 12 34 56 78 913, 802",
+      // A single number grouped by three from its start, its first part not a number on its own.
+      "0612 345 678": "06 12 34 56 78",
+      "0034 612 345 678": "00 34612345678",
+      // Text in Calc, left as typed: an extension of fewer or more than three digits, pairs, a country code apart.
+      "0612345678 12": "0612345678 12",
+      "0612345678 8021": "0612345678 8021",
+      "06 12 34 56 78 913": "06 12 34 56 78 913",
+      "+32 471234567 802": "0032 471234567 802",
+    };
+    const candidates = Object.keys(typed).map((phone, index) => seedCandidate(index + 1, { phone }));
+    const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-PHONE-8", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Qatar" }]);
+    memory.seed(clientBriefCandidates, candidates.map(candidate => ({ brief_id: brief!.id, application_id: candidate.id, association_status: "shortlisted", candidate_consent_at: consentAt })));
+    const phones = (csv: string) => {
+      const [header, ...rows] = csv.split("\n");
+      const column = header!.split(";").indexOf("\"Téléphone\"");
+      return Object.fromEntries(rows.map(row => [row.split(";")[2], row.split(";")[column]]));
+    };
+    const expected = Object.fromEntries(Object.values(typed).map((phone, index) => [`"c${index + 1}@test.local"`, `"${phone}"`]));
+
+    expect(phones((await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: candidates.map(candidate => candidate.id as number) })).csv)).toEqual(expected);
+    expect(phones((await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number })).csv)).toEqual(expected);
+  });
+
   it("écrit dans l’export du vivier les pays et les langues en clair, et le statut en mots (INTL-10)", async () => {
     const candidate = seedCandidate(1, { target_countries: JSON.stringify(["Émirats arabes unis", "Qatar"]), languages: JSON.stringify(["Arabic", "French"]), status: "shortlisted" });
     const pool = await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: [candidate.id as number] });
