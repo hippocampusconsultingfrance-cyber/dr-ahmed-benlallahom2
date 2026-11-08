@@ -39,6 +39,21 @@ describe("bundle de la fonction Vercel (dist/vercel/index.js, re-exporté par ap
   }, 30_000);
 
   /**
+   * EXPL-15: every module of the bundle is imported at the function's cold
+   * start, so a module importing pdfkit, @vercel/blob or svix at the top would
+   * load it before the first request again. Only an import() may load them.
+   */
+  it("ne charge pdfkit, @vercel/blob et svix qu'à la demande, par import()", async () => {
+    const onDemand = ["@vercel/blob", "pdfkit", "svix"];
+    const { metafile } = await build({ entryPoints: ["server/vercelEntry.ts"], platform: "node", packages: "external", bundle: true, format: "esm", write: false, metafile: true, logLevel: "silent" });
+    const imports = Object.entries(metafile.inputs).flatMap(([file, input]) => input.imports
+      .filter(({ path: specifier }) => onDemand.some(name => specifier === name || specifier.startsWith(`${name}/`)))
+      .map(({ path: specifier, kind }) => ({ file, specifier, kind })));
+    expect(imports.filter(({ kind }) => kind !== "dynamic-import")).toEqual([]);
+    expect([...new Set(imports.map(({ specifier }) => specifier))].sort()).toEqual(onDemand);
+  }, 30_000);
+
+  /**
    * CODE-13: the build no longer writes the versioned api/index.js, which held
    * a bundle of August. Vercel starts that file, which serves the handler of the
    * bundle the build has just written, whatever that bundle holds.
@@ -63,7 +78,9 @@ describe("bundle de la fonction Vercel (dist/vercel/index.js, re-exporté par ap
       expect(run.stderr).toBe("");
       expect(run.stdout).toBe("bundle du build : /api/health\n");
 
-      // The function ships that bundle even if Vercel's file tracing missed the re-export.
+      // includeFiles only makes sure the bundle file itself is shipped: the
+      // packages it imports come from Vercel's tracing of api/index.js, to be
+      // checked on a preview deployment.
       const vercel = JSON.parse(readFileSync(path.join(process.cwd(), "vercel.json"), "utf8"));
       expect(globSync(vercel.functions["api/index.js"].includeFiles, { cwd: directory })).toContain(outfile);
     } finally {
