@@ -147,7 +147,7 @@ function blankBrackets(text: string) {
  * folded and looked up once. Only texts the length of a language mention, and
  * emptied once full.
  */
-type ComparedText = { folded: string; core: string; codes: readonly RecruitmentLanguageCode[] };
+type ComparedText = { folded: string; core: string; codes: readonly RecruitmentLanguageCode[]; readonly others: readonly string[] };
 const COMPARED_TEXTS = new Map<string, ComparedText>();
 const COMPARED_TEXTS_LIMIT = 2_000;
 const COMPARED_TEXT_MAX_LENGTH = 200;
@@ -162,7 +162,9 @@ function comparedText(text: string): ComparedText {
     if (!codes.includes(entry.code) && namesLanguage(searched, entry)) codes.push(entry.code);
   }
   const core = blankBrackets(folded).replaceAll("\u0000", " ").replace(/\s+/g, " ").trim() || folded.trim();
-  const compared = { folded, core, codes: Object.freeze(codes) };
+  // The languages the table does not know it names outside brackets, by their codes: read when first asked for.
+  let others: readonly string[] | undefined;
+  const compared = { folded, core, codes: Object.freeze(codes), get others() { return (others ??= Object.freeze(otherLanguageCodes(core))); } };
   if (text.length <= COMPARED_TEXT_MAX_LENGTH) {
     if (COMPARED_TEXTS.size >= COMPARED_TEXTS_LIMIT) COMPARED_TEXTS.clear();
     COMPARED_TEXTS.set(text, compared);
@@ -251,55 +253,105 @@ const OTHER_LANGUAGE_CODES = [
 /** The languages their names are read in, from Intl.DisplayNames: the table's four. */
 const OTHER_LANGUAGE_LOCALES = ["fr", "en", "de", "zh"];
 /**
- * The names it gives none of, or other names than its: serbo-croate (« serbe
- * (latin) »), berbère, amazigh, tagalog (« filipino »); and the names these
- * languages are written under, which it gives in full or under another name:
- * Twi and Fante (« akan »), Luganda (« ganda »), Kirundi (« roundi »), Sotho
- * and Ndebele (« sotho du Sud », « North Ndebele »), créole (« créole
- * haïtien »), frison (« frison occidental »), gaélique (« gaélique écossais »),
- * Pulaar and Fulfulde (« peul »), Jula (« dioula »), Tshiluba (« luba-kasaï »),
- * Sorani (« Central Kurdish »), Kurmanji, Kapampangan, Bisaya, Mooré, the languages
- * of southern Africa under their own names (Setswana, isiZulu…), Hokkien,
- * and Cantonese, also where Intl.DisplayNames is missing, and as 广东话 or 粵語.
+ * The names it gives none of, or other names than its, each with the code (or
+ * the codes) of the language it names: serbo-croate (« serbe (latin) »),
+ * berbère, amazigh, tagalog (« filipino »); and the names these languages are
+ * written under, which it gives in full or under another name: Twi and Fante
+ * (« akan »), Luganda (« ganda »), Kirundi (« roundi »), Sotho and Ndebele
+ * (« sotho du Sud », « North Ndebele »), créole (« créole haïtien », and the
+ * creoles above), frison (« frison occidental »), gaélique (« gaélique
+ * écossais »), Pulaar and Fulfulde (« peul »), Jula (« dioula »), Tshiluba
+ * (« luba-kasaï »), Sorani (« Central Kurdish »), Kurmanji, Kapampangan,
+ * Bisaya, Mooré, the languages of southern Africa under their own names
+ * (Setswana, isiZulu…), Hokkien, and Cantonese, also where Intl.DisplayNames
+ * is missing, and as 广东话 or 粵語.
  */
-const OTHER_LANGUAGE_NAMES = [
-  "Serbo-croate", "Serbo-Croatian", "Serbokroatisch", "塞尔维亚-克罗地亚语", "Berbère", "Berber", "Berberisch", "柏柏尔语", "Amazigh", "Amazighe", "Tamazight",
-  "Tagalog", "他加禄语", "Kiswahili", "Sinhalese",
-  "Twi", "Asante Twi", "契维语", "Fante", "Fanti", "Luganda", "Kirundi", "Kiroundi", "Ikirundi", "Sotho", "Sesotho", "索托语", "Ndebele", "Ndébélé", "isiNdebele", "恩德贝勒语",
-  "Créole", "Creole", "Kreyòl", "Kreol", "Kreolisch", "克里奥尔语", "Frison", "Frisian", "Friesisch", "弗里西亚语", "Gaélique", "Gaelic", "Gälisch", "盖尔语",
-  "Pulaar", "Poular", "Fulfulde", "Peulh", "Jula", "Tshiluba", "Ciluba", "Sorani", "Kurmanji", "Kurmandji", "Kurmancî", "Kapampangan", "Bisaya", "Visayan",
-  "Setswana", "Siswati", "isiZulu", "isiXhosa", "Tshivenda", "Xitsonga", "Chichewa", "Kikongo", "Kinyarwanda", "Mooré", "Mossi",
-  "Cantonais", "Cantonese", "Kantonesisch", "粤语", "广东话", "廣東話", "粵語", "Hokkien",
+const OTHER_LANGUAGE_NAMES: ReadonlyArray<readonly [codes: string, ...names: string[]]> = [
+  ["hbs", "Serbo-croate", "Serbo-Croatian", "Serbokroatisch", "塞尔维亚-克罗地亚语"],
+  ["ber", "Berbère", "Berber", "Berberisch", "柏柏尔语", "Amazigh", "Amazighe", "Tamazight"],
+  ["tl", "Tagalog", "他加禄语"],
+  ["sw", "Kiswahili"],
+  ["si", "Sinhalese"],
+  ["tw", "Twi", "Asante Twi", "契维语"],
+  ["fat", "Fante", "Fanti"],
+  ["lg", "Luganda"],
+  ["rn", "Kirundi", "Kiroundi", "Ikirundi"],
+  ["st", "Sotho", "Sesotho", "索托语"],
+  ["nd nr", "Ndebele", "Ndébélé", "isiNdebele", "恩德贝勒语"],
+  ["ht mfe crs jam kea", "Créole", "Creole", "Kreyòl", "Kreol", "Kreolisch", "克里奥尔语"],
+  ["fy", "Frison", "Frisian", "Friesisch", "弗里西亚语"],
+  ["gd", "Gaélique", "Gaelic", "Gälisch", "盖尔语"],
+  ["fuc", "Pulaar", "Poular"],
+  ["ff", "Fulfulde", "Peulh"],
+  ["dyu", "Jula"],
+  ["lua", "Tshiluba", "Ciluba"],
+  ["ckb", "Sorani"],
+  ["kmr", "Kurmanji", "Kurmandji", "Kurmancî"],
+  ["pam", "Kapampangan"],
+  ["ceb", "Bisaya", "Visayan"],
+  ["tn", "Setswana"],
+  ["ss", "Siswati"],
+  ["zu", "isiZulu"],
+  ["xh", "isiXhosa"],
+  ["ve", "Tshivenda"],
+  ["ts", "Xitsonga"],
+  ["ny", "Chichewa"],
+  ["kg", "Kikongo"],
+  ["rw", "Kinyarwanda"],
+  ["mos", "Mooré", "Mossi"],
+  ["yue", "Cantonais", "Cantonese", "Kantonesisch", "粤语", "广东话", "廣東話", "粵語"],
+  ["nan", "Hokkien"],
 ];
 
-let otherLanguageNames: readonly string[] | undefined;
+/** Each name of a language the table does not know, folded, and the codes of the languages it names. */
+let otherLanguageNames: ReadonlyMap<string, readonly string[]> | undefined;
 
 /**
  * The names of the languages above, folded, what they say between brackets
  * aside (« luba-katanga (kiluba) », « Norwegisch (Bokmål) »), from two
- * letters in Chinese and three in the other scripts. Only the list above
- * where Intl.DisplayNames is missing (a browser or a Node.js built without
- * its data).
+ * letters in Chinese and three in the other scripts, each with the code of the
+ * language Intl.DisplayNames gives it for, or that the list above gives it:
+ * « cantonais », « Cantonese », « Kantonesisch » and « 粤语 » are all yue. Only
+ * the list above where Intl.DisplayNames is missing (a browser or a Node.js
+ * built without its data).
  */
 function readOtherLanguageNames() {
-  const names = new Set<string>();
-  const add = (name: string | undefined) => {
+  const names = new Map<string, string[]>();
+  const add = (name: string | undefined, code: string) => {
     const folded = foldLanguageText(name?.replace(/[(（][^)）]*[)）]/g, " ") ?? "").replace(/\s+/g, " ").trim();
     const letters = Array.from(folded).filter(character => LETTER_OR_DIGIT.test(character)).length;
-    if (letters >= (SPACED_SCRIPT.test(folded) ? 3 : 2)) names.add(folded);
+    if (letters < (SPACED_SCRIPT.test(folded) ? 3 : 2)) return;
+    const codes = names.get(folded);
+    if (!codes) names.set(folded, [code]);
+    else if (!codes.includes(code)) codes.push(code);
   };
   if (typeof Intl.DisplayNames === "function") {
     for (const locale of OTHER_LANGUAGE_LOCALES) {
       try {
         const display = new Intl.DisplayNames([locale], { type: "language", fallback: "none" });
-        for (const code of OTHER_LANGUAGE_CODES) add(display.of(code));
+        for (const code of OTHER_LANGUAGE_CODES) add(display.of(code), code);
       } catch {
         // A locale or a code this host cannot name: the others and the list below.
       }
     }
   }
-  OTHER_LANGUAGE_NAMES.forEach(add);
-  return Array.from(names);
+  for (const [codes, ...written] of OTHER_LANGUAGE_NAMES) for (const name of written) for (const code of codes.split(" ")) add(name, code);
+  return names;
+}
+
+/**
+ * The codes of the languages the table does not know this folded text names,
+ * by one of their names found whole in it (« yue » for « Cantonese » as for
+ * « cantonais courant », « gd » for « Gaelic »); none for any other text.
+ */
+function otherLanguageCodes(folded: string) {
+  otherLanguageNames ??= readOtherLanguageNames();
+  const codes: string[] = [];
+  otherLanguageNames.forEach((named, name) => {
+    if (!containsWords(folded, name)) return;
+    for (const code of named) if (!codes.includes(code)) codes.push(code);
+  });
+  return codes;
 }
 
 /**
@@ -308,9 +360,7 @@ function readOtherLanguageNames() {
  * « Golfe », « obligatoire »).
  */
 function namesOtherLanguage(text: string) {
-  otherLanguageNames ??= readOtherLanguageNames();
-  const folded = foldLanguageText(text);
-  return otherLanguageNames.some(name => containsWords(folded, name));
+  return comparedText(text).others.length > 0;
 }
 
 /**
@@ -405,16 +455,24 @@ function containsWords(folded: string, words: string) {
   return false;
 }
 
-/** Whether a name gives a language the table does not know by its words: those of one whole in the other's, what they say between brackets aside. */
-function givesByWords(name: ComparedText, required: ComparedText) {
-  return !required.codes.length && (containsWords(name.folded, required.core) || (!name.codes.length && containsWords(required.folded, name.core)));
+/**
+ * Whether a name gives a language the table does not know: by the code of a
+ * language both name (« Cantonese » or « 粤语 » for « Cantonais », the form
+ * recording it in the page's language, the AI in the CV's), or by its words,
+ * those of one whole in the other's, what they say between brackets aside.
+ */
+function givesOtherLanguage(name: ComparedText, required: ComparedText) {
+  if (required.codes.length) return false;
+  if (required.others.some(code => name.others.includes(code))) return true;
+  return containsWords(name.folded, required.core) || (!name.codes.length && containsWords(required.folded, name.core));
 }
 
 /**
  * Whether this name (one of a candidate's languages) gives a language of the
  * requirement: one of its codes (« Arabic » for « Arabe », not « English
  * (polished) » for « Polonais » nor « Germany » for « Allemand »), or, for a
- * language the table does not know, the words of one whole in the other's,
+ * language the table does not know, the code of one of its names
+ * (« Cantonese » for « Cantonais ») or the words of one whole in the other's,
  * what they say between brackets aside (« Wolof » for « Wolof courant » or
  * « Wolof (courant) », and the reverse; not « Wolofs »). An alternative
  * (« Wolof ou anglais ») is given by any of its languages.
@@ -422,8 +480,8 @@ function givesByWords(name: ComparedText, required: ComparedText) {
 export function givesRequiredLanguage(name: string, requirement: RecruitmentLanguageRequirement) {
   const compared = comparedText(name);
   if (compared.codes.some(code => requirement.codes.includes(code))) return true;
-  if (requirement.anyOf.length) return requirement.anyOf.some(option => givesByWords(compared, comparedText(option)));
-  return givesByWords(compared, comparedText(requirement.text));
+  if (requirement.anyOf.length) return requirement.anyOf.some(option => givesOtherLanguage(compared, comparedText(option)));
+  return givesOtherLanguage(compared, comparedText(requirement.text));
 }
 
 /**

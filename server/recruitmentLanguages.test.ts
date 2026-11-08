@@ -180,6 +180,26 @@ describe("langues du recrutement comparées par code (IA-02)", () => {
     expect(meetsRequiredLanguage(["Wolof (courant)"], wolof!)).toBe(true);
   });
 
+  it("reconnaît une langue hors table sous chacun de ses noms, par le code de la langue qu’il nomme, comme une langue de la table (IA-02)", () => {
+    // The form records the language in the page's language, the AI reads it in the CV's, the admin writes the mission in French.
+    const met = (required: string, names: string[]) => recruitmentLanguageRequirements(required).filter(requirement => meetsRequiredLanguage(names, requirement)).length;
+    for (const [required, names] of [
+      ["Cantonais – Anglais", ["English", "Cantonese"]], ["Cantonais – Anglais", ["English", "粤语"]], ["Cantonais – Anglais", ["English", "Kantonesisch"]],
+      ["Cantonais / Anglais", ["English", "Cantonese"]], ["粤语 – 英语", ["English", "Cantonais"]], ["Chinois – Cantonais", ["Chinese", "Cantonese"]],
+      ["Gaélique – Anglais", ["English", "Gaelic"]], ["Frison – Anglais", ["English", "Frisian"]], ["Dioula – Français", ["French", "Dyula"]],
+      ["Twi – Anglais", ["English", "Twi"]], ["Sorani – Arabe", ["Arabic", "Central Kurdish"]],
+    ] as const) {
+      // Before: one of the two requirements, its words not found in the other name (8 language points of 15).
+      expect(met(required, [...names]), `${required} / ${names.join(", ")}`).toBe(2);
+    }
+    // English only, or another language of no common name: one requirement of the two.
+    expect(met("Cantonais – Anglais", ["English"])).toBe(1);
+    expect(met("Cantonais – Anglais", ["English", "Hakka"])).toBe(1);
+    expect(met("Gaélique – Anglais", ["English", "Irish"])).toBe(1);
+    const [cantonese] = recruitmentLanguageRequirements("Cantonais");
+    expect(["Cantonese", "粤语", "广东话", "Mandarin", "Chinese"].filter(name => givesRequiredLanguage(name, cantonese!))).toEqual(["Cantonese", "粤语", "广东话"]);
+  });
+
   it("garde avec sa langue ce qui la qualifie après un tiret : une exigence, une préférence, une variété ou une région, en français, anglais, allemand et chinois (IA-02)", () => {
     // Before: « Anglais – obligatoire » was two requirements, English and « obligatoire », met by nobody.
     const qualified: Array<[string, string]> = [

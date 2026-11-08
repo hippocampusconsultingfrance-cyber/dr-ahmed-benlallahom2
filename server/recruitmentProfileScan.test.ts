@@ -240,6 +240,45 @@ describe("Candidatures — profil de matching et filtres de la liste (IA-02)", (
     for (const language of ["-", "()", "an"]) expect(await filtered(language), language).toEqual([]);
   });
 
+  it("reconnaît une langue hors table sous chacun de ses noms, déclarée dans la langue de la page : le profil, la mission et le filtre Langue la comparent par son code (IA-02)", async () => {
+    const dossier = (lastName: string, languages: string[]) => ({
+      tracking_id: `CVCODE${lastName}`, first_name: "Dr", last_name: lastName, email: `${lastName.toLowerCase()}@test.local`, specialty: "Anesthésie-réanimation",
+      target_countries: JSON.stringify(["Émirats arabes unis"]), languages: JSON.stringify(languages), analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION,
+      cv_file_key: `recruitment/cv/${lastName}.pdf`, cv_original_name: "cv.pdf", cv_mime_type: "application/pdf", cv_size_bytes: 1000,
+    });
+    // The form records « Other language: Cantonese » in English; the admin writes the mission in French.
+    memory.seed(cvApplications, [
+      dossier("Cantonese", ["English", "Cantonese"]),
+      dossier("Yueyu", ["English", "粤语"]),
+      dossier("Cantonais", ["English", "Cantonais"]),
+      dossier("Chinacanto", ["Chinese", "Cantonese"]),
+      dossier("Gaelic", ["English", "Gaelic"]),
+      dossier("Frisian", ["English", "Frisian"]),
+      dossier("Dyula", ["French", "Dyula"]),
+      dossier("Englishonly", ["English"]),
+    ]);
+    const filtered = async (language: string) => lastNames((await caller().admin.recruitment.list({ language })).items).sort();
+    const profiled = async (language: string) => {
+      const [profile] = memory.seed(recruitmentMatchProfiles, [{ name: language, minimum_score: 0, required_languages: JSON.stringify([language]), active: 1 }]);
+      return lastNames((await caller().admin.recruitment.list({ profileId: profile!.id as number })).items).sort();
+    };
+    const missioned = async (language: string) => {
+      const [brief] = memory.seed(clientBriefs, [{ brief_id: `BRIEF-CODE-${memory.rows(clientBriefs).length}`, organization_name: "Hôpital", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie-réanimation", country: "Émirats arabes unis", required_languages: language }]);
+      const result = await caller().admin.clientBriefs.candidates({ briefId: brief!.id as number, limit: 50 });
+      return result.candidates.filter(candidate => candidate.match.breakdown.languages === 15).map(candidate => candidate.lastName).sort();
+    };
+    // Before: only « Cantonais » written in French met « Cantonais – Anglais »; the others had 8 language points of 15.
+    const expected: Array<[string, string[]]> = [
+      ["Cantonais – Anglais", ["Cantonais", "Cantonese", "Yueyu"]], ["Cantonais / Anglais", ["Cantonais", "Cantonese", "Yueyu"]],
+      ["Chinois – Cantonais", ["Chinacanto"]], ["Gaélique – Anglais", ["Gaelic"]], ["Frison – Anglais", ["Frisian"]], ["Dioula – Français", ["Dyula"]],
+    ];
+    for (const [language, names] of expected) {
+      expect(await filtered(language), `filtre ${language}`).toEqual(names);
+      expect(await profiled(language), `profil ${language}`).toEqual(names);
+      expect(await missioned(language), `mission ${language}`).toEqual(names);
+    }
+  });
+
   it("ne lit les langues tirées du CV, et leurs citations, que pour un profil qui exige des langues (IA-02)", async () => {
     seedCandidates(0, 3, 3);
     const [byCountry, byLanguage] = memory.seed(recruitmentMatchProfiles, [
