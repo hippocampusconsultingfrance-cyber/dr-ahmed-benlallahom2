@@ -152,7 +152,7 @@ describe("GDPRRequestForm — retour (A11Y-17)", () => {
     view.language = language;
     view.error = null;
     const back = gdprRequestCopy[language].back;
-    const html = renderToStaticMarkup(createElement(Router, { ssrPath: "/gdpr" }, createElement(GDPRRequestForm, { backHref: "/" })));
+    const html = renderToStaticMarkup(createElement(Router, { ssrPath: "/gdpr", children: createElement(GDPRRequestForm, { backHref: "/" }) }));
 
     expect(html).toMatch(new RegExp(`<a href="/"[^>]*><svg[^>]*>.*?</svg>${back}</a>`));
     expect(html).not.toMatch(new RegExp(`<button[^>]*>(<svg[^>]*>.*?</svg>)?${back}</button>`));
