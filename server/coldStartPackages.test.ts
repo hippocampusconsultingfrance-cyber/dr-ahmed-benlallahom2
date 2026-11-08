@@ -9,7 +9,9 @@ import { listen } from "./testSupport/candidateUploadApp";
  * before the first request is answered, whatever that request does.
  *
  * Each mock counts the loads of its package (Vitest runs a module's factory
- * once, when it is first imported) and gives the real one.
+ * once, when it is first imported, and not again after vi.resetModules()) and
+ * gives the real one. The tests of a package that must stay unloaded therefore
+ * run before any test that loads it.
  */
 const loads = vi.hoisted(() => ({ pdfkit: 0, blob: 0, svix: 0 }));
 vi.mock("pdfkit", async importOriginal => {
@@ -32,7 +34,7 @@ vi.mock("svix", async importOriginal => {
 vi.mock("./resendWebhookEvents", () => ({ recordResendEmailEvent: vi.fn(async () => ({ duplicate: false })) }));
 
 const { generateInvoicePDF } = await import("./invoice");
-const { storagePut } = await import("./storage");
+const { storageDelete, storageGetSignedUrl, storageListObjects, storagePut, storagePutOnce } = await import("./storage");
 const { registerResendWebhookRoute } = await import("./routes/resendWebhook");
 const { resolveInvoiceSeller } = await import("./invoiceSeller");
 
@@ -74,32 +76,37 @@ describe("paquets chargés à la première utilisation, pas au démarrage à fro
     expect(loads).toEqual({ pdfkit: 0, blob: 0, svix: 0 });
   });
 
-  it("charge pdfkit et @vercel/blob à la première facture, une seule fois pour les suivantes", async () => {
+  // Before any invoice, while the SDK has not been loaded yet.
+  it("ne charge pas @vercel/blob quand aucun stockage n'est configuré", async () => {
+    vi.stubEnv("BLOB_READ_WRITE_TOKEN", "");
+    const cv = Buffer.from("%PDF-1.4");
+    await expect(storagePut("candidate-documents/cv.pdf", cv)).rejects.toMatchObject({ message: "storage_upload_failed", code: "storage_config_missing" });
+    await expect(storagePutOnce("invoices/FAC-2026-000077-APTCOLDSTART1.pdf", cv)).rejects.toMatchObject({ message: "storage_upload_failed", code: "storage_config_missing" });
+    const configMissing = "Private storage config missing: set BLOB_READ_WRITE_TOKEN";
+    await expect(storageGetSignedUrl("candidate-documents/cv.pdf")).rejects.toThrow(configMissing);
+    await expect(storageDelete(["candidate-documents/cv.pdf"])).rejects.toThrow(configMissing);
+    await expect(storageListObjects("candidate-documents/")).rejects.toThrow(configMissing);
+    expect(loads.blob).toBe(0);
+  });
+
+  it("charge pdfkit et @vercel/blob à la première facture", async () => {
     vi.stubEnv("BLOB_READ_WRITE_TOKEN", "blob-test-token");
     const first = await generateInvoicePDF(invoice, resolveInvoiceSeller({}));
     expect(first.buffer.subarray(0, 5).toString()).toBe("%PDF-");
     expect(first.url).toBe("https://blob.test/invoices/FAC-2026-000077-APTCOLDSTART1.pdf");
     expect(loads).toMatchObject({ pdfkit: 1, blob: 1 });
 
+    // Once loaded, the packages serve the next invoices and uploads.
     const again = await generateInvoicePDF({ ...invoice, invoiceNumber: "FAC-2026-000078" }, resolveInvoiceSeller({}));
-    await storagePut("candidate-documents/cv.pdf", Buffer.from("%PDF-1.4"), "application/pdf");
     expect(again.url).toBe("https://blob.test/invoices/FAC-2026-000078-APTCOLDSTART1.pdf");
-    expect(loads).toMatchObject({ pdfkit: 1, blob: 1 });
+    const cv = await storagePut("candidate-documents/cv.pdf", Buffer.from("%PDF-1.4"), "application/pdf");
+    expect(cv.url).toMatch(/^https:\/\/blob\.test\/candidate-documents\/cv_[0-9a-f]{8}\.pdf$/);
   });
 
-  it("ne charge pas @vercel/blob quand aucun stockage n'est configuré", async () => {
-    vi.resetModules();
-    loads.blob = 0;
-    vi.stubEnv("BLOB_READ_WRITE_TOKEN", "");
-    const { storagePut: unconfiguredPut } = await import("./storage");
-    await expect(unconfiguredPut("candidate-documents/cv.pdf", Buffer.from("%PDF-1.4"))).rejects.toMatchObject({ message: "storage_upload_failed", code: "storage_config_missing" });
-    expect(loads.blob).toBe(0);
-  });
-
-  it("charge svix au premier évènement Resend, une seule fois pour les suivants", async () => {
+  it("charge svix au premier évènement Resend", async () => {
     vi.stubEnv("RESEND_WEBHOOK_SECRET", `whsec_${Buffer.from("cold-start-test-secret").toString("base64")}`);
     vi.spyOn(console, "error").mockImplementation(() => undefined);
-    expect((await unsignedResendEvent()).status).toBe(400);
+    expect(loads.svix).toBe(0);
     expect((await unsignedResendEvent()).status).toBe(400);
     expect(loads.svix).toBe(1);
   });
