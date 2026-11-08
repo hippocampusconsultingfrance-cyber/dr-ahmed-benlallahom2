@@ -3,6 +3,7 @@ import { appointments } from "../drizzle/schema";
 import { getDb } from "./db";
 import { mutationRowCount } from "./dbMutation";
 import { closeUnsentAppointmentFulfillment, enqueueAppointmentFulfillment, enqueueStripeRefundNotices, processAppointmentFulfillmentNow } from "./appointmentFulfillment";
+import { logError } from "./_core/logError";
 import { notifyOwner } from "./_core/notification";
 import { formatPatientAmount, sendUnconfirmablePaymentEmail } from "./_core/notifications";
 import { emailLanguageFor } from "./emailLanguage";
@@ -37,10 +38,6 @@ export type CheckoutCompletionResult = {
 export type UnconfirmablePaymentReason = "session_mismatch" | "already_paid_other_session" | "hold_released";
 
 const INVALID_WEBHOOK = { error: "Invalid webhook" } as const;
-
-function safeErrorName(error: unknown) {
-  return error instanceof Error ? error.name : "UnknownError";
-}
 
 function paymentIntentIdOf(payment: { payment_intent?: unknown }): string | null {
   const value = payment.payment_intent;
@@ -105,7 +102,7 @@ export async function processFulfillmentBestEffort(
   const work = processNow(appointmentId, { deadlineAt: Date.now() + timeoutMs }).then(
     result => ({ processed: result.processed, timedOut: false, failed: false }),
     error => {
-      console.error("[AppointmentFulfillment] Immediate processing failed; left for scheduled retry", safeErrorName(error));
+      logError("[AppointmentFulfillment] Immediate processing failed; left for scheduled retry", error);
       return { processed: 0, timedOut: false, failed: true };
     },
   );
@@ -503,7 +500,7 @@ export async function handleChargeRefunded(charge: ChargePayload, now = new Date
   console.log("Stripe refund recorded for appointment", { trackingId: appointment.trackingId });
   // As for a dashboard refund: post-payment emails still waiting for a retry are no longer sent (EXPL-02).
   await closeUnsentAppointmentFulfillment(appointment.id, now)
-    .catch(error => console.error("[Stripe] Pending post-payment emails could not be closed", error instanceof Error ? error.name : "UnknownError"));
+    .catch(error => logError("[Stripe] Pending post-payment emails could not be closed", error));
 
   // A queuing failure answers 500: the redelivery finds the refund recorded and queues them again.
   await sendStripeRefundNotices(appointment.id);

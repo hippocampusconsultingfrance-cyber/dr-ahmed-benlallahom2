@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { getDb } from "../db";
 import { isAuthorizedVercelCronRequest } from "./cronAuth";
 import { getEnvironmentConfigurationStatus, type ConfigurationWarning, type ProductionRequiredEnvironmentVariable } from "./env";
+import { logError } from "./logError";
 
 /**
  * GET /api/health : sonde de disponibilité pour un service de supervision externe
@@ -80,7 +81,7 @@ async function checkDatabase({ getDatabase = getDb as () => Promise<QueryableDat
     }
   } catch (error) {
     // Jamais de détail d'erreur dans la réponse publique (chaîne de connexion, hôte…).
-    console.error("[Health] Database check failed:", error instanceof Error ? error.name : "unknown error");
+    logError("[Health] Database check failed", error);
     value = { status: "error", latencyMs: null };
   }
   cachedDatabaseCheck = { at: startedAt, value };

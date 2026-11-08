@@ -8,6 +8,7 @@ vi.mock("@neondatabase/serverless", async importOriginal => ({
   neon: vi.fn(() => neonDriver.client),
 }));
 
+import { neon } from "@neondatabase/serverless";
 import { appointments, availabilitySlots, candidateAccounts, clientBriefCandidates, clientBriefs, cvApplications, cvCandidateCertifications, users } from "../drizzle/schema";
 import { getDb, LANGUAGE_COLUMNS_MAX_RETRY_DELAY_MS, LANGUAGE_COLUMNS_RETRY_DELAY_MS, resetDbForTests } from "./db";
 import { ensureLanguageColumns, LANGUAGE_COLUMN_DDL, LANGUAGE_COLUMN_TABLES, MISSION_COLUMN_DDL, MISSION_COLUMNS, resetLanguageColumnsMemo, RUNTIME_COLUMNS } from "./languageColumns";
@@ -93,6 +94,13 @@ function neonDatabase(options: { missing?: string[]; alter?: (table: string) => 
 
 const lockTimeout = Object.assign(new Error("canceling statement due to lock timeout"), { code: "55P03" });
 const notOwner = Object.assign(new Error("must be owner of table appointments"), { code: "42501" });
+
+/** Label, error name and SQLSTATE of each failed check console.error logged (logError's JSON lines). */
+const checkFailures = (error: { mock: { calls: unknown[][] } }) => error.mock.calls.map(([line]) => {
+  const { label, name, code } = JSON.parse(String(line)) as Record<string, string | undefined>;
+  return [label, name, code ?? ""];
+});
+const CHECK_FAILED = "[Database] Language columns check failed";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -242,8 +250,7 @@ describe("getDb() : seules les requêtes sur ces tables attendent les colonnes",
     lockWait.reject(lockTimeout);
     const columnMissing = { status: "rejected", reason: { cause: { code: "42703" } } };
     expect(await settled).toMatchObject([columnMissing, columnMissing]);
-    expect(error).toHaveBeenCalledTimes(1);
-    expect(error).toHaveBeenCalledWith("[Database] Language columns check failed:", "Error", "55P03");
+    expect(checkFailures(error)).toEqual([[CHECK_FAILED, "Error", "55P03"]]);
 
     // Within the delay, no new check or ALTER: the queries go straight through.
     await expect(db.select().from(appointments)).rejects.toThrow();
@@ -435,9 +442,9 @@ describe("getDb() : seules les requêtes sur ces tables attendent les colonnes",
       vi.setSystemTime(Date.now() + LANGUAGE_COLUMNS_MAX_RETRY_DELAY_MS);
     }
     expect(sent.filter(text => alteredTable(text))).toHaveLength(6);
-    expect(error.mock.calls).toEqual([
-      ["[Database] Language columns check failed:", "Error", "55P03"],
-      ["[Database] Language columns check failed:", "Error", ""],
+    expect(checkFailures(error)).toEqual([
+      [CHECK_FAILED, "Error", "55P03"],
+      [CHECK_FAILED, "Error", ""],
     ]);
 
     // Back to normal: logged once.
@@ -460,9 +467,9 @@ describe("getDb() : seules les requêtes sur ces tables attendent les colonnes",
     }
     // The owner sees the 42501 (role not owner) even though a network error came
     // first (Drizzle wraps both in an Error; only the SQLSTATE tells them apart).
-    expect(error.mock.calls).toEqual([
-      ["[Database] Language columns check failed:", "Error", ""],
-      ["[Database] Language columns check failed:", "Error", "42501"],
+    expect(checkFailures(error)).toEqual([
+      [CHECK_FAILED, "Error", ""],
+      [CHECK_FAILED, "Error", "42501"],
     ]);
     expect(log).not.toHaveBeenCalled();
 
@@ -476,6 +483,19 @@ describe("getDb() : seules les requêtes sur ces tables attendent les colonnes",
     vi.stubEnv("DATABASE_URL", "");
     neonDatabase();
     await expect(getDb()).resolves.toBeNull();
+  });
+
+  it("chaîne de connexion invalide : pas de base, et ni la chaîne ni son mot de passe au journal (EXPL-11)", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    // The real neon(), whose message repeats the connection string it refuses.
+    const { neon: realNeon } = await vi.importActual<typeof import("@neondatabase/serverless")>("@neondatabase/serverless");
+    vi.mocked(neon).mockImplementationOnce(realNeon);
+    vi.stubEnv("DATABASE_URL", "postgresql://app_user:synthetic-db-password@db host.example.test/app");
+    await expect(getDb()).resolves.toBeNull();
+    expect(warn).toHaveBeenCalledTimes(1);
+    const [line] = warn.mock.calls[0] as [string];
+    expect(JSON.parse(line)).toEqual({ label: "[Database] Failed to connect", name: "Error", message: "Database connection string provided to `neon()` is not a valid URL." });
+    expect(line).not.toMatch(/synthetic-db-password|app_user|example\.test/);
   });
 });
 
@@ -545,7 +565,7 @@ describe("colonnes des missions (0003) créées à l’exécution", () => {
     await expect(db.select().from(clientBriefCandidates)).rejects.toThrow();
     expect([...missing]).toEqual(["client_brief_candidates"]);
     await expect(db.select().from(cvCandidateCertifications)).resolves.toEqual([]);
-    expect(error).toHaveBeenCalledWith("[Database] Language columns check failed:", "Error", "55P03");
+    expect(checkFailures(error)).toContainEqual([CHECK_FAILED, "Error", "55P03"]);
 
     lock = "free";
     vi.setSystemTime(Date.now() + LANGUAGE_COLUMNS_RETRY_DELAY_MS);

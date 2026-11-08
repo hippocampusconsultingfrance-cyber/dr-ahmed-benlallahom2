@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import type { TrpcContext } from "./context";
+import { logError, runWithRequestLog } from "./logError";
 import { isAdminMfaVerified } from "../adminMfa";
 import { CHECK_VIOLATION, FOREIGN_KEY_VIOLATION, postgresConstraintName, UNIQUE_VIOLATION } from "../databaseConstraints";
 import { postgresErrorCode } from "../languageColumns";
@@ -42,11 +43,6 @@ export function internalErrorReference(): string {
   return randomUUID().slice(0, 8);
 }
 
-/** Log line of an unexpected error: name and message, without the query parameters (personal data). */
-export function internalErrorSummary(error: unknown): string {
-  return error instanceof Error ? `${error.name}: ${error.message.split("\nparams:")[0].slice(0, 500)}` : "UnknownError";
-}
-
 /**
  * Unexpected errors (anything that is not a deliberate TRPCError: database,
  * provider, programming errors) reach the client as a generic French message
@@ -59,13 +55,14 @@ export function formatTrpcErrorShape<TShape extends { message: string; data: { c
   shape: TShape,
   error: { code: string; cause?: unknown },
   reference: () => string = internalErrorReference,
+  req?: TrpcContext["req"],
 ): ErrorShapeWithReason<TShape> {
   if (error.cause instanceof PublicErrorReason) return { ...shape, data: { ...shape.data, reason: error.cause.reason, ...(error.cause.date ? { date: error.cause.date } : {}) } };
   // INTL-05: a field refused for its characters (shared/textInput.ts), by its stable reason rather than the validation's JSON.
   if (error.code === "BAD_REQUEST" && refusesTextInputCharacters(error.cause)) return { ...shape, message: TEXT_INPUT_INVALID_CHARACTERS_MESSAGE, data: { ...shape.data, reason: TEXT_INPUT_INVALID_CHARACTERS } };
   if (error.code !== "INTERNAL_SERVER_ERROR" || error.cause === undefined) return shape as ErrorShapeWithReason<TShape>;
   const ref = reference();
-  console.error(`[tRPC] Internal error ref=${ref}`, internalErrorSummary(error.cause));
+  logError("[tRPC] Internal error", error.cause, { ref, req });
   return {
     ...shape,
     message: `${GENERIC_INTERNAL_ERROR_MESSAGE} (réf. ${ref})`,
@@ -95,8 +92,11 @@ export function databaseConstraintRefusal(error: TRPCError): TRPCError | null {
 
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
-  errorFormatter: ({ shape, error }) => formatTrpcErrorShape(shape, error),
+  errorFormatter: ({ shape, error, ctx }) => formatTrpcErrorShape(shape, error, internalErrorReference, ctx?.req),
 });
+
+// The lines logged during a call carry its request's x-vercel-id (EXPL-11).
+const requestLog = t.middleware(({ ctx, next }) => runWithRequestLog(ctx.req, () => next()));
 
 const databaseConstraintRefusals = t.middleware(async ({ next }) => {
   const result = await next();
@@ -105,7 +105,7 @@ const databaseConstraintRefusals = t.middleware(async ({ next }) => {
   return result;
 });
 
-const procedure = t.procedure.use(databaseConstraintRefusals);
+const procedure = t.procedure.use(requestLog).use(databaseConstraintRefusals);
 
 export const router = t.router;
 export const publicProcedure = procedure;

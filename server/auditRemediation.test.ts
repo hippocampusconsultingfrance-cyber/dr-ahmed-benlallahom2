@@ -101,7 +101,9 @@ describe("remédiations de l’audit externe", () => {
       const result = await postEvent({ id: "evt_audit_completed", object: "event", type: "checkout.session.completed", data: { object: { id: "cs_audit", object: "checkout.session", payment_status: "paid" } } });
       expect(result.status).toBe(500);
       expect(JSON.parse(result.text)).toEqual({ received: false });
-      expect(consoleError).toHaveBeenCalledWith("Stripe webhook processing failed", "Error");
+      expect(consoleError).toHaveBeenCalledTimes(1);
+      // One JSON line (logError): the message is kept for the diagnosis, its email address left out.
+      expect(JSON.parse(consoleError.mock.calls[0]![0] as string)).toEqual({ label: "Stripe webhook processing failed", name: "Error", message: "connection reset while confirming APT-SECRET-42 for [email]" });
       expect(JSON.stringify(consoleError.mock.calls)).not.toContain("zoe@example.test");
     } finally {
       consoleError.mockRestore();

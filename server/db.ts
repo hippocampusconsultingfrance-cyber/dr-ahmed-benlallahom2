@@ -3,6 +3,7 @@ import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 import { InsertUser, users } from "../drizzle/schema";
 import { isConfiguredAdminOpenId } from './_core/env';
+import { logError } from "./_core/logError";
 import { ensureLanguageColumns, LOCK_NOT_AVAILABLE, postgresErrorCode, waitForLanguageColumns } from "./languageColumns";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -61,7 +62,7 @@ function languageColumnsReady(ddl: Parameters<typeof ensureLanguageColumns>[0]):
     }
     if (languageColumnsLoggedFailures.has(`${name} ${code}`)) return;
     languageColumnsLoggedFailures.add(`${name} ${code}`);
-    console.error("[Database] Language columns check failed:", name, code);
+    logError("[Database] Language columns check failed", error);
   });
 }
 
@@ -74,7 +75,8 @@ export async function getDb() {
       const ddl = drizzle(client);
       _db = drizzle({ client: waitForLanguageColumns(client, () => languageColumnsReady(ddl)) });
     } catch (error) {
-      console.warn("[Database] Failed to connect:", error);
+      // neon() names the connection string, password included, in its message: logError leaves it out.
+      logError("[Database] Failed to connect", error, { level: "warn" });
       _db = null;
     }
   }
@@ -142,7 +144,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       set: updateSet,
     });
   } catch (error) {
-    console.error("[Database] Failed to upsert user:", error);
+    logError("[Database] Failed to upsert user", error);
     throw error;
   }
 }

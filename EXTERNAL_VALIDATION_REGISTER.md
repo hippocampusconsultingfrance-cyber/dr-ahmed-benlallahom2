@@ -2,7 +2,7 @@
 
 Ce registre distingue les contrôles réalisables automatiquement de ceux qui exigent un appareil réel, un client tiers, une boîte de réception autorisée ou une session d’administration. Il évite qu’un test local soit présenté comme une validation d’usage réelle.
 
-> Une ligne documentée dans `todo.md` signifie que son protocole existe. Elle ne peut être considérée comme validée opérationnellement qu’après ajout de la date, de la version, du responsable et de la preuve dans ce registre.
+> Une ligne de l’ancien `todo.md` (archivé dans `docs/archive/todo.md`, historique, il ne fait pas foi) ne vaut pas validation. Un contrôle n’est considéré comme validé opérationnellement qu’après ajout de la date, de la version, du responsable et de la preuve dans ce registre.
 
 | Contrôle | Prérequis | Preuve minimale à archiver | Statut |
 |---|---|---|---|

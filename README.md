@@ -54,10 +54,13 @@ shared/            types et constantes partagés client/serveur
 drizzle/           schéma et migrations SQL (source de vérité : drizzle/MIGRATION_SOURCE_OF_TRUTH.md)
 scripts/           pré-rendu SEO, régression visuelle, budgets de performance, contrôles de la CI
 docs/audits/       rapports d'audit
+docs/EXPLOITATION.md  référence d'exploitation : tâches, variables, alertes, procédures
+docs/archive/      rapports et notes d'août 2026, gardés pour l'historique (ne font pas foi)
 ```
 
 ## Déploiement (Vercel)
 
+- Exploitation courante (horaires des tâches, variables, alertes, webhook Stripe, panne Resend, Google Drive, document bloqué, retour arrière) : [docs/EXPLOITATION.md](docs/EXPLOITATION.md).
 - La production est servie par Vercel ; la configuration (build, en-têtes, réécritures, crons) est dans `vercel.json`.
 - L'installation utilise `pnpm install --frozen-lockfile` : toute modification de dépendance doit être commitée avec son `pnpm-lock.yaml`.
 - Les pages publiques sont pré-rendues avec leur `<title>`, description, canonical et balises Open Graph ; les routes privées et inconnues passent par `/_spa-fallback` (noindex).

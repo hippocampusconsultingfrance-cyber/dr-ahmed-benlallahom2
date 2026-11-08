@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, inArray, isNotNull, lt, or, sql } from "drizzle-orm";
 import { candidateAccounts, candidateDocuments, candidateSessions, cvApplications, recruitmentAuditLogs } from "../drizzle/schema";
 import { getDb } from "./db";
+import { logError } from "./_core/logError";
 import { notifyOwner } from "./_core/notification";
 import {
   CandidateErasureBusyError,
@@ -134,7 +135,8 @@ export async function runRecruitmentRetentionCleanup(
       if (error instanceof CandidateErasureBusyError) deferred.push(application.trackingId);
       else {
         failed.push(application.trackingId);
-        console.error("[RecruitmentRetention] erasure failed", { applicationId: application.id, error: error instanceof Error ? error.message : "unknown" });
+        // Under the reference the owner's report lists; Drizzle's message would hold the candidate's address.
+        logError("[RecruitmentRetention] erasure failed", error, { ref: application.trackingId });
       }
     }
   }

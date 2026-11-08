@@ -23,6 +23,11 @@ const documentJobs = vi.hoisted(() => ({
   processDueCandidateDocumentAnalysisJobs: vi.fn(async () => ({ processed: 0, completed: 0, retried: 0, needsReview: 0, released: 0 })),
 }));
 vi.mock("./candidateDocumentProcessing", () => documentJobs);
+// The Resend transport, for the one test that sends a reminder through the real notifications module.
+const resend = vi.hoisted(() => ({ send: vi.fn() }));
+vi.mock("resend", () => ({ Resend: vi.fn(() => ({ emails: { send: resend.send } })) }));
+const security = vi.hoisted(() => ({ logSecurityEvent: vi.fn(async (_event: Record<string, unknown>) => undefined) }));
+vi.mock("./candidateSecurity", () => security);
 
 import { patientEmailIdempotencyKey } from "./appointmentFulfillment";
 import {
@@ -140,6 +145,37 @@ describe("envoi des rappels", () => {
 
     expect(await sendDueAppointmentReminders(DAILY_REMINDER_WINDOW, new Date(NOW.getTime() + 60_000))).toEqual({ reminded: 1, sent: 1, failed: 0 });
     expect(memory.rows(appointments)[0]).toMatchObject({ reminder_sent: 1 });
+  });
+
+  it("journalise le refus de Resend pour quota sur une ligne JSON portant son code, sans l’adresse du patient (EXPL-11)", async () => {
+    vi.stubEnv("RESEND_API_KEY", "re_test_reminder_quota");
+    const { sendReminderEmail } = await vi.importActual<typeof import("./_core/notifications")>("./_core/notifications");
+    notifications.sendReminderEmail.mockImplementationOnce(async (...args) => {
+      await sendReminderEmail(...args as Parameters<typeof sendReminderEmail>);
+      return undefined;
+    });
+    resend.send.mockResolvedValueOnce({ data: null, error: { name: "daily_quota_exceeded", statusCode: 429, message: "You have reached your daily email sending quota for camille.patient@example.test." }, headers: {} });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    seedAppointment(6, { customer_email: "camille.patient@example.test" });
+    try {
+      expect(await sendDueAppointmentReminders(DAILY_REMINDER_WINDOW, NOW)).toEqual({ reminded: 1, sent: 0, failed: 1 });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+
+    expect(resend.send).toHaveBeenCalledWith(expect.objectContaining({ to: ["camille.patient@example.test"] }), expect.anything());
+    expect(consoleError.mock.calls).toEqual([[expect.any(String)]]);
+    expect(JSON.parse(consoleError.mock.calls[0]![0] as string)).toEqual({
+      label: "[Reminder] Delivery failed",
+      name: "Error",
+      code: "daily_quota_exceeded",
+      message: "reminder_email_failed",
+      cause: "PostPaymentEmailError: reminder_email_rejected:You have reached your daily email sending quota for [email].",
+    });
+    expect(JSON.stringify(consoleError.mock.calls)).not.toContain("camille");
+    // The first sign the owner reads: the security event of the « Sécurité » tab.
+    expect(security.logSecurityEvent).toHaveBeenCalledWith(expect.objectContaining({ category: "resend_quota_exceeded", metadata: { quota: "daily", emailKind: "post_payment" } }));
+    expect(memory.rows(appointments)[0]).toMatchObject({ reminder_sent: 0 });
   });
 
   it("essaie de nouveau un rappel refusé sous une autre clé une fois l’adresse corrigée, même de sa seule casse : Resend refuserait sinon la clé réutilisée avec un autre destinataire (409, ABUS-03)", async () => {

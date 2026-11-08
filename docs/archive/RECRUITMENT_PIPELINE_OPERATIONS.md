@@ -1,5 +1,7 @@
 # Exploitation du pipeline de recrutement intelligent
 
+> **Archive, ne fait plus foi (EXPL-19).** Le traitement des CV n'a pas lieu toutes les cinq minutes mais une fois par jour (`/api/scheduled/recruitment-processing`, 01:15 UTC, `vercel.json`), et les dossiers échus ne sont pas archivés mais effacés (`/api/scheduled/recruitment-retention`). Référence : [`docs/EXPLOITATION.md`](../EXPLOITATION.md).
+
 ## Cycle de traitement
 
 Un CV est d’abord soumis à une validation technique : extension, type MIME, signature binaire, taille et cohérence du conteneur DOCX. Il est conservé en **quarantaine privée** tant que cette validation et la récupération par le worker ne sont pas terminées. Le worker planifié traite les jobs d’analyse toutes les cinq minutes, par petits lots et avec au plus trois tentatives.

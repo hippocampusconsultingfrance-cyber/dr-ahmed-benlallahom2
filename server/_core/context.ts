@@ -4,6 +4,7 @@ import { clerkClient, getAuth } from "@clerk/express";
 import * as db from "../db";
 import { isAdminMfaVerified } from "../adminMfa";
 import { isConfiguredAdminOpenId } from "./env";
+import { logError } from "./logError";
 
 export type TrpcContext = {
   req: CreateExpressContextOptions["req"];
@@ -40,7 +41,7 @@ export async function createContext(
 
       mfaVerified = await isAdminMfaVerified(opts.req, auth.userId);
     } catch (error) {
-      console.error("[Clerk] Unable to synchronize authenticated user", error);
+      logError("[Clerk] Unable to synchronize authenticated user", error, { req: opts.req });
     }
   }
 

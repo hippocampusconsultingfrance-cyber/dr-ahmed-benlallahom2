@@ -34,6 +34,7 @@ import {
   sendCandidatePortalAccessEmail,
   type ResendDeliveryFailureCode,
 } from "./_core/notifications";
+import { logError } from "./_core/logError";
 import { PublicErrorReason, publicProcedure, router } from "./_core/trpc";
 import { candidateRequestIp, verifyCandidateTurnstile } from "./candidateTurnstile";
 import { candidateDeviceLabel, readableCandidateDeviceLabel } from "./candidateDeviceLabel";
@@ -84,7 +85,7 @@ async function candidateDatabaseOperation<T>(operation: () => Promise<T>): Promi
     return await operation();
   } catch (error) {
     if (error instanceof TRPCError) throw error;
-    console.error("candidate_database_operation_failed", error);
+    logError("candidate_database_operation_failed", error);
     throw candidateRefusal("INTERNAL_SERVER_ERROR", "Le service candidat est temporairement indisponible. Veuillez réessayer dans quelques instants.", "candidate_service_unavailable");
   }
 }
@@ -180,7 +181,7 @@ async function logCandidateEmailDelivery(input: {
       ? { providerMessageId: input.providerMessageId }
       : deliveryUncertain ? { deliveryStatus: "unknown" } : undefined,
   }).catch((error: unknown) => {
-    console.error("candidate_email_delivery_audit_failed", error instanceof Error ? error.name : "UnknownError");
+    logError("candidate_email_delivery_audit_failed", error);
   });
 }
 
@@ -196,7 +197,7 @@ async function recordCandidateActivationDelivery(
     candidateEmail,
     trackingId: application.trackingId,
   }, delivery)).catch((error: unknown) => {
-    console.error("candidate_activation_delivery_trace_failed", error instanceof Error ? error.name : "UnknownError");
+    logError("candidate_activation_delivery_trace_failed", error);
   });
 }
 
@@ -389,7 +390,7 @@ export const candidatePortalRouter = router({
             }).where(and(eq(candidateAccounts.id, candidateId), eq(candidateAccounts.verificationTokenHash, verificationTokenHash))));
           }
           await recordCandidateActivationDelivery(db, matchingApplication, email, { status: "failed", providerEmailId: null, failureCode });
-          console.error("candidate_verification_email_failed", error instanceof Error ? error.name : "UnknownError");
+          logError("candidate_verification_email_failed", error);
           await logCandidateEmailDelivery({ candidateId, category: "candidate_verification_delivery", outcome: "failed", failureCode, ipHash });
         }
         await logSecurityEvent({ actorKind: "candidate", actorReference: String(candidateId), category: "candidate_account_created", outcome: "allowed", ipHash });
@@ -457,7 +458,7 @@ export const candidatePortalRouter = router({
             }).where(and(eq(candidateAccounts.id, candidate.id), eq(candidateAccounts.verificationTokenHash, tokenHash)));
           }
           await recordCandidateActivationDelivery(db, application, email, { status: "failed", providerEmailId: null, failureCode });
-          console.error("candidate_verification_resend_failed", error instanceof Error ? error.name : "UnknownError");
+          logError("candidate_verification_resend_failed", error);
           await logSecurityEvent({
             actorKind: "candidate",
             actorReference: String(candidate.id),
@@ -571,7 +572,7 @@ export const candidatePortalRouter = router({
       pairState = networkState.blocked ? null : await recordPersistentRateLimitAttempt({ ...CANDIDATE_LOGIN_POLICY.emailNetwork, subject: pairSubject });
       emailState = networkState.blocked || pairState?.blocked ? null : await recordPersistentRateLimitAttempt({ ...CANDIDATE_LOGIN_POLICY.email, subject: email });
     } catch (error) {
-      console.error("candidate_login_throttle_unavailable", error instanceof Error ? error.name : "UnknownError");
+      logError("candidate_login_throttle_unavailable", error);
       throw candidateRefusal("SERVICE_UNAVAILABLE", "La connexion est temporairement indisponible. Veuillez réessayer dans quelques instants.", "candidate_service_unavailable");
     }
     if (networkState.blocked || pairState?.blocked) {
@@ -680,7 +681,7 @@ export const candidatePortalRouter = router({
             passwordResetExpiresAt: candidate.passwordResetExpiresAt,
           }).where(and(eq(candidateAccounts.id, candidate.id), eq(candidateAccounts.passwordResetTokenHash, tokenHash)));
         }
-        console.error("candidate_reset_email_failed", error instanceof Error ? error.name : "UnknownError");
+        logError("candidate_reset_email_failed", error);
         await logCandidateEmailDelivery({ candidateId: candidate.id, category: "candidate_password_reset_delivery", outcome: "failed", failureCode, ipHash });
       }
       await logSecurityEvent({ actorKind: "candidate", actorReference: String(candidate.id), category: "candidate_password_reset_requested", outcome: "allowed", ipHash });

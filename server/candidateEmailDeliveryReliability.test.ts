@@ -99,9 +99,11 @@ describe("fiabilité des e-mails du portail candidat", () => {
     await requestReset();
 
     const errors = vi.mocked(console.error).mock.calls;
-    expect(errors).toEqual(expect.arrayContaining([
-      ["candidate_verification_email_failed", "CandidatePortalAccessEmailError"],
-      ["candidate_reset_email_failed", "CandidatePortalAccessEmailError"],
+    // One JSON line each (logError): the error's name, Resend's error name as its code, never the address Resend's message repeats.
+    const failure = { name: "CandidatePortalAccessEmailError", code: "validation_error", message: "Resend candidate access email failed: provider rejected request" };
+    expect(errors.map(([line]) => JSON.parse(String(line)))).toEqual(expect.arrayContaining([
+      { label: "candidate_verification_email_failed", ...failure },
+      { label: "candidate_reset_email_failed", ...failure },
     ]));
     expect(JSON.stringify(errors)).not.toContain(EMAIL);
   });

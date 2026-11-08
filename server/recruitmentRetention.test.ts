@@ -189,6 +189,22 @@ describe("rétention des candidatures : effacement réel à l’échéance", () 
     expect(state.notifications[0]!.content).toContain(dossier.trackingId);
   });
 
+  it("journalise un effacement refusé par la base sous la référence du bilan, sans l’adresse que la requête cherchait (EXPL-11)", async () => {
+    const dossier = seedApplication(1, new Date(NOW.getTime() - DAY));
+    memory.failNext(/^select .* from "candidate_accounts"/, 1, "57014");
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      expect(await runRecruitmentRetentionCleanup("vercel-cron", { now: NOW, dependencies })).toMatchObject({ erased: 0, failed: 1 });
+      expect(state.notifications[0]!.content).toContain(dossier.trackingId);
+      const lines = consoleError.mock.calls.map(([line]) => JSON.parse(String(line)) as Record<string, string>);
+      expect(lines).toEqual([expect.objectContaining({ label: "[RecruitmentRetention] erasure failed", ref: dossier.trackingId, code: "57014" })]);
+      expect(lines[0]!.message).toMatch(/^Failed query: select .* from "candidate_accounts"/);
+      expect(JSON.stringify(consoleError.mock.calls)).not.toMatch(/candidat1@test\.local|params:/);
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
   it("reporte un dossier dont l’analyse est en cours", async () => {
     const dossier = seedApplication(1, new Date(NOW.getTime() - DAY));
     memory.seed(cvProcessingJobs, [{ application_id: dossier.id, job_status: "running", started_at: new Date() }]);

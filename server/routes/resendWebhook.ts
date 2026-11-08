@@ -1,7 +1,7 @@
 import express, { type Express } from "express";
 import { internalErrorSummary } from "../_core/trpc";
 import { recordResendEmailEvent } from "../resendWebhookEvents";
-import { safeErrorName } from "./routeHelpers";
+import { logError } from "../_core/logError";
 
 // svix is loaded at the first Resend event, not at the Vercel function's cold
 // start (EXPL-15). The load is kept; a failed one is tried again at the next event.
@@ -50,7 +50,7 @@ export function registerResendWebhookRoute(app: Express) {
       const { duplicate } = await recordResendEmailEvent({ providerEventId, event: { type: event.type, created_at: event.created_at, data: event.data }, payload });
       res.status(200).json(duplicate ? { received: true, duplicate: true } : { received: true });
     } catch (error) {
-      console.error("Resend webhook verification failed:", safeErrorName(error));
+      logError("Resend webhook verification failed", error, { req });
       res.status(400).send("Invalid Resend webhook");
     }
   });

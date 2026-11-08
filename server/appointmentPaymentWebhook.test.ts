@@ -1,4 +1,4 @@
-import type { SQL } from "drizzle-orm";
+import { DrizzleQueryError, type SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -261,6 +261,26 @@ describe("envoi immédiat borné dans le temps", () => {
     const outcome = await processFulfillmentBestEffort(1, 5, () => new Promise((_resolve, reject) => setTimeout(() => reject(new Error("late")), 20)));
     expect(outcome.timedOut).toBe(true);
     await new Promise(resolve => setTimeout(resolve, 40));
+  });
+
+  it("journalise l’échec de l’envoi immédiat sur une ligne JSON, avec le SQLSTATE et sans les paramètres de la requête (EXPL-11)", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const timeout = Object.assign(new Error("canceling statement due to statement timeout"), { code: "57014" });
+    const refused = new DrizzleQueryError('update "appointment_fulfillment_jobs" set "last_error" = $1 where "appointment_fulfillment_jobs"."id" = $2', ["confirmation_email_rejected:patient.synthetic@example.test", 7], timeout);
+
+    const outcome = await processFulfillmentBestEffort(1, 1_000, async () => { throw refused; });
+
+    expect(outcome).toEqual({ processed: 0, timedOut: false, failed: true });
+    expect(consoleError.mock.calls).toEqual([[expect.any(String)]]);
+    expect(JSON.parse(consoleError.mock.calls[0]![0] as string)).toEqual({
+      label: "[AppointmentFulfillment] Immediate processing failed; left for scheduled retry",
+      name: "Error",
+      code: "57014",
+      message: 'Failed query: update "appointment_fulfillment_jobs" set "last_error" = $1 where "appointment_fulfillment_jobs"."id" = $2',
+      cause: "Error: canceling statement due to statement timeout",
+    });
+    expect(JSON.stringify(consoleError.mock.calls)).not.toContain("patient.synthetic");
+    consoleError.mockRestore();
   });
 
   it("retourne le nombre de jobs traités quand l’envoi aboutit à temps", async () => {
