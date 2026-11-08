@@ -37,7 +37,7 @@ export default function FAQPage() {
           </section>
 
           <aside className="mt-6 flex gap-3 rounded-2xl border border-amber-400/30 bg-amber-400/5 p-5 text-sm leading-relaxed text-muted-foreground"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-300" aria-hidden="true" /><p>{content.note}</p></aside>
-          <div className="mt-6 flex items-center gap-2 text-sm text-muted-foreground"><ShieldCheck className="h-4 w-4 text-primary" aria-hidden="true" /><span>Hippocampus Consulting · revue humaine obligatoire pour le recrutement</span></div>
+          <div className="mt-6 flex items-center gap-2 text-sm text-muted-foreground"><ShieldCheck className="h-4 w-4 text-primary" aria-hidden="true" /><span>{content.humanReview}</span></div>
         </div>
       </main>
       <Footer />

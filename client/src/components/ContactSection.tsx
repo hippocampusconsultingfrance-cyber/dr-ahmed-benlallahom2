@@ -75,12 +75,13 @@ export default function ContactSection() {
 
   return (
     <section id="contact" className="contact-section py-28 sm:py-36 relative">
-      {/* Background subtle */}
+      {/* Background subtle: decorative, as on the GDPR form (A11Y-14). */}
       <div className="absolute inset-0 opacity-10">
         <img
           src="/assets/consulting-network.svg"
           loading="lazy"
-          alt="Consultation médicale et accompagnement professionnel par le Dr. Ahmed Ben Lallahom"
+          alt=""
+          aria-hidden="true"
           className="w-full h-full object-cover"
         />
       </div>

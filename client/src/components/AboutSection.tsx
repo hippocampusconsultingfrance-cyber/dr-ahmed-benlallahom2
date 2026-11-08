@@ -82,7 +82,8 @@ export default function AboutSection() {
 
           {/* Content — spans 7 cols */}
           <div className="lg:col-span-7 lg:pl-8 section-heading">
-            <span className="eyebrow-label mb-5">Clinical leadership</span>
+            {/* English kicker on every page, its wording left to the owner (PUB-15): read with an English voice (A11Y-13). */}
+            <span lang="en" className="eyebrow-label mb-5">Clinical leadership</span>
             <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-bold text-foreground mb-8">
               {content.about.title}
             </h2>

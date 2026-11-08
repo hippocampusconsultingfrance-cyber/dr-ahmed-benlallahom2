@@ -61,7 +61,7 @@ const bookingWindowMessages = {
 
 export const bookingContent = {
   fr: {
-    title: "Réserver une Consultation",
+    title: "Réserver une consultation",
     subtitle: "Conseil en santé - 30 minutes",
     form: {
       name: "Nom complet",

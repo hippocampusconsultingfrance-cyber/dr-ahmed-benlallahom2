@@ -2,12 +2,38 @@ import { useEffect, useState } from "react";
 import { siteConfig } from "@/data/site-config";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { scrollToSectionTop } from "@/lib/scrollToSection";
+import { cn } from "@/lib/utils";
 import { Link } from "wouter";
 import { ArrowUpRight, BadgeCheck, Clock3, Languages } from "lucide-react";
 
+/** Time each role of the hero stays on screen. */
+export const HERO_ROLE_INTERVAL_MS = 3000;
+
+/**
+ * Index of the hero role shown: each role once, then back to the first, where the title stays;
+ * none changes when the visitor asks for reduced motion (A11Y-07). The title still updates by
+ * itself, with no pause: only the three roles shown at once would meet WCAG 2.2.2 strictly.
+ */
+export function useHeroRoleIndex(count: number) {
+  const [roleIndex, setRoleIndex] = useState(0);
+
+  useEffect(() => {
+    if (count < 2 || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    let shown = 0;
+    const interval = window.setInterval(() => {
+      shown += 1;
+      setRoleIndex(shown % count);
+      if (shown >= count) window.clearInterval(interval);
+    }, HERO_ROLE_INTERVAL_MS);
+    return () => window.clearInterval(interval);
+  }, [count]);
+
+  return roleIndex;
+}
+
 export default function HeroSection() {
   const { content, language } = useLanguage();
-  const [roleIndex, setRoleIndex] = useState(0);
+  const roleIndex = useHeroRoleIndex(content.hero.roles.length);
 
   const trustCopy = {
     fr: ["Expertise clinique certifiée", "Consultation de 30 minutes", "Accompagnement international"],
@@ -16,20 +42,14 @@ export default function HeroSection() {
     zh: ["专业临床经验", "30分钟咨询", "国际化支持"],
   }[language] ?? ["Certified clinical expertise", "30-minute consultation", "International support"];
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setRoleIndex((prev) => (prev + 1) % content.hero.roles.length);
-    }, 3000);
-    return () => clearInterval(interval);
-  }, [content.hero.roles.length]);
-
   return (
     <section id="hero" className="relative min-h-screen flex items-center overflow-hidden bg-background">
-      {/* Background Image */}
+      {/* Background Image: decorative, the h1 already names the doctor (A11Y-14). */}
       <div className="absolute inset-0">
         <img
           src="/assets/medical-hero.svg"
-          alt="Dr. Ahmed Ben Lallahom - Anesthésiste-Réanimateur et Entrepreneur en Santé"
+          alt=""
+          aria-hidden="true"
           className="w-full h-full object-cover sm:object-right"
           loading="eager"
           fetchPriority="high"
@@ -77,14 +97,25 @@ export default function HeroSection() {
             {content.hero.greeting}
           </h1>
 
-          {/* Animated role with cyan accent */}
-          <div className="h-10 sm:h-12 mb-8 overflow-hidden">
-            <p
-              key={roleIndex}
-              className="text-xl sm:text-2xl lg:text-3xl font-medium text-primary animate-in fade-in slide-in-from-bottom-2 duration-500"
-            >
-              {content.hero.roles[roleIndex]}
-            </p>
+          {/* Animated role with cyan accent (A11Y-07): the roles share one grid cell, so that the block keeps
+              the height of the longest one, wrapped on a phone rather than cut, and the page does not move
+              when the role changes. Screen readers read the three roles at once, separated by commas, which
+              they pause on (a « · » can be read out as « middle dot »). */}
+          <div className="min-h-10 sm:min-h-12 mb-8">
+            <p className="sr-only">{content.hero.roles.join(", ")}</p>
+            <div className="grid" aria-hidden="true">
+              {content.hero.roles.map((role, index) => (
+                <p
+                  key={index}
+                  className={cn(
+                    "col-start-1 row-start-1 text-xl sm:text-2xl lg:text-3xl font-medium text-primary",
+                    index === roleIndex ? "animate-in fade-in slide-in-from-bottom-2 duration-500" : "invisible",
+                  )}
+                >
+                  {role}
+                </p>
+              ))}
+            </div>
           </div>
 
           {/* Description */}
@@ -106,7 +137,8 @@ export default function HeroSection() {
             </button>
           </div>
 
-          <div className="trust-strip" aria-label="Professional assurances">
+          {/* No aria-label: on a div without a role, it is not allowed (axe aria-prohibited-attr), and was in English on every page. */}
+          <div className="trust-strip">
             <div className="trust-strip-item">
               <BadgeCheck aria-hidden="true" className="h-4 w-4" />
               <span>{trustCopy[0]}</span>

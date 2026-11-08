@@ -116,6 +116,7 @@ describe("titres, urgence et liens de la FAQ (A11Y-15, PUB-14, A11Y-17)", () => 
     const link = screen.getByRole("link", { name: label });
     expect(link.getAttribute("href")).toBe("/recruitment");
     expect(screen.queryByRole("button", { name: "Hippocampus Consulting" })).toBeNull();
-    expect(screen.getByRole("link", { name: getFaqContent(language).booking }).getAttribute("href")).toBe("/booking");
+    // Celui de la page, l'en-tête ayant le sien, du même nom en français (« Réserver une consultation »).
+    expect(within(screen.getByRole("main")).getByRole("link", { name: getFaqContent(language).booking }).getAttribute("href")).toBe("/booking");
   });
 });

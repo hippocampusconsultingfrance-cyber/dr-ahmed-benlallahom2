@@ -26,7 +26,7 @@ export default function AdminRoot() {
   if (!publishableKey) {
     // Variable de build : sans elle, seul l'espace admin est indisponible, le site public reste en ligne.
     return (
-      <main className="min-h-screen bg-background flex items-center justify-center px-4">
+      <main lang="fr" className="min-h-screen bg-background flex items-center justify-center px-4">
         <div role="alert" className="max-w-md text-center">
           <h1 className="text-2xl font-bold text-foreground mb-4">Administration indisponible</h1>
           <p className="text-muted-foreground">
@@ -47,7 +47,7 @@ export default function AdminRoot() {
     >
       <Suspense
         fallback={
-          <div className="min-h-screen bg-background px-4 py-16">
+          <div lang="fr" className="min-h-screen bg-background px-4 py-16">
             <div className="mx-auto max-w-3xl">
               <PublicContentSkeleton cards={1} label="Chargement de l’accès administrateur" />
             </div>
