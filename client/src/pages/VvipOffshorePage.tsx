@@ -595,7 +595,7 @@ export default function VvipOffshorePage() {
                       <div className="rounded-xl bg-primary/10 p-3 text-primary w-fit">
                         <Icon className="h-6 w-6" />
                       </div>
-                      <h3 className="mt-4 font-display text-lg text-foreground">{item.title}</h3>
+                      <h2 className="mt-4 font-display text-lg text-foreground">{item.title}</h2>
                       <p className="mt-2 text-xs leading-5 text-muted-foreground">{item.desc}</p>
                     </div>
                   );

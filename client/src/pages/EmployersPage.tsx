@@ -367,7 +367,7 @@ export default function EmployersPage() {
                       <Icon className="h-6 w-6" />
                     </div>
                     <div>
-                      <h3 className="font-display text-lg text-foreground">{item.title}</h3>
+                      <h2 className="font-display text-lg text-foreground">{item.title}</h2>
                       <p className="mt-1 text-sm text-muted-foreground">{item.desc}</p>
                     </div>
                   </div>
