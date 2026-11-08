@@ -8,8 +8,6 @@ import { elementsOf, renderStateful, resetStatefulHooks } from "@/testing/statef
 // des revenus, messages de remboursement, données d’une personne).
 
 vi.mock("react", async importOriginal => (await import("@/testing/statefulRender")).withStatefulHooks(await importOriginal()));
-// The status badges are written in the admin's language (AdminStatusBadge, ADM-07): French here.
-vi.mock("@/contexts/LanguageContext", () => ({ useLanguage: () => ({ language: "fr" }) }));
 
 const view = vi.hoisted(() => ({
   // The revenue of the current month, the one of the previous month being 100.00.

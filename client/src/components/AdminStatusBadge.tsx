@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { useLanguage } from "@/contexts/LanguageContext";
 import type { UserLanguage } from "@/contexts/userPreferences";
 import { cn } from "@/lib/utils";
 import { APPOINTMENT_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "./appointmentStatusLabels";
@@ -73,8 +72,11 @@ export function adminStatusTone(kind: AdminStatusKind, status: string): AdminBad
   return (ADMIN_STATUS_TONES[kind] as Record<string, AdminBadgeTone>)[status] ?? "neutral";
 }
 
-/** The badge of a payment, an appointment, a health question, a testimonial or a GDPR request, in the admin's language. */
-export default function AdminStatusBadge({ kind, status, className }: { kind: AdminStatusKind; status: string; className?: string }) {
-  const { language } = useLanguage();
+/**
+ * The badge of a payment, an appointment, a health question, a testimonial or a
+ * GDPR request. In French by default, whatever the site's language: the tabs
+ * that show it are written in French (ADM-07); a translated tab passes its own.
+ */
+export default function AdminStatusBadge({ kind, status, language = "fr", className }: { kind: AdminStatusKind; status: string; language?: UserLanguage; className?: string }) {
   return <AdminBadge tone={adminStatusTone(kind, status)} className={className}>{adminStatusLabel(kind, status, language)}</AdminBadge>;
 }

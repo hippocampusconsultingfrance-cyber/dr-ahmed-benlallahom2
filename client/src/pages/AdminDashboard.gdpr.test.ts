@@ -9,8 +9,6 @@ import { elementsOf, renderStateful, resetStatefulHooks } from "@/testing/statef
 // pour appeler leur action comme un clic.
 
 vi.mock("react", async importOriginal => (await import("@/testing/statefulRender")).withStatefulHooks(await importOriginal()));
-// The status badges are written in the admin's language (AdminStatusBadge, ADM-07): French here.
-vi.mock("@/contexts/LanguageContext", () => ({ useLanguage: () => ({ language: "fr" }) }));
 
 type MutationOptions = { onSuccess?: (result: never) => unknown; onError?: (error: Error) => unknown };
 type ButtonProps = { children?: ReactNode; onClick?: () => void; disabled?: boolean; type?: string; "aria-describedby"?: string };
@@ -344,6 +342,31 @@ describe("RGPD-12 — rechercher une personne par email", () => {
     const late = { ...found, gdprRequests: [{ ...found.gdprRequests[0]!, createdAt: new Date("2026-10-25T23:30:00Z") }] };
     const html = render(createElement(PersonalDataResult, { data: late as never, onChanged: vi.fn() }));
     expect(html).toContain("GJEANNE</span> · 26/10/2026 · Accès");
+  });
+
+  it("date ses messages, questions, rendez-vous et candidatures au jour de Paris, et dit une question à traiter « À répondre », comme leurs onglets (ADM-07)", () => {
+    const previous = process.env.TZ;
+    // A browser on UTC: 23:30 there is already 00:30 the next day in Paris.
+    process.env.TZ = "UTC";
+    try {
+      const late = new Date("2026-09-14T23:30:00Z");
+      const data = {
+        ...found,
+        contactMessages: [{ ...found.contactMessages[0]!, createdAt: late }],
+        medicalQuestions: [{ ...found.medicalQuestions[0]!, status: "submitted", createdAt: late }],
+        appointments: [{ ...found.appointments[0]!, appointmentDate: late }],
+        recruitment: { ...found.recruitment, applications: [{ ...found.recruitment.applications[0]!, createdAt: late }] },
+      };
+      const html = render(createElement(PersonalDataResult, { data: data as never, onChanged: vi.fn() }));
+      expect(html).toContain("CJEANNE</span> · 15/09/2026 · ");
+      expect(html).toContain("QMED-JEANNE</span> · 15/09/2026 · À répondre · ");
+      expect(html).toContain("APTJEANNE</span> · 15/09/2026 · ");
+      expect(html).toContain("déposée le 15/09/2026");
+      expect(html).not.toContain("14/09/2026");
+    } finally {
+      if (previous === undefined) delete process.env.TZ;
+      else process.env.TZ = previous;
+    }
   });
 
   it("exporte le JSON préparé par le serveur", () => {

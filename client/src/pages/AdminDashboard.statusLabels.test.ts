@@ -8,8 +8,6 @@ import { renderStateful, resetStatefulHooks } from "@/testing/statefulRender";
 // « Remboursé », « Annulé », pas les valeurs « refunded », « cancelled » de la base.
 
 vi.mock("react", async importOriginal => (await import("@/testing/statefulRender")).withStatefulHooks(await importOriginal()));
-// The status badges are written in the admin's language (AdminStatusBadge, ADM-07): French here.
-vi.mock("@/contexts/LanguageContext", () => ({ useLanguage: () => ({ language: "fr" }) }));
 
 const view = vi.hoisted(() => ({ items: [] as Array<Record<string, unknown>> }));
 

@@ -14,8 +14,6 @@ import { elementsOf, renderStateful, resetStatefulHooks } from "@/testing/statef
 // réponse quand une question contient une longue chaîne.
 
 vi.mock("react", async importOriginal => (await import("@/testing/statefulRender")).withStatefulHooks(await importOriginal()));
-// The status badges are written in the admin's language (AdminStatusBadge, ADM-07): French here.
-vi.mock("@/contexts/LanguageContext", () => ({ useLanguage: () => ({ language: "fr" }) }));
 
 type MutationOptions = { onSuccess?: (result: any) => unknown };
 const state = vi.hoisted(() => {

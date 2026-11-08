@@ -17,8 +17,6 @@ const view = vi.hoisted(() => ({
   toasts: [] as Array<[string, string]>,
 }));
 
-// The status badges are written in the admin's language (AdminStatusBadge, ADM-07): French here.
-vi.mock("@/contexts/LanguageContext", () => ({ useLanguage: () => ({ language: "fr" }) }));
 vi.mock("@/lib/trpc", async () => {
   const { useMutation } = await import("@tanstack/react-query");
   const fakeMutation = (name: string) => (options: object) => useMutation({

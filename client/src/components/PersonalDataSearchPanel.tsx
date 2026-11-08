@@ -12,17 +12,16 @@ import { downloadJsonFile } from "./jsonFileDownload";
 import { formatGdprRequestDate, GDPR_REQUEST_STATUS_LABELS, GDPR_REQUEST_TYPE_LABELS } from "./gdprRequestAdmin";
 import { formatAdminAmount } from "./adminAmount";
 import { APPOINTMENT_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "./appointmentStatusLabels";
+import { adminStatusLabel } from "./AdminStatusBadge";
+import { formatAdminDate } from "./adminDateFormat";
 
 export type PersonalData = inferRouterOutputs<AppRouter>["admin"]["personalData"]["find"];
 type ErasureReport = inferRouterOutputs<AppRouter>["admin"]["personalData"]["erase"];
-
-const MEDICAL_QUESTION_STATUS_LABELS: Record<string, string> = { submitted: "Nouvelle", drafting: "Brouillon", answered: "Répondue", published: "Publiée", rejected: "Classée sans suite" };
 
 export const PERSONAL_DATA_ERASURE_CONFIRMATION = "Effacer les données de cette personne ? Seront supprimés : ses messages de contact et ses questions santé (avec leur journal). Ses rendez-vous passés, annulés ou abandonnés seront anonymisés (identité, email, téléphone et motif effacés ; date, montant, statut et facture conservés). Les rendez-vous à venir encore en cours (confirmés, en attente de paiement ou payés et à rembourser) et les demandes RGPD restent, ainsi que les dossiers de recrutement (à effacer séparément). Action irréversible.";
 
 const candidateErasureConfirmation = (trackingId: string) => `Effacer définitivement le dossier candidat ${trackingId} ? Comme depuis l’onglet « Candidatures » : le CV et ses copies (stockage et Google Drive), les analyses IA, les relances et historiques d’emails, la présence dans les missions, ainsi que l’espace candidat lié, ses sessions et ses documents. Seule une preuve d’effacement anonymisée est conservée. Action irréversible.`;
 
-const formatDate = (value: Date | string) => new Date(value).toLocaleDateString("fr-FR");
 const excerpt = (text: string, length = 140) => (text.length > length ? `${text.slice(0, length)}…` : text);
 
 export function describePersonalDataErasure(report: ErasureReport) {
@@ -118,16 +117,16 @@ export function PersonalDataResult({ data, onChanged }: { data: PersonalData; on
       <p className="text-sm text-muted-foreground">{describePersonalDataFound(data)}</p>
       <div className="grid gap-5 md:grid-cols-2">
         <Group title="Messages de contact" count={data.totals.contactMessages} shown={data.contactMessages.length}>
-          {data.contactMessages.map(message => <li key={message.id}><span className="font-mono text-xs">{message.trackingId}</span> · {formatDate(message.createdAt)} · {excerpt(message.message)}</li>)}
+          {data.contactMessages.map(message => <li key={message.id}><span className="font-mono text-xs">{message.trackingId}</span> · {formatAdminDate(message.createdAt)} · {excerpt(message.message)}</li>)}
         </Group>
         <Group title="Questions santé" count={data.totals.medicalQuestions} shown={data.medicalQuestions.length}>
-          {data.medicalQuestions.map(question => <li key={question.id}><span className="font-mono text-xs">{question.trackingId}</span> · {formatDate(question.createdAt)} · {MEDICAL_QUESTION_STATUS_LABELS[question.status] ?? question.status} · {excerpt(question.question)}</li>)}
+          {data.medicalQuestions.map(question => <li key={question.id}><span className="font-mono text-xs">{question.trackingId}</span> · {formatAdminDate(question.createdAt)} · {adminStatusLabel("medicalQuestion", question.status)} · {excerpt(question.question)}</li>)}
         </Group>
         <Group title="Demandes RGPD" count={data.totals.gdprRequests} shown={data.gdprRequests.length}>
           {data.gdprRequests.map(request => <li key={request.id}><span className="font-mono text-xs">{request.trackingId}</span> · {formatGdprRequestDate(request.createdAt)} · {GDPR_REQUEST_TYPE_LABELS[request.requestType] ?? request.requestType} · {GDPR_REQUEST_STATUS_LABELS[request.status] ?? request.status}</li>)}
         </Group>
         <Group title="Rendez-vous" count={data.totals.appointments} shown={data.appointments.length}>
-          {data.appointments.map(booking => <li key={booking.id}><span className="font-mono text-xs">{booking.trackingId}</span> · {formatDate(booking.appointmentDate)} · {APPOINTMENT_STATUS_LABELS[booking.appointmentStatus] ?? booking.appointmentStatus} · {PAYMENT_STATUS_LABELS[booking.paymentStatus] ?? booking.paymentStatus} · {formatAdminAmount(booking.finalPrice)}{booking.invoiceNumber ? ` · facture ${booking.invoiceNumber}` : ""}</li>)}
+          {data.appointments.map(booking => <li key={booking.id}><span className="font-mono text-xs">{booking.trackingId}</span> · {formatAdminDate(booking.appointmentDate)} · {APPOINTMENT_STATUS_LABELS[booking.appointmentStatus] ?? booking.appointmentStatus} · {PAYMENT_STATUS_LABELS[booking.paymentStatus] ?? booking.paymentStatus} · {formatAdminAmount(booking.finalPrice)}{booking.invoiceNumber ? ` · facture ${booking.invoiceNumber}` : ""}</li>)}
         </Group>
       </div>
 
@@ -138,7 +137,7 @@ export function PersonalDataResult({ data, onChanged }: { data: PersonalData; on
           <ul className="mt-3 space-y-2">
             {data.recruitment.applications.map(application => (
               <li key={application.id} className="flex flex-wrap items-center gap-3">
-                <span className="text-muted-foreground"><span className="font-mono text-xs text-foreground">{application.trackingId}</span> · déposée le {formatDate(application.createdAt)}</span>
+                <span className="text-muted-foreground"><span className="font-mono text-xs text-foreground">{application.trackingId}</span> · déposée le {formatAdminDate(application.createdAt)}</span>
                 <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" disabled={eraseApplication.isPending} onClick={() => { if (window.confirm(candidateErasureConfirmation(application.trackingId))) eraseApplication.mutate({ id: application.id }); }}>
                   <Trash2 className="mr-2 h-4 w-4" />
                   Effacer le dossier candidat

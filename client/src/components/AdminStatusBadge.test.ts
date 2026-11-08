@@ -1,23 +1,17 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { contrastRatio, oklchToLinearRgb, relativeLuminance, type Oklch } from "@/lib/contrast";
 
 // ADM-07 — un badge de statut unique pour l’administration : les statuts des
 // paiements, rendez-vous, questions santé, témoignages et demandes RGPD en
-// mots, en français et en anglais selon la langue de l’administration.
+// mots, en français dans les onglets écrits en français quelle que soit la
+// langue du site, en anglais quand un onglet traduit le demande.
 // A11Y-12 — ses teintes se lisent à 4,5:1 au moins, en thème clair (texte -700
 // sur fond -50) comme en thème sombre (texte -300 sur sa teinte, posée sur la
 // carte ou le fond des pages), mesurées sur les classes que le badge rend.
 
-const view = vi.hoisted(() => ({ language: "fr" as "fr" | "en" | "de" | "zh" }));
-vi.mock("@/contexts/LanguageContext", () => ({ useLanguage: () => ({ language: view.language }) }));
-
 const { default: AdminStatusBadge, AdminBadge, ADMIN_BADGE_TONES, adminStatusLabel, adminStatusTone } = await import("./AdminStatusBadge");
-
-beforeEach(() => {
-  view.language = "fr";
-});
 
 describe("ADM-07 — libellés des statuts", () => {
   it.each([
@@ -44,10 +38,9 @@ describe("ADM-07 — libellés des statuts", () => {
     expect(adminStatusTone("payment", "disputed")).toBe("neutral");
   });
 
-  it("rend le libellé dans la langue de l’administration", () => {
+  it("rend le libellé en français sans langue donnée, en anglais quand on le lui demande", () => {
     expect(renderToStaticMarkup(createElement(AdminStatusBadge, { kind: "payment", status: "refunded" }))).toMatch(/>Remboursé<\/span>$/);
-    view.language = "en";
-    const html = renderToStaticMarkup(createElement(AdminStatusBadge, { kind: "payment", status: "refunded", className: "shrink-0" }));
+    const html = renderToStaticMarkup(createElement(AdminStatusBadge, { kind: "payment", status: "refunded", language: "en", className: "shrink-0" }));
     expect(html).toMatch(/>Refunded<\/span>$/);
     expect(html).toContain("shrink-0");
     expect(html).toContain(ADMIN_BADGE_TONES.accent.split(" ")[0]);

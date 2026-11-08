@@ -11,8 +11,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 type Question = { id: number; trackingId: string; firstName: string; lastName: string; email: string; phone: string; question: string; status: string; createdAt: string; publicationConsent: number; adminResponse: string | null; publicQuestion: string | null; publicResponse: string | null; responseSentAt: string | null; rejectionReason: string | null };
 const view = vi.hoisted(() => ({ requests: [] as Array<Record<string, unknown>>, questions: [] as Question[], reads: [] as number[] }));
 
-// The status badges are written in the admin's language (AdminStatusBadge, ADM-07): French here.
-vi.mock("@/contexts/LanguageContext", () => ({ useLanguage: () => ({ language: "fr" }) }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));
 vi.mock("@/lib/trpc", () => {
   const mutation = () => ({ mutate: vi.fn(), isPending: false });

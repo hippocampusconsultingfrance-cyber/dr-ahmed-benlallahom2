@@ -11,8 +11,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 type GdprRequest = { id: number; trackingId: string; name: string; email: string; requestType: string; status: string; description: string | null; notes: string | null; createdAt: string; responseDate: string | null };
 const view = vi.hoisted(() => ({ refetch: [] as Array<ReturnType<typeof vi.fn>>, requests: null as null | GdprRequest[] }));
 
-// The status badges are written in the admin's language (AdminStatusBadge, ADM-07): French here.
-vi.mock("@/contexts/LanguageContext", () => ({ useLanguage: () => ({ language: "fr" }) }));
 vi.mock("@/lib/trpc", () => ({
   trpc: {
     useUtils: () => ({ admin: { gdprRequests: { list: { invalidate: vi.fn() } } } }),

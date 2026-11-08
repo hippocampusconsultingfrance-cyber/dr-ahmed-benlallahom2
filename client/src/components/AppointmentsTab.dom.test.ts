@@ -22,8 +22,6 @@ const server = vi.hoisted(() => ({
   mutations: [] as Array<{ procedure: string; input: Record<string, unknown> }>,
 }));
 
-// The status badges are written in the admin's language (AdminStatusBadge, ADM-07): French here.
-vi.mock("@/contexts/LanguageContext", () => ({ useLanguage: () => ({ language: "fr" }) }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() } }));
 vi.mock("@/lib/trpc", async () => {
   const { useQueries, useQuery, useQueryClient } = await import("@tanstack/react-query");
@@ -79,6 +77,7 @@ vi.mock("@/lib/trpc", async () => {
 });
 
 const { default: AppointmentsTab } = await import("./AppointmentsTab");
+const { LanguageProvider } = await import("@/contexts/LanguageContext");
 
 function booking(id: number, overrides: Partial<Row> = {}): Row {
   return {
@@ -91,7 +90,7 @@ function booking(id: number, overrides: Partial<Row> = {}): Row {
 
 function mount() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(createElement(QueryClientProvider, { client }, createElement(AppointmentsTab)));
+  return render(createElement(QueryClientProvider, { client }, createElement(LanguageProvider, null, createElement(AppointmentsTab))));
 }
 
 beforeEach(() => {
@@ -115,6 +114,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  localStorage.clear();
 });
 
 describe("ADM-18 — onglet Réservations", () => {
@@ -141,6 +141,21 @@ describe("ADM-18 — onglet Réservations", () => {
     expect(screen.getByText("Remboursé 150,00 € le 02/11/2026 15:05 (heure de Paris) · Annulé le 02/11/2026 15:05 (heure de Paris) · Motif : Annulation / remboursement par le praticien : Empêchement du praticien", { normalizer: text => text.replace(/\s+/g, " ").trim() })).toBeTruthy();
     expect(screen.getAllByText("20/11/2026 10:00 (heure de Paris)")).toHaveLength(3);
     expect(document.body.textContent).not.toContain("10:00:00");
+  });
+
+  it("écrit les statuts en français, comme le reste de l’onglet, quand le site est en anglais (ADM-07)", async () => {
+    localStorage.setItem("language", "en");
+    server.agenda = [
+      { id: 1, trackingId: "APTDOM000001", customerName: "Patient agenda", customerPhone: "+33611223344", appointmentDate: "2026-11-20T09:00:00.000Z", appointmentStatus: "confirmed", duration: 30, language: "fr" },
+    ];
+    mount();
+    expect(document.documentElement.lang).toBe("en");
+    const card = (await screen.findByText("Patient 1")).closest<HTMLElement>(".rounded-lg")!;
+    expect(within(card).getByText("Payé")).toBeTruthy();
+    expect(within(card).getByText("Confirmé")).toBeTruthy();
+    const agenda = screen.getByRole("region", { name: "Agenda des consultations" });
+    expect(await within(agenda).findByText("Confirmé")).toBeTruthy();
+    expect(screen.queryByText(/^(Paid|Confirmed|Refunded|Cancelled|Awaiting payment)$/)).toBeNull();
   });
 
   it("lit l’agenda à part, par jours de Paris, change de période et l’imprime", async () => {

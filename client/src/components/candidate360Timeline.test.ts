@@ -42,6 +42,29 @@ describe("chronologie candidat 360°", () => {
     ]);
   });
 
+  it("date l’échéance d’une relance au jour de Paris et dit la délivrabilité d’une campagne en mots (ADM-07)", () => {
+    const previous = process.env.TZ;
+    // A browser in Dubai: 01:30 on 5 August there is still 4 August in Paris.
+    process.env.TZ = "Asia/Dubai";
+    try {
+      const timeline = buildCandidateTimeline({
+        createdAt: new Date("2026-08-01T08:00:00.000Z"),
+        audits: [],
+        campaignRecipients: [
+          { id: 1, campaignTitle: "Urgences Dubaï", deliveryStatus: "delivered", error: null, sentAt: new Date("2026-08-02T08:00:00.000Z"), deliveredAt: new Date("2026-08-02T08:01:00.000Z"), lastEventAt: null },
+          { id: 2, campaignTitle: "Pédiatrie Doha", deliveryStatus: "bounced", error: null, sentAt: new Date("2026-08-02T09:00:00.000Z"), deliveredAt: null, lastEventAt: null },
+        ],
+        followUps: [{ id: 3, kind: "custom", status: "suggested", notes: null, dueAt: new Date("2026-08-04T21:30:00.000Z"), completedAt: null }],
+      });
+
+      expect(timeline.find(event => event.kind === "follow_up")?.detail).toBe("Échéance : 04/08/2026");
+      expect(timeline.filter(event => event.kind === "campaign").map(event => event.detail)).toEqual(["Statut de délivrabilité : rejeté par la messagerie du destinataire", "Statut de délivrabilité : remis"]);
+    } finally {
+      if (previous === undefined) delete process.env.TZ;
+      else process.env.TZ = previous;
+    }
+  });
+
   it("place les événements les plus récents en premier", () => {
     const timeline = buildCandidateTimeline({
       createdAt: new Date("2026-08-01T08:00:00.000Z"),

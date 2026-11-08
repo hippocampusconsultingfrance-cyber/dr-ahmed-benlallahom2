@@ -22,8 +22,6 @@ const question = (id: number, status: string, extra: Record<string, unknown> = {
   adminResponse: null, publicQuestion: null, publicResponse: null, responseSentAt: null, ...extra,
 });
 
-// The status badges are written in the admin's language (AdminStatusBadge, ADM-07): French here.
-vi.mock("@/contexts/LanguageContext", () => ({ useLanguage: () => ({ language: "fr" }) }));
 vi.mock("sonner", () => ({
   toast: {
     success: (message: string) => state.toasts.push(["success", message]),
