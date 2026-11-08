@@ -51,8 +51,18 @@ const FRENCH_OTHER_NAMES: Partial<Record<RecruitmentLanguageCode, readonly strin
   he: ["Hébraïque"],
 };
 
-/** A text as the languages compare it: folded like the admin search (accents, Arabic harakat, ligatures), case aside. */
-const foldLanguageText = (text: string) => foldAdminSearchText(text).toLowerCase();
+/**
+ * The Hebrew points and cantillation marks (U+0591–U+05C7, not the maqaf,
+ * paseq, sof pasuq and nun hafukha): « ייִדיש », Yiddish as Intl.DisplayNames
+ * writes it, is « יידיש » as it is usually typed, « עִבְרִית » is « עברית ».
+ */
+const HEBREW_POINTS = /[\u0591-\u05bd\u05bf\u05c1\u05c2\u05c4\u05c5\u05c7]/g;
+
+/** A text as the languages compare it: folded like the admin search (accents, Arabic harakat, ligatures) and without Hebrew points, case aside. */
+const foldLanguageText = (text: string) => foldAdminSearchText(text).replace(HEBREW_POINTS, "").toLowerCase();
+
+/** A name as the lists of names hold it: folded, what it says between brackets aside, its spaces single. */
+const foldListedName = (name: string) => foldLanguageText(name.replace(/[(（][^)）]*[)）]/g, " ")).replace(/\s+/g, " ").trim();
 
 /**
  * Scripts that separate their words with spaces and no prefix: a name written
@@ -390,7 +400,7 @@ let otherLanguageNames: ReadonlyMap<string, readonly string[]> | undefined;
 function readOtherLanguageNames() {
   const names = new Map<string, string[]>();
   const add = (name: string | undefined, code: string) => {
-    const folded = foldLanguageText(name?.replace(/[(（][^)）]*[)）]/g, " ") ?? "").replace(/\s+/g, " ").trim();
+    const folded = foldListedName(name ?? "");
     const letters = Array.from(folded).filter(character => LETTER_OR_DIGIT.test(character)).length;
     if (letters < (SPACED_SCRIPT.test(folded) ? 3 : 2)) return;
     const codes = names.get(folded);
@@ -444,6 +454,63 @@ function namesOtherLanguage(text: string) {
   return comparedText(text).others.length > 0;
 }
 
+/** What is neither a letter nor a digit at the start or the end of a text (« Indonesia. »). */
+const OUTER_PUNCTUATION = new RegExp("^[^\\p{L}\\p{N}]+|[^\\p{L}\\p{N}]+$", "gu");
+/** The two-letter region codes, AA to ZZ: Intl.DisplayNames names those that exist. */
+const REGION_CODES = Array.from({ length: 26 * 26 }, (_, index) => String.fromCharCode(65 + Math.floor(index / 26), 65 + (index % 26)));
+/** The country names of the list above (« Myanmar »), regions also where Intl.DisplayNames is missing. */
+const LISTED_REGION_NAMES = new Set(["Myanmar"].map(foldListedName));
+/** By locale, the region names Intl.DisplayNames gives in it, long and short, folded as the listed names: each read when first asked for. */
+const REGION_NAMES = new Map<string, ReadonlySet<string>>();
+/** By code, the names Intl.DisplayNames gives a language in the table's four languages, folded: each read when first asked for. */
+const DISPLAYED_LANGUAGE_NAMES = new Map<string, ReadonlySet<string>>();
+
+function displayedNames(cache: Map<string, ReadonlySet<string>>, key: string, read: (add: (name: string | undefined) => void) => void) {
+  const cached = cache.get(key);
+  if (cached) return cached;
+  const names = new Set<string>();
+  if (typeof Intl.DisplayNames === "function") {
+    try {
+      read(name => { if (name) names.add(foldListedName(name)); });
+    } catch {
+      // A locale or a code this host cannot name: the names read before it.
+    }
+  }
+  cache.set(key, names);
+  return names;
+}
+
+const regionNames = (locale: string) => displayedNames(REGION_NAMES, locale, add => {
+  for (const style of ["long", "short"] as const) {
+    const display = new Intl.DisplayNames([locale], { type: "region", style, fallback: "none" });
+    for (const region of REGION_CODES) add(display.of(region));
+  }
+});
+
+const displayedLanguageNames = (code: string) => displayedNames(DISPLAYED_LANGUAGE_NAMES, code, add => {
+  for (const locale of OTHER_LANGUAGE_LOCALES) add(new Intl.DisplayNames([locale], { type: "language", fallback: "none" }).of(code));
+});
+
+/**
+ * Whether a part beside a dash names a country or a region, which qualifies
+ * the language next to it, rather than a language the table does not know
+ * (IA02-R4): its words outside brackets are the name of a region in French,
+ * English, German or Chinese, or in the language they name, and not that
+ * language's name in one of these four. « English – Indonesia », « Anglais –
+ * Myanmar (Birmanie) » and « Englisch – Myanmar » are English in a country,
+ * as « English – Malaysia » is, although « Indonesia » is Indonesian in its
+ * own language and « Myanmar » an English name of Burmese, which a
+ * candidate's language still reads as; « Arménien », a French name of
+ * Armenian, stays a language, as « Wolof » and « Serbo-croate » do.
+ */
+function namesRegion(text: string) {
+  const compared = comparedText(text);
+  const words = compared.core.replace(OUTER_PUNCTUATION, "");
+  const languages = compared.others;
+  if (!LISTED_REGION_NAMES.has(words) && ![...OTHER_LANGUAGE_LOCALES, ...languages].some(locale => regionNames(locale).has(words))) return false;
+  return !languages.some(code => displayedLanguageNames(code).has(words));
+}
+
 /**
  * The parts of a text at a Chinese conjunction or a dash, each that names a
  * language with the parts after it that name none, which qualify it: a level
@@ -452,7 +519,8 @@ function namesOtherLanguage(text: string) {
  * « Portugais – Brésil »). And the parts before the first one that names one
  * with it (埃 in 埃及阿拉伯语, Egyptian Arabic). A language the table does not
  * know is named by its name (« Wolof – Anglais » and « Serbo-croate –
- * Anglais » are two, as with « / »).
+ * Anglais » are two, as with « / »), unless the name is a country's too
+ * (« English – Indonesia » is one).
  */
 function partsBetweenNames(text: string) {
   const groups: Array<{ start: number; end: number; names: boolean }> = [];
@@ -460,7 +528,7 @@ function partsBetweenNames(text: string) {
   for (const part of partsOutsideBrackets(text, BETWEEN_NAMES)) {
     const start = text.indexOf(part, cursor);
     cursor = start + part.length;
-    const names = recruitmentLanguageCodes(part).length > 0 || namesOtherLanguage(part);
+    const names = recruitmentLanguageCodes(part).length > 0 || (namesOtherLanguage(part) && !namesRegion(part));
     const last = groups.at(-1);
     if (last && (!names || !last.names)) Object.assign(last, { end: cursor, names: names || last.names });
     else groups.push({ start, end: cursor, names });

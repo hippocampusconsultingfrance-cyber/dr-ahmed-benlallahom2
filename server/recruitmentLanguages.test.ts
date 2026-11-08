@@ -19,6 +19,8 @@ describe("langues du recrutement comparées par code (IA-02)", () => {
     for (const name of ["Français", "francais", "FRANÇAIS", "French", "Französisch", "Franzosisch", "法语", "franc\u0327ais"]) expect(recruitmentLanguageCodes(name)).toEqual(["fr"]);
     for (const name of ["Anglais", "English", "Englisch", "英语", "英文"]) expect(recruitmentLanguageCodes(name)).toEqual(["en"]);
     for (const name of ["Arabe", "arabe", "Arabic", "Arabisch", "阿拉伯语", "العربية", "العَرَبِيَّة"]) expect(recruitmentLanguageCodes(name)).toEqual(["ar"]);
+    // Hebrew with its points, as with the Arabic harakat.
+    for (const name of ["Hébreu", "עברית", "עִבְרִית"]) expect(recruitmentLanguageCodes(name)).toEqual(["he"]);
     for (const name of ["Allemand", "German", "Deutsch", "德语"]) expect(recruitmentLanguageCodes(name)).toEqual(["de"]);
     for (const name of ["Chinois", "Chinese", "Chinesisch", "中文", "Mandarin"]) expect(recruitmentLanguageCodes(name)).toEqual(["zh"]);
   });
@@ -242,7 +244,7 @@ describe("langues du recrutement comparées par code (IA-02)", () => {
       ["Vietnamien – Anglais", ["English", "Tiếng Việt"]], ["Bulgare – Anglais", ["English", "Български"]], ["Hongrois – Anglais", ["English", "Magyar"]],
       ["Tchèque – Anglais", ["English", "Čeština"]], ["Suédois – Anglais", ["English", "Svenska"]], ["Norvégien – Anglais", ["English", "Norsk"]],
       ["Norvégien – Anglais", ["English", "Bokmål"]], ["Norvégien – Anglais", ["English", "Nynorsk"]], ["Danois – Anglais", ["English", "Dansk"]],
-      ["Finnois – Anglais", ["English", "Suomi"]],
+      ["Finnois – Anglais", ["English", "Suomi"]], ["Yiddish – Anglais", ["English", "ייִדיש"]], ["Yiddish – Anglais", ["English", "יידיש"]],
       // English names still in use for a country's language.
       ["Birman – Anglais", ["English", "Myanmar"]], ["Birman – Anglais", ["English", "Burmese"]], ["Khmer – Anglais", ["English", "Cambodian"]],
       ["Lao – Anglais", ["English", "Laotian"]], ["Tagalog – Anglais", ["English", "Pilipino"]],
@@ -276,6 +278,27 @@ describe("langues du recrutement comparées par code (IA-02)", () => {
     expect(recruitmentLanguageRequirements("Anglais – obligatoire, Arabe – souhaité").map(requirement => requirement.codes)).toEqual([["en"], ["ar"]]);
   });
 
+  it("lit un pays après un tiret comme ce qui qualifie la langue voisine, même quand son nom est aussi celui d’une langue hors table, et une langue comme une seconde exigence (IA02-R4-REGIONS)", () => {
+    const met = (required: string, names: string[]) => recruitmentLanguageRequirements(required).filter(requirement => meetsRequiredLanguage(names, requirement)).length;
+    // « Indonesia » is Indonesian in its own language, « Myanmar » an English name of Burmese: before, a second
+    // requirement, which a candidate who speaks English did not meet (8 language points of 15, neither the profile nor the Langue filter).
+    for (const required of [
+      "English – Indonesia", "English – Myanmar", "English – Myanmar (Burma)", "Anglais – Myanmar", "Anglais – Myanmar (Birmanie)", "Englisch – Myanmar",
+      "English – Malaysia", "English – Philippines", "Anglais – Indonésie",
+    ]) {
+      expect(recruitmentLanguageRequirements(required), required).toEqual([{ text: required, codes: ["en"], anyOf: [] }]);
+      expect(met(required, ["English"]), required).toBe(1);
+    }
+    // A language beside a dash, named so in French or English, is still a requirement of its own, which English alone does not meet.
+    for (const required of ["Wolof – Anglais", "Serbo-croate – Anglais", "Anglais – Wolof", "Indonésien – Anglais", "Birman – Anglais", "Anglais – Birman", "Arménien – Anglais"]) {
+      expect(recruitmentLanguageRequirements(required), required).toHaveLength(2);
+      expect(met(required, ["English"]), required).toBe(1);
+    }
+    // A candidate's language is still read under these names.
+    expect(met("Birman – Anglais", ["English", "Myanmar"])).toBe(2);
+    expect(met("Indonésien – Anglais", ["English", "Indonesia"])).toBe(2);
+  });
+
   it("sans Intl.DisplayNames (un navigateur ou un Node.js sans ses données), garde les noms de sa propre liste et ce qui qualifie une langue (IA-02)", async () => {
     vi.stubGlobal("Intl", { ...Intl, DisplayNames: undefined });
     vi.resetModules();
@@ -286,6 +309,8 @@ describe("langues du recrutement comparées par code (IA-02)", () => {
       expect(languages.recruitmentLanguageRequirements("Anglais – obligatoire").map(requirement => requirement.text)).toEqual(["Anglais – obligatoire"]);
       expect(languages.recruitmentLanguageRequirements("Cantonais – Anglais").map(requirement => requirement.text)).toEqual(["Cantonais", "Anglais"]);
       expect(languages.recruitmentLanguageRequirements("Twi – English").map(requirement => requirement.text)).toEqual(["Twi", "English"]);
+      // Myanmar, of the list, is a country beside a dash there too.
+      expect(languages.recruitmentLanguageRequirements("English – Myanmar").map(requirement => requirement.text)).toEqual(["English – Myanmar"]);
       // Kabyle is only named by Intl.DisplayNames: without it, the part qualifies Arabic, as before.
       expect(languages.recruitmentLanguageRequirements("Arabe – Kabyle").map(requirement => requirement.text)).toEqual(["Arabe – Kabyle"]);
     } finally {
