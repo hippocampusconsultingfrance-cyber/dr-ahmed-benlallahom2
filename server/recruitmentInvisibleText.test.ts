@@ -1294,7 +1294,8 @@ describe("dossier d’un CV qui cache du texte, de bout en bout (IA-01)", () => 
         document.text(right, 300, 90 + index * 20, { lineBreak: false });
       });
     });
-    const twoColumnsDocx = () => docx(paragraph(PHYSICIAN_CV[0]!) + `<w:tbl>${rows.map(([left, right]) => `<w:tr>${cell(paragraph(left))}${cell(paragraph(right))}</w:tr>`).join("")}</w:tbl>`);
+    // Its columns as Word writes them (w:tblGrid); a table of no widths is read as one whose cells' texts may touch (docxLineBreaks).
+    const twoColumnsDocx = () => docx(paragraph(PHYSICIAN_CV[0]!) + `<w:tbl><w:tblGrid><w:gridCol w:w="4900"/><w:gridCol w:w="4900"/></w:tblGrid>${rows.map(([left, right]) => `<w:tr>${cell(paragraph(left))}${cell(paragraph(right))}</w:tr>`).join("")}</w:tbl>`);
     const reading = (location: string) => aiReading({
       professionalTitle: "Médecin anesthésiste-réanimateur",
       specialties: ["anesthésie-réanimation"],
@@ -1332,7 +1333,7 @@ describe("dossier d’un CV qui cache du texte, de bout en bout (IA-01)", () => 
     expect(fromPdf.score).toBe(fromDocx.score);
   }, PDF_TEST_TIMEOUT_MS);
 
-  it("CV honnête au titre et à la spécialité dans deux phrases d’un paragraphe, ou de part et d’autre d’une tabulation : le même score en PDF et en DOCX, 30 points de spécialité (IA-04)", async () => {
+  it("CV honnête au titre et à la spécialité dans un paragraphe, de part et d’autre d’une tabulation large ou étroite, d’un saut de ligne ou de deux cellules sans écart : les mêmes lignes et le même score en PDF et en DOCX (IA-04)", async () => {
     const name = "Dr Nadia Mansour";
     const profile = "Médecin anesthésiste-réanimateur depuis 2012, j’exerce au bloc opératoire et en réanimation polyvalente au CHU de Lyon. "
       + "Spécialité : anesthésie-réanimation, avec une pratique de l’anesthésie locorégionale échoguidée.";
@@ -1350,6 +1351,20 @@ describe("dossier d’un CV qui cache du texte, de bout en bout (IA-01)", () => 
     });
     const tabbed = (left: string, right: string) =>
       `<w:p><w:pPr><w:tabs><w:tab w:val="right" w:pos="9000"/></w:tabs></w:pPr><w:r><w:t xml:space="preserve">{{${left}}}</w:t><w:tab/><w:t xml:space="preserve">{{${right}}}</w:t></w:r></w:p>`;
+    // Courier, 10 pt: the title (32 characters) is 192 pt wide, the specialty 3 pt after it, as a space.
+    const courier = '<w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/><w:sz w:val="20"/>';
+    const narrowTab = `<w:p><w:pPr><w:tabs><w:tab w:val="left" w:pos="3900"/></w:tabs></w:pPr><w:r><w:rPr>${courier}</w:rPr><w:t xml:space="preserve">{{${title}}}</w:t><w:tab/><w:t xml:space="preserve">{{${specialty}}}</w:t></w:r></w:p>`;
+    const twoCells = `<w:tbl><w:tblPr><w:tblCellMar><w:left w:w="0" w:type="dxa"/><w:right w:w="0" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid><w:gridCol w:w="3900"/><w:gridCol w:w="5000"/></w:tblGrid><w:tr>`
+      + `${cell(`<w:p><w:r><w:rPr>${courier}</w:rPr><w:t xml:space="preserve">{{${title}}}</w:t></w:r></w:p>`, '<w:tcW w:w="3900" w:type="dxa"/>')}${cell(`<w:p><w:r><w:rPr>${courier}</w:rPr><w:t xml:space="preserve">{{${specialty}}}</w:t></w:r></w:p>`, '<w:tcW w:w="5000" w:type="dxa"/>')}</w:tr></w:tbl>`;
+    const courierRun = (text: string) => `<w:r><w:rPr>${courier}</w:rPr><w:t xml:space="preserve">{{${text}}}</w:t></w:r>`;
+    const longLine = `${title}, exerçant depuis de nombreuses années au sein de services hospitaliers universitaires, ${specialty}`;
+    const oneLinePdf = () => pdf(document => {
+      document.fontSize(11).fillColor("black").text(name, 50, 60, { lineBreak: false });
+      document.font("Courier").fontSize(10).text(title, 50, 90, { lineBreak: false });
+      document.text(specialty, 50 + document.widthOfString(title) + 3, 90, { lineBreak: false });
+      document.font("Helvetica").fontSize(11);
+      [experience, language, licence].forEach((line, index) => document.text(line, 50, 120 + index * 20, { lineBreak: false }));
+    });
     const cvs = {
       // The profile paragraph: one line of the DOCX, which the PDF wraps.
       paragraph: {
@@ -1372,7 +1387,36 @@ describe("dossier d’un CV qui cache du texte, de bout en bout (IA-01)", () => 
         }),
         docx: () => docx(paragraph(name) + tabbed(specialty, title) + tabbed(language, experience) + paragraph(licence)),
       },
+      // A tab a few points wide, at a stop just after the title: a space, one line, as in the PDF.
+      narrowTab: { pdf: oneLinePdf, docx: () => docx(paragraph(name) + narrowTab + [experience, language, licence].map(line => paragraph(line)).join("")) },
+      // Two cells side by side without margins nor gap: one line, as in the PDF.
+      twoCells: { pdf: oneLinePdf, docx: () => docx(paragraph(name) + twoCells + [experience, language, licence].map(line => paragraph(line)).join("")) },
+      // What Word hides of the line: a line break, a tab whose stop is far, the paragraph mark after the title. One line, as in the PDF.
+      hiddenBreak: { pdf: oneLinePdf, docx: () => docx(paragraph(name) + `<w:p>${courierRun(`${title} `)}<w:r><w:rPr><w:vanish/></w:rPr><w:br/></w:r>${courierRun(specialty)}</w:p>` + [experience, language, licence].map(line => paragraph(line)).join("")) },
+      hiddenTab: { pdf: oneLinePdf, docx: () => docx(paragraph(name) + `<w:p><w:pPr><w:tabs><w:tab w:val="left" w:pos="9000"/></w:tabs></w:pPr>${courierRun(`${title} `)}<w:r><w:rPr><w:vanish/></w:rPr><w:tab/></w:r>${courierRun(specialty)}</w:p>` + [experience, language, licence].map(line => paragraph(line)).join("")) },
+      hiddenMark: { pdf: oneLinePdf, docx: () => docx(paragraph(name) + `<w:p><w:pPr><w:rPr><w:vanish/></w:rPr></w:pPr>${courierRun(`${title} `)}</w:p><w:p>${courierRun(specialty)}</w:p>` + [experience, language, licence].map(line => paragraph(line)).join("")) },
+      // Two cells side by side, each paragraph followed by an empty one: one line.
+      emptyParagraphCells: { pdf: oneLinePdf, docx: () => docx(paragraph(name) + twoCells.replace(/<\/w:p><\/w:tc>/g, "</w:p><w:p/></w:tc>") + [experience, language, licence].map(line => paragraph(line)).join("")) },
+      // A line of 150 characters squeezed (w:w) onto one line of the page, the title at its start and the specialty at its end.
+      squeezed: {
+        pdf: () => pdf(document => {
+          document.fontSize(11).fillColor("black").text(name, 50, 60, { lineBreak: false });
+          document.fontSize(6).text(longLine, 50, 90, { lineBreak: false });
+          document.fontSize(11);
+          [experience, language, licence].forEach((line, index) => document.text(line, 50, 120 + index * 20, { lineBreak: false }));
+        }),
+        docx: () => docx(paragraph(name) + paragraph(longLine, '<w:sz w:val="22"/><w:w w:val="50"/>') + [experience, language, licence].map(line => paragraph(line)).join("")),
+      },
+      // A line break (Shift+Entrée) between the title and the specialty: two lines, as in the PDF; mammoth wrote none.
+      lineBreak: {
+        pdf: () => pdf(document => {
+          document.fontSize(11).fillColor("black").text(name, 50, 60, { lineBreak: false });
+          [title, specialty, experience, language, licence].forEach((line, index) => document.text(line, 50, 90 + index * 20, { lineBreak: false }));
+        }),
+        docx: () => docx(paragraph(name) + `<w:p><w:r><w:t xml:space="preserve">{{${title}}}</w:t><w:br/><w:t xml:space="preserve">{{${specialty}}}</w:t></w:r></w:p>` + [experience, language, licence].map(line => paragraph(line)).join("")),
+      },
     };
+    const specialtyPoints: Record<string, number> = { paragraph: 15, tab: 30, narrowTab: 15, twoCells: 15, lineBreak: 30, hiddenBreak: 15, hiddenTab: 15, hiddenMark: 15, emptyParagraphCells: 15, squeezed: 15 };
     for (const [cv, { pdf: pdfFile, docx: docxFile }] of Object.entries(cvs)) {
       const read: Array<{ text: string; score: unknown; breakdown: Record<string, number> }> = [];
       for (const [file, mimeType, location] of [[await pdfFile(), "application/pdf", "page 1"], [docxFile(), DOCX, "section Profil"]] as const) {
@@ -1383,18 +1427,30 @@ describe("dossier d’un CV qui cache du texte, de bout en bout (IA-01)", () => 
         read.push({ text: String(dossier(id).extracted_text), score: dossier(id).ai_score, breakdown: JSON.parse(String(dossier(id).ai_extracted_skills)).scoreBreakdown });
       }
       const [fromPdf, fromDocx] = read as [typeof read[number], typeof read[number]];
+      const lines = (text: string) => text.split("\n").map(line => line.trim()).filter(line => line && !/^\[PAGE \d+\]$/.test(line));
       if (cv === "paragraph") {
-        // The DOCX gives the paragraph on one line, the PDF on the lines it wraps onto.
-        expect(fromDocx.text.split("\n")).toContain(profile);
-        expect(fromPdf.text).not.toContain(profile);
-      } else {
-        // The tab read as a line break, as the wide gap of the PDF; before, « Spécialité : anesthésie-réanimation Médecin anesthésiste-réanimateur ».
+        // The DOCX gives the paragraph on one line, and the PDF too once its wrapped lines are joined; before, on the 3 lines of the PDF.
+        expect(lines(fromDocx.text)).toContain(profile);
+        expect(lines(fromPdf.text)).toContain(profile);
+      } else if (cv === "tab") {
+        // The wide tab read as a line break, as the wide gap of the PDF; before, « Spécialité : anesthésie-réanimation Médecin anesthésiste-réanimateur ».
         expect(fromDocx.text).toContain(`${specialty}\n${title}`);
         expect(fromPdf.text).toContain(`${specialty}\n${title}`);
         expect(fromDocx.text).not.toContain("\t");
+      } else if (cv === "lineBreak") {
+        // Before: « Médecin anesthésiste-réanimateurSpécialité : anesthésie-réanimation », 15 points in DOCX, 30 in PDF.
+        expect(lines(fromDocx.text)).toEqual(expect.arrayContaining([title, specialty]));
+      } else if (cv === "squeezed") {
+        // Before (843ab77): a line of more than 100 characters counted as the two of a page of 100, 30 points in both.
+        expect(lines(fromDocx.text)).toContain(longLine);
+        expect(lines(fromPdf.text)).toContain(longLine);
+      } else {
+        // Before: two lines and 30 points in DOCX, one line and 15 in PDF.
+        expect(lines(fromDocx.text)).toContain(`${title} ${specialty}`);
+        expect(lines(fromPdf.text)).toContain(`${title} ${specialty}`);
       }
-      // Before: 30 points of specialty in PDF, 15 in DOCX, and a score 15 lower.
-      expect(fromPdf.breakdown.specialtyMatch, cv).toBe(30);
+      expect(lines(fromDocx.text), cv).toEqual(lines(fromPdf.text));
+      expect(fromPdf.breakdown.specialtyMatch, cv).toBe(specialtyPoints[cv]);
       expect(fromDocx.breakdown, cv).toEqual(fromPdf.breakdown);
       expect(fromPdf.score, cv).not.toBeNull();
       expect(fromDocx.score, cv).toBe(fromPdf.score);
