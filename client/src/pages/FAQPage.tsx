@@ -5,13 +5,16 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { AlertTriangle, ArrowRight, CircleHelp, ShieldCheck } from "lucide-react";
-import { Link, useLocation } from "wouter";
+import { useState } from "react";
+import { Link } from "wouter";
 import { getFaqContent, type FaqLocale } from "./faqContent";
 
 export default function FAQPage() {
   const { language } = useLanguage();
-  const [, setLocation] = useLocation();
   const content = getFaqContent(language as FaqLocale);
+  // Réponses gardées dans la page, repliées ou non, pour les moteurs de recherche ; `hidden` les
+  // masque et les retire de la lecture tant que leur question est fermée (SEOP-03).
+  const [openEntry, setOpenEntry] = useState("");
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -24,12 +27,12 @@ export default function FAQPage() {
             <div className="flex items-center gap-3 text-primary"><CircleHelp className="h-6 w-6" /><p className="text-xs font-semibold uppercase tracking-[0.18em]">{content.eyebrow}</p></div>
             <h1 className="mt-5 max-w-2xl font-display text-4xl font-semibold tracking-tight sm:text-5xl">{content.title}</h1>
             <p className="mt-5 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">{content.description}</p>
-            <div className="mt-7 flex flex-col gap-3 sm:flex-row"><Button asChild className="min-h-11"><Link href="/booking">{content.booking}<ArrowRight className="ml-2 h-4 w-4" /></Link></Button><Button className="min-h-11" variant="outline" onClick={() => setLocation("/recruitment")}>Hippocampus Consulting</Button></div>
+            <div className="mt-7 flex flex-col gap-3 sm:flex-row"><Button asChild className="min-h-11"><Link href="/booking">{content.booking}<ArrowRight className="ml-2 h-4 w-4" /></Link></Button><Button asChild className="min-h-11" variant="outline"><Link href="/recruitment">{content.apply}</Link></Button></div>
           </header>
 
           <section className="mt-6 rounded-2xl border border-border bg-card/70 px-6 py-3 sm:px-8" aria-label={content.title}>
-            <Accordion type="single" collapsible className="w-full">
-              {content.entries.map((entry, index) => <AccordionItem key={entry.question} value={`faq-${index}`}><AccordionTrigger className="py-5 text-base text-foreground hover:no-underline">{entry.question}</AccordionTrigger><AccordionContent className="max-w-3xl text-base leading-relaxed text-muted-foreground">{entry.answer}</AccordionContent></AccordionItem>)}
+            <Accordion type="single" collapsible value={openEntry} onValueChange={setOpenEntry} className="w-full">
+              {content.entries.map((entry, index) => <AccordionItem key={entry.question} value={`faq-${index}`}><AccordionTrigger headingLevel={2} className="py-5 text-base text-foreground hover:no-underline">{entry.question}</AccordionTrigger><AccordionContent forceMount hidden={openEntry !== `faq-${index}`} className="max-w-3xl text-base leading-relaxed text-muted-foreground">{entry.answer}</AccordionContent></AccordionItem>)}
             </Accordion>
           </section>
 

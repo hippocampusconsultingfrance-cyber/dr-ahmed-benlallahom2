@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { getFaqContent } from "../client/src/pages/faqContent";
 import { getRouteSeo, renderRouteSeoHead } from "./routeSeo";
 
 describe("route SEO initial head", () => {
@@ -33,6 +34,18 @@ describe("route SEO initial head", () => {
     expect(seo.noIndex).not.toBe(true);
     expect(seo.title).toContain("Questions santé");
     expect(head).toContain("https://drahmedbenlallahom.com/questions-anesthesie");
+  });
+
+  it("publie sur /faq un FAQPage en français, tiré des questions de la page (SEOP-03)", () => {
+    const schemas = Array.from(renderRouteSeoHead("/faq?utm_source=newsletter").matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g), match => JSON.parse(match[1]));
+    const entries = getFaqContent("fr").entries;
+
+    expect(schemas).toHaveLength(1);
+    expect(schemas[0]).toMatchObject({ "@context": "https://schema.org", "@type": "FAQPage", inLanguage: "fr-FR" });
+    expect(schemas[0].mainEntity).toEqual(entries.map(entry => ({ "@type": "Question", name: entry.question, acceptedAnswer: { "@type": "Answer", text: entry.answer } })));
+    expect(schemas[0].mainEntity.some((item: { acceptedAnswer: { text: string } }) => item.acceptedAnswer.text.includes("100 €"))).toBe(true);
+    // Rien de tel sur les autres pages que l'accueil.
+    for (const path of ["/booking", "/employers", "/questions-anesthesie"]) expect(renderRouteSeoHead(path), path).not.toContain("application/ld+json");
   });
 
   it("exclut les outils et pages de statut de l’indexation", () => {
