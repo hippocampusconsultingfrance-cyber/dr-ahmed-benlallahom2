@@ -1,5 +1,5 @@
 import { crc32 } from "node:zlib";
-import { DOCUMENT_DECOMPRESSION_LIMITS, inspectDocxArchive } from "./documentDecompressionLimits";
+import { DOCUMENT_DECOMPRESSION_LIMITS, inspectDocxArchive, type DocumentDecompressionLimits } from "./documentDecompressionLimits";
 import {
   DOCX_COMPLEX_CHARACTERS, DOCX_COMPLEX_FONTS, DOCX_COMPLEX_METRICS, DOCX_EMOJI_METRICS, DOCX_FONT_ALIASES, DOCX_FONT_AS_BASE, DOCX_FONT_AS_BEFORE, DOCX_FONT_AS_UPRIGHT, DOCX_FONT_CHARACTERS,
   DOCX_FONT_KERNING, DOCX_FONT_METRICS, DOCX_FONT_WIDTH_DIGITS, DOCX_KERNING_FALLBACK, DOCX_KERNING_MOST, DOCX_SIGN_FALLBACK, DOCX_SUBSTITUTE_FONTS, DOCX_WORD_FONTS,
@@ -5845,7 +5845,7 @@ function relationshipsOf(part: string) {
  * and the layout work (docxLayoutWorkUnits). An unchanged file is returned as
  * is.
  */
-export function withoutInvisibleDocxText(buffer: Buffer, limits = DOCUMENT_DECOMPRESSION_LIMITS): {
+export function withoutInvisibleDocxText(buffer: Buffer, limits: DocumentDecompressionLimits = DOCUMENT_DECOMPRESSION_LIMITS): {
   buffer: Buffer;
   invisibleText: string[];
   unverifiableText: Array<{ text: string; reason: DocxUnverifiableReason }>;

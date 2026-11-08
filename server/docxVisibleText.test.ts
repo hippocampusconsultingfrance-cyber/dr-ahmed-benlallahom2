@@ -142,8 +142,7 @@ const honestLines = () => HONEST.map(line => paragraph(line)).join("");
 
 /** What is read of the honest lines and `body` (placed after them, or before them at the top of the page), what is set aside, why; `parts`: other parts of the document (docx). */
 async function check(body: string, { styles, limits = DOCUMENT_DECOMPRESSION_LIMITS, atTop = false, parts }: { styles?: string; limits?: DocumentDecompressionLimits; atTop?: boolean; parts?: Parameters<typeof docx>[2] } = {}) {
-  // Its limits are typed as production's own values: other ones are what these tests try.
-  const result = withoutInvisibleDocxText(docx(atTop ? body + honestLines() : honestLines() + body, styles, parts), limits as typeof DOCUMENT_DECOMPRESSION_LIMITS);
+  const result = withoutInvisibleDocxText(docx(atTop ? body + honestLines() : honestLines() + body, styles, parts), limits);
   const text = (await mammoth.extractRawText({ buffer: result.buffer })).value.replace(/\s+/g, " ");
   const hidden = result.invisibleText.join(" ").replace(/\s+/g, " ");
   const unverifiable = result.unverifiableText.map(passage => passage.text).join(" ").replace(/\s+/g, " ");

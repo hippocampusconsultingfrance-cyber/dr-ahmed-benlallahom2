@@ -89,7 +89,7 @@ export type DocxArchiveInspection = {
  * refused (never needed by a CV produced by a word processor). `onEntry`
  * receives each entry once inflated within those bounds.
  */
-export function inspectDocxArchive(buffer: Buffer, limits = DOCUMENT_DECOMPRESSION_LIMITS, onEntry?: (name: string, content: Buffer) => void): DocxArchiveInspection {
+export function inspectDocxArchive(buffer: Buffer, limits: DocumentDecompressionLimits = DOCUMENT_DECOMPRESSION_LIMITS, onEntry?: (name: string, content: Buffer) => void): DocxArchiveInspection {
   const invalid = () => new Error("cv_validation_docx_container_invalid");
   const searchStart = Math.max(0, buffer.length - 22 - 0xffff);
   let eocd = -1;
