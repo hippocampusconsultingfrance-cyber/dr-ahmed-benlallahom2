@@ -501,6 +501,12 @@ export function renderInvoicePDF(
         // carries the same attachment (a different payload would be refused
         // with 409 invalid_idempotent_request).
         info: { Title: `Facture ${content.invoiceNumber}`, Author: seller.name, CreationDate: data.issueDate, ModDate: data.issueDate },
+        // A11Y-21: a screen reader reads the invoice, always in French, in
+        // French, and a viewer shows its title rather than the file name. Not
+        // tagged: no structure is marked in its content. An invoice already
+        // stored keeps the PDF it was issued with (generateInvoicePDF).
+        lang: "fr-FR",
+        displayTitle: true,
       });
       const chunks: Buffer[] = [];
 

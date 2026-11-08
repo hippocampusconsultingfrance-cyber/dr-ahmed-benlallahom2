@@ -315,7 +315,7 @@ export const medicalQuestionsRouter = router({
         db.insert(medicalQuestionAuditLogs).values({ medicalQuestionId: input.id, actorOpenId: ctx.user.openId, action: "response_send_started", metadata: JSON.stringify({ idempotencyKey, attempt }) }),
       ]);
       try {
-        await sendMedicalQuestionResponseEmail({ email: question.email, firstName: question.firstName, trackingId: question.trackingId, response: input.adminResponse }, { idempotencyKey });
+        await sendMedicalQuestionResponseEmail({ email: question.email, firstName: question.firstName, trackingId: question.trackingId, response: input.adminResponse, language: question.language }, { idempotencyKey });
       } catch {
         // Nothing left: the question is put back as it was read, so the answer
         // on record stays the one the person received (after a resend, or an
