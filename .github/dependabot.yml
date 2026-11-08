@@ -24,6 +24,11 @@ updates:
         update-types:
           - minor
           - patch
+    ignore:
+      # The types of express 5 do not describe express 4: they come with express 5, by hand.
+      - dependency-name: "@types/express"
+        update-types:
+          - version-update:semver-major
 
   # The quality job's steps are listed in server/ciWorkflow.test.ts: a new version of an action
   # changes that list in the same pull request.
