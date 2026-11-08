@@ -72,8 +72,11 @@ const SPREADSHEET_NUMBER = new RegExp(String.raw`^[+\-(]*${SPREADSHEET_DECIMAL}[
 /** A group of a number after a space, as Calc in French reads « 0034 612 345 678 »: three digits, then anything but a digit. */
 const SPREADSHEET_THOUSANDS = /^[+\-(]*\d{3}(?!\d)|^[+\-)]+$/;
 
-/** A date of two or three parts, spaces aside (« 06-12-34 », « 12/06 », « 06.12.2034 »). */
-const SPREADSHEET_DATE = /^[+\-(.,]*(\d+)[-/.](\d+)(?:[-/.](\d+))?[-/.,+)]*$/;
+/** A date of two or three parts, spaces aside (« 06-12-34 », « 12/06 », « 06.12.2034 »), its year negative or not (« 6/8/-72 »). */
+const SPREADSHEET_DATE = /^[+\-(.,]*(\d+)[-/.](\d+)(?:[-/.]-?(\d+))?[-/.,+)]*$/;
+
+/** The most digits of a year Calc reads in a date (« 12/06/002020 »): a longer part makes no date (« 0612345678/79 », « 12/06/0002020 »). */
+const SPREADSHEET_YEAR_DIGITS = 6;
 
 /** A fraction, after an integer or not (« 0612 34/56 », « 126,465/103 »). */
 const SPREADSHEET_FRACTION = new RegExp(String.raw`^[+\-(.,]*(?:(${SPREADSHEET_DECIMAL}(?:\s+\d{3}(?!\d)[\d.,]*)*)\s+)?(${SPREADSHEET_DECIMAL})\/${SPREADSHEET_DECIMAL}[-/.,+)]*$`);
@@ -87,27 +90,75 @@ const SPREADSHEET_SCIENTIFIC = /^\d+(?:[.,]\d+)?[eE][+-]?\d+$/;
  * rather than text. Calc reads them leniently: a first group of any length
  * followed by groups of three, in French (« 0034 612 345 678 »), a sign or
  * parentheses before or after (« (0612345678) », « 0612345678- »), a decimal
- * sign at the end (« 0612345678. »), a date, a fraction (« 06 12/34 »). This
- * answers yes to all of these and to some values Calc keeps as text, never no
- * to one it reads as a number: checked in LibreOffice Calc 24.2, in English
- * (1033), French (1036) and German (1031), on 40 000 values of digits and
- * these signs (ADM-26).
+ * sign at the end (« 0612345678. »), a date, its year negative or not, a
+ * fraction (« 06 12/34 »), spaces between a number and its sign or
+ * parentheses (« ( 0612345678 ) », « 19 504479 /6 + »). This answers yes to
+ * all of these and to some values Calc keeps as text, never no to one it reads
+ * as a number: checked in LibreOffice Calc 24.2, in English (1033), French
+ * (1036) and German (1031), on 40 000 values of digits and these signs, then
+ * on 650 000 more (ADM-26).
  */
-function spreadsheetMayReadAsNumberOrDate(value: string) {
-  if (!DIGITS_AND_PHONE_SIGNS.test(value) || !/\d/.test(value)) return false;
+function spreadsheetMayReadAsNumberOrDate(typed: string) {
+  if (!DIGITS_AND_PHONE_SIGNS.test(typed) || !/\d/.test(typed)) return false;
+  // Calc ignores spaces between a number and the signs or parentheses around it.
+  const value = typed.trim().replace(/^[\s+\-(]+|[\s+\-)]+$/g, signs => signs.replace(/\s+/g, ""));
   const compact = value.replace(/\s+/g, "");
   const [, ...groups] = value.split(/\s+/);
   if (SPREADSHEET_NUMBER.test(compact) && groups.every(group => SPREADSHEET_THOUSANDS.test(group))) return true;
-  const date = SPREADSHEET_DATE.exec(compact);
-  // A date has a day and a month of one or two digits: at most one of its parts is longer.
-  if (date && date.slice(1).filter(part => part !== undefined && part.length > 2).length <= 1) return true;
+  const date = SPREADSHEET_DATE.exec(compact)?.slice(1).filter(part => part !== undefined);
+  // A date has a day and a month of one or two digits: at most one of its parts is longer, its year.
+  if (date && date.filter(part => part.length > 2).length <= 1 && date.every(part => part.length <= SPREADSHEET_YEAR_DIGITS)) return true;
   const fraction = SPREADSHEET_FRACTION.exec(value.replace(/\s*\/\s*/g, "/"));
   // « 0612345678/0698765432 », two numbers, stays text: a fraction alone is read only with a decimal or grouping sign.
   return fraction !== null && (fraction[1] !== undefined || /[.,]/.test(fraction[2]!));
 }
 
-/** The fewest digits of a phone number: around a « / » or a « , », a shorter part makes a fraction or a decimal (« 0612 34/56 », « 126,465/103 »), not several numbers. */
+/** Where digits are set apart by two from the end (« 06 12 34 56 78 »). */
+const BY_TWO_FROM_THE_END = /\B(?=(?:\d{2})+$)/g;
+
+/**
+ * A phone number's digits, a « + » typed before them written « 00 », its
+ * opening parenthesis or not (« (+34 612 345 678) » gives « 0034612345678 »,
+ * as « +34 612 345 678 »), so that the country code is never run into the
+ * national number.
+ */
+function phoneDigits(written: string) {
+  const digits = written.replace(/\D/g, "");
+  return /^\D*\+/.test(written) ? `00${digits}` : digits;
+}
+
+/** A phone number's digits set apart, its « + » written « 00 », so that no spreadsheet reads them as a number: see csvPhoneValue. */
+function phoneDigitsSetApart(written: string) {
+  const digits = phoneDigits(written);
+  // « 00 » before three digits would read as thousands in French (« 00 123 »).
+  if (digits.startsWith("00") && digits.length >= 6) return `00 ${digits.slice(2)}`;
+  if (digits.length >= 3) return digits.replace(BY_TWO_FROM_THE_END, " ");
+  return `'${written}`;
+}
+
+/**
+ * The fewest digits of a phone number, its « 00 » for « + » aside: around a
+ * « / » or a « , », a shorter part makes a fraction or a decimal
+ * (« 0612 34/56 », « 126,465/103 »), or the country and area codes of a single
+ * number (« +49 151/23456789 », « +43 664/1234567 »), not several numbers.
+ */
 const PHONE_NUMBER_DIGITS = 7;
+
+/** The digits of a phone number, its « 00 » for « + » aside (« 0049 151 » has five). */
+function phoneNumberDigits(written: string) {
+  return phoneDigits(written).replace(/^00/, "").length;
+}
+
+/**
+ * The fewest digits of a number a shorter part after a « / » is a variant of,
+ * the end of another number, as French writes lines that follow
+ * (« 06 12 34 56 78/79 », « 06.12.34.56.78 / 6.98.76 »): eight, or ten after
+ * the « 00 » of an international number, its country code included. Country
+ * and area codes before a subscriber number make fewer (« +49 33203/12345 »,
+ * « +961 312345/6 »).
+ */
+const PHONE_NUMBER_WITH_VARIANT_DIGITS = 8;
+const INTERNATIONAL_PHONE_NUMBER_WITH_VARIANT_DIGITS = 10;
 
 /** The signs that separate several numbers typed in one field, and how the export writes them between those numbers. */
 const PHONE_NUMBER_SEPARATORS = [[/\s*\/\s*/, " / "], [/\s*,\s*/, ", "]] as const;
@@ -116,14 +167,27 @@ const PHONE_NUMBER_SEPARATORS = [[/\s*\/\s*/, " / "], [/\s*,\s*/, ", "]] as cons
  * Several numbers typed in one field (« 06.12.34.56.78 / 06.98.76.54.32 »,
  * « 0612345678,0698765432 »), each written as it would be alone and their
  * separator kept (« 06 12 34 56 78 / 06 98 76 54 32 »), so that setting the
- * digits apart never runs two numbers into one; null for a single number, or
- * if the numbers so joined could still be read as a number (ADM-26).
+ * digits apart never runs two numbers into one; after a « / », the variants
+ * of the first one likewise, their digits by two from the end
+ * (« 06.12.34.56.78/79 » gives « 06 12 34 56 78 / 79 »). A separator typed at
+ * the start, at the end or twice separates nothing
+ * (« 0612345678,0698765432, »). Null for a single number, or if the numbers so
+ * joined could still be read as a number (ADM-26).
  */
-function severalPhoneNumbersAsText(value: string) {
+function severalPhoneNumbersAsText(value: string): string | null {
   for (const [separator, joint] of PHONE_NUMBER_SEPARATORS) {
-    const numbers = value.split(separator);
-    if (numbers.length < 2 || numbers.some(number => number.replace(/\D/g, "").length < PHONE_NUMBER_DIGITS)) continue;
-    const written = numbers.map(phoneAsText).join(joint);
+    const parts = value.split(separator).filter(part => /\d/.test(part));
+    if (parts.length < 2) continue;
+    const first = parts[0]!;
+    const withVariants = joint === " / " && phoneNumberDigits(first) >= (phoneDigits(first).startsWith("00") ? INTERNATIONAL_PHONE_NUMBER_WITH_VARIANT_DIGITS : PHONE_NUMBER_WITH_VARIANT_DIGITS);
+    const variant = (part: string | undefined) => withVariants && part !== undefined && phoneNumberDigits(part) < PHONE_NUMBER_DIGITS;
+    if (!parts.every((part, index) => phoneNumberDigits(part) >= PHONE_NUMBER_DIGITS || (index > 0 && variant(part)))) continue;
+    const written = parts.map((part, index) => {
+      if (variant(part)) return part.replace(/\D/g, "").replace(BY_TWO_FROM_THE_END, " ");
+      if (!variant(parts[index + 1])) return phoneAsText(part);
+      // Before a variant, a number is set apart even if it is text on its own, its « 00 » not: either would make a fraction (« 0661 234567 / 91 », « 00 33612345678 / 02 »).
+      return (severalPhoneNumbersAsText(part) ?? phoneDigitsSetApart(part)).replace(/^00 /, "00");
+    }).join(joint);
     return spreadsheetMayReadAsNumberOrDate(written) ? null : written;
   }
   return null;
@@ -133,13 +197,7 @@ function severalPhoneNumbersAsText(value: string) {
 function phoneAsText(written: string): string {
   if (SPREADSHEET_SCIENTIFIC.test(written)) return `'${written}`;
   if (!spreadsheetMayReadAsNumberOrDate(written)) return written;
-  const several = severalPhoneNumbersAsText(written);
-  if (several !== null) return several;
-  const digits = written.replace(/\D/g, "");
-  // « 00 » before three digits would read as thousands in French (« 00 123 »).
-  if (digits.startsWith("00") && digits.length >= 6) return `00 ${digits.slice(2)}`;
-  if (digits.length >= 3) return digits.replace(/\B(?=(?:\d{2})+$)/g, " ");
-  return `'${written}`;
+  return severalPhoneNumbersAsText(written) ?? phoneDigitsSetApart(written);
 }
 
 /**
@@ -151,7 +209,8 @@ function phoneAsText(written: string): string {
  * it behind an apostrophe. A number a spreadsheet may read as a number or a
  * date (spreadsheetMayReadAsNumberOrDate) leaves with its digits set apart:
  * its « 00 » by one space (« +34 612 345 678 », « +21651000010 » and
- * « 0021651000010 » give « 00 34612345678 » and « 00 21651000010 »), the
+ * « 0021651000010 » give « 00 34612345678 » and « 00 21651000010 »), a « + »
+ * after an opening parenthesis too (« (+34 612 345 678) »: phoneDigits), the
  * others by two from the end (« 0612345678 », « (0612345678) » and
  * « 0612 345 678 » give « 06 12 34 56 78 »), which no spreadsheet reads as a
  * number; one of two digits, which spreadsheets always read as a number, and
@@ -159,9 +218,11 @@ function phoneAsText(written: string): string {
  * numbers separated by « / » or « , » leave each set apart on its own, their
  * separator kept (« 06.12.34.56.78 / 06.98.76.54.32 » and
  * « 0612345678,0698765432 » give « 06 12 34 56 78 / 06 98 76 54 32 » and
- * « 06 12 34 56 78, 06 98 76 54 32 »: severalPhoneNumbersAsText). Any other
- * number leaves as typed (« 0033 (0)6 12 34 56 78 », « 0612345678 /
- * 0698765432 »). The other columns keep the protection.
+ * « 06 12 34 56 78, 06 98 76 54 32 »: severalPhoneNumbersAsText), and so do
+ * a number and its variant after a « / » (« 06.12.34.56.78/79 » gives
+ * « 06 12 34 56 78 / 79 »). Any other number leaves as typed
+ * (« 0033 (0)6 12 34 56 78 », « 0612345678 / 0698765432 »,
+ * « 06 12 34 56 78/79 »). The other columns keep the protection.
  */
 function csvPhoneValue(phone: string | null) {
   if (!phone) return phone;
