@@ -16,12 +16,14 @@ const view = vi.hoisted(() => ({
   retryResult: { attempted: 0, sent: 0, failed: 0, skipped: 0 } as RetryResult,
   sent: [] as unknown[],
   retried: [] as unknown[],
+  tested: [] as unknown[],
+  previewed: [] as unknown[],
   toasts: [] as Array<[string, string]>,
 }));
 
 vi.mock("@/lib/trpc", async () => {
   const { useMutation } = await import("@tanstack/react-query");
-  const fakeMutation = <T,>(calls: "sent" | "retried", result: () => T) => (options: object) => useMutation({ mutationFn: async (input: unknown) => { view[calls].push(input); return result(); }, ...options });
+  const fakeMutation = <T,>(calls: "sent" | "retried" | "tested", result: () => T) => (options: object) => useMutation({ mutationFn: async (input: unknown) => { view[calls].push(input); return result(); }, ...options });
   return {
     trpc: {
       useUtils: () => ({ admin: { recruitment: { campaigns: { list: { invalidate: () => undefined } } } } }),
@@ -32,6 +34,13 @@ vi.mock("@/lib/trpc", async () => {
             list: { useQuery: () => ({ data: view.campaigns, isLoading: false }) },
             send: { useMutation: fakeMutation("sent", () => view.sendResult) },
             retryFailed: { useMutation: fakeMutation("retried", () => view.retryResult) },
+            // MAIL-13: the HTML the server renders with the real builder; queried only once the preview is opened.
+            previewEmail: { useQuery: (input: unknown, options: { enabled: boolean }) => {
+              if (!options.enabled) return { data: undefined, error: null };
+              view.previewed.push(input);
+              return { data: { subject: "Poste au Canada", html: "<!DOCTYPE html><html lang=\"fr\"><body><h2>Anesthésistes – Canada</h2><p>Bonjour Ahmed,</p></body></html>", text: "" }, error: null };
+            } },
+            sendTest: { useMutation: fakeMutation("tested", () => ({ success: true, to: "admin@test.local" })) },
           },
         },
       },
@@ -59,6 +68,8 @@ beforeEach(() => {
   view.campaigns = [];
   view.sent = [];
   view.retried = [];
+  view.tested = [];
+  view.previewed = [];
   view.toasts = [];
 });
 afterEach(() => {
@@ -105,5 +116,47 @@ describe("Mailing : avertissement en cas d’échec et relance des seuls échecs
     fireEvent.click(retry);
     await waitFor(() => expect(view.toasts).toEqual([["warning", "Relance terminée: 1/2 · 1 encore en échec."]]));
     expect(view.retried).toEqual([{ campaignId: 41, confirmed: true }]);
+  });
+});
+
+describe("Mailing : aperçu exact et « M’envoyer un test » (MAIL-13)", () => {
+  function writeCampaign() {
+    fireEvent.change(screen.getByPlaceholderText("Ex. Anesthésistes – Allemagne 2026"), { target: { value: "Anesthésistes – Canada" } });
+    fireEvent.change(screen.getByPlaceholderText("Ex. Opportunité médicale internationale"), { target: { value: "Poste au Canada" } });
+    fireEvent.change(screen.getByPlaceholderText(/Présentez la mission/), { target: { value: "Mission de six mois en anesthésie." } });
+  }
+  const content = { title: "Anesthésistes – Canada", subject: "Poste au Canada", body: "Mission de six mois en anesthésie.", language: "fr" };
+
+  it("montre le rendu réel de l’email dans un cadre sans script, avec son objet, sans rien envoyer", async () => {
+    mount();
+    const preview = screen.getByRole("button", { name: "Aperçu de l’email" });
+    expect(preview).toHaveProperty("disabled", true);
+    writeCampaign();
+    expect(view.previewed).toEqual([]);
+    fireEvent.click(preview);
+
+    const frame = await screen.findByTitle("Aperçu de l’email de la campagne");
+    expect(frame.tagName).toBe("IFRAME");
+    expect(frame.getAttribute("sandbox")).toBe("");
+    expect(frame.getAttribute("srcdoc")).toContain("<p>Bonjour Ahmed,</p>");
+    expect(screen.getByText("Objet :").parentElement!.textContent).toBe("Objet : Poste au Canada");
+    expect(view.previewed.at(-1)).toEqual(content);
+    expect(view.sent).toEqual([]);
+    expect(view.tested).toEqual([]);
+  });
+
+  it("envoie le test à l’administrateur seulement, depuis le formulaire comme depuis l’aperçu, sans lancer la campagne", async () => {
+    mount();
+    writeCampaign();
+    fireEvent.click(screen.getByRole("button", { name: "M’envoyer un test" }));
+    await waitFor(() => expect(view.toasts).toEqual([["success", "Email de test envoyé à admin@test.local."]]));
+    expect(view.tested).toEqual([content]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Aperçu de l’email" }));
+    await screen.findByTitle("Aperçu de l’email de la campagne");
+    const inDialog = screen.getAllByRole("button", { name: "M’envoyer un test" });
+    fireEvent.click(inDialog.at(-1)!);
+    await waitFor(() => expect(view.tested).toEqual([content, content]));
+    expect(view.sent).toEqual([]);
   });
 });

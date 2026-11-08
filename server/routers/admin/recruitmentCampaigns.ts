@@ -18,6 +18,7 @@ import {
   buildRecruitmentCampaignEmail,
   RESEND_BATCH_MAX_EMAILS,
   sendRecruitmentCampaignBatch,
+  sendRecruitmentCampaignEmail,
   type RecruitmentCampaignBatchDelivery,
   type RecruitmentEmailLanguage,
 } from "../../_core/notifications";
@@ -228,6 +229,30 @@ async function deliverCampaign(db: CampaignDb, campaign: CampaignContent, recipi
   return { sent, failed };
 }
 
+/** The preview and the test of a campaign: its content as the admin types it (MAIL-13). */
+const campaignContentInput = z.object({
+  title: z.string().trim().max(180),
+  subject: z.string().trim().max(255),
+  body: z.string().trim().max(8000),
+  language: z.enum(["fr", "en"]),
+});
+
+/**
+ * A campaign email as a recipient gets it (MAIL-13), greeting the admin by
+ * the first word of their name as a candidate is greeted by theirs. Its
+ * unsubscribe links carry a token no candidate has: they unsubscribe nobody.
+ */
+function campaignTestEmail(input: z.infer<typeof campaignContentInput>, adminName: string | null | undefined) {
+  return {
+    candidateFirstName: adminName?.trim().split(/\s+/)[0] ?? "",
+    campaignTitle: input.title,
+    subject: input.subject,
+    body: input.body,
+    language: input.language,
+    ...recruitmentUnsubscribeLinks("apercu"),
+  };
+}
+
 export const adminRecruitmentCampaignsRouter = router({
   previewAudience: adminProcedure
     .input(z.object({
@@ -285,6 +310,27 @@ export const adminRecruitmentCampaignsRouter = router({
     const metricByCampaign = new Map(metrics.map(metric => [metric.campaignId, metric]));
     return campaigns.map(campaign => ({ ...campaign, delivery: metricByCampaign.get(campaign.id) || { total: 0, sent: 0, delivered: 0, failed: 0, retryable: 0, delayed: 0, opened: 0 } }));
   }),
+
+  /** The exact email of the campaign being written, rendered by its real builder (MAIL-13); nothing is sent nor recorded. */
+  previewEmail: adminProcedure
+    .input(campaignContentInput)
+    .query(({ input, ctx }) => {
+      const email = buildRecruitmentCampaignEmail(campaignTestEmail(input, ctx.user.name));
+      return { subject: email.subject, html: email.html, text: email.text };
+    }),
+
+  /**
+   * « M'envoyer un test » (MAIL-13): the campaign being written, to the
+   * verified address of the signed-in admin only. No campaign, recipient,
+   * status or counter is written.
+   */
+  sendTest: adminProcedure
+    .input(campaignContentInput)
+    .mutation(async ({ input, ctx }) => {
+      if (!ctx.user.email) throw new TRPCError({ code: "BAD_REQUEST", message: "Aucune adresse email vérifiée n’est associée à votre compte administrateur." });
+      await sendRecruitmentCampaignEmail({ ...campaignTestEmail(input, ctx.user.name), candidateEmail: ctx.user.email });
+      return { success: true, to: ctx.user.email };
+    }),
 
   send: adminProcedure
     .input(z.object({

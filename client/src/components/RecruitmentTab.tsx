@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from "react";
-import { BrainCircuit, ClipboardList, Download, FileSearch, Loader2, Mail, RefreshCw, Settings2, Sparkles, Trash2, UserRound, UserRoundPlus } from "lucide-react";
+import { BrainCircuit, ClipboardList, Download, Eye, FileSearch, Loader2, Mail, RefreshCw, Send, Settings2, Sparkles, Trash2, UserRound, UserRoundPlus } from "lucide-react";
+import { keepPreviousData } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
@@ -42,6 +43,39 @@ const statusOptions = RECRUITMENT_APPLICATION_STATUS_OPTIONS;
 
 type Status = RecruitmentApplicationStatus;
 type RecruitmentEmailTemplate = "profile_interest" | "additional_information";
+type TemplateEmailInput = { id: number; template: RecruitmentEmailTemplate; language: "fr" | "en"; customRequest?: string };
+
+/**
+ * MAIL-13 : l’email exact du compositeur, rendu par le vrai gabarit du serveur
+ * dans un cadre qui n’exécute aucun script (sandbox), et « M’envoyer un test »,
+ * à la seule adresse vérifiée de l’administrateur connecté.
+ */
+function TemplateEmailPreview({ input }: { input: TemplateEmailInput }) {
+  const [open, setOpen] = useState(false);
+  // Les précisions tapées atteignent l’aperçu une fois la saisie en pause.
+  const customRequest = useAdminFilterDelay(input.customRequest ?? "");
+  const preview = trpc.admin.recruitment.previewTemplateEmail.useQuery({ ...input, customRequest: customRequest || undefined }, { enabled: open, placeholderData: keepPreviousData });
+  const sendTest = trpc.admin.recruitment.sendTemplateTest.useMutation({
+    onSuccess: ({ to }) => toast.success(`Email de test envoyé à ${to}.`),
+    onError: mutationError => toast.error(mutationError.message),
+  });
+  return (
+    <div className="space-y-3 border-t border-border pt-4">
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" size="sm" variant="outline" aria-expanded={open} onClick={() => setOpen(current => !current)}><Eye className="mr-2 h-4 w-4" />{open ? "Masquer l’aperçu" : "Aperçu exact de l’email"}</Button>
+        <Button type="button" size="sm" variant="outline" disabled={sendTest.isPending} onClick={() => sendTest.mutate(input)}>{sendTest.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}M’envoyer un test</Button>
+      </div>
+      <p className="text-xs text-muted-foreground">Le test part à votre seule adresse : le dossier du candidat, son statut et son journal ne changent pas.</p>
+      {open && (preview.data ? (
+        <div className="space-y-2">
+          <p className="text-sm text-muted-foreground wrap-anywhere"><span className="font-semibold text-foreground">Objet :</span> {preview.data.subject}</p>
+          <iframe title="Aperçu de l’email au candidat" sandbox="" srcDoc={preview.data.html} className="h-80 w-full rounded-lg border border-border bg-white" />
+        </div>
+      ) : preview.error ? <p className="text-sm text-destructive">{preview.error.message}</p> : <PublicContentSkeleton label="Préparation de l’aperçu" />)}
+    </div>
+  );
+}
+
 // The version the server stores with each analysis: a score of another version is to be recalculated.
 const VERIFIED_ANALYSIS_VERSION = RECRUITMENT_ANALYSIS_PROMPT_VERSION;
 
@@ -858,6 +892,7 @@ export default function RecruitmentTab({ initialSearch = "" }: { initialSearch?:
                   <span className="text-xs">Ce texte libre sera ajouté au message dans la langue choisie.</span>
                 </label>
               )}
+              <TemplateEmailPreview input={{ id: emailComposer.id, template: emailComposer.template, language: emailLanguage, customRequest: emailComposer.template === "additional_information" ? customRequest.trim() || undefined : undefined }} />
             </div>
           )}
           <DialogFooter>
