@@ -44,9 +44,9 @@ const staticEntries: PublicSearchEntry[] = [
       zh: "健康咨询：时间段、费用、在线付款与发票",
     },
     keywords: {
-      fr: ["réserver", "réservation", "rendez-vous", "rdv", "consultation", "téléconsultation", "conseil médical", "tarif", "prix", "honoraires", "coût", "paiement", "facture", "annulation", "remboursement", "créneau", "anesthésie"],
-      en: ["book", "booking", "appointment", "consultation", "teleconsultation", "medical advice", "fee", "price", "cost", "rate", "payment", "invoice", "cancellation", "refund", "slot", "anaesthesia", "anesthesia"],
-      de: ["buchen", "buchung", "termin", "beratung", "telekonsultation", "medizinische beratung", "honorar", "preis", "kosten", "tarif", "zahlung", "rechnung", "stornierung", "erstattung", "anästhesie"],
+      fr: ["réserver", "réservation", "rendez-vous", "rdv", "consultation", "téléconsultation", "conseil médical", "tarif", "prix", "honoraires", "coût", "paiement", "facture", "annuler", "annulation", "rembourser", "remboursement", "créneau", "anesthésie"],
+      en: ["book", "booking", "appointment", "consultation", "teleconsultation", "medical advice", "fee", "price", "cost", "rate", "payment", "invoice", "cancel", "cancelled", "canceled", "cancellation", "refund", "reimbursement", "slot", "anaesthesia", "anesthesia"],
+      de: ["buchen", "buchung", "termin", "beratung", "telekonsultation", "medizinische beratung", "honorar", "preis", "kosten", "tarif", "zahlung", "rechnung", "stornieren", "stornierung", "erstatten", "erstattung", "anästhesie"],
       zh: ["预约", "挂号", "咨询", "远程咨询", "医疗建议", "费用", "价格", "收费", "付款", "发票", "取消", "退款", "时间", "麻醉"],
     },
   },
@@ -147,9 +147,9 @@ const staticEntries: PublicSearchEntry[] = [
     title: { fr: "Questions fréquentes", en: "Frequently asked questions", de: "Häufige Fragen", zh: "常见问题" },
     description: { fr: "Réponses pratiques : consultation, paiement, annulation, recrutement", en: "Practical answers: consultation, payment, cancellation, recruitment", de: "Praktische Antworten: Beratung, Zahlung, Stornierung, Rekrutierung", zh: "实用解答：咨询、付款、取消、招聘" },
     keywords: {
-      fr: ["faq", "question", "questions fréquentes", "aide", "annulation", "urgence", "délai", "tarif", "paiement", "remboursement"],
-      en: ["faq", "question", "help", "cancellation", "emergency", "delay", "fee", "payment", "refund"],
-      de: ["faq", "frage", "hilfe", "stornierung", "notfall", "frist", "honorar", "zahlung", "erstattung"],
+      fr: ["faq", "question", "questions fréquentes", "aide", "annuler", "annulation", "urgence", "délai", "tarif", "paiement", "rembourser", "remboursement"],
+      en: ["faq", "question", "help", "cancel", "cancelled", "canceled", "cancellation", "emergency", "delay", "fee", "payment", "refund", "reimbursement"],
+      de: ["faq", "frage", "hilfe", "stornieren", "stornierung", "notfall", "frist", "honorar", "zahlung", "erstatten", "erstattung"],
       zh: ["常见问题", "问题", "帮助", "取消", "紧急", "期限", "费用", "付款", "退款"],
     },
   },
@@ -234,14 +234,41 @@ export const publicSearchIndex: PublicSearchEntry[] = [
   ...(isPublicTestimonialsEnabled() ? [testimonialsEntry] : []),
 ];
 
+/**
+ * Raccourcis vers les parcours principaux, de vrais liens, quand la recherche ne trouve rien et sur
+ * la page 404 (PUB-28) : mêmes libellés que l'en-tête, la réservation nommée comme sa page.
+ */
+export const publicShortcuts: { title: Localized<string>; links: { href: string; label: Localized<string> }[] } = {
+  title: { fr: "Pages utiles", en: "Useful pages", de: "Nützliche Seiten", zh: "常用页面" },
+  links: [
+    { href: "/booking", label: { fr: "Réserver une consultation", en: "Book a consultation", de: "Beratung buchen", zh: "预约咨询" } },
+    { href: "/questions-anesthesie", label: { fr: "Questions santé", en: "Health questions", de: "Gesundheitsfragen", zh: "健康问答" } },
+    { href: "/recruitment", label: { fr: "Recrutement", en: "Recruitment", de: "Recruiting", zh: "招聘" } },
+    { href: "/employers", label: { fr: "Employeurs", en: "Employers", de: "Arbeitgeber", zh: "雇主专区" } },
+    { href: "/#contact", label: { fr: "Contact", en: "Contact", de: "Kontakt", zh: "联系" } },
+  ],
+};
+
+/**
+ * Mots trop courants pour suffire à la recherche de secours, présents dans presque toutes les pages
+ * (« de », « la », « the », « und ») ; une lettre seule non plus. Les mots courts du site (« cv »,
+ * « rh », « ia ») y suffisent (PUB-28).
+ */
+const fallbackStopWords: Localized<ReadonlySet<string>> = {
+  fr: new Set(["au", "aux", "de", "des", "du", "en", "et", "la", "le", "les", "ou", "par", "pour", "sur", "un", "une"]),
+  en: new Set(["an", "and", "at", "by", "for", "in", "is", "of", "on", "or", "the", "to"]),
+  de: new Set(["am", "an", "auf", "das", "dem", "den", "der", "des", "die", "ein", "eine", "fur", "im", "in", "mit", "oder", "und", "von", "zu"]),
+  zh: new Set(["的", "和", "与", "在", "或"]),
+};
+
+/** Ponctuation au début ou à la fin d'un mot tapé (« annuler ? », « cancel? »), qui n'en fait pas partie. */
+const EDGE_PUNCTUATION = new RegExp("^[^\\p{L}\\p{N}]+|[^\\p{L}\\p{N}]+$", "gu");
+
 function normalize(value: string) {
   return value.normalize("NFD").replace(/[̀-ͯ]/g, "").toLocaleLowerCase();
 }
 
-export function searchPublicPages(query: string, language: SearchLanguage) {
-  const terms = normalize(query).trim().split(/\s+/).filter(Boolean);
-  if (!terms.length) return [];
-
+function rank(terms: string[], language: SearchLanguage) {
   return publicSearchIndex
     .map((entry) => {
       const title = normalize(entry.title[language]);
@@ -251,6 +278,22 @@ export function searchPublicPages(query: string, language: SearchLanguage) {
       const score = terms.reduce((total, term) => total + (title.includes(term) ? 3 : 0) + (description.includes(term) ? 2 : 0) + (keywords.includes(term) ? 1 : 0), 0);
       return { entry, score, matchedTerms };
     })
-    .filter(({ matchedTerms }) => matchedTerms === terms.length)
     .sort((left, right) => right.score - left.score || left.entry.title[language].localeCompare(right.entry.title[language]));
+}
+
+/**
+ * Pages qui contiennent tous les mots de la recherche, les mieux placées d'abord. Sans aucune, pour
+ * une recherche de plusieurs mots (« recrutement Dubai »), celles qui en contiennent au moins un,
+ * hors mots vides, marquées `partial` (PUB-28). Un signe isolé (« ? ») n'est pas un mot.
+ */
+export function searchPublicPages(query: string, language: SearchLanguage) {
+  const terms = normalize(query).trim().split(/\s+/).map((term) => term.replace(EDGE_PUNCTUATION, "")).filter(Boolean);
+  if (!terms.length) return [];
+
+  const complete = rank(terms, language).filter(({ matchedTerms }) => matchedTerms === terms.length);
+  if (complete.length || terms.length === 1) return complete.map((result) => ({ ...result, partial: false }));
+
+  const meaningful = terms.filter((term) => !fallbackStopWords[language].has(term) && !/^[a-z0-9]$/.test(term));
+  if (!meaningful.length) return [];
+  return rank(meaningful, language).filter(({ matchedTerms }) => matchedTerms > 0).map((result) => ({ ...result, partial: true }));
 }

@@ -12,7 +12,7 @@ vi.mock("@/_core/hooks/useAuth", () => ({ useAuth: () => ({ user: { name: "Dr Ah
 vi.mock("@clerk/react", () => ({ SignInButton: () => null, UserButton: () => null }));
 // The section lives in the address (ADM-09): a navigation to /admin?… changes the search the dashboard reads.
 const address = vi.hoisted(() => ({ search: "" }));
-vi.mock("wouter", () => ({ useLocation: () => ["/admin", (path: string) => { address.search = path.split("?")[1] ?? ""; }], useSearch: () => address.search }));
+vi.mock("wouter", () => ({ useLocation: () => ["/admin", (path: string) => { address.search = path.split("?")[1] ?? ""; }], useSearch: () => address.search, Link: function Link() { return null; } }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() } }));
 vi.mock("@/lib/trpc", () => ({
   trpc: {

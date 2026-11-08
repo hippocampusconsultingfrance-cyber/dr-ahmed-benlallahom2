@@ -850,7 +850,7 @@ export default function BookingPage() {
   const submitErrorRef = useRef<HTMLParagraphElement>(null);
   const submitErrorCountRef = useRef(0);
   const [takenSlot, setTakenSlot] = useState<number | null>(null);
-  const pendingTitleRef = useRef<HTMLHeadingElement>(null);
+  const pendingTitleRef = useRef<HTMLParagraphElement>(null);
   const [paymentStatus, setPaymentStatus] = useState<"success" | "canceled" | null>(null);
   const [trackingId, setTrackingId] = useState<string | null>(null);
   const [pendingBooking, setPendingBooking] = useState<PendingBooking | null>(null);
@@ -1373,6 +1373,8 @@ export default function BookingPage() {
         )}
 
         {/* Pending payment after a return from Stripe */}
+        {/* Titre de chaque carte d'état, ici comme plus bas : pas un titre, il précéderait le h1 de la page dans la
+            lecture (A11Y-15) ; la carte est une région nommée par lui. */}
         {!paymentStatus && pendingBooking && (
           <Card className="payment-state payment-state-canceled mb-6 p-5 sm:p-6" role="region" aria-labelledby="pending-booking-title">
             <div className="flex items-start gap-4">
@@ -1380,7 +1382,7 @@ export default function BookingPage() {
                 <Clock className="w-6 h-6" />
               </span>
               <div className="min-w-0">
-                <h2 id="pending-booking-title" ref={pendingTitleRef} tabIndex={-1} className="font-display text-xl font-bold mb-2 focus:outline-none">{content.pending.title}</h2>
+                <p id="pending-booking-title" ref={pendingTitleRef} tabIndex={-1} className="font-display text-xl font-bold mb-2 focus:outline-none">{content.pending.title}</p>
                 <p className="text-sm text-muted-foreground leading-relaxed">{content.pending.description}</p>
                 <dl className="mt-3 grid gap-1 text-sm">
                   <div><dt className="inline font-medium">{content.pending.slot}{content.pending.labelSeparator}</dt><dd className="inline">{parisDateTimeFormat.format(new Date(pendingBooking.appointmentDate))} ({content.form.parisTime}){pendingLocalTime && `, ${content.form.localTime(pendingLocalTime)}`}</dd></div>
@@ -1406,14 +1408,14 @@ export default function BookingPage() {
 
         {/* Payment Success Message */}
         {paymentStatus === "success" && (
-          <Card className="payment-state payment-state-success mb-6 p-6 sm:p-8">
+          <Card className="payment-state payment-state-success mb-6 p-6 sm:p-8" role="region" aria-labelledby="payment-success-title">
             <div className="flex items-start gap-4">
               <span className="payment-state-icon" aria-hidden="true">
                 <CheckCircle className="w-6 h-6" />
               </span>
               <div className="min-w-0">
                 <span className="eyebrow-label mb-3">{content.pricing.total}</span>
-                <h3 className="font-display text-2xl font-bold mb-3">{content.paymentSuccess}</h3>
+                <p id="payment-success-title" className="font-display text-2xl font-bold mb-3">{content.paymentSuccess}</p>
                 <p className="text-sm text-muted-foreground leading-relaxed">{content.confirmationNextSteps}</p>
                 {trackingId && (
                   <p className="mt-4 text-sm text-foreground">
@@ -1430,14 +1432,14 @@ export default function BookingPage() {
 
         {/* Payment Canceled Message */}
         {paymentStatus === "canceled" && (
-          <Card className="payment-state payment-state-canceled mb-6 p-6 sm:p-8">
+          <Card className="payment-state payment-state-canceled mb-6 p-6 sm:p-8" role="region" aria-labelledby="payment-canceled-title">
             <div className="flex items-start gap-4">
               <span className="payment-state-icon" aria-hidden="true">
                 <AlertCircle className="w-6 h-6" />
               </span>
               <div className="min-w-0">
                 <span className="eyebrow-label mb-3">{content.pricing.title}</span>
-                <h3 className="font-display text-2xl font-bold mb-3">{content.paymentCanceled}</h3>
+                <p id="payment-canceled-title" className="font-display text-2xl font-bold mb-3">{content.paymentCanceled}</p>
                 <p className="text-sm text-muted-foreground leading-relaxed">{content.canceledNextSteps}</p>
                 <Button type="button" onClick={handleReset} className="cta-secondary mt-6">
                   {content.restartBooking}

@@ -1,15 +1,15 @@
 import { Button } from "@/components/ui/button";
 import { Home, ArrowLeft } from "lucide-react";
-import { useLocation } from "wouter";
+import { Link } from "wouter";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { SEOHead } from "@/components/SEOHead";
 import LanguageMenu from "@/components/LanguageMenu";
 import { ManageCookiesButton } from "@/components/CookieConsent";
+import { publicShortcuts } from "@/lib/publicSearchIndex";
 
 export const notFoundSeo = { noIndex: true } as const;
 
 export default function NotFound() {
-  const [, setLocation] = useLocation();
   const { language } = useLanguage();
 
   const content: Record<string, { title: string; subtitle: string; description: string; goHome: string; goBack: string }> = {
@@ -51,37 +51,36 @@ export default function NotFound() {
       {/* Background pattern */}
       <div className="absolute inset-0 diagnostic-grid opacity-30" />
       <LanguageMenu className="absolute right-4 top-4 z-10 sm:right-6 sm:top-6" />
-      
-      <div className="relative text-center max-w-lg">
+
+      {/* Cible du lien d'évitement ; le titre est « Page introuvable », « 404 » n'est qu'un décor (A11Y-15). */}
+      <main id="main-content" tabIndex={-1} className="relative text-center max-w-lg">
         {/* Large 404 number */}
-        <div className="relative mb-6">
-          <h1 className="stat-monumental text-[8rem] sm:text-[12rem] leading-none select-none opacity-20">
+        <div className="relative mb-6" aria-hidden="true">
+          <p className="stat-monumental text-[8rem] sm:text-[12rem] leading-none select-none opacity-20">
             {c.title}
-          </h1>
+          </p>
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="ecg-divider w-48" />
           </div>
         </div>
 
         {/* Subtitle */}
-        <h2 className="text-2xl sm:text-3xl font-bold text-foreground mb-4 font-display">
+        <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-4 font-display">
           {c.subtitle}
-        </h2>
+        </h1>
 
         {/* Description */}
         <p className="text-muted-foreground mb-8 text-lg leading-relaxed">
           {c.description}
         </p>
 
-        {/* Buttons */}
+        {/* Buttons : l'accueil est un vrai lien, « Page précédente » une action (A11Y-17). */}
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
-          <Button
-            onClick={() => setLocation("/")}
-            className="gap-2"
-            size="lg"
-          >
-            <Home className="w-4 h-4" />
-            {c.goHome}
+          <Button asChild className="gap-2" size="lg">
+            <Link href="/">
+              <Home className="w-4 h-4" />
+              {c.goHome}
+            </Link>
           </Button>
           <Button
             onClick={() => window.history.back()}
@@ -94,9 +93,23 @@ export default function NotFound() {
           </Button>
         </div>
 
+        {/* Raccourcis vers les parcours principaux (PUB-28). */}
+        <nav className="mt-10" aria-labelledby="not-found-shortcuts-title">
+          <h2 id="not-found-shortcuts-title" className="text-sm font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            {publicShortcuts.title[language]}
+          </h2>
+          <ul className="mt-4 flex flex-wrap justify-center gap-x-5 gap-y-3 text-sm font-medium">
+            {publicShortcuts.links.map(link => (
+              <li key={link.href}>
+                <Link href={link.href} className="text-primary underline-offset-4 hover:underline">{link.label[language]}</Link>
+              </li>
+            ))}
+          </ul>
+        </nav>
+
         {/* Page sans pied de page : « Gérer les cookies » sous le contenu (PUB-12). */}
         <ManageCookiesButton className="mt-10 text-sm text-muted-foreground underline underline-offset-4 transition-colors hover:text-primary" />
-      </div>
+      </main>
     </div>
   );
 }

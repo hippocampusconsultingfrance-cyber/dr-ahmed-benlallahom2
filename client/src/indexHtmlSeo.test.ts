@@ -57,9 +57,10 @@ describe("document HTML initial", () => {
     expect(json).not.toContain("contact@drahmedbenlallahom.com");
     // Plus de JSON-LD codé en dur dans le shell : il ne serait pas aligné sur site-config.
     expect(readProjectFile("client/index.html")).not.toContain("application/ld+json");
-    // Uniquement sur l'accueil : pas de répétition sur les pages non indexables.
+    // Uniquement sur l'accueil : pas de répétition sur les pages non indexables, ni sur la FAQ, qui
+    // n'a que son FAQPage (SEOP-03).
     expect(structuredData(renderRouteSeoHead("/search"))).toEqual([]);
-    expect(structuredData(renderRouteSeoHead("/faq"))).toEqual([]);
+    expect(structuredData(renderRouteSeoHead("/faq")).map(schema => schema["@type"])).toEqual(["FAQPage"]);
   });
 });
 

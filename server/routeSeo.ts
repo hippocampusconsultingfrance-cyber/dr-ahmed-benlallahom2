@@ -1,4 +1,5 @@
 import { venturesFr } from "../client/src/data/ventures-fr";
+import { getFaqContent } from "../client/src/pages/faqContent";
 import {
   DEFAULT_SHARE_IMAGE,
   ROBOTS_INDEX,
@@ -171,13 +172,39 @@ function renderHead(input: HeadInput): string {
   ].filter(Boolean).join("\n    ");
 }
 
+/**
+ * FAQPage (SEOP-03) : les questions et réponses de /faq, en français comme tout le HTML pré-rendu,
+ * prises dans faqContent.ts que la page affiche : le balisage reste celui des réponses visibles.
+ */
+function buildFaqStructuredData(): Record<string, unknown>[] {
+  return [
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      inLanguage: "fr-FR",
+      mainEntity: getFaqContent("fr").entries.map(entry => ({
+        "@type": "Question",
+        name: entry.question,
+        acceptedAnswer: { "@type": "Answer", text: entry.answer },
+      })),
+    },
+  ];
+}
+
+// Données structurées du site sur l'accueil, celles de la FAQ sur /faq ; aucune sur les pages non indexables.
+function routeStructuredData(seo: RouteSeo): Record<string, unknown>[] | undefined {
+  if (seo.noIndex) return undefined;
+  if (seo.canonicalPath === "/") return buildSiteStructuredData();
+  if (seo.canonicalPath === "/faq") return buildFaqStructuredData();
+  return undefined;
+}
+
 export function renderRouteSeoHead(url: string): string {
   const seo = getRouteSeo(url);
   return renderHead({
     ...seo,
     canonicalUrl: canonicalUrlFor(seo.canonicalPath),
-    // Données structurées du site uniquement sur l'accueil (pas sur les pages non indexables).
-    structuredData: seo.canonicalPath === "/" && !seo.noIndex ? buildSiteStructuredData() : undefined,
+    structuredData: routeStructuredData(seo),
   });
 }
 

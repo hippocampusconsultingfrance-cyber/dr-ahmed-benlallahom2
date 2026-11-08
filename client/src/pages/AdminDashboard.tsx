@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Calendar, MessageSquare, Shield, DollarSign, ArrowLeft, Star, CalendarDays, UserRound, BriefcaseBusiness, Send, UsersRound, LogOut } from "lucide-react";
 import { toast } from "sonner";
-import { useLocation, useSearch } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { adminLocationOf, adminPath, type AdminTab } from "@shared/adminTabs";
 import SecurityOperationsTab from "@/components/SecurityOperationsTab";
 import MedicalQuestionsAdminTab from "@/components/MedicalQuestionsAdminTab";
@@ -86,9 +86,11 @@ export default function AdminDashboard() {
               Actualiser l’accès
             </Button>
             <UserButton showName />
-            <Button variant="ghost" onClick={() => setLocation("/")}>
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Accueil
+            <Button asChild variant="ghost">
+              <Link href="/">
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Accueil
+              </Link>
             </Button>
           </div>
         </div>
@@ -102,7 +104,7 @@ export default function AdminDashboard() {
 
   if (!adminSecurity.data?.verified) {
     // The page's main region, which « Aller au contenu principal » reaches (A11Y-12).
-    return <main className="min-h-screen bg-background flex items-center justify-center px-4"><div className="w-full max-w-md rounded-2xl border border-cyan-900/50 bg-card p-7 shadow-2xl"><div className="mb-5 flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-xl bg-cyan-400/10 text-cyan-300"><Shield className="h-6 w-6"/></span><div><h1 className="text-xl font-bold text-foreground">Validation de sécurité</h1><p className="text-sm text-muted-foreground">Une seconde vérification protège les documents et CV sensibles.</p></div></div><p className="mb-4 text-sm text-muted-foreground">Demandez un code à six chiffres sur votre email administrateur, puis saisissez-le ci-dessous.</p><Button className="mb-5 w-full" onClick={() => requestMfa.mutate()} disabled={requestMfa.isPending}>{requestMfa.isPending ? "Envoi en cours…" : "Envoyer un code de sécurité"}</Button><form className="space-y-2" onSubmit={submitMfaCode}><label htmlFor="admin-mfa-code" className="text-sm font-medium text-foreground">Code à 6 chiffres</label><Input id="admin-mfa-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={mfaCode} onChange={event => setMfaCode(event.target.value.replace(/\D/g, ""))} placeholder="123456"/><Button type="submit" className="mt-2 w-full" variant="outline" disabled={mfaCode.length !== 6 || verifyMfa.isPending}>{verifyMfa.isPending ? "Vérification…" : "Valider le code"}</Button></form><Button variant="ghost" className="mt-3 w-full" onClick={() => setLocation("/")}>Retour au site</Button><Button variant="ghost" className="mt-1 w-full" onClick={signOut} disabled={signingOut}><LogOut className="mr-2 h-4 w-4"/>{signingOut ? "Déconnexion…" : "Se déconnecter"}</Button></div></main>;
+    return <main className="min-h-screen bg-background flex items-center justify-center px-4"><div className="w-full max-w-md rounded-2xl border border-cyan-900/50 bg-card p-7 shadow-2xl"><div className="mb-5 flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-xl bg-cyan-400/10 text-cyan-300"><Shield className="h-6 w-6"/></span><div><h1 className="text-xl font-bold text-foreground">Validation de sécurité</h1><p className="text-sm text-muted-foreground">Une seconde vérification protège les documents et CV sensibles.</p></div></div><p className="mb-4 text-sm text-muted-foreground">Demandez un code à six chiffres sur votre email administrateur, puis saisissez-le ci-dessous.</p><Button className="mb-5 w-full" onClick={() => requestMfa.mutate()} disabled={requestMfa.isPending}>{requestMfa.isPending ? "Envoi en cours…" : "Envoyer un code de sécurité"}</Button><form className="space-y-2" onSubmit={submitMfaCode}><label htmlFor="admin-mfa-code" className="text-sm font-medium text-foreground">Code à 6 chiffres</label><Input id="admin-mfa-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={mfaCode} onChange={event => setMfaCode(event.target.value.replace(/\D/g, ""))} placeholder="123456"/><Button type="submit" className="mt-2 w-full" variant="outline" disabled={mfaCode.length !== 6 || verifyMfa.isPending}>{verifyMfa.isPending ? "Vérification…" : "Valider le code"}</Button></form><Button asChild variant="ghost" className="mt-3 w-full"><Link href="/">Retour au site</Link></Button><Button variant="ghost" className="mt-1 w-full" onClick={signOut} disabled={signingOut}><LogOut className="mr-2 h-4 w-4"/>{signingOut ? "Déconnexion…" : "Se déconnecter"}</Button></div></main>;
   }
 
   const tabs = [
@@ -127,9 +129,12 @@ export default function AdminDashboard() {
       <header className="border-b border-border bg-card/50 backdrop-blur sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 py-3 sm:py-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="sm" onClick={() => setLocation("/")}>
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Site
+            {/* Le site est un vrai lien, comme les autres retours vers le site de cette page (A11Y-17). */}
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/">
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Site
+              </Link>
             </Button>
             <h1 className="text-xl font-bold text-foreground">Administration</h1>
           </div>

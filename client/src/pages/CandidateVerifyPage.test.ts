@@ -6,7 +6,8 @@ import { elementsOf, renderStateful, resetStatefulHooks } from "@/testing/statef
 // Page d’activation ouverte depuis le lien envoyé par email : contrôle du lien
 // en cours, formulaire occupé pendant l’activation, lien absent ou refusé avec
 // retour vers la connexion, refus du serveur annoncé sans quitter la page, et
-// lien expiré pendant la saisie qui mène au renvoi d’un nouveau lien.
+// lien expiré pendant la saisie qui mène au renvoi d’un nouveau lien ; ces
+// retours sont de vrais liens, et non des boutons (A11Y-17).
 
 vi.mock("react", async importOriginal => (await import("@/testing/statefulRender")).withStatefulHooks(await importOriginal()));
 
@@ -25,7 +26,13 @@ const view = vi.hoisted(() => ({
 }));
 
 vi.mock("@/contexts/LanguageContext", () => ({ useLanguage: () => ({ language: view.language }) }));
-vi.mock("wouter", () => ({ useLocation: () => ["/candidate/verify", (path: string) => view.navigations.push(path)] }));
+vi.mock("wouter", async () => {
+  const { createElement } = await import("react");
+  return {
+    useLocation: () => ["/candidate/verify", (path: string) => view.navigations.push(path)],
+    Link: function Link({ href, children, className }: { href: string; children: unknown; className?: string }) { return createElement("a", { href, className }, children as never); },
+  };
+});
 vi.mock("@/lib/trpc", () => ({
   trpc: {
     useUtils: () => ({ candidatePortal: { me: { invalidate: async () => undefined } } }),
@@ -43,6 +50,7 @@ vi.mock("@/components/CandidateLegalFooter", () => ({ default: () => null }));
 const { default: CandidateVerifyPage } = await import("./CandidateVerifyPage");
 const { candidateAccountCopy } = await import("./candidateAccountCopy");
 const { Button } = await import("@/components/ui/button");
+const { Link } = await import("wouter");
 
 const LINK = "?email=vera%40example.test&token=activation-token-0123456789";
 const READY: Details = { data: { email: "vera@example.test", firstName: "Vera", lastName: "Rossi" }, isLoading: false, isError: false };
@@ -108,10 +116,11 @@ describe("activation de l’espace candidat", () => {
       expect(page, search).toContain(copy.invalidDescription);
       expect(page, search).not.toContain("<form");
 
-      view.navigations = [];
-      const back = elementsOf(render()).find(element => element.type === "button" && element.props.children === copy.backToAccess)!;
-      (back.props.onClick as () => void)();
-      expect(view.navigations, search).toEqual(["/candidate/access"]);
+      expect(page, search).toContain('href="/candidate/access"');
+      const tree = render();
+      expect(elementsOf(tree).find(element => element.props.children === copy.backToAccess)?.props, search).toMatchObject({ href: "/candidate/access" });
+      expect(elementsOf(tree).find(element => element.props.children === copy.backToAccess)?.type, search).toBe(Link);
+      expect(elementsOf(tree).some(element => element.type === "button"), search).toBe(false);
     }
     // Without the token, the link is not even checked.
     expect(view.detailsInputs.some(call => call.options.enabled && !(call.input as { token: string }).token)).toBe(false);
@@ -120,7 +129,7 @@ describe("activation de l’espace candidat", () => {
   it.each(["fr", "en", "de", "zh"] as const)("propose un nouveau lien d’activation, l’adresse du lien refusé déjà saisie (%s, REC-17)", language => {
     view.language = language;
     const copy = candidateAccountCopy[language];
-    const requestNewLink = () => elementsOf(render()).find(element => element.type === Button && element.props.children === copy.requestNewLink);
+    const requestNewLink = () => elementsOf(render()).find(element => element.type === Link && element.props.children === copy.requestNewLink);
     for (const [search, details, destination] of [
       [LINK, { isLoading: false, isError: true }, "/candidate/access?mode=activation&email=vera%40example.test"],
       ["?email=vera%40example.test", READY, "/candidate/access?mode=activation&email=vera%40example.test"],
@@ -129,10 +138,10 @@ describe("activation de l’espace candidat", () => {
       resetStatefulHooks();
       openLink(search);
       view.details = details;
-      view.navigations = [];
-      expect(html(), search).toContain(copy.requestNewLink);
-      (requestNewLink()!.props.onClick as () => void)();
-      expect(view.navigations, search).toEqual([destination]);
+      expect(html(), search).toContain(`href="${destination.replace("&", "&amp;")}"`);
+      expect(requestNewLink()!.props.href, search).toBe(destination);
+      // Shown as the button of the card, but a link.
+      expect(elementsOf(render()).find(element => element.type === Button)!.props.asChild, search).toBe(true);
     }
 
     // A valid link shows the activation form, not the button.
@@ -201,8 +210,7 @@ describe("activation de l’espace candidat", () => {
     expect(view.focused).toEqual(["candidate-activation-unavailable-title"]);
     expect(byId(tree, "candidate-activation-unavailable-title").props.tabIndex).toBe(-1);
 
-    const requestNewLink = elementsOf(tree).find(element => element.type === Button && element.props.children === copy.requestNewLink)!;
-    (requestNewLink.props.onClick as () => void)();
-    expect(view.navigations).toEqual(["/candidate/access?mode=activation&email=vera%40example.test"]);
+    const requestNewLink = elementsOf(tree).find(element => element.type === Link && element.props.children === copy.requestNewLink)!;
+    expect(requestNewLink.props.href).toBe("/candidate/access?mode=activation&email=vera%40example.test");
   });
 });

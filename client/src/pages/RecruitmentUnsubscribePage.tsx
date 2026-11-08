@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useLocation } from "wouter";
+import { Link } from "wouter";
 import { CheckCircle2, MailX, ShieldAlert } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { SEOHead } from "@/components/SEOHead";
@@ -60,7 +60,6 @@ export function getRecruitmentUnsubscribeCopy(language: SupportedLanguage) {
 }
 
 export default function RecruitmentUnsubscribePage() {
-  const [, navigate] = useLocation();
   const { language } = useLanguage();
   const copy = getRecruitmentUnsubscribeCopy(language as SupportedLanguage);
   const token = useMemo(() => new URLSearchParams(window.location.search).get("token")?.trim() ?? "", []);
@@ -105,9 +104,10 @@ export default function RecruitmentUnsubscribePage() {
               </button>
             </>
           )}
-          <button type="button" onClick={() => navigate("/")} className="mt-7 block w-full text-sm font-medium text-cyan-300 hover:text-cyan-100">
+          {/* L'accueil est un vrai lien, et non un bouton (A11Y-17). */}
+          <Link href="/" className="mt-7 block w-full text-sm font-medium text-cyan-300 hover:text-cyan-100">
             {copy.home}
-          </button>
+          </Link>
         </section>
         {/* Page sans pied de page : « Gérer les cookies » sous la carte, hors de la zone annoncée (PUB-12). */}
         <ManageCookiesButton className="mt-6 text-sm text-slate-400 underline underline-offset-4 transition-colors hover:text-cyan-100" />

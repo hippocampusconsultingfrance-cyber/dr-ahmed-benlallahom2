@@ -943,6 +943,23 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
     await vvip.context().close();
   }, 120_000);
 
+  it("garde masquées à l'écran les réponses repliées de la FAQ, et les imprime avec les autres (SEOP-03)", async () => {
+    const page = await open("/faq", { consent: true });
+    const answers = page.locator('[data-slot="accordion-content"]');
+    const visible = () => answers.evaluateAll((panels) => panels.map((panel) => panel.checkVisibility()));
+    const count = await answers.count();
+    expect(count).toBeGreaterThan(0);
+    expect(await visible()).toEqual(Array(count).fill(false));
+
+    await page.emulateMedia({ media: "print" });
+    expect(await visible()).toEqual(Array(count).fill(true));
+    expect(await page.getByText(/Le tarif de base est de 100/).isVisible()).toBe(true);
+
+    await page.emulateMedia({ media: "screen" });
+    expect(await visible()).toEqual(Array(count).fill(false));
+    await page.context().close();
+  }, 60_000);
+
   it("rend libellés et saisie de la connexion candidat lisibles en thème clair (A11Y-02)", async () => {
     for (const width of [1366, 390]) {
       const page = await open("/candidate/access", { width, theme: "light" });

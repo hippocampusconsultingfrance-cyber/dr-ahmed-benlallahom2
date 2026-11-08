@@ -83,7 +83,7 @@ afterEach(() => {
 describe("garde-fous Turnstile des parcours publics", () => {
   it.each([
     ["le formulaire de contact", ContactSection],
-    ["la demande RGPD", () => GDPRRequestForm({ onBack: () => undefined })],
+    ["la demande RGPD", () => GDPRRequestForm({ backHref: "/" })],
     ["la candidature standard", RecruitmentPage],
     ["la candidature VVIP offshore", VvipOffshorePage],
   ] as const)("bloque l’envoi de %s sans jeton Turnstile", (_label, component) => {
@@ -209,7 +209,7 @@ describe("retours publics après soumission", () => {
   });
 
   it("confirme la réception d’une demande RGPD", () => {
-    const form = () => GDPRRequestForm({ onBack: () => undefined });
+    const form = () => GDPRRequestForm({ backHref: "/" });
     elements(form);
     view.mutations["gdpr.submit"]!.options.onSuccess!();
     const confirmation = elements(form);

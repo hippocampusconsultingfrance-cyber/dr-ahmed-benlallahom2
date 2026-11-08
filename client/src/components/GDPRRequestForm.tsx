@@ -6,6 +6,7 @@ import { cleanTextInput } from "@shared/textInputCleaning";
 import { CheckCircle, Loader2, ArrowLeft } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { Link } from "wouter";
 import { TurnstileWidget } from "./TurnstileWidget";
 
 export const gdprRequestCopy = publicFormCopy.gdpr;
@@ -19,10 +20,11 @@ export const gdprFieldIds = {
 } as const;
 
 interface GDPRRequestFormProps {
-  onBack?: () => void;
+  /** Page où ramène « Retour », un vrai lien (A11Y-17). */
+  backHref?: string;
 }
 
-export default function GDPRRequestForm({ onBack }: GDPRRequestFormProps) {
+export default function GDPRRequestForm({ backHref }: GDPRRequestFormProps) {
   const { content, language } = useLanguage();
   const copy = getGdprRequestCopy(language);
   const [formData, setFormData] = useState({
@@ -89,14 +91,14 @@ export default function GDPRRequestForm({ onBack }: GDPRRequestFormProps) {
         <div className="max-w-2xl mx-auto">
           {/* Header */}
           <div className="mb-12">
-            {onBack && (
-              <button
-                onClick={onBack}
-                className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors mb-6"
+            {backHref && (
+              <Link
+                href={backHref}
+                className="flex w-fit items-center gap-2 text-primary hover:text-primary/80 transition-colors mb-6"
               >
                 <ArrowLeft className="w-4 h-4" />
                 {copy.back}
-              </button>
+              </Link>
             )}
             <h1 className="font-display text-3xl sm:text-4xl lg:text-5xl font-bold text-foreground mb-4">
               {content.gdpr.title}
