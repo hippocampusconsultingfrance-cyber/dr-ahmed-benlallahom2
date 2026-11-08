@@ -148,6 +148,9 @@ function blankBrackets(text: string) {
   }).join("");
 }
 
+/** A text as ACCENTED_NAMES are looked for in it: as written, case aside, what it says between brackets blanked out. */
+const writtenText = (text: string) => blankBrackets(text.normalize("NFC").toLowerCase()).replaceAll("\u0000", " ");
+
 /**
  * The texts already compared, folded, with the codes of the languages they
  * name and their words outside brackets (`core`, « wolof » for « Wolof
@@ -176,7 +179,7 @@ function comparedText(text: string): ComparedText {
   let others: readonly string[] | undefined;
   const compared = {
     folded, core, codes: Object.freeze(codes),
-    get others() { return (others ??= Object.freeze(otherLanguageCodes(core, blankBrackets(text.normalize("NFC").toLowerCase()).replaceAll("\u0000", " ")))); },
+    get others() { return (others ??= Object.freeze(otherLanguageCodes(core, writtenText(text)))); },
   };
   if (text.length <= COMPARED_TEXT_MAX_LENGTH) {
     if (COMPARED_TEXTS.size >= COMPARED_TEXTS_LIMIT) COMPARED_TEXTS.clear();
@@ -454,8 +457,6 @@ function namesOtherLanguage(text: string) {
   return comparedText(text).others.length > 0;
 }
 
-/** What is neither a letter nor a digit at the start or the end of a text (« Indonesia. »). */
-const OUTER_PUNCTUATION = new RegExp("^[^\\p{L}\\p{N}]+|[^\\p{L}\\p{N}]+$", "gu");
 /** The two-letter region codes, AA to ZZ: Intl.DisplayNames names those that exist. */
 const REGION_CODES = Array.from({ length: 26 * 26 }, (_, index) => String.fromCharCode(65 + Math.floor(index / 26), 65 + (index % 26)));
 /** The country names of the list above (« Myanmar »), regions also where Intl.DisplayNames is missing. */
@@ -492,23 +493,38 @@ const displayedLanguageNames = (code: string) => displayedNames(DISPLAYED_LANGUA
 });
 
 /**
- * Whether a part beside a dash names a country or a region, which qualifies
- * the language next to it, rather than a language the table does not know
- * (IA02-R4): its words outside brackets are the name of a region in French,
- * English, German or Chinese, or in the language they name, and not that
- * language's name in one of these four. « English – Indonesia », « Anglais –
- * Myanmar (Birmanie) » and « Englisch – Myanmar » are English in a country,
- * as « English – Malaysia » is, although « Indonesia » is Indonesian in its
- * own language and « Myanmar » an English name of Burmese, which a
- * candidate's language still reads as; « Arménien », a French name of
- * Armenian, stays a language, as « Wolof » and « Serbo-croate » do.
+ * Whether the languages the table does not know that a part beside a dash
+ * names are only named by a country's or a region's name, which qualifies
+ * the language next to it (IA02-R4): a region name in French, English,
+ * German or Chinese, or in a language the part names, is written whole in
+ * its words outside brackets, unless it is that language's name in one of
+ * these four, and each name of a language written there lies within such a
+ * region name, whatever other words come with it (a requirement, a level,
+ * a place). « English – Indonesia », « Anglais – Myanmar (Birmanie) »,
+ * « Englisch – Myanmar » and « English – Myanmar required » or « English – C1
+ * Myanmar » are English in a country, as « English – Malaysia required » is,
+ * although « Indonesia » is Indonesian in its own language and « Myanmar » an
+ * English name of Burmese, which a candidate's language still reads as;
+ * « Arménien », a French name of Armenian, « Bahasa Indonesia », a name of
+ * Indonesian, and « Sénégal wolof » stay languages, as « Wolof » and
+ * « Serbo-croate » do.
  */
 function namesRegion(text: string) {
   const compared = comparedText(text);
-  const words = compared.core.replace(OUTER_PUNCTUATION, "");
   const languages = compared.others;
-  if (!LISTED_REGION_NAMES.has(words) && ![...OTHER_LANGUAGE_LOCALES, ...languages].some(locale => regionNames(locale).has(words))) return false;
-  return !languages.some(code => displayedLanguageNames(code).has(words));
+  const regions: Array<readonly [number, number]> = [];
+  for (const names of [LISTED_REGION_NAMES, ...[...OTHER_LANGUAGE_LOCALES, ...languages].map(regionNames)]) {
+    names.forEach(name => {
+      if (!languages.some(code => displayedLanguageNames(code).has(name))) regions.push(...wordsPlaces(compared.core, name));
+    });
+  }
+  if (!regions.length) return false;
+  otherLanguageNames ??= readOtherLanguageNames();
+  const outsideRegions = Array.from(otherLanguageNames.keys()).some(name =>
+    wordsPlaces(compared.core, name).some(([start, end]) => !regions.some(region => region[0] <= start && end <= region[1])));
+  if (outsideRegions) return false;
+  const written = writtenText(text);
+  return !ACCENTED_NAMES.some(([, name]) => containsWords(written, name));
 }
 
 /**
@@ -594,14 +610,30 @@ export function recruitmentLanguagePrefixCodes(text: string): RecruitmentLanguag
   return Array.from(new Set(LANGUAGE_NAMES.filter(entry => entry.folded.startsWith(folded)).map(entry => entry.code)));
 }
 
+/**
+ * Where these folded words are found whole in this folded text, from `from`:
+ * the index of the first place, -1 when none. Words of a script written
+ * without spaces or with prefixes are found anywhere in it.
+ */
+function wordsIndex(folded: string, words: string, from = 0) {
+  if (!LETTER_OR_DIGIT.test(words)) return -1;
+  if (!SPACED_SCRIPT.test(words)) return folded.indexOf(words, from);
+  for (let index = folded.indexOf(words, from); index >= 0; index = folded.indexOf(words, index + 1)) {
+    if (startsWord(folded, index) && !LETTER_OR_DIGIT.test(folded[index + words.length] ?? "")) return index;
+  }
+  return -1;
+}
+
 /** Whether these folded words (a language the table does not know) are found whole in this folded name: « wolof » in « Wolof courant », not « fran » in « français ». */
 function containsWords(folded: string, words: string) {
-  if (!LETTER_OR_DIGIT.test(words)) return false;
-  if (!SPACED_SCRIPT.test(words)) return folded.includes(words);
-  for (let index = folded.indexOf(words); index >= 0; index = folded.indexOf(words, index + 1)) {
-    if (startsWord(folded, index) && !LETTER_OR_DIGIT.test(folded[index + words.length] ?? "")) return true;
-  }
-  return false;
+  return wordsIndex(folded, words) >= 0;
+}
+
+/** Each place where these folded words are found whole in this folded text: its start and its end. */
+function wordsPlaces(folded: string, words: string) {
+  const places: Array<readonly [number, number]> = [];
+  for (let index = wordsIndex(folded, words); index >= 0; index = wordsIndex(folded, words, index + 1)) places.push([index, index + words.length]);
+  return places;
 }
 
 /**

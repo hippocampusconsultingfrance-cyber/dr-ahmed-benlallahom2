@@ -299,6 +299,24 @@ describe("langues du recrutement comparées par code (IA-02)", () => {
     expect(met("Indonésien – Anglais", ["English", "Indonesia"])).toBe(2);
   });
 
+  it("lit encore un pays après un tiret comme ce qui qualifie la langue voisine quand un mot d’exigence, un niveau ou un autre mot l’accompagne (IA02-R4-REGIONS-MOTS)", () => {
+    const met = (required: string, names: string[]) => recruitmentLanguageRequirements(required).filter(requirement => meetsRequiredLanguage(names, requirement)).length;
+    // Before: the country was a region only when nothing else was written beside it, a second requirement otherwise.
+    for (const required of [
+      "English – Myanmar required", "English – Indonesia only", "English – Myanmar office", "Anglais – Myanmar obligatoire", "Anglais – Indonesia exigé",
+      "English – C1 Myanmar", "English – Myanmar (Burma) required", "Englisch – Myanmar erforderlich", "English – Kongo-Kinshasa required",
+      "English – Malaysia required", "Anglais – Indonésie obligatoire", "English – Thailand only",
+    ]) {
+      expect(recruitmentLanguageRequirements(required), required).toEqual([{ text: required, codes: ["en"], anyOf: [] }]);
+      expect(met(required, ["English"]), required).toBe(1);
+    }
+    // A language named beside it, or a name of a language that holds the country's (« Bahasa Indonesia »), is still a requirement of its own.
+    for (const required of ["Wolof – Anglais obligatoire", "Arménien – Anglais requis", "English – Bahasa Indonesia", "English – Myanmar Wolof", "Anglais – Sénégal wolof", "Anglais – Birman obligatoire", "Anglais – Burkina Faso moré"]) {
+      expect(recruitmentLanguageRequirements(required), required).toHaveLength(2);
+      expect(met(required, ["English"]), required).toBe(1);
+    }
+  });
+
   it("sans Intl.DisplayNames (un navigateur ou un Node.js sans ses données), garde les noms de sa propre liste et ce qui qualifie une langue (IA-02)", async () => {
     vi.stubGlobal("Intl", { ...Intl, DisplayNames: undefined });
     vi.resetModules();
@@ -311,6 +329,7 @@ describe("langues du recrutement comparées par code (IA-02)", () => {
       expect(languages.recruitmentLanguageRequirements("Twi – English").map(requirement => requirement.text)).toEqual(["Twi", "English"]);
       // Myanmar, of the list, is a country beside a dash there too.
       expect(languages.recruitmentLanguageRequirements("English – Myanmar").map(requirement => requirement.text)).toEqual(["English – Myanmar"]);
+      expect(languages.recruitmentLanguageRequirements("English – Myanmar required").map(requirement => requirement.text)).toEqual(["English – Myanmar required"]);
       // Kabyle is only named by Intl.DisplayNames: without it, the part qualifies Arabic, as before.
       expect(languages.recruitmentLanguageRequirements("Arabe – Kabyle").map(requirement => requirement.text)).toEqual(["Arabe – Kabyle"]);
     } finally {
