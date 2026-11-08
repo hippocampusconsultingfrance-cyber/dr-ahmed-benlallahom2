@@ -237,7 +237,8 @@ const READ_REQUIREMENTS = new Map<string, readonly RecruitmentLanguageRequiremen
  * Mauritius, the Seychelles, Jamaica and Cape Verde, Papiamento, Sranan;
  * Hmong; Bhojpuri, Maithili, Konkani, Santali, Manipuri, Rajasthani, Awadhi,
  * Magahi, Dogri, Bodo and Mizo; Minangkabau, Balinese, Madurese, Buginese,
- * Sasak, Tetum and Tok Pisin. Not those whose name is mostly a place's
+ * Sasak, Tetum and Tok Pisin; Tarifit, Montenegrin and Southern Kurdish, of
+ * the families below. Not those whose name is mostly a place's
  * (Douala, Bassa, Lunda, Aceh, Banjar, Pampanga) or, accents aside, a word
  * (« moré », Mooré: « more », read with its accent only, below), nor Swiss
  * German, a variety of German. Not
@@ -253,8 +254,9 @@ const OTHER_LANGUAGE_CODES = [
   "kab zgh tzm shi fil",
   "yue hak nan prs ckb kmr tig ceb hil ilo war bik pag fuc dyu lua nso snk fon kri pcm luo kam kln bem nyn cgg tum loz kmb umb sus men tem tiv efi ibb bin ewo",
   "mfe crs jam kea pap srn hmn bho mai kok sat mni raj awa mag doi brx lus min ban mad bug sas tet tpi",
+  "rif cnr sdh",
 ].join(" ").split(" ");
-/** The languages their names are read in, from Intl.DisplayNames: the table's four. */
+/** The languages their names are read in, from Intl.DisplayNames: the table's four, and each language in its own (« srpski », « Taqbaylit »). */
 const OTHER_LANGUAGE_LOCALES = ["fr", "en", "de", "zh"];
 /**
  * The names it gives none of, or other names than its, each with the code (or
@@ -273,7 +275,12 @@ const OTHER_LANGUAGE_LOCALES = ["fr", "en", "de", "zh"];
  * (Pashtu, Azeri, Nepalese, Fulani), the names the candidates write their
  * language under (Bahasa Indonesia, Bahasa Melayu, Afaan Oromoo, Bamanankan,
  * Pular, Shqip, Frysk, پښتو, الكردية, الأمازيغية, السواحيلية, አማርኛ,
- * Українська), and French names (azéri, malinké, comorien, pidgin).
+ * Українська), and French names (azéri, malinké, comorien, pidgin). And the
+ * names a language is written under in its own script or spelling that
+ * Intl.DisplayNames does not give as its own (Srpski, the Latin spelling of
+ * Serbian; کوردی; پنجابی, Punjabi in Shahmukhi; Oʻzbek; Bokmål and Nynorsk;
+ * Tarifit and rifain), and the English names still in use for a country's
+ * language (Montenegrin, Myanmar, Cambodian, Laotian, Pilipino).
  */
 const OTHER_LANGUAGE_NAMES: ReadonlyArray<readonly [codes: string, ...names: string[]]> = [
   ["hbs", "Serbo-croate", "Serbo-Croatian", "Serbokroatisch", "塞尔维亚-克罗地亚语"],
@@ -334,6 +341,18 @@ const OTHER_LANGUAGE_NAMES: ReadonlyArray<readonly [codes: string, ...names: str
   ["si", "Singhalese"],
   ["sq", "Shqip"],
   ["uk", "Українська"],
+  ["sr", "Srpski"],
+  ["ku ckb", "کوردی"],
+  ["pa", "پنجابی"],
+  ["uz", "Oʻzbek", "O'zbek", "O’zbek", "Ozbek", "Oʻzbekcha"],
+  ["nb", "Bokmål", "Bokmal"],
+  ["nn", "Nynorsk"],
+  ["rif", "Tarifit", "Tarifiyt", "Rifain", "Riffian", "Rifian"],
+  ["cnr", "Montenegrin", "Monténégrin", "Montenegrinisch", "Crnogorski"],
+  ["my", "Myanmar"],
+  ["km", "Cambodian", "Cambodgien"],
+  ["lo", "Laotian", "Laotien"],
+  ["tl fil", "Pilipino"],
 ];
 
 /** Names of a language that are words accents aside (« moré », « more »): found only as written, with their accents, case aside. */
@@ -343,9 +362,11 @@ const ACCENTED_NAMES: ReadonlyArray<readonly [code: string, name: string]> = [["
  * The languages of a macrolanguage or a family the table does not know, by
  * its code: a requirement of it is met by each of them (« Kurde » by Sorani
  * and Kurmanji, « Serbo-croate » by Serbian, Croatian and Bosnian, « Berbère »
- * by Kabyle, Tachelhit and Tamazight, « Peul » by Pulaar), not the reverse.
+ * by Kabyle, Tachelhit, Tamazight and Tarifit, « Peul » by Pulaar,
+ * « Norvégien » by Bokmål and Nynorsk), not the reverse.
  */
 const MEMBER_LANGUAGES: Readonly<Record<string, readonly string[]>> = {
+  no: ["nb", "nn"],
   ku: ["ckb", "kmr", "sdh"],
   hbs: ["sr", "hr", "bs", "cnr"],
   ber: ["kab", "shi", "tzm", "zgh", "rif"],
@@ -360,10 +381,11 @@ let otherLanguageNames: ReadonlyMap<string, readonly string[]> | undefined;
  * The names of the languages above, folded, what they say between brackets
  * aside (« luba-katanga (kiluba) », « Norwegisch (Bokmål) »), from two
  * letters in Chinese and three in the other scripts, each with the code of the
- * language Intl.DisplayNames gives it for, or that the list above gives it:
- * « cantonais », « Cantonese », « Kantonesisch » and « 粤语 » are all yue. Only
- * the list above where Intl.DisplayNames is missing (a browser or a Node.js
- * built without its data).
+ * language Intl.DisplayNames gives it for, in the table's four languages and
+ * in its own, or that the list above gives it: « cantonais », « Cantonese »,
+ * « Kantonesisch » and « 粤语 » are all yue, « српски » sr, « Soomaali » so.
+ * Only the list above where Intl.DisplayNames is missing (a browser or a
+ * Node.js built without its data).
  */
 function readOtherLanguageNames() {
   const names = new Map<string, string[]>();
@@ -382,6 +404,14 @@ function readOtherLanguageNames() {
         for (const code of OTHER_LANGUAGE_CODES) add(display.of(code), code);
       } catch {
         // A locale or a code this host cannot name: the others and the list below.
+      }
+    }
+    // Each language's own name, as its speakers write it: in a locale the host does not have, the name in its default locale.
+    for (const code of OTHER_LANGUAGE_CODES) {
+      try {
+        add(new Intl.DisplayNames([code], { type: "language", fallback: "none" }).of(code), code);
+      } catch {
+        // A code this host cannot name in its own language.
       }
     }
   }

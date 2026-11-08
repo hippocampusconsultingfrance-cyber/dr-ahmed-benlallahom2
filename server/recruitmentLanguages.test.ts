@@ -227,6 +227,36 @@ describe("langues du recrutement comparées par code (IA-02)", () => {
     expect(recruitmentLanguageRequirements("English – more than B2").map(requirement => requirement.text)).toEqual(["English – more than B2"]);
   });
 
+  it("reconnaît une langue hors table sous le nom que ses locuteurs lui donnent, et les membres d’une famille que la table nommait sans les lire (IA02-R3-NOMS-BIS)", () => {
+    const met = (required: string, names: string[]) => recruitmentLanguageRequirements(required).filter(requirement => meetsRequiredLanguage(names, requirement)).length;
+    for (const [required, names] of [
+      // The language's own name (Intl.DisplayNames in that language), and its spellings the candidates write.
+      ["Serbo-croate – Anglais", ["English", "Srpski"]], ["Serbo-croate – Anglais", ["English", "Српски"]], ["Serbo-croate – Anglais", ["English", "Hrvatski"]],
+      ["Serbo-croate – Anglais", ["English", "Bosanski"]], ["Serbo-croate – Anglais", ["English", "Montenegrin"]], ["Berbère – Français", ["French", "Taqbaylit"]],
+      ["Berbère – Français", ["French", "Tarifit"]], ["Berbère – Français", ["French", "Rifain"]], ["Berbère – Français", ["French", "Riffian"]],
+      ["Kurde – Anglais", ["English", "کوردی"]], ["Malayalam – Anglais", ["English", "മലയാളം"]], ["Tamoul – Anglais", ["English", "தமிழ்"]],
+      ["Bengali – Anglais", ["English", "বাংলা"]], ["Népalais – Anglais", ["English", "नेपाली"]], ["Cingalais – Anglais", ["English", "සිංහල"]],
+      ["Pendjabi – Anglais", ["English", "ਪੰਜਾਬੀ"]], ["Pendjabi – Anglais", ["English", "پنجابی"]], ["Somali – Anglais", ["English", "Soomaali"]],
+      ["Somali – Anglais", ["English", "Af-Soomaali"]], ["Kinyarwanda – Français", ["French", "Ikinyarwanda"]], ["Ouzbek – Anglais", ["English", "Oʻzbek"]],
+      ["Arménien – Anglais", ["English", "Հայերեն"]], ["Géorgien – Anglais", ["English", "ქართული"]], ["Thaï – Anglais", ["English", "ภาษาไทย"]],
+      ["Vietnamien – Anglais", ["English", "Tiếng Việt"]], ["Bulgare – Anglais", ["English", "Български"]], ["Hongrois – Anglais", ["English", "Magyar"]],
+      ["Tchèque – Anglais", ["English", "Čeština"]], ["Suédois – Anglais", ["English", "Svenska"]], ["Norvégien – Anglais", ["English", "Norsk"]],
+      ["Norvégien – Anglais", ["English", "Bokmål"]], ["Norvégien – Anglais", ["English", "Nynorsk"]], ["Danois – Anglais", ["English", "Dansk"]],
+      ["Finnois – Anglais", ["English", "Suomi"]],
+      // English names still in use for a country's language.
+      ["Birman – Anglais", ["English", "Myanmar"]], ["Birman – Anglais", ["English", "Burmese"]], ["Khmer – Anglais", ["English", "Cambodian"]],
+      ["Lao – Anglais", ["English", "Laotian"]], ["Tagalog – Anglais", ["English", "Pilipino"]],
+    ] as const) {
+      // Before (d300a39): one of the two requirements, 8 language points of 15, neither the profile nor the Langue filter.
+      expect(met(required, [...names]), `${required} / ${names.join(", ")}`).toBe(2);
+    }
+    // English alone still meets one of them; a member of a family does not meet another of its members.
+    for (const required of ["Serbo-croate – Anglais", "Kurde – Anglais", "Norvégien – Anglais"]) expect(met(required, ["English"]), required).toBe(1);
+    expect(met("Berbère – Français", ["French"])).toBe(1);
+    expect(met("Bokmål – Anglais", ["English", "Nynorsk"])).toBe(1);
+    expect(met("Croate – Anglais", ["English", "Srpski"])).toBe(1);
+  });
+
   it("garde avec sa langue ce qui la qualifie après un tiret : une exigence, une préférence, une variété ou une région, en français, anglais, allemand et chinois (IA-02)", () => {
     // Before: « Anglais – obligatoire » was two requirements, English and « obligatoire », met by nobody.
     const qualified: Array<[string, string]> = [
