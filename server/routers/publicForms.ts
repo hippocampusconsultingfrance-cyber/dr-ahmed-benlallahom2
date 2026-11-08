@@ -64,7 +64,9 @@ type PublicFormRateLimitRequest = {
 // Les tests d’intégration réemploient volontairement les mêmes adresses dans
 // plusieurs scénarios indépendants. La protection persistante reste active
 // dans tous les environnements réels ; ses seuils sont couverts séparément.
-const rateLimitsDisabled = () => process.env.NODE_ENV === "test" || process.env.VITEST === "true";
+// Seul Vitest, qui pose lui-même VITEST=true, la coupe : un NODE_ENV=test posé
+// par erreur sur un serveur réel la laisse active (CODE-10).
+const rateLimitsDisabled = () => process.env.VITEST === "true";
 
 /** Compteur visé par une demande : politique, empreinte d’IP et sujet (null : rien à compter). */
 function publicFormRateLimitTarget(input: PublicFormRateLimitRequest) {

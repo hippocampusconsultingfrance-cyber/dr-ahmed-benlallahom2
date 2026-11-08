@@ -325,7 +325,8 @@ export async function clearPersistentRateLimit(input: { action: string; subject:
 }
 
 export async function isCompromisedPassword(password: string): Promise<boolean> {
-  if (process.env.NODE_ENV === "test") return false;
+  // Skipped under Vitest only, which sets VITEST=true itself: a NODE_ENV=test set by mistake on a real server keeps the check (CODE-10).
+  if (process.env.VITEST === "true") return false;
   const digest = createHash("sha1").update(password).digest("hex").toUpperCase();
   const prefix = digest.slice(0, 5);
   const suffix = digest.slice(5);
