@@ -1,5 +1,5 @@
 import { FormEvent, useReducer, useState } from "react";
-import { AlertTriangle, ArrowUpRight, CheckCircle2, HeartHandshake, LockKeyhole, MailCheck, ShieldCheck, Sparkles } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, CheckCircle2, HeartHandshake, LockKeyhole, MailCheck, Sparkles } from "lucide-react";
 import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import { SEOHead } from "@/components/SEOHead";

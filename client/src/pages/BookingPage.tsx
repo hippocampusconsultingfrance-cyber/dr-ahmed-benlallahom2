@@ -803,7 +803,7 @@ export function getBookingErrorMessage(
 
 export default function BookingPage() {
   const { language } = useLanguage();
-  const [location, setLocation] = useLocation();
+  useLocation();
   const content = bookingContent[language as keyof typeof bookingContent] || bookingContent.en;
   const bookingFormCopy = getBookingFormCopy(language);
   const bookingRailCopy = {

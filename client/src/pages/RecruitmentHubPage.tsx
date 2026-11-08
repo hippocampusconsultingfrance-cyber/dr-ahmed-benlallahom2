@@ -1,5 +1,4 @@
-import { ShieldCheck, Globe2, UsersRound, Award, ArrowRight, Stethoscope, Briefcase } from "lucide-react";
-import { Link } from "wouter";
+import { ShieldCheck, ArrowRight, Stethoscope } from "lucide-react";
 import { SEOHead } from "@/components/SEOHead";
 import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";

@@ -11,7 +11,6 @@ process.env.CANDIDATE_AUTH_PEPPER ||= TEST_PEPPER;
 // vrai module de notifications : seul le transport Resend est simulé, pour
 // accepter, refuser ou laisser sans réponse claire chaque envoi.
 
-type Answer = "sent" | "refused" | "uncertain";
 type SentEmail = { to: string; link: string; idempotencyKey: string };
 const state = vi.hoisted(() => ({
   db: null as unknown,

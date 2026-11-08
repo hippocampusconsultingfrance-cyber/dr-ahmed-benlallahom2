@@ -10,7 +10,6 @@ import { elementsOf, renderStateful, resetStatefulHooks } from "@/testing/statef
 
 vi.mock("react", async importOriginal => (await import("@/testing/statefulRender")).withStatefulHooks(await importOriginal()));
 
-type Query = { data?: unknown; isLoading?: boolean; isError?: boolean; isFetching?: boolean; errorUpdatedAt?: number; dataUpdatedAt?: number };
 type Language = "fr" | "en" | "de" | "zh";
 const view = vi.hoisted(() => ({
   language: "fr" as "fr" | "en" | "de" | "zh",

@@ -1,5 +1,5 @@
-import { FormEvent, useRef, useState } from "react";
-import { CheckCircle2, FileUp, Globe2, Loader2, ShieldCheck, UsersRound, Building2 } from "lucide-react";
+import { FormEvent, useState } from "react";
+import { CheckCircle2, Loader2, ShieldCheck, UsersRound, Building2 } from "lucide-react";
 import { Link } from "wouter";
 import { SEOHead } from "@/components/SEOHead";
 import Navigation from "@/components/Navigation";

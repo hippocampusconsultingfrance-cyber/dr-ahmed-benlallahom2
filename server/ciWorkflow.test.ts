@@ -842,8 +842,9 @@ const STRICT_CHECKS = ["noImplicitAny", "noImplicitThis", "strictNullChecks", "s
  * tsconfig.json, which no step's command shows either, read as TypeScript reads it (its
  * `extends`, `files`, `include` and `exclude`): `tsc --noEmit` checks the types of every
  * source file of client/src, server and shared, and of every test file (CODE-03), in strict
- * mode. Not `include: []`, nor `exclude` of the tests, nor `noCheck`, as `tsc --noCheck` is
- * refused above, nor `strict: false` or one of its checks turned off.
+ * mode and with `noUnusedLocals`. Not `include: []`, nor `exclude` of the tests, nor `noCheck`,
+ * as `tsc --noCheck` is refused above, nor `strict: false` or one of its checks turned off, nor
+ * `noUnusedLocals` left out.
  */
 function expectTypeScriptChecksEverySource(tsconfig: string) {
   const file = path.join(root, "tsconfig.json");
@@ -854,6 +855,7 @@ function expectTypeScriptChecksEverySource(tsconfig: string) {
   expect(parsed.options.noCheck ?? false, "tsconfig.json: noCheck").toBe(false);
   expect(parsed.options.strict ?? false, "tsconfig.json: strict").toBe(true);
   expect(STRICT_CHECKS.filter(option => parsed.options[option] === false), "tsconfig.json: strict checks turned off").toEqual([]);
+  expect(parsed.options.noUnusedLocals ?? false, "tsconfig.json: noUnusedLocals").toBe(true);
 }
 
 /** The matcher knip compares its file patterns with (picomatch), taken from knip's own dependencies. */
@@ -1587,7 +1589,7 @@ describe("intégration continue GitHub", () => {
       expect(() => expectScriptsRunByFileFinish({ "scripts/check-performance-budgets.mjs": `${line}\n${budgets}` }), line).toThrow(new RegExp(`^scripts/check-performance-budgets\\.mjs: ${reason}`));
     }
 
-    // TypeScript: strict mode, and each of its checks, kept.
+    // TypeScript: strict mode, each of its checks, and noUnusedLocals kept.
     const tsconfig = readJsonWithComments("tsconfig.json", await read("tsconfig.json"));
     const strictWith = (compilerOptions: Record<string, unknown>) => () => expectTypeScriptChecksEverySource(JSON.stringify({ ...tsconfig, compilerOptions: { ...(tsconfig.compilerOptions as object), ...compilerOptions } }));
     expect(strictWith({})).not.toThrow();
@@ -1595,6 +1597,8 @@ describe("intégration continue GitHub", () => {
     for (const option of ["strictNullChecks", "noImplicitAny", "useUnknownInCatchVariables"]) {
       expect(strictWith({ [option]: false }), option).toThrow(/^tsconfig\.json: strict checks turned off/);
     }
+    expect(strictWith({ noUnusedLocals: false })).toThrow(/^tsconfig\.json: noUnusedLocals/);
+    expect(strictWith({ noUnusedLocals: undefined })).toThrow(/^tsconfig\.json: noUnusedLocals/);
   }, 30_000);
 
   it("refuse une configuration de vitest, de TypeScript ou de knip qui écarte des tests ou des sources : exclude '**', include vide, ce contrôle écarté, ignore '**', entrées élargies, ignoreIssues (CODE-14)", async () => {

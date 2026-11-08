@@ -1,7 +1,7 @@
 import { FormEvent, useMemo, useRef, useState } from "react";
 import { isAcceptedRecruitmentCvFile, RECRUITMENT_CV_ACCEPT_ATTRIBUTE } from "@shared/recruitmentCvLimits";
 import { cleanTextInput } from "@shared/textInputCleaning";
-import { CheckCircle2, Clock3, FileUp, Globe2, Loader2, ShieldCheck, UserCheck, Zap, Award, Compass, Lock } from "lucide-react";
+import { CheckCircle2, Clock3, FileUp, Loader2, ShieldCheck, UserCheck, Award, Compass, Lock } from "lucide-react";
 import { Link } from "wouter";
 import { SEOHead } from "@/components/SEOHead";
 import Navigation from "@/components/Navigation";
