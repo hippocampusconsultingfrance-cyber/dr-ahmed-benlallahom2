@@ -3,6 +3,7 @@ import { createElement } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { contrastOnTint, contrastRatio, type Oklch } from "@/lib/contrast";
 
 // Documents candidats montés par React dans un DOM, avec un faux tRPC :
 // « Refuser » et « Archiver » demandent la note interne saisie (aucun texte mis
@@ -189,5 +190,76 @@ describe("état d’analyse affiché sur la carte (EXPL-12)", () => {
     mount();
     expect(badge()).toBe("Revue humaine requise");
     expect(screen.getByText("Analyse non disponible : une revue humaine est requise.")).toBeTruthy();
+  });
+});
+
+describe("carte d’analyse lisible en thème clair (A11Y-12)", () => {
+  /** Tailwind 4 shades the card uses (node_modules/tailwindcss/theme.css), and the light theme's white card. */
+  const SHADES: Record<string, Oklch> = { "cyan-700": [0.52, 0.105, 223.128], "cyan-800": [0.45, 0.085, 224.283], "cyan-950": [0.302, 0.056, 229.695], "amber-700": [0.555, 0.163, 48.998] };
+  const WHITE_CARD: Oklch = [1, 0, 0];
+  /** The light-theme text colour of an element: its text-* class without a dark: prefix. */
+  const lightText = (element: Element) => {
+    const name = Array.from(element.classList).find(value => /^text-[a-z]+-\d+$/.test(value));
+    if (!name || !SHADES[name.slice(5)]) throw new Error(`no known text colour on ${element.outerHTML}`);
+    return SHADES[name.slice(5)]!;
+  };
+
+  it("garde le titre, le modèle et les points à vérifier au-dessus de 4,5:1 sur la carte blanche", () => {
+    view.list.data = [diploma({ aiSummary: "Diplôme de docteur en médecine.", aiConfidence: 80, aiModel: "gpt-test", aiFlags: JSON.stringify(["date_illisible"]) })];
+    mount();
+    const model = screen.getByText("Modèle: gpt-test");
+    const box = model.parentElement!;
+    // The analysis box: a 15 % cyan-950 tint on the card.
+    expect(box.classList.contains("bg-cyan-950/15")).toBe(true);
+    const onBox = (element: Element) => contrastOnTint(lightText(element), SHADES["cyan-950"]!, 0.15, WHITE_CARD);
+    expect(onBox(model)).toBeGreaterThanOrEqual(4.5);
+    expect(onBox(screen.getByText("Synthèse IA d’aide à la revue"))).toBeGreaterThanOrEqual(4.5);
+    // The points to verify, under the box, on the card itself.
+    const flags = screen.getByText(/^Points à vérifier/);
+    expect(box.contains(flags)).toBe(false);
+    expect(contrastRatio(lightText(flags), WHITE_CARD)).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+describe("documents regroupés par candidat, avec leur candidature (ADM-19)", () => {
+  const omar = { candidateId: 9, candidateEmail: "omar@test.local", firstName: "Omar", lastName: "Said" };
+
+  beforeEach(() => {
+    view.list.data = [
+      diploma({ id: 14, originalName: "identite.pdf", category: "identity_document", applicationTrackingId: "CVAMINA00001" }),
+      diploma({ id: 13, ...omar, originalName: "licence.pdf", category: "medical_license", applicationTrackingId: null }),
+      diploma({ id: 12, applicationTrackingId: "CVAMINA00001" }),
+    ];
+  });
+
+  it("montre chaque document une seule fois, sous le nom de son candidat, dans l’ordre de son dernier dépôt", () => {
+    mount();
+    const groups = screen.getAllByRole("region");
+    expect(groups.map(group => within(group).getByRole("heading", { level: 3 }).textContent)).toEqual(["Amina Haddad", "Omar Said"]);
+
+    const amina = screen.getByRole("region", { name: "Amina Haddad" });
+    // Those of the rows read (the 50 most recent), not every document of the candidate.
+    expect(amina.textContent).toContain("amina@test.local · 2 document(s) affiché(s)");
+    expect(within(amina).getByText(/identite\.pdf/)).toBeTruthy();
+    expect(within(amina).getByText(/diplome\.pdf/)).toBeTruthy();
+    expect(within(screen.getByRole("region", { name: "Omar Said" })).getByText(/licence\.pdf/)).toBeTruthy();
+    for (const name of [/identite\.pdf/, /diplome\.pdf/, /licence\.pdf/]) expect(screen.getAllByText(name)).toHaveLength(1);
+  });
+
+  it("« Voir la candidature » ouvre la candidature du candidat dans l’onglet Candidatures ; rien sans candidature", () => {
+    window.history.replaceState(null, "", "/admin?tab=candidateDocuments");
+    mount();
+    const link = within(screen.getByRole("region", { name: "Amina Haddad" })).getByRole("link", { name: /Voir la candidature/ });
+    expect(link.getAttribute("href")).toBe("/admin?tab=recruitment&ref=CVAMINA00001");
+    expect(within(screen.getByRole("region", { name: "Omar Said" })).queryByRole("link")).toBeNull();
+
+    fireEvent.click(link);
+    expect(`${window.location.pathname}${window.location.search}`).toBe("/admin?tab=recruitment&ref=CVAMINA00001");
+  });
+
+  it.each([["en", "View application"], ["de", "Bewerbung ansehen"], ["zh", "查看申请"]] as const)("en %s, le lien dit « %s »", (language, label) => {
+    view.language = language;
+    mount();
+    expect(screen.getByRole("link", { name: new RegExp(label) })).toBeTruthy();
   });
 });

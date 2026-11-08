@@ -7,7 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // ADM-10 — Témoignages de l’administration montés par React dans un DOM, avec
 // un faux tRPC : une liste qui n’a pas pu être chargée le dit, avec
 // « Réessayer », au lieu de « Aucun témoignage », et une approbation ou une
-// suppression refusée le dit.
+// suppression refusée le dit. Le statut est écrit en mots (ADM-07) et le
+// bouton de suppression, une icône, porte un nom (A11Y-12).
 
 const view = vi.hoisted(() => ({
   list: null as unknown as { data: unknown[] | undefined; isLoading: boolean; error: { message: string } | null; refetch: ReturnType<typeof vi.fn>; isFetching: boolean },
@@ -82,11 +83,22 @@ describe("ADM-10 — témoignages de l’administration", () => {
     view.refusal = "Validation de sécurité administrateur requise (10003)";
     mount();
     vi.spyOn(window, "confirm").mockReturnValue(true);
-    const card = screen.getByText("Claire D.").closest("div.bg-card") as HTMLElement;
-    const buttons = within(card).getAllByRole("button");
-    fireEvent.click(buttons[buttons.length - 1]!);
+    fireEvent.click(screen.getByRole("button", { name: "Supprimer le témoignage de Claire D." }));
 
     await waitFor(() => expect(view.toasts).toEqual([["error", "Validation de sécurité administrateur requise (10003)"]]));
     expect(view.calls).toEqual([["delete", { id: 3 }]]);
+  });
+});
+
+describe("ADM-07 — statut d’un témoignage en mots", () => {
+  it("dit « À modérer », « Approuvé », « Rejeté » et « Mis en avant », jamais la valeur enregistrée", () => {
+    view.list.data = [testimonial, { ...testimonial, id: 4, authorName: "Marc L.", status: "approved", featured: 1 }, { ...testimonial, id: 5, authorName: "Ines B.", status: "rejected" }];
+    mount();
+    const card = (author: string) => screen.getByText(author).closest("div.bg-card") as HTMLElement;
+    expect(within(card("Claire D.")).getByText("À modérer")).toBeTruthy();
+    expect(within(card("Marc L.")).getByText("Approuvé")).toBeTruthy();
+    expect(within(card("Marc L.")).getByText("Mis en avant")).toBeTruthy();
+    expect(within(card("Ines B.")).getByText("Rejeté")).toBeTruthy();
+    expect(screen.queryByText(/^(pending|approved|rejected|Featured)$/)).toBeNull();
   });
 });

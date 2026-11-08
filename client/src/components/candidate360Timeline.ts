@@ -1,4 +1,5 @@
 import { certificationExpiryInFrench } from "@shared/recruitmentFactOrigins";
+import { formatAdminDate } from "./adminDateFormat";
 
 export type CandidateTimelineEvent = {
   id: string;
@@ -11,6 +12,19 @@ export type CandidateTimelineEvent = {
 type AuditEntry = { id: number; action: string; metadata: string | null; createdAt: Date };
 type CampaignEntry = { id: number; campaignTitle: string | null; deliveryStatus: string; error: string | null; sentAt: Date | null; deliveredAt: Date | null; lastEventAt: Date | null };
 type FollowUpEntry = { id: number; kind: string; status: string; notes: string | null; dueAt: Date; completedAt: Date | null };
+
+/** ADM-07: a campaign email's delivery in words, not as stored (recruitment_campaign_recipients.delivery_status). */
+const DELIVERY_STATUS_LABELS: Record<string, string> = {
+  queued: "en attente d’envoi",
+  sent: "envoyé",
+  delivered: "remis",
+  delayed: "remise retardée",
+  bounced: "rejeté par la messagerie du destinataire",
+  complained: "signalé comme indésirable",
+  failed: "échec de l’envoi",
+  suppressed: "adresse bloquée par le service d’envoi",
+  skipped: "non envoyé (consentement retiré ou profil fermé)",
+};
 
 function parseMetadata(value: string | null): Record<string, unknown> {
   if (!value) return {};
@@ -63,7 +77,7 @@ export function buildCandidateTimeline(input: {
       date,
       kind: "campaign",
       title: `Campagne : ${recipient.campaignTitle || "offre de recrutement"}`,
-      detail: recipient.error || `Statut de délivrabilité : ${recipient.deliveryStatus}`,
+      detail: recipient.error || `Statut de délivrabilité : ${DELIVERY_STATUS_LABELS[recipient.deliveryStatus] ?? recipient.deliveryStatus}`,
     });
   });
 
@@ -73,7 +87,7 @@ export function buildCandidateTimeline(input: {
       date: task.completedAt || task.dueAt,
       kind: "follow_up",
       title: task.status === "completed" ? "Relance terminée" : task.status === "dismissed" ? "Relance écartée" : "Relance à effectuer",
-      detail: task.notes || `Échéance : ${task.dueAt.toLocaleDateString("fr-FR")}`,
+      detail: task.notes || `Échéance : ${formatAdminDate(task.dueAt)}`,
     });
   });
 

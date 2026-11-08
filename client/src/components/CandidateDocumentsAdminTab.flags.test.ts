@@ -30,7 +30,7 @@ const { default: CandidateDocumentsAdminTab } = await import("./CandidateDocumen
 function flagsLine(language: typeof view.language) {
   view.language = language;
   const html = renderToStaticMarkup(createElement(CandidateDocumentsAdminTab));
-  const line = html.match(/<p class="mt-3 flex gap-2 text-xs text-amber-400">(.*?)<\/p>/s)?.[1] ?? "";
+  const line = html.match(/<p class="mt-3 flex gap-2 text-xs text-amber-700 dark:text-amber-400">(.*?)<\/p>/s)?.[1] ?? "";
   return line.replace(/<[^>]+>/g, "").replace(/&quot;/g, "\"").replace(/&#x27;/g, "'").replace(/&amp;/g, "&");
 }
 

@@ -15,7 +15,9 @@ import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { agendaDays, buildAppointmentsAgenda, type AgendaRange } from "@/pages/appointmentsAgenda";
 import { getAppointmentAdminActions, PATIENT_DATA_ERASED_REASON_PROMPT, PATIENT_DATA_ERASED_REFUND_NOTICE } from "@/pages/appointmentAdminActions";
 import { formatAdminAmount } from "@/components/adminAmount";
-import { APPOINTMENT_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/components/appointmentStatusLabels";
+import { PAYMENT_STATUS_LABELS } from "@/components/appointmentStatusLabels";
+import AdminStatusBadge, { AdminBadge } from "@/components/AdminStatusBadge";
+import { formatAdminDateTime } from "@/components/adminDateFormat";
 
 /**
  * The list's filters (ADM-18): by default without the bookings that never
@@ -31,17 +33,8 @@ function listFilterInput(filter: AppointmentListFilter) {
   return filter === "useful" ? { excludeAbandoned: true } : filter === "all" ? {} : { status: filter };
 }
 
-/** « 31/10/2026 10:00 », Paris time, without the seconds (ADM-18). */
-const parisDateTime = (date: string | Date) => new Date(date).toLocaleString("fr-FR", { timeZone: "Europe/Paris", dateStyle: "short", timeStyle: "short" });
 /** « 12 octobre 2026 », a Paris calendar day (YYYY-MM-DD). */
 const parisLongDay = (day: string) => new Date(`${day}T12:00:00.000Z`).toLocaleDateString("fr-FR", { timeZone: "Europe/Paris", day: "numeric", month: "long", year: "numeric" });
-
-const APPOINTMENT_STATUS_COLORS: Record<string, string> = {
-  confirmed: "bg-blue-500/20 text-blue-400",
-  cancelled: "bg-red-500/20 text-red-400",
-  completed: "bg-green-500/20 text-green-400",
-  no_show: "bg-gray-500/20 text-gray-400",
-};
 
 const AGENDA_RANGES: Array<{ id: AgendaRange; label: string }> = [
   { id: "today", label: "Aujourd’hui" },
@@ -92,7 +85,7 @@ function AppointmentsAgenda() {
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Chargement de l’agenda…</p>
       ) : error ? (
-        <p className="text-sm text-red-400">L’agenda n’a pas pu être chargé : {error.message}</p>
+        <p className="text-sm text-red-700 dark:text-red-400">L’agenda n’a pas pu être chargé : {error.message}</p>
       ) : agenda.length > 0 ? (
         <div className="space-y-3">
           {agenda.map(day => (
@@ -106,7 +99,8 @@ function AppointmentsAgenda() {
                       {apt.customerPhone && <span className="text-muted-foreground"> · {apt.customerPhone}</span>}
                       <span className="font-mono text-xs text-muted-foreground"> · {apt.trackingId}</span>
                     </span>
-                    <span className={`shrink-0 rounded px-2 py-0.5 text-[11px] font-medium ${APPOINTMENT_STATUS_COLORS[apt.appointmentStatus] || "bg-muted text-muted-foreground"} print:bg-transparent print:px-0 print:text-foreground`}>{APPOINTMENT_STATUS_LABELS[apt.appointmentStatus] ?? apt.appointmentStatus}</span>
+                    {/* Printed on paper in the dark theme too: its own colours are dropped. */}
+                    <AdminStatusBadge kind="appointment" status={apt.appointmentStatus} className="shrink-0 print:border-0 print:bg-transparent print:px-0 print:text-foreground print:dark:bg-transparent print:dark:text-foreground" />
                   </li>
                 ))}
               </ul>
@@ -127,8 +121,8 @@ function AppointmentsAgenda() {
  */
 function cancellationDetails(apt: { cancellationReason?: string | null; cancelledAt?: string | Date | null; refundAmount?: string | null; refundedAt?: string | Date | null }) {
   return [
-    apt.refundAmount || apt.refundedAt ? `Remboursé${apt.refundAmount ? ` ${formatAdminAmount(apt.refundAmount)}` : ""}${apt.refundedAt ? ` le ${parisDateTime(apt.refundedAt)}` : ""}` : "",
-    apt.cancelledAt ? `Annulé le ${parisDateTime(apt.cancelledAt)}` : "",
+    apt.refundAmount || apt.refundedAt ? `Remboursé${apt.refundAmount ? ` ${formatAdminAmount(apt.refundAmount)}` : ""}${apt.refundedAt ? ` le ${formatAdminDateTime(apt.refundedAt)}` : ""}` : "",
+    apt.cancelledAt ? `Annulé le ${formatAdminDateTime(apt.cancelledAt)}` : "",
     apt.cancellationReason ? `Motif : ${apt.cancellationReason}` : "",
   ].filter(Boolean);
 }
@@ -227,13 +221,6 @@ export default function AppointmentsTab({ initialSearch = "" }: { initialSearch?
     return <div>{agenda}{toolbar}<AdminErrorState description={error.message} onRetry={retry} retrying={retrying} /></div>;
   }
 
-  const statusColors: Record<string, string> = {
-    pending: "bg-yellow-500/20 text-yellow-400",
-    completed: "bg-green-500/20 text-green-400",
-    failed: "bg-red-500/20 text-red-400",
-    refunded: "bg-purple-500/20 text-purple-400",
-  };
-
   if (isLoading) {
     return <div>{agenda}{toolbar}<PublicContentSkeleton label="Chargement des rendez-vous" /></div>;
   }
@@ -260,29 +247,25 @@ export default function AppointmentsTab({ initialSearch = "" }: { initialSearch?
                 <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
                   <span className="break-all">{apt.customerEmail}</span>
                   <span>{apt.customerPhone}</span>
-                  <span>{parisDateTime(apt.appointmentDate)}</span>
+                  <span>{formatAdminDateTime(apt.appointmentDate)}</span>
                   <span className="font-semibold text-foreground">{formatAdminAmount(apt.finalPrice)}</span>
                   {/* Langue de la page de réservation : emails patients en anglais sauf pour FR (EN-01). */}
                   <span title="Langue de la réservation et des emails au patient">Langue : {(apt.language || "fr").toUpperCase()}</span>
                 </div>
               </div>
               <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
-                <span className={`px-2 py-1 rounded text-xs font-medium ${statusColors[apt.paymentStatus] || ""}`}>
-                  {PAYMENT_STATUS_LABELS[apt.paymentStatus] ?? apt.paymentStatus}
-                </span>
-                <span className={`px-2 py-1 rounded text-xs font-medium ${APPOINTMENT_STATUS_COLORS[apt.appointmentStatus] || ""}`}>
-                  {APPOINTMENT_STATUS_LABELS[apt.appointmentStatus] ?? apt.appointmentStatus}
-                </span>
+                <AdminStatusBadge kind="payment" status={apt.paymentStatus} />
+                <AdminStatusBadge kind="appointment" status={apt.appointmentStatus} />
                 {(() => {
                   const actions = getAppointmentAdminActions(apt);
                   const buttonClass = "min-h-10 flex-1 sm:min-h-0 sm:flex-none";
                   return (
                     <>
                       {actions.unconfirmedPayment && (
-                        <span className="px-2 py-1 rounded text-xs font-medium bg-amber-500/20 text-amber-400">Paiement à régulariser</span>
+                        <AdminBadge tone="warning">Paiement à régulariser</AdminBadge>
                       )}
                       {actions.patientDataErased && (
-                        <span className="px-2 py-1 rounded text-xs font-medium bg-slate-500/20 text-slate-300" title="Rendez-vous anonymisé (effacement RGPD ou conservation de 3 ans écoulée) : le patient n’est plus joignable par le site.">Données effacées</span>
+                        <AdminBadge tone="neutral" title="Rendez-vous anonymisé (effacement RGPD ou conservation de 3 ans écoulée) : le patient n’est plus joignable par le site.">Données effacées</AdminBadge>
                       )}
                       {actions.canComplete && (
                         <Button size="sm" variant="outline" className={buttonClass} disabled={updateStatus.isPending}

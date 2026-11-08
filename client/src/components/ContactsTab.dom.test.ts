@@ -68,6 +68,14 @@ describe("ADM-10 — « Lu » sur un message", () => {
   });
 });
 
+describe("ADM-07 — date d’un message", () => {
+  it("la lit à l’heure de Paris, comme celles des rendez-vous, avec son fuseau, sans les secondes", () => {
+    mount();
+    // 08:00 UTC on 20 October 2026: 10:00 in Paris (summer time).
+    expect(screen.getByText("20/10/2026 10:00 (heure de Paris)")).toBeTruthy();
+  });
+});
+
 describe("ADM-10 — liste des messages illisible", () => {
   it("dit que les messages n’ont pas pu être chargés, les recharge avec « Réessayer » et le garde inactif pendant l’essai", () => {
     view.firstPage = { data: undefined, isLoading: false, isFetching: false, error: { message: "Validation de sécurité administrateur requise (10003)" }, refetch: vi.fn() };

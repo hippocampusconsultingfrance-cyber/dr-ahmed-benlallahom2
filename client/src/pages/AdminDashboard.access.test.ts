@@ -126,14 +126,19 @@ describe("accès au tableau de bord", () => {
     (buttonNamed(tree, "Envoyer un code de sécurité")!.props.onClick as () => void)();
     expect(view.begin).toHaveBeenCalledTimes(1);
 
-    const codeInput = () => elements(render()).find(element => element.props.id === "admin-mfa-code")!;
-    const validate = () => buttonNamed(render(), "Valider le code")!;
+    // A11Y-12: the screen is the page's main region, the code a form's, sent by « Valider le code » as by Entrée.
+    expect(tree.type).toBe("main");
+    const codeForm = () => elements(render()).find(element => element.type === "form")!;
+    const codeInput = () => elementsOf(codeForm().props.children).find(element => element.props.id === "admin-mfa-code")!;
+    const validate = () => elementsOf(codeForm().props.children).find(element => element.props.type === "submit" && textOf(element).trim() === "Valider le code")!;
     expect(validate().props.disabled).toBe(true);
     (codeInput().props.onChange as (event: { target: { value: string } }) => void)({ target: { value: "12a-34 56" } });
     tree = render();
     expect(codeInput().props.value).toBe("123456");
     expect(validate().props.disabled).toBe(false);
-    (validate().props.onClick as () => void)();
+    const submit = { preventDefault: vi.fn() };
+    (codeForm().props.onSubmit as (event: typeof submit) => void)(submit);
+    expect(submit.preventDefault).toHaveBeenCalledTimes(1);
     expect(view.verify).toHaveBeenCalledWith({ code: "123456" });
   });
 

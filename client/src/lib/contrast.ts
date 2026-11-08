@@ -27,6 +27,19 @@ export function contrastRatio(foreground: Oklch, background: Oklch): number {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
+const encodeSrgb = (channel: number) => (channel <= 0.0031308 ? 12.92 * channel : 1.055 * channel ** (1 / 2.4) - 0.055);
+const decodeSrgb = (channel: number) => (channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
+
+/** Contrast of a text on a tint of opacity `alpha` (bg-cyan-950/15: 0.15) laid over a surface, blended as the browser does, in sRGB. */
+export function contrastOnTint(text: Oklch, tint: Oklch, alpha: number, surface: Oklch): number {
+  const over = oklchToLinearRgb(tint).map(encodeSrgb);
+  const under = oklchToLinearRgb(surface).map(encodeSrgb);
+  const [red, green, blue] = over.map((channel, index) => decodeSrgb(channel * alpha + under[index]! * (1 - alpha)));
+  const background = 0.2126 * red! + 0.7152 * green! + 0.0722 * blue!;
+  const [lighter, darker] = [relativeLuminance(text), background].sort((a, b) => b - a);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
 export const contrastTokens = {
   dark: {
     background: [0.12, 0.02, 250],

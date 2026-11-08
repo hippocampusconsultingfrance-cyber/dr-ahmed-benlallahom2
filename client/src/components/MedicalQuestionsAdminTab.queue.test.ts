@@ -108,11 +108,13 @@ describe("ADM-01 — file des questions santé", () => {
     expect(html.indexOf("Patiente1")).toBeLessThan(html.indexOf("Patiente2"));
   });
 
-  it("montre la référence citée par l’email de notification et un statut lisible", () => {
+  it("montre la référence citée par l’email de notification, un statut lisible et la date de réception en heure de Paris (ADM-07)", () => {
     const html = render();
     expect(html).toContain("QMED-ADMIN001-00000");
-    expect(html).toContain("Nouvelle");
-    expect(html).toContain("Brouillon");
+    expect(html).toMatch(/>À répondre<\/span>/);
+    expect(html).toMatch(/>Brouillon<\/span>/);
+    expect(html).not.toMatch(/>(submitted|drafting)</);
+    expect(html).toMatch(/\d{2}\/\d{2}\/\d{4} \d{2}:\d{2} \(heure de Paris\)/);
   });
 
   it("propose « Classer sans suite » pour une question sans réponse, pas après l’envoi", () => {
@@ -156,7 +158,7 @@ describe("ADM-01 — file des questions santé", () => {
     render();
     state.sendOptions.onSuccess!({ success: true, published: false, resent: false, unconfirmedSentAt: new Date(Date.UTC(2026, 9, 20, 8, 30)) } as never);
     expect(state.invalidated).toEqual(["get", "list"]);
-    expect(state.toasts.at(-1)).toEqual(["warning", "Un envoi du 20/10/2026 10:30:00 s’est interrompu avant d’être enregistré : la personne a peut-être déjà reçu la réponse. Il est enregistré à cette date avec le texte de cet envoi, sans nouvel email : une modification faite depuis n’a été ni envoyée ni conservée. « Renvoyer la réponse » permet un nouvel envoi volontaire."]);
+    expect(state.toasts.at(-1)).toEqual(["warning", "Un envoi du 20/10/2026 10:30 (heure de Paris) s’est interrompu avant d’être enregistré : la personne a peut-être déjà reçu la réponse. Il est enregistré à cette date avec le texte de cet envoi, sans nouvel email : une modification faite depuis n’a été ni envoyée ni conservée. « Renvoyer la réponse » permet un nouvel envoi volontaire."]);
     state.sendOptions.onSuccess!({ success: true, published: false, resent: false, unconfirmedSentAt: null } as never);
     expect(state.toasts.at(-1)).toEqual(["success", "Réponse envoyée par email."]);
   });

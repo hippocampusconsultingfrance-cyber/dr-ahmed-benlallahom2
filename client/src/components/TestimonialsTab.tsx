@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { AdminErrorState } from "@/components/AdminStatePanel";
 import AdminClampedText from "@/components/AdminClampedText";
+import AdminStatusBadge from "@/components/AdminStatusBadge";
 
 export default function TestimonialsTab() {
   const { data: testimonialsList, isLoading, error, refetch, isFetching } = trpc.admin.testimonials.list.useQuery();
@@ -23,12 +24,6 @@ export default function TestimonialsTab() {
     },
     onError: mutationError => toast.error(mutationError.message),
   });
-
-  const statusColors: Record<string, string> = {
-    pending: "bg-yellow-500/20 text-yellow-400",
-    approved: "bg-green-500/20 text-green-400",
-    rejected: "bg-red-500/20 text-red-400",
-  };
 
   if (isLoading) {
     return <PublicContentSkeleton label="Chargement des témoignages administratifs" />;
@@ -55,10 +50,8 @@ export default function TestimonialsTab() {
                       <Star key={i} className="w-3 h-3 fill-cyan-400 text-cyan-400" />
                     ))}
                   </div>
-                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColors[t.status] || ""}`}>
-                    {t.status}
-                  </span>
-                  {t.featured === 1 && <span className="px-2 py-0.5 rounded text-xs font-medium bg-cyan-500/20 text-cyan-400">Featured</span>}
+                  <AdminStatusBadge kind="testimonial" status={t.status} />
+                  {t.featured === 1 && <AdminStatusBadge kind="testimonial" status="featured" />}
                 </div>
                 <p className="break-words text-sm font-medium text-foreground">{t.title}</p>
                 <AdminClampedText text={t.content} about={`témoignage de ${t.authorName}`} className="text-sm text-muted-foreground mt-1" />
@@ -88,13 +81,15 @@ export default function TestimonialsTab() {
                   size="sm"
                   variant="destructive"
                   className="min-h-10 flex-1 sm:min-h-0 sm:flex-none"
+                  // A11Y-12: the icon alone names nothing.
+                  aria-label={`Supprimer le témoignage de ${t.authorName}`}
                   onClick={() => {
                     if (confirm("Supprimer ce témoignage ?")) {
                       deleteTestimonial.mutate({ id: t.id });
                     }
                   }}
                 >
-                  <Trash2 className="w-3 h-3" />
+                  <Trash2 className="w-3 h-3" aria-hidden="true" />
                 </Button>
               </div>
             </div>

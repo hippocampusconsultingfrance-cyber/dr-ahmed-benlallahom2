@@ -9,6 +9,7 @@ import AdminSearchField from "@/components/AdminSearchField";
 import { adminListCount, adminPageOffsets, ADMIN_PAGE_SIZE, mergeAdminPages, useAdminPageCount } from "@/components/adminPagination";
 import { adminSearchStatus, useAdminSearch } from "@/components/adminSearch";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
+import { formatAdminDateTime } from "@/components/adminDateFormat";
 
 /** `initialSearch`: the reference the dashboard's address names (ADM-09), searched at once. */
 export default function ContactsTab({ initialSearch = "" }: { initialSearch?: string } = {}) {
@@ -84,7 +85,7 @@ export default function ContactsTab({ initialSearch = "" }: { initialSearch?: st
                 <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground mb-2">
                   <span className="break-all">{msg.email}</span>
                   {msg.phone && <span>{msg.phone}</span>}
-                  <span>{new Date(msg.createdAt).toLocaleString("fr-FR")}</span>
+                  <span>{formatAdminDateTime(msg.createdAt)}</span>
                 </div>
                 <p className="whitespace-pre-line text-sm text-foreground">{msg.message}</p>
               </div>

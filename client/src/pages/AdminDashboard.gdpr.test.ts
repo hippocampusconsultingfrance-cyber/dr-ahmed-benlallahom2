@@ -188,7 +188,10 @@ describe("RGPD-12 — onglet RGPD", () => {
     state.gdprPage = { items: [gdprRequest(1), gdprRequest(2, { createdAt: new Date(Date.now() - 40 * DAY) }), gdprRequest(3, { status: "completed", responseDate: new Date(Date.now() - DAY), notes: "Données effacées le 25." })], total: 3 };
     const html = render(createElement(GdprTab));
     expect(html).toContain(`Échéance : ${formatGdprRequestDate(gdprRequestDeadline(gdprRequest(1).createdAt))}`);
-    expect(html).toMatch(/<span class="font-semibold text-red-400">Échéance dépassée : /);
+    // Dark red in the light theme too (A11Y-12).
+    expect(html).toMatch(/<span class="font-semibold text-red-700 dark:text-red-400">Échéance dépassée : /);
+    // Its receipt, on the Paris clock, the zone said (ADM-07).
+    expect(html).toMatch(/Reçue le \d{2}\/\d{2}\/\d{4} \d{2}:\d{2} \(heure de Paris\)/);
     expect(html).toContain("À traiter");
     expect(html).toContain("Traitée");
     expect(html).not.toMatch(/>pending</);
@@ -339,6 +342,31 @@ describe("RGPD-12 — rechercher une personne par email", () => {
     const late = { ...found, gdprRequests: [{ ...found.gdprRequests[0]!, createdAt: new Date("2026-10-25T23:30:00Z") }] };
     const html = render(createElement(PersonalDataResult, { data: late as never, onChanged: vi.fn() }));
     expect(html).toContain("GJEANNE</span> · 26/10/2026 · Accès");
+  });
+
+  it("date ses messages, questions, rendez-vous et candidatures au jour de Paris, et dit une question à traiter « À répondre », comme leurs onglets (ADM-07)", () => {
+    const previous = process.env.TZ;
+    // A browser on UTC: 23:30 there is already 00:30 the next day in Paris.
+    process.env.TZ = "UTC";
+    try {
+      const late = new Date("2026-09-14T23:30:00Z");
+      const data = {
+        ...found,
+        contactMessages: [{ ...found.contactMessages[0]!, createdAt: late }],
+        medicalQuestions: [{ ...found.medicalQuestions[0]!, status: "submitted", createdAt: late }],
+        appointments: [{ ...found.appointments[0]!, appointmentDate: late }],
+        recruitment: { ...found.recruitment, applications: [{ ...found.recruitment.applications[0]!, createdAt: late }] },
+      };
+      const html = render(createElement(PersonalDataResult, { data: data as never, onChanged: vi.fn() }));
+      expect(html).toContain("CJEANNE</span> · 15/09/2026 · ");
+      expect(html).toContain("QMED-JEANNE</span> · 15/09/2026 · À répondre · ");
+      expect(html).toContain("APTJEANNE</span> · 15/09/2026 · ");
+      expect(html).toContain("déposée le 15/09/2026");
+      expect(html).not.toContain("14/09/2026");
+    } finally {
+      if (previous === undefined) delete process.env.TZ;
+      else process.env.TZ = previous;
+    }
   });
 
   it("exporte le JSON préparé par le serveur", () => {

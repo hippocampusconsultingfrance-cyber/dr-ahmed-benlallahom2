@@ -52,6 +52,7 @@ vi.mock("@/lib/trpc", () => ({
 }));
 
 const { default: MedicalQuestionsAdminTab } = await import("./MedicalQuestionsAdminTab");
+const { default: AdminStatusBadge, adminStatusLabel } = await import("./AdminStatusBadge");
 
 type Element = { type: unknown; props: Record<string, any> };
 const textOf = (node: unknown): string => {
@@ -224,7 +225,11 @@ describe("brouillon et classement sans suite d’une question santé (ADM-23)", 
 
     resetStatefulHooks();
     state.selected.data = question({ status: "rejected", rejectionReason: "abusif" });
-    expect(textOf(elements().find(element => element.type === "p" && textOf(element).startsWith("Référence")))).toContain("Classée sans suite (motif : Abusive / spam)");
+    const reference = elements().find(element => element.type === "p" && textOf(element).startsWith("Référence"));
+    // The status in its badge (ADM-07), « Classée sans suite », then the reason.
+    expect(elementsOf(reference).find(element => element.type === AdminStatusBadge)?.props).toMatchObject({ kind: "medicalQuestion", status: "rejected" });
+    expect(adminStatusLabel("medicalQuestion", "rejected")).toBe("Classée sans suite");
+    expect(textOf(reference)).toContain("(motif : Abusive / spam)");
   });
 
   it("classe sans motif quand aucun n’est choisi", () => {

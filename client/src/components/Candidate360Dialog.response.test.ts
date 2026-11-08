@@ -65,6 +65,16 @@ beforeEach(() => {
   state.errors = [];
 });
 
+describe("ADM-07 — statut et dates de la fiche 360°", () => {
+  it("écrit le statut de la candidature en mots et sa réception à l’heure de Paris", () => {
+    const html = sheet().filter(element => element.type === "p" || element.type === "span").map(element => renderToStaticMarkup(element)).join("\n");
+    expect(html).toContain("Statut : Nouvelle");
+    expect(html).not.toContain("Statut : new");
+    // 10:00 UTC on 20 October 2026: 12:00 in Paris.
+    expect(html).toContain("20/10/2026 12:00 (heure de Paris)");
+  });
+});
+
 describe("ADM-13 — « Le candidat a répondu » dans la fiche 360°", () => {
   it("enregistre la réponse du candidat, puis relit la fiche et les indicateurs", async () => {
     (button("Le candidat a répondu")!.props.onClick as () => void)();
