@@ -1,7 +1,18 @@
 import express, { type Express } from "express";
-import { Webhook } from "svix";
+import { internalErrorSummary } from "../_core/trpc";
 import { recordResendEmailEvent } from "../resendWebhookEvents";
 import { safeErrorName } from "./routeHelpers";
+
+// svix is loaded at the first Resend event, not at the Vercel function's cold
+// start (EXPL-15). The load is kept; a failed one is tried again at the next event.
+let svix: Promise<typeof import("svix")> | undefined;
+function loadSvix(): Promise<typeof import("svix")> {
+  svix ??= import("svix").catch(error => {
+    svix = undefined;
+    throw error;
+  });
+  return svix;
+}
 
 /** Verifies the Svix signature on the raw body: createApp registers it before express.json(). */
 export function registerResendWebhookRoute(app: Express) {
@@ -9,6 +20,17 @@ export function registerResendWebhookRoute(app: Express) {
     const webhookSecret = process.env.RESEND_WEBHOOK_SECRET;
     if (!webhookSecret) {
       res.status(503).send("Resend webhook is not configured");
+      return;
+    }
+    // A svix that cannot be loaded is our failure, not an invalid signature:
+    // 500, which Resend retries and the smoke test of the built server tells
+    // apart from the 400 of a refused signature, as for Stripe's webhook.
+    let Webhook: typeof import("svix").Webhook;
+    try {
+      ({ Webhook } = await loadSvix());
+    } catch (error) {
+      console.error("Resend webhook unavailable", internalErrorSummary(error));
+      res.status(500).send("Resend webhook unavailable");
       return;
     }
     try {

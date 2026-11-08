@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { readdirSync, readFileSync } from "node:fs";
+import { relative, resolve, sep } from "node:path";
 import { createServer } from "vite";
 import { describe, expect, it } from "vitest";
 
@@ -10,6 +10,21 @@ const vercel = JSON.parse(read("vercel.json")) as {
   rewrites: { source: string; destination: string }[];
 };
 const headerFor = (source: string, key: string) => vercel.headers.find(rule => rule.source === source)?.headers.find(header => header.key === key)?.value;
+
+/**
+ * The headers Vercel sends for a path: those of every rule whose source matches
+ * it, a later rule's value replacing an earlier one's. The sources of
+ * vercel.json are literal paths, ending at most in a `(.*)` group.
+ */
+function headersAt(pathname: string): Record<string, string> {
+  const headers: Record<string, string> = {};
+  for (const rule of vercel.headers) {
+    expect(rule.source).toMatch(/^(?:\/[a-z-]+)*(?:\/\(\.\*\))?$/);
+    if (!new RegExp(`^${rule.source}$`).test(pathname)) continue;
+    for (const { key, value } of rule.headers) headers[key] = value;
+  }
+  return headers;
+}
 
 describe("polices auto-hébergées (PUB-COOKIE-02 / PERF-05)", () => {
   it("ne contacte plus Google Fonts, ni dans le HTML ni dans la CSP", () => {
@@ -47,6 +62,23 @@ describe("cache immuable des fichiers hachés (CACHE-01)", () => {
     // Les fichiers non hachés (photos, logos) de /assets ne sont jamais figés.
     expect(vercel.headers.some(rule => rule.source.startsWith("/assets") && rule.headers.some(header => /immutable/.test(header.value)))).toBe(false);
     expect(read("scripts/check-performance-budgets.mjs")).toContain('path.resolve("dist/public/static")');
+  });
+
+  it("garde un jour en cache les photos, logos et illustrations de /assets, non hachés, puis les revalide en arrière-plan pendant une semaine (SEOP-14)", () => {
+    const assets = readdirSync(resolve(root, "client/public/assets"), { recursive: true, withFileTypes: true }).filter(entry => entry.isFile());
+    expect(assets.length).toBeGreaterThan(0);
+    const page = headersAt("/");
+    for (const asset of assets) {
+      const pathname = `/${relative(resolve(root, "client/public"), resolve(asset.parentPath, asset.name)).split(sep).join("/")}`;
+      const headers = headersAt(pathname);
+      expect(headers["Cache-Control"], pathname).toBe("public, max-age=86400, stale-while-revalidate=604800");
+      // The security headers of every page are kept.
+      expect({ ...headers, "Cache-Control": undefined }, pathname).toEqual({ ...page, "Cache-Control": undefined });
+    }
+    // Hashed files stay immutable, the API uncached, and the pages revalidated at each visit.
+    expect(headersAt("/static/index-Bu9jLZjO.css")["Cache-Control"]).toBe("public, max-age=31536000, immutable");
+    expect(headersAt("/api/health")["Cache-Control"]).toBe("no-store");
+    for (const pathname of ["/", "/booking", "/recruitment/vvip-offshore"]) expect(headersAt(pathname)["Cache-Control"], pathname).toBeUndefined();
   });
 
   it("répare un fragment introuvable mis en cache (redéploiement, retour arrière) au lieu de rester bloqué un an", () => {

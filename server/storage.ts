@@ -1,7 +1,17 @@
-import { BlobNotFoundError, del, head, issueSignedToken, list, presignUrl, put } from "@vercel/blob";
-
 const PRIVATE_BLOB_ACCESS = "private" as const;
 const SIGNED_URL_LIFETIME_MS = 5 * 60 * 1000;
+
+// The Vercel Blob SDK is loaded at the first storage call, not at the Vercel
+// function's cold start (EXPL-15). The load is kept; a failed one is tried
+// again at the next call.
+let vercelBlob: Promise<typeof import("@vercel/blob")> | undefined;
+function loadVercelBlob(): Promise<typeof import("@vercel/blob")> {
+  vercelBlob ??= import("@vercel/blob").catch(error => {
+    vercelBlob = undefined;
+    throw error;
+  });
+  return vercelBlob;
+}
 
 function getBlobToken(): string {
   const token = process.env.BLOB_READ_WRITE_TOKEN?.trim();
@@ -60,13 +70,15 @@ export async function storagePut(
   const body = typeof data === "string" || Buffer.isBuffer(data) ? data : Buffer.from(data);
   let uploaded;
   try {
+    const token = getBlobToken();
+    const { put } = await loadVercelBlob();
     uploaded = await put(key, body, {
       access: PRIVATE_BLOB_ACCESS,
       addRandomSuffix: false,
       allowOverwrite: false,
       cacheControlMaxAge: 60,
       contentType,
-      token: getBlobToken(),
+      token,
     });
   } catch (error) {
     const wrapped = new Error("storage_upload_failed", { cause: error }) as Error & { code: string };
@@ -100,6 +112,7 @@ export async function storagePutOnce(
   try {
     const token = getBlobToken();
     checking = true;
+    const { BlobNotFoundError, head, put } = await loadVercelBlob();
     try {
       const stored = await head(key, { token });
       return { key: stored.pathname, url: stored.url, uploaded: false };
@@ -132,6 +145,7 @@ export async function storageGet(relKey: string): Promise<{ key: string; url: st
 export async function storageGetSignedUrl(relKey: string): Promise<string> {
   const key = normalizeKey(relKey);
   const token = getBlobToken();
+  const { issueSignedToken, presignUrl } = await loadVercelBlob();
   const validUntil = Date.now() + SIGNED_URL_LIFETIME_MS;
   const signedToken = await issueSignedToken({
     pathname: key,
@@ -163,6 +177,7 @@ export async function storageGetBuffer(relKey: string): Promise<Buffer> {
 export async function storageDelete(relKeys: string[]): Promise<number> {
   const keys = Array.from(new Set(relKeys.map(normalizeKey).filter(key => key.length > 0)));
   const token = getBlobToken();
+  const { del } = await loadVercelBlob();
   for (let index = 0; index < keys.length; index += 100) {
     await del(keys.slice(index, index + 100), { token });
   }
@@ -174,6 +189,7 @@ export async function storageListObjects(prefix: string, maxKeys = 500): Promise
   const normalized = normalizeKey(prefix);
   if (!normalized.includes("/")) throw new Error("storage_list_prefix_too_broad");
   const token = getBlobToken();
+  const { list } = await loadVercelBlob();
   const objects: Array<{ key: string; uploadedAt: Date }> = [];
   let cursor: string | undefined;
   do {

@@ -2,7 +2,6 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import bidiFactory from "bidi-js";
-import PDFDocument from "pdfkit";
 import { storageGetBuffer, storagePutOnce } from "./storage.js";
 import { resolveInvoiceSeller, type InvoiceSeller } from "./invoiceSeller";
 
@@ -44,13 +43,26 @@ type InvoiceFont = keyof typeof INVOICE_FONT_FILES;
 const FALLBACK_INVOICE_FONTS = { regular: "Helvetica", bold: "Helvetica-Bold" } as const;
 
 // server/fonts depuis ce fichier (tsx, vitest), ou depuis la racine du projet
-// pour les bundles esbuild (api/index.js sur Vercel, où le répertoire courant
-// est la racine de la fonction, et dist/index.js).
+// pour les bundles esbuild (dist/vercel/index.js, que api/index.js re-exporte
+// sur Vercel, où le répertoire courant est la racine de la fonction, et
+// dist/index.js).
 function invoiceFontDirectories(): string[] {
   return [fileURLToPath(new URL("./fonts/", import.meta.url)), path.resolve(process.cwd(), "server", "fonts")];
 }
 
 const invoiceFontData = new Map<InvoiceFont, Buffer>();
+
+// PDFKit n'est chargé qu'à la première facture, pas au démarrage à froid de la
+// fonction Vercel (EXPL-15). Le chargement est gardé ; un échec est retenté à
+// la facture suivante.
+let pdfDocument: Promise<typeof import("pdfkit")> | undefined;
+function loadPdfDocument(): Promise<typeof import("pdfkit")> {
+  pdfDocument ??= import("pdfkit").then(module => module.default, error => {
+    pdfDocument = undefined;
+    throw error;
+  });
+  return pdfDocument;
+}
 
 function readInvoiceFont(font: InvoiceFont): Buffer | null {
   const cached = invoiceFontData.get(font);
@@ -486,11 +498,12 @@ export async function archiveInvoicePDF(data: InvoiceData, seller: InvoiceSeller
  * same bytes, so a retried job rebuilds the very invoice from its recorded
  * number and dates (EXPL-02).
  */
-export function renderInvoicePDF(
+export async function renderInvoicePDF(
   data: InvoiceData,
   seller: InvoiceSeller = resolveInvoiceSeller(),
 ): Promise<Buffer> {
   const content = buildInvoiceContent(data, seller);
+  const PDFDocument = await loadPdfDocument();
   return new Promise((resolve, reject) => {
     try {
       const doc = new PDFDocument({

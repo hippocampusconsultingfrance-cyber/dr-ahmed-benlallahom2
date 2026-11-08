@@ -10,7 +10,9 @@ import { pathToFileURL } from "node:url";
  * Test de fumée du serveur construit (CODE-14). Après `pnpm build`, démarre
  * pour de vrai les deux bundles serveur et vérifie qu'ils répondent :
  *  - api/index.js, la fonction Vercel, servie par un petit hôte HTTP local
- *    (VERCEL=1, comme sur Vercel : pas de fichiers statiques) ;
+ *    (VERCEL=1, comme sur Vercel : pas de fichiers statiques) ; ce fichier
+ *    versionné re-exporte le bundle que le build écrit dans dist/vercel/index.js
+ *    (CODE-13), importé ici comme Vercel l'importe ;
  *  - dist/index.js, le serveur Express de `pnpm start`.
  * `node --check` (server/vercelBundle.test.ts) ne voit qu'une erreur de
  * syntaxe ; ici, un import manquant, une exception au chargement ou une route
@@ -34,11 +36,12 @@ import { pathToFileURL } from "node:url";
  * et un code cohérent (200 seulement si tout est « ok »), puis une requête tRPC
  * anonyme, qui traverse clerkMiddleware.
  *
- * Le bundle garde en import("…") à la demande des paquets (stripe, pdf-parse,
- * mammoth…) : un paquet absent n'y échoue qu'à la première requête qui le
- * charge. Chacun doit donc se résoudre depuis le bundle, et les routes
- * principales sont appelées : webhook Stripe mal signé (400 attendu, et non le
- * 500 d'un SDK introuvable), webhook Resend sans signature (400), tâche
+ * Le bundle garde en import("…") à la demande des paquets (stripe, pdfkit,
+ * @vercel/blob, svix, pdf-parse, mammoth… : EXPL-15) : un paquet absent n'y
+ * échoue qu'à la première requête qui le charge. Chacun doit donc se résoudre
+ * depuis le bundle, et les routes principales sont appelées : webhook Stripe
+ * mal signé (400 attendu, et non le 500 d'un SDK introuvable), webhook Resend
+ * sans signature (400, et non le 500 d'un svix introuvable), tâche
  * planifiée avec le CRON_SECRET factice (403 sans lui ; avec lui, la tâche va
  * jusqu'à la base injoignable : 500 dont la trace, sous la même référence,
  * n'est pas une erreur de module), calcul public du prix d'une réservation
@@ -134,8 +137,12 @@ const OUTBOUND_CONNECTION = /\[smoke\] connexion sortante refusée vers \S+/;
 /** Contrôles des routes qui chargent les modules à la demande, communs aux deux bundles. */
 const ROUTE_CHECKS = ["lazyPackages", "booking", "stripeWebhook", "resendWebhook", "scheduledJob", "noModuleErrors", "noOutboundConnections"];
 
+/**
+ * `entry` : le fichier démarré ; `bundle` : le code construit qu'il charge, où
+ * lazyPackages cherche les import("…") (l'entrée elle-même par défaut).
+ */
 export const BUILT_SERVERS = Object.freeze([
-  { name: "fonction Vercel (api/index.js)", entry: "api/index.js", vercel: true, checks: ["health", "api", ...ROUTE_CHECKS] },
+  { name: "fonction Vercel (api/index.js)", entry: "api/index.js", bundle: "dist/vercel/index.js", vercel: true, checks: ["health", "api", ...ROUTE_CHECKS] },
   { name: "serveur Node (dist/index.js, pnpm start)", entry: "dist/index.js", vercel: false, checks: ["health", "api", "spa", ...ROUTE_CHECKS] },
 ]);
 
@@ -242,10 +249,10 @@ const CHECKS = {
     }
     return `/ ${status} (page de l'application)`;
   },
-  async lazyPackages(_base, { entry }) {
-    const specifiers = lazyPackageImports(await readFile(entry, "utf8"));
-    const missing = unresolvedPackages(entry, specifiers);
-    if (missing.length) throw new Error(`paquet(s) importé(s) à la demande introuvable(s) depuis ${path.basename(entry)} : ${missing.join(", ")}`);
+  async lazyPackages(_base, { root, bundle }) {
+    const specifiers = lazyPackageImports(await readFile(bundle, "utf8"));
+    const missing = unresolvedPackages(bundle, specifiers);
+    if (missing.length) throw new Error(`paquet(s) importé(s) à la demande introuvable(s) depuis ${path.relative(root, bundle)} : ${missing.join(", ")}`);
     return `${specifiers.length} paquet(s) importé(s) à la demande résolu(s)`;
   },
   async booking(base) {
@@ -324,6 +331,7 @@ async function stop(child, closed) {
  */
 export async function smokeBuiltServer(target, { root = process.cwd(), startTimeoutMs = 30_000 } = {}) {
   const entry = path.resolve(root, target.entry);
+  const bundle = path.resolve(root, target.bundle ?? target.entry);
   const args = ["--import", NETWORK_GUARD, ...target.vercel ? ["--input-type=module", "--eval", VERCEL_HOST, pathToFileURL(entry).href] : [entry]];
   const env = smokeChildEnvironment(target, await freePort());
   const child = spawn(process.execPath, args, { cwd: root, env, stdio: ["ignore", "pipe", "pipe"] });
@@ -347,7 +355,7 @@ export async function smokeBuiltServer(target, { root = process.cwd(), startTime
     });
     const base = `http://127.0.0.1:${port}`;
     const results = [];
-    for (const check of target.checks) results.push(await CHECKS[check](base, { entry, output: () => output }));
+    for (const check of target.checks) results.push(await CHECKS[check](base, { root, bundle, output: () => output }));
     return { port, results };
   } catch (error) {
     await stop(child, closed);
