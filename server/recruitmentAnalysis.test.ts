@@ -719,6 +719,45 @@ describe("une même citation ne compte qu’une fois (IA-04)", () => {
     expect(other.scoreBreakdown.specialtyMatch).toBe(30);
     expect(other.relevanceScore).toBe(35);
   });
+
+  /**
+   * The title and specialty fields of the quotes, by turns, each with its
+   * value: « Anesthésie », written with as many dots as quotes before it (the
+   * fields of one value would be one field).
+   */
+  const specialtyQuotes = (quotes: Array<string | [string, string]>) => {
+    const fieldEvidence = quotes.map((quote, index) => {
+      const [evidence, value] = typeof quote === "string" ? [quote, `Anesthésie${".".repeat(index)}`] : quote;
+      return { field: index % 2 ? "specialty" as const : "professionalTitle" as const, value, evidence, sourceLocation: "page 1", confidence: 95 };
+    });
+    return analysisFixture({ professionalTitle: fieldEvidence[0]!.value, specialties: fieldEvidence.map(item => item.value), skills: [], fieldEvidence });
+  };
+
+  it("80 citations de spécialité qui se chevauchent toutes sur un CV de 60 000 caractères : 15 points en un temps borné (IA04-R41)", () => {
+    // The word written all over the CV, in paragraphs of a hundred, and the AI quoting it 80 times, each time a little longer.
+    const paragraph = Array.from({ length: 100 }, () => "Anesthésie").join(" ");
+    const cv = `[PAGE 1]\nDr Karim Benali\nCurriculum vitae\n${Array.from({ length: 55 }, () => paragraph).join("\n")}`;
+    const tails = ["", "e ", "ie ", "sie ", "ésie ", "hésie ", "thésie ", "sthésie ", "esthésie ", "nesthésie "];
+    const quotes = Array.from({ length: 80 }, (_, index) => tails[index % 10] + Array.from({ length: 1 + Math.floor(index / 10) }, () => "Anesthésie").join(" "));
+    const started = performance.now();
+    const result = normalizeRecruitmentAnalysis(specialtyQuotes(quotes), cv, declared);
+    // Before: every pair of quotes, each place of one against each of the other, more than ten minutes.
+    expect(performance.now() - started).toBeLessThan(5_000);
+    expect(result.fieldEvidence.filter(item => item.evidenceVerified)).toHaveLength(80);
+    expect(result.scoreBreakdown.specialtyMatch).toBe(15);
+  });
+
+  it("une citation écrite plus de mille fois et une autre écrite à part sont encore deux endroits (IA04-R41)", () => {
+    const words = Array.from({ length: 1_500 }, () => "anesthésie").join(" ");
+    const cv = `[PAGE 1]\n${titleLine}\n${skillLine}\nPublications : ${words}`;
+    const result = normalizeRecruitmentAnalysis(specialtyQuotes([[titleLine, title], "Anesthésie"]), cv, declared);
+    expect(result.fieldEvidence.map(item => item.evidenceVerified)).toEqual([true, true]);
+    expect(result.scoreBreakdown.specialtyMatch).toBe(30);
+    // Two quotes both written more than a thousand times are told apart by their first thousand places only: here, they overlap there.
+    const both = normalizeRecruitmentAnalysis(specialtyQuotes(["anesthésie anesthésie", "Anesthésie"]), `[PAGE 1]\n${words} réanimation anesthésie réanimation`, declared);
+    expect(both.fieldEvidence.map(item => item.evidenceVerified)).toEqual([true, true]);
+    expect(both.scoreBreakdown.specialtyMatch).toBe(15);
+  });
 });
 
 describe("données du candidat entre les balises du serveur (IA-05)", () => {

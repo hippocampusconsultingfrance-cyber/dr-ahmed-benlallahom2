@@ -1360,27 +1360,55 @@ function locationPage(sourceLocation: string) {
  */
 const evidenceProvenance = (item: { evidence: string }) => normalizeEvidenceText(item.evidence);
 
-/** Where a normalized quote is written in the normalized text: the start and end of each place. */
+/**
+ * The places of a quote read at most (IA04-R41): far more than a CV writes
+ * the same specialty quote, few enough that comparing the 80 quotes the AI may
+ * give, two by two, stays a matter of milliseconds.
+ */
+const QUOTE_PLACES_READ = 1_000;
+
+/**
+ * Where a normalized quote is written in the normalized text, the start of
+ * each place in order, the first QUOTE_PLACES_READ of them: `all` tells
+ * whether these are all of them.
+ */
 function quotePlaces(text: string, quote: string) {
-  const places: Array<[number, number]> = [];
-  for (let index = text.indexOf(quote); index !== -1 && quote; index = text.indexOf(quote, index + 1)) places.push([index, index + quote.length]);
-  return places;
+  const starts: number[] = [];
+  let index = quote ? text.indexOf(quote) : -1;
+  for (; index !== -1 && starts.length < QUOTE_PLACES_READ; index = text.indexOf(quote, index + 1)) starts.push(index);
+  return { starts, length: quote.length, all: index === -1 };
+}
+
+type QuotePlaces = ReturnType<typeof quotePlaces>;
+
+/**
+ * Whether one of the places read of `quote` overlaps no place of `other`, all
+ * of whose places must be known: otherwise one of those not read could be
+ * the one it overlaps. Both are in order and each quote's places have one
+ * length, so one pass over each does: the places of `other` that end before
+ * one of `quote` begins end before the next ones too.
+ */
+function placeOutside(quote: QuotePlaces, other: QuotePlaces) {
+  if (!other.all) return false;
+  let next = 0;
+  for (const start of quote.starts) {
+    while (next < other.starts.length && other.starts[next]! + other.length <= start) next += 1;
+    if (next === other.starts.length || other.starts[next]! >= start + quote.length) return true;
+  }
+  return false;
 }
 
 /**
  * Two different quotes written in two places of the text (IA-04): one of them
  * is written somewhere that overlaps no place of the other. A header repeated
  * on each page, cited whole for one field and in part (or overlapping) for the
- * other, overlaps itself on every page: it stays one quote.
+ * other, overlaps itself on every page: it stays one quote. A quote written
+ * more than QUOTE_PLACES_READ times is apart from another only by one of its
+ * places read that overlaps none of the other's (IA04-R41).
  */
-function quotesAreApart(text: string, left: string, right: string) {
-  if (left === right) return false;
-  const leftPlaces = quotePlaces(text, left);
-  const rightPlaces = quotePlaces(text, right);
-  const placeOutside = (places: Array<[number, number]>, others: Array<[number, number]>) =>
-    places.some(([start, end]) => others.every(([otherStart, otherEnd]) => end <= otherStart || otherEnd <= start));
-  return leftPlaces.length > 0 && rightPlaces.length > 0 &&
-    (placeOutside(leftPlaces, rightPlaces) || placeOutside(rightPlaces, leftPlaces));
+function quotesAreApart(left: QuotePlaces, right: QuotePlaces) {
+  return left.starts.length > 0 && right.starts.length > 0 &&
+    (placeOutside(left, right) || placeOutside(right, left));
 }
 
 function distinctEvidence<T extends EvidenceBearing>(evidence: T[]): T[] {
@@ -1473,9 +1501,11 @@ function verifiedScoreBreakdown(input: {
       )
       .map(item => normalizeEvidenceText(item.evidence))
   );
+  // Each quote's places read once (IA04-R41): its pairs compare them.
   const normalizedSource = specialtyQuotes.length > 1 ? normalizeEvidenceText(input.sourceText) : "";
-  const twoSpecialtyQuotes = specialtyQuotes.some((quote, index) =>
-    specialtyQuotes.slice(index + 1).some(other => quotesAreApart(normalizedSource, quote, other)));
+  const specialtyPlaces = specialtyQuotes.length > 1 ? specialtyQuotes.map(quote => quotePlaces(normalizedSource, quote)) : [];
+  const twoSpecialtyQuotes = specialtyPlaces.some((places, index) =>
+    specialtyPlaces.slice(index + 1).some(other => quotesAreApart(places, other)));
   return {
     specialtyMatch: twoSpecialtyQuotes ? 30 : specialtyQuotes.length > 0 ? 15 : 0,
     experienceEvidence: Math.min(
