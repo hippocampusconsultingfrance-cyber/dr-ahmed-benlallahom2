@@ -1416,7 +1416,75 @@ describe("dossier d’un CV qui cache du texte, de bout en bout (IA-01)", () => 
         docx: () => docx(paragraph(name) + `<w:p><w:r><w:t xml:space="preserve">{{${title}}}</w:t><w:br/><w:t xml:space="preserve">{{${specialty}}}</w:t></w:r></w:p>` + [experience, language, licence].map(line => paragraph(line)).join("")),
       },
     };
-    const specialtyPoints: Record<string, number> = { paragraph: 15, tab: 30, narrowTab: 15, twoCells: 15, lineBreak: 30, hiddenBreak: 15, hiddenTab: 15, hiddenMark: 15, emptyParagraphCells: 15, squeezed: 15 };
+    // Round 3, tour 2 (IA04-R4, IA04-P1). The width of a text in the PDF's Helvetica 11 pt, to wrap a paragraph or fill a line.
+    const measure = new PDFDocument({ size: "A4" }).fontSize(11);
+    const wrap = (text: string, width: number) => text.split(" ").reduce<string[]>((lines, word) => {
+      const last = lines[lines.length - 1];
+      if (last !== undefined && measure.widthOfString(`${last} ${word}`) <= width) lines[lines.length - 1] = `${last} ${word}`;
+      else lines.push(word);
+      return lines;
+    }, []);
+    // The title's line filled to nine tenths of the page's text width, the specialty's line under it: two paragraphs, no spacing.
+    const fullTitle = ["praticien", "hospitalier", "temps", "plein", "au", "centre", "hospitalier", "universitaire", "de", "Lyon", "depuis", "2012"]
+      .reduce((line, word) => (measure.widthOfString(line) < 445 ? `${line} ${word}` : line), `${title},`);
+    const field = (code: string) => `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> QUOTE "</w:instrText></w:r>${code}<w:r><w:instrText xml:space="preserve">" </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t xml:space="preserve"> </w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r>`;
+    const icon = '<w:r><w:drawing><wp:inline><wp:extent cx="125999" cy="125999"/></wp:inline></w:drawing></w:r>';
+    const iconCell = (text: string) => cell(`<w:p>${icon}<w:r><w:t xml:space="preserve">{{ ${text}}}</w:t></w:r></w:p>`, '<w:tcW w:w="4535" w:type="dxa"/>');
+    const rest = [experience, language, licence];
+    Object.assign(cvs, {
+      // A line break in a field's code, which Word never shows (IA04-R4-CHAMP; before: two lines, 30 points in DOCX).
+      fieldCode: { pdf: oneLinePdf, docx: () => docx(paragraph(name) + `<w:p>${courierRun(`${title} `)}${field("<w:r><w:br/></w:r>")}${courierRun(specialty)}</w:p>` + rest.map(line => paragraph(line)).join("")) },
+      // The profile in a slanted italic (a shear, as LibreOffice draws a font without an italic face; IA04-R4-ITALIQUE; before: PDF 30).
+      italicParagraph: {
+        pdf: () => pdf(document => {
+          document.fontSize(11).fillColor("black").text(name, 50, 60, { lineBreak: false });
+          wrap(profile, 400).forEach((line, index) => {
+            const y = 90 + index * 12.7;
+            document.save();
+            document.transform(1, 0, -0.35, 1, 0.35 * y, 0);
+            document.text(line, 50, y, { lineBreak: false });
+            document.restore();
+          });
+          rest.forEach((line, index) => document.text(line, 50, 160 + index * 20, { lineBreak: false }));
+        }),
+        docx: () => docx(paragraph(name) + paragraph(profile, "<w:i/>") + rest.map(line => paragraph(line)).join("")),
+      },
+      // Title and specialty aligned on the right margin, a paragraph each (IA04-P1-ALIGN-DROITE; before: one line in PDF, 15 points).
+      rightHeader: {
+        pdf: () => pdf(document => {
+          document.fontSize(11).fillColor("black").text(name, 50, 60, { lineBreak: false });
+          [title, specialty].forEach((line, index) => document.text(line, 545 - document.widthOfString(line), 90 + index * 13.5, { lineBreak: false }));
+          rest.forEach((line, index) => document.text(line, 50, 130 + index * 20, { lineBreak: false }));
+        }),
+        docx: () => docx(paragraph(name) + [title, specialty].map(line => `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:t xml:space="preserve">{{${line}}}</w:t></w:r></w:p>`).join("") + rest.map(line => paragraph(line)).join("")),
+      },
+      // The title's line full, the specialty's paragraph under it at the same pitch: nothing tells a wrap from a new paragraph
+      // (IA04-P1-LIGNE-PLEINE, IA04-R4-LIGNE-LARGE; before: one line in PDF, 15 points).
+      fullLine: {
+        pdf: () => pdf(document => {
+          document.fontSize(11).fillColor("black").text(name, 50, 60, { lineBreak: false });
+          [fullTitle, specialty, ...rest].forEach((line, index) => document.text(line, 50, 76 + index * 13.5, { lineBreak: false }));
+        }),
+        docx: () => docx(paragraph(name) + [fullTitle, specialty, ...rest].map(line => paragraph(line)).join("")),
+      },
+      // Two cells, each starting with an icon: measured by the picture's extent, apart as in the PDF (IA04-P1-DOCX-NONMESURE; before:
+      // one line in DOCX, 15 points).
+      iconCells: {
+        pdf: () => pdf(document => {
+          document.fontSize(11).fillColor("black").text(name, 50, 60, { lineBreak: false });
+          for (const [x, text] of [[50, title], [305, specialty]] as const) {
+            document.rect(x, 91, 9.9, 9.9).fill("black");
+            document.fillColor("black").text(` ${text}`, x + 9.9, 90, { lineBreak: false });
+          }
+          rest.forEach((line, index) => document.text(line, 50, 120 + index * 20, { lineBreak: false }));
+        }),
+        docx: () => docx(paragraph(name) + `<w:tbl><w:tblGrid><w:gridCol w:w="4535"/><w:gridCol w:w="4535"/></w:tblGrid><w:tr>${iconCell(title)}${iconCell(specialty)}</w:tr></w:tbl>` + rest.map(line => paragraph(line)).join("")),
+      },
+    });
+    const specialtyPoints: Record<string, number> = {
+      paragraph: 15, tab: 30, narrowTab: 15, twoCells: 15, lineBreak: 30, hiddenBreak: 15, hiddenTab: 15, hiddenMark: 15, emptyParagraphCells: 15, squeezed: 15,
+      fieldCode: 15, italicParagraph: 15, rightHeader: 30, fullLine: 30, iconCells: 30,
+    };
     for (const [cv, { pdf: pdfFile, docx: docxFile }] of Object.entries(cvs)) {
       const read: Array<{ text: string; score: unknown; breakdown: Record<string, number> }> = [];
       for (const [file, mimeType, location] of [[await pdfFile(), "application/pdf", "page 1"], [docxFile(), DOCX, "section Profil"]] as const) {
@@ -1428,7 +1496,7 @@ describe("dossier d’un CV qui cache du texte, de bout en bout (IA-01)", () => 
       }
       const [fromPdf, fromDocx] = read as [typeof read[number], typeof read[number]];
       const lines = (text: string) => text.split("\n").map(line => line.trim()).filter(line => line && !/^\[PAGE \d+\]$/.test(line));
-      if (cv === "paragraph") {
+      if (cv === "paragraph" || cv === "italicParagraph") {
         // The DOCX gives the paragraph on one line, and the PDF too once its wrapped lines are joined; before, on the 3 lines of the PDF.
         expect(lines(fromDocx.text)).toContain(profile);
         expect(lines(fromPdf.text)).toContain(profile);
@@ -1437,9 +1505,12 @@ describe("dossier d’un CV qui cache du texte, de bout en bout (IA-01)", () => 
         expect(fromDocx.text).toContain(`${specialty}\n${title}`);
         expect(fromPdf.text).toContain(`${specialty}\n${title}`);
         expect(fromDocx.text).not.toContain("\t");
-      } else if (cv === "lineBreak") {
+      } else if (cv === "lineBreak" || cv === "rightHeader" || cv === "iconCells") {
         // Before: « Médecin anesthésiste-réanimateurSpécialité : anesthésie-réanimation », 15 points in DOCX, 30 in PDF.
         expect(lines(fromDocx.text)).toEqual(expect.arrayContaining([title, specialty]));
+      } else if (cv === "fullLine") {
+        expect(lines(fromDocx.text)).toEqual(expect.arrayContaining([fullTitle, specialty]));
+        expect(lines(fromPdf.text)).toEqual(expect.arrayContaining([fullTitle, specialty]));
       } else if (cv === "squeezed") {
         // Before (843ab77): a line of more than 100 characters counted as the two of a page of 100, 30 points in both.
         expect(lines(fromDocx.text)).toContain(longLine);

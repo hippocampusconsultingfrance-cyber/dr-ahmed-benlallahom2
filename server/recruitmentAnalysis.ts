@@ -879,7 +879,7 @@ const normalizeEvidenceText = (value: string) =>
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLocaleLowerCase()
-    .replace(/[\s.,;:!?()[\]{}'"«»“”‘’/\\|_+=*•·—–\-،؛؟、。《》「」『』【】]+/g, " ")
+    .replace(/[\s\u0085.,;:!?()[\]{}'"«»“”‘’/\\|_+=*•·—–\-،؛؟、。《》「」『』【】]+/g, " ")
     .trim();
 
 /** Chinese and Japanese write words without spaces: a value with ideographs is looked up as is (INTL-02). */
@@ -1389,8 +1389,11 @@ function locationPage(sourceLocation: string) {
  */
 const evidenceProvenance = (item: { evidence: string }) => normalizeEvidenceText(item.evidence);
 
-/** Where a line of the CV ends (IA-04): only a line break, not the end of a sentence. */
-const LINE_END = /\r\n|[\n\r\f\v\u0085\u2028\u2029]/;
+/**
+ * Where a line of the CV ends (IA-04): only a line break, not the end of a sentence. The other characters of a line's end
+ * (U+0085, U+2028, U+2029, \v, \f), which a viewer draws within a line, as a space, nothing or a sign, are read as spaces.
+ */
+const LINE_END = /\r\n|[\n\r]/;
 /** A page marker the server writes before each page's text (never the document's, escaped by escapeCvPageMarkers). */
 const PAGE_MARKER_LINE = /^\s*\[PAGE\s+(\d+)\]\s*$/i;
 
@@ -1405,14 +1408,18 @@ const PAGE_MARKER_LINE = /^\s*\[PAGE\s+(\d+)\]\s*$/i;
  * PDF (wrappedLinesTogether), a line drawn in pieces on one line
  * (rowsTogether), and a line only at a line break or a gap as wide as a table
  * cell's. A line written on two pages or more is one place on all of them. So
- * are all the lines repeated at the edges of the pages, a header and a footer
- * of one line or several (rowsTogether puts them there): those at the same rank
- * from the top, or from the bottom, of two pages or more among the first, or
- * the last, lines of their page written on another page too, numbers aside (a
- * page number). The lines of the body keep their places, repeated or not
- * (the same role in each experience is one place, another line another).
+ * are all the lines repeated at the edges of the pages, a header and a footer:
+ * the first, or the last, line of two pages or more, of the same text numbers
+ * aside (a page number). rowsTogether writes the rows of a PDF's header, or of
+ * its footer, as one line at the edge of its page, which it finds by their
+ * height on the page; the text a vision read (`edgeSeries`) has no heights, and
+ * the lines at the same rank from the top, or from the bottom, among the first,
+ * or the last, lines of their page written on another page too are its header
+ * and its footer. The lines of the body keep their places, repeated or not (the
+ * same role in each experience is one place, another line another, even last
+ * on two pages).
  */
-function normalizedSourcePassages(sourceText: string) {
+function normalizedSourcePassages(sourceText: string, options: { edgeSeries?: boolean } = {}) {
   const starts: number[] = [];
   const lines: Array<{ normalized: string; masked: string; page: number | null }> = [];
   let text = "";
@@ -1468,7 +1475,7 @@ function normalizedSourcePassages(sourceText: string) {
   const onOtherPages = (index: number) => (maskedPages.get(lines[index]!.masked)?.size ?? 0) >= 2;
   linesOf.forEach((indexes, pageNumber) => {
     for (const edge of ["top", "bottom"] as const) {
-      for (let rank = 0; rank < indexes.length; rank += 1) {
+      for (let rank = 0; rank < (options.edgeSeries ? indexes.length : Math.min(1, indexes.length)); rank += 1) {
         const index = indexes[edge === "top" ? rank : indexes.length - 1 - rank]!;
         if (!onOtherPages(index)) break;
         const key = `${edge}:${rank}:${lines[index]!.masked}`;
@@ -1877,7 +1884,7 @@ export function normalizeRecruitmentAnalysis(
       ...transcriptionMark(item.sourceLocation),
     }));
   const evidenceExperiences = distinctExperiencesByFact(normalizedExperiences);
-  const sourcePassages = normalizedSourcePassages(sourceText);
+  const sourcePassages = normalizedSourcePassages(sourceText, { edgeSeries: declared.extractionMethod === "pdf_vision" });
   const allEvidence = distinctEvidence([
     ...evidenceExperiences,
     ...normalizedLanguages,

@@ -752,6 +752,9 @@ describe("une même citation ne compte qu’une fois (IA-04)", () => {
       `Médecin anesthésiste, ${pad}, Réanimateur, ${pad}, 10 ans d’expérience, ${pad}, Licence DHA, Anglais courant`,
       `Médecin anesthésiste, ${pad},\u2009Réanimateur, ${pad},\u2009Licence DHA,\u2009Anglais courant, ${pad},\u200910 ans d’expérience`,
       "Médecin anesthésiste, titulaire depuis longtemps, Réanimateur · 10 ans d’expérience · Licence DHA · Anglais courant",
+      // The characters of a line's end a viewer draws within a line (NEL, the line and paragraph separators, \v, \f): spaces
+      // (IA04-R4-SEPARATEURS, IA04-R4-CARACTERES; before: a line each, 30 points and a score of 60).
+      "Médecin anesthésiste \u0085Réanimateur \u2028 10 ans d’expérience \u2029Licence DHA\vAnglais courant\f",
     ];
     for (const line of lines) {
       const result = normalizeRecruitmentAnalysis(nurse, `[PAGE 1]\nKarim Benali\n${line}`, declared);
@@ -858,8 +861,13 @@ describe("une même citation ne compte qu’une fois (IA-04)", () => {
       expect(result.relevanceScore).toBeNull();
     });
 
-    /** The same footer written in sentences, on `lines` lines of each of `pages` pages, each sentence quoted for a fact, on the page `at` gives. */
-    const inSentences = (footer: string[], pages: number, at: (index: number) => number) => {
+    /**
+     * The same footer written in sentences, on `lines` lines of each of `pages` pages, each sentence quoted for a fact, on the page
+     * `at` gives; as a vision reads it (`reading`), each line of a page's text as it is, or as the PDF's text gives it, the rows of
+     * its footer on one line (rowsTogether).
+     */
+    const inSentences = (written: string[], pages: number, at: (index: number) => number, reading: "pdf_text" | "pdf_vision" = "pdf_vision") => {
+      const footer = reading === "pdf_text" && pages > 1 ? [written.join(" ")] : written;
       const source = Array.from({ length: pages }, (_, index) => [
         `[PAGE ${index + 1}]`,
         ...(index === 0 ? ["Karim Benali", "Infirmier diplômé d’État", "2014-2024 : Infirmier, Clinique du Parc, Lyon"] : [`Suite du parcours, page ${index + 1}`]),
@@ -877,7 +885,7 @@ describe("une même citation ne compte qu’une fois (IA-04)", () => {
           { field: "yearsExperience", value: "10 ans", evidence: "10 ans d’expérience", sourceLocation: `page ${at(2)}, pied de page`, confidence: 95 },
         ],
       });
-      return normalizeRecruitmentAnalysis(analysis, source, declared);
+      return normalizeRecruitmentAnalysis(analysis, source, { ...declared, extractionMethod: reading });
     };
 
     it("écrit en phrases, sur une, deux ou trois lignes, cité sur une page ou page par page : 15 points de spécialité et toujours pas de score", () => {
@@ -888,12 +896,14 @@ describe("une même citation ne compte qu’une fois (IA-04)", () => {
         ["Médecin anesthésiste.", "Réanimateur. 10 ans d’expérience.", "Licence DHA. Anglais courant."],
       ];
       for (const footer of footers) {
-        for (const [pages, at] of [[1, () => 1], [3, (index: number) => (index % 3) + 1], [3, () => 2]] as const) {
-          const result = inSentences(footer, pages, at);
-          expect(result.fieldEvidence.every(item => item.evidenceVerified), footer.join(" / ")).toBe(true);
-          // Before: 30 points of specialty and a score of 60, on one page as on three.
-          if (footer.length === 1 || pages > 1) expect(result.scoreBreakdown.specialtyMatch, `${footer.join(" / ")} : ${pages}`).toBe(15);
-          if (footer.length < 3 || pages > 1) expect(result.relevanceScore, `${footer.join(" / ")} : ${pages}`).toBeNull();
+        for (const reading of ["pdf_text", "pdf_vision"] as const) {
+          for (const [pages, at] of [[1, () => 1], [3, (index: number) => (index % 3) + 1], [3, () => 2]] as const) {
+            const result = inSentences(footer, pages, at, reading);
+            expect(result.fieldEvidence.every(item => item.evidenceVerified), footer.join(" / ")).toBe(true);
+            // Before: 30 points of specialty and a score of 60, on one page as on three.
+            if (footer.length === 1 || pages > 1) expect(result.scoreBreakdown.specialtyMatch, `${footer.join(" / ")} : ${pages} ${reading}`).toBe(15);
+            if (footer.length < 3 || pages > 1) expect(result.relevanceScore, `${footer.join(" / ")} : ${pages} ${reading}`).toBeNull();
+          }
         }
       }
       // Written once, on three lines of a single page, they are three places of the CV: the lines of an ordinary CV.
@@ -916,14 +926,16 @@ describe("une même citation ne compte qu’une fois (IA-04)", () => {
     it("un en-tête et un pied de page, d’une ligne ou de plusieurs, numérotés ou non, au bord de chaque page : un seul endroit, pas de score", () => {
       const page = (index: number, top: string[], bottom: string[]) => [`[PAGE ${index + 1}]`, ...top, ...(index === 0 ? ["Karim Benali", "Infirmier diplômé d’État"] : []),
         `Soins infirmiers : service ${index + 1}, unité de chirurgie.`, `Transmissions écrites, équipe ${index + 1}.`, ...bottom].join("\n");
-      const layouts = [
+      const footer = (index: number) => ["Médecin anesthésiste", "Réanimateur · 10 ans d’expérience", `Licence DHA · Anglais courant · page ${index + 1} sur 3`];
+      const layouts: Array<[(index: number) => string, "pdf_text" | "pdf_vision"]> = [
         // The header names the title, the footer the rest.
-        (index: number) => page(index, ["Médecin anesthésiste"], ["Réanimateur · 10 ans d’expérience · Licence DHA · Anglais courant"]),
-        // A footer of three lines, the last numbered.
-        (index: number) => page(index, [], ["Médecin anesthésiste", "Réanimateur · 10 ans d’expérience", `Licence DHA · Anglais courant · page ${index + 1} sur 3`]),
+        [(index: number) => page(index, ["Médecin anesthésiste"], ["Réanimateur · 10 ans d’expérience · Licence DHA · Anglais courant"]), "pdf_text"],
+        // A footer of three lines, the last numbered: as a vision reads it, and as the PDF's text gives it, its rows on one line.
+        [(index: number) => page(index, [], footer(index)), "pdf_vision"],
+        [(index: number) => page(index, [], [footer(index).join(" ")]), "pdf_text"],
       ];
-      for (const layout of layouts) {
-        const result = normalizeRecruitmentAnalysis(nurseQuotes, [0, 1, 2].map(layout).join("\n"), declared);
+      for (const [layout, reading] of layouts) {
+        const result = normalizeRecruitmentAnalysis(nurseQuotes, [0, 1, 2].map(layout).join("\n"), { ...declared, extractionMethod: reading });
         expect(result.fieldEvidence.every(item => item.evidenceVerified)).toBe(true);
         // Before: two or three lines repeated on the same pages: one place; numbered, the last was a place of its own on each page.
         expect(result.scoreBreakdown.specialtyMatch).toBe(15);
@@ -966,17 +978,44 @@ describe("une même citation ne compte qu’une fois (IA-04)", () => {
           { field: "specialty", value: "anesthésie-réanimation", evidence: body[0]!, sourceLocation: "page 1", confidence: 95 },
         ],
       });
-      // A header repeated on both pages: one place, the lines under it others.
-      const repeatedHeader = ["[PAGE 1]", ...header, body[0], body[1], "[PAGE 2]", ...header, body[2]].join("\n");
-      const result = normalizeRecruitmentAnalysis(honest, repeatedHeader, declared);
-      expect(result.scoreBreakdown.specialtyMatch).toBe(30);
-      expect(result.relevanceScore).not.toBeNull();
-      // The title and the specialty both in that header: one place, 15 points.
-      const bothInHeader = ["[PAGE 1]", ...header, body[0], body[1], "[PAGE 2]", ...header, body[0], body[2]].join("\n");
-      expect(normalizeRecruitmentAnalysis(honest, bothInHeader, declared).scoreBreakdown.specialtyMatch).toBe(15);
-      // The same lines twice on one page are not a header: two lines, as without pages.
-      const onePage = ["[PAGE 1]", ...header, body[0], ...header, body[0], body[1], body[2]].join("\n");
-      expect(normalizeRecruitmentAnalysis(honest, onePage, declared).scoreBreakdown.specialtyMatch).toBe(30);
+      // A header of two lines repeated on both pages, as a vision reads it or on one line as the PDF's text gives it: one place, the
+      // lines under it others.
+      for (const [top, reading] of [[header, "pdf_vision"], [[header.join(" ")], "pdf_text"]] as const) {
+        const read = { ...declared, extractionMethod: reading };
+        const repeatedHeader = ["[PAGE 1]", ...top, body[0], body[1], "[PAGE 2]", ...top, body[2]].join("\n");
+        const result = normalizeRecruitmentAnalysis(honest, repeatedHeader, read);
+        expect(result.scoreBreakdown.specialtyMatch, reading).toBe(30);
+        expect(result.relevanceScore).not.toBeNull();
+        // The title and the specialty both in that header (the PDF's text has the line repeated under it in it): one place, 15 points.
+        const both = reading === "pdf_text" ? [[...header, body[0]].join(" ")] : [...header, body[0]];
+        const bothInHeader = ["[PAGE 1]", ...both, body[1], "[PAGE 2]", ...both, body[2]].join("\n");
+        expect(normalizeRecruitmentAnalysis(honest, bothInHeader, read).scoreBreakdown.specialtyMatch, reading).toBe(15);
+        // The same lines twice on one page are not a header: two lines, as without pages.
+        const onePage = ["[PAGE 1]", ...top, body[0], ...top, body[0], body[1], body[2]].join("\n");
+        expect(normalizeRecruitmentAnalysis(honest, onePage, read).scoreBreakdown.specialtyMatch, reading).toBe(30);
+      }
+    });
+
+    it("deux lignes différentes du corps au même rang depuis le bas de deux pages restent deux endroits dans le texte d’un PDF, comme dans le DOCX (IA04-R3-PAGES-BIS)", () => {
+      // Each page ends with the same role and pole, lines of the body: the PDF's text has no header nor footer there (rowsTogether
+      // writes them on one line at the edge of their page), the vision's text reads its edges by their rank.
+      const entry = (hospital: string, years: string) => [`${hospital}, praticien hospitalier, ${years}`, "Bloc opératoire, réanimation chirurgicale et gardes.", "Médecin anesthésiste-réanimateur", "Pôle anesthésie-réanimation"];
+      const lines = ["[PAGE 1]", "Dr Karim Haddad", "Expérience professionnelle", ...entry("CHU de Lyon", "2018-2024"), "[PAGE 2]", ...entry("CHU de Grenoble", "2015-2018"), "Anglais courant (C1)", "Licence DHA (2023)", ...entry("CHU de Nice", "2012-2015")];
+      const honestPoles = (page: (number: number) => string) => analysisFixture({
+        professionalTitle: "Médecin anesthésiste-réanimateur",
+        specialties: ["anesthésie-réanimation"],
+        normalizedLanguages: [{ language: "Anglais", proficiency: "fluent", evidence: "Anglais courant (C1)", sourceLocation: page(2), confidence: 95 }],
+        certifications: [{ name: "Licence DHA", issuingBody: null, country: null, expiresAt: null, evidence: "Licence DHA (2023)", sourceLocation: page(2), confidence: 95 }],
+        fieldEvidence: [
+          { field: "professionalTitle", value: "Médecin anesthésiste-réanimateur", evidence: "Médecin anesthésiste-réanimateur", sourceLocation: page(1), confidence: 95 },
+          { field: "specialty", value: "anesthésie-réanimation", evidence: "Pôle anesthésie-réanimation", sourceLocation: page(2), confidence: 95 },
+        ],
+      });
+      const fromPdf = normalizeRecruitmentAnalysis(honestPoles(number => `page ${number}`), lines.join("\n"), { ...declared, extractionMethod: "pdf_text" });
+      const fromDocx = normalizeRecruitmentAnalysis(honestPoles(() => "Expérience"), lines.filter(line => !/^\[PAGE/.test(line)).join("\n"), { ...declared, extractionMethod: "docx" });
+      // Before: the last two lines of both pages at the same ranks from the bottom were the footer's one place, 15 points in PDF.
+      expect(fromPdf.scoreBreakdown.specialtyMatch).toBe(30);
+      expect(fromPdf.scoreBreakdown).toEqual(fromDocx.scoreBreakdown);
     });
   });
 });

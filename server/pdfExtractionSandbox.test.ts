@@ -80,6 +80,22 @@ describe("cellules d’une rangée et colonnes côte à côte lues comme des lig
     const unchanged = { items: line("Sans", 3, "écart") };
     expect(textCellsAsLines(unchanged)).toBe(unchanged);
   });
+
+  it("coupe un grand écart d’après la place des textes, l’élément qui finit la ligne compris, et sans élément blanc entre deux textes de droite à gauche (IA04-P1-EOL-ECART)", () => {
+    const at = (str: string, x: number, width: number, hasEOL = false) => ({ str, width, height: 11, transform: [11, 0, 0, 11, x, 700], hasEOL });
+    /** The text as pdf-parse writes it, each item's own text then a line break at its end of line. */
+    const read = (items: Array<ReturnType<typeof at>>) => textCellsAsLines({ items }).items.map(item => item.str + (item.hasEOL ? "\n" : "")).join("");
+    // As reportlab draws them: the title, pdf.js's whitespace item, the specialty aligned on the right ending the line. Before
+    // (b22e964 to ddcc047): the item ending the line was left out of it, the gap never cut.
+    const twoColumns = [at("Médecin anesthésiste-réanimateur", 90, 170), { ...at(" ", 260, 88.9), height: 0 }, at("Spécialité : anesthésie-réanimation", 348.9, 180, true)];
+    expect(read(twoColumns)).toBe("Médecin anesthésiste-réanimateur\nSpécialité : anesthésie-réanimation\n");
+    // Arabic, drawn from the right without a whitespace item between its cells: a line break is put before the second.
+    const rightToLeft = [at("الوظيفة", 478.1, 35.5), at("طبيب تخدير وإنعاش", 309.6, 90.7, true)];
+    expect(read(rightToLeft)).toBe("الوظيفة\nطبيب تخدير وإنعاش\n");
+    // The same texts a space apart: one line, nothing written.
+    const close = { items: [at("Médecin", 90, 40), at("anesthésiste", 133, 60, true)] };
+    expect(textCellsAsLines(close)).toBe(close);
+  });
 });
 
 describe("ligne dessinée en morceaux entre les autres lignes lue d’un tenant, en-tête et pied de page au bord de leur page (IA-04)", () => {
@@ -147,6 +163,51 @@ describe("ligne dessinée en morceaux entre les autres lignes lue d’un tenant,
     // A line drawn at once is left as it is: the same object.
     const once = { items: [body("Karim Benali", 780), piece(0, false, 300), piece(1, false, 300), piece(2, true, 300)] };
     expect(rowsTogether([once])[0]).toBe(once);
+  });
+
+  it("rassemble une ligne dessinée en morceaux cisaillés, tournée d’une fraction de degré ou de quelques degrés, ou tournée avec sa page (IA04-R4-PENCHE)", () => {
+    // The pieces of the nurse's line, drawn between the body's lines, each start along its baseline.
+    const along = [0, 45, 110];
+    const turned = (angle: number) => {
+      const [cos, sin] = [Math.cos(angle), Math.sin(angle)];
+      return { items: [0, 1, 2].flatMap(index => [
+        { ...piece(index), transform: [9 * cos, 9 * sin, -9 * sin, 9 * cos, 50 + along[index]! * cos, 300 + along[index]! * sin] }, end, body(`Soins ${index}`, 780 - index * 20),
+      ]) };
+    };
+    // Before (d1fe5af): an item whose matrix was not level was never gathered, a line per piece, 30 points and a score of 60.
+    for (const angle of [0.2, 3].map(degrees => (degrees * Math.PI) / 180)) {
+      expect(read(rowsTogether([turned(angle)])[0]!), String(angle)).toBe("Médecin Réanimateur Licence\nSoins 0\nSoins 1\nSoins 2\n");
+    }
+    // Each piece slanted by a shear of 0.0005, invisible: its baseline does not move.
+    const sheared = { items: [0, 1, 2].flatMap(index => [{ ...piece(index, false, 300), transform: [9, 0, 0.0045, 9, footerAt[index]!, 300] }, end, body(`Soins ${index}`, 780 - index * 20)]) };
+    expect(read(rowsTogether([sheared])[0]!)).toBe("Médecin Réanimateur Licence\nSoins 0\nSoins 1\nSoins 2\n");
+    // A landscape page shown upright through /Rotate 90: its text drawn turned by a quarter turn, the pieces along x = 541.9.
+    const quarter = (text: string, x: number, y: number, eol = false) => ({ str: text, width: text.length * 5, height: 9, transform: [0, 9, -9, 0, x, y], hasEOL: eol });
+    const page = { items: [0, 1, 2].flatMap(index => [quarter(footer[index]!, 541.9, footerAt[index]!), end, quarter(`Soins ${index}`, 61.9 + index * 18, 50, true)]) };
+    expect(read(rowsTogether([page])[0]!)).toBe("Médecin Réanimateur Licence\nSoins 0\nSoins 1\nSoins 2\n");
+  });
+
+  it("met dans sa rangée, sans la couper, un séparateur dessiné après la ligne dans l’écart que pdf.js y écrit en blanc (IA04-R4-SEPARATEURS)", () => {
+    const blank = (x: number, width: number) => ({ str: " ", width, height: 0, transform: [9, 0, 0, 9, x, 300], hasEOL: false });
+    // The claims drawn at once, a gap of 27 pt for each separator, then the separators drawn last, each gap between two of them a
+    // whitespace item of pdf.js as wide as it. Before (d1fe5af): the row was cut at those whitespace items, a line per claim.
+    const items = [
+      body("Karim Benali", 780),
+      at("Médecin", 50, 300), blank(85, 27), at("Réanimateur", 112, 300), blank(167, 27), at("Licence", 194, 300),
+      at("•", 98, 300), blank(103, 59), at("•", 180, 300, true),
+    ];
+    const [read1] = rowsTogether([{ items }]);
+    expect(read(read1!)).toBe("Karim Benali\nMédecin • Réanimateur • Licence\n");
+    expect(textCellsAsLines(read1!)).toBe(read1);
+  });
+
+  it("écrit un pied de page de plusieurs rangées, l’une numérotée, sur une ligne au bas de chaque page", () => {
+    const pages = [1, 2, 3].map(number => ({ items: [
+      body(`Soins ${number}`, 780), body(`Transmissions ${number}`, 760),
+      at("Médecin · CV", 50, 60, true), at(`Réanimateur · Licence · page ${number}`, 50, 46, true),
+    ] }));
+    // Before: the numbered row was not found on the other pages, the footer two lines, one place each.
+    rowsTogether(pages).forEach((content, index) => expect(read(content)).toBe(`Soins ${index + 1}\nTransmissions ${index + 1}\nMédecin · CV Réanimateur · Licence · page ${index + 1}\n`));
   });
 
   it("met une ligne d’arabe ou d’hébreu rassemblée dans l’ordre de droite à gauche", () => {
@@ -218,6 +279,41 @@ describe("lignes d’un paragraphe coupées faute de place lues comme une ligne 
     const items = [...line(full, 90, 700), ...line("réanimation polyvalente et gardes.", 90, 685.4)];
     const characters = (value: unknown[]) => (value as Array<{ str: string }>).map(item => item.str).join("").replace(/\s+/g, "");
     expect(characters(wrappedLinesTogether({ items }, { box: [0, 0, 612, 792] }).items)).toBe(characters(items));
+  });
+
+  it("rejoint les lignes d’un paragraphe en italique dessiné penché (une police sans face italique) comme les droites (IA04-R4-ITALIQUE)", () => {
+    // LibreOffice slants the upright face of DejaVu Sans by a shear of its text matrix. Before (d1fe5af): never joined, PDF 55 and DOCX 40.
+    const slanted = (str: string, x: number, y: number) => line(str, x, y).map(item => ({ ...item, transform: [11, 0, item.str ? 3.81 : 0, 11, item.transform[4]!, item.transform[5]!] }));
+    const items = [...slanted(full, 90, 700), ...slanted("réanimation polyvalente et gardes.", 90, 685.4), ...line("2012-2024 : CHU de Lyon", 90, 660.8)];
+    expect(read(items)).toBe(`${full} réanimation polyvalente et gardes.\n2012-2024 : CHU de Lyon\n`);
+  });
+
+  it("laisse deux lignes alignées à droite, centrées, ou deux rangs d’un tableau de droite à gauche : chacune son paragraphe, comme dans le DOCX (IA04-P1-ALIGN-DROITE)", () => {
+    const right = (str: string, y: number) => line(str, 522 - str.length * 5.5, y);
+    const centred = (str: string, y: number) => line(str, 306 - (str.length * 5.5) / 2, y);
+    const body = [...line("Expérience professionnelle", 90, 640), ...line("2012-2024 : Praticien hospitalier, CHU de Lyon", 90, 614)];
+    // A header aligned on the right margin: both lines end there, and are full on that side only when they reach the left margin.
+    // Before (d1fe5af): « Médecin anesthésiste-réanimateur Spécialité : anesthésie-réanimation », 15 points instead of 30.
+    const header = [...right("Dr Karim Haddad", 730), ...right("Médecin anesthésiste-réanimateur", 715.4), ...right("Spécialité : anesthésie-réanimation", 700.8), ...body];
+    expect(read(header)).toBe("Dr Karim Haddad\nMédecin anesthésiste-réanimateur\nSpécialité : anesthésie-réanimation\nExpérience professionnelle\n2012-2024 : Praticien hospitalier, CHU de Lyon\n");
+    const centre = [...centred("Médecin anesthésiste-réanimateur", 715.4), ...centred("karim.haddad@example.org · Lyon", 700.8), ...body];
+    expect(read(centre)).toBe("Médecin anesthésiste-réanimateur\nkarim.haddad@example.org · Lyon\nExpérience professionnelle\n2012-2024 : Praticien hospitalier, CHU de Lyon\n");
+    // A table of two rows laid out right to left: the label on the right, its value on its left, a row under the other.
+    const rows = [...line("الوظيفة", 478.1, 735.7), ...line("طبيب تخدير وإنعاش", 309.6, 735.7), ...line("التخصص", 473.9, 722.6), ...line("تخدير وإنعاش", 338.8, 722.6), ...body];
+    expect(read(rows).split("\n").slice(0, 4)).toEqual(["الوظيفة", "طبيب تخدير وإنعاش", "التخصص", "تخدير وإنعاش"]);
+  });
+
+  it("ne rejoint pas une ligne qui commence comme un paragraphe (une capitale, un libellé) quand rien ne distingue l’interligne d’un saut de paragraphe ; la rejoint dans une colonne étroite ou après une ligne déjà coupée (IA04-R4-LIGNE-LARGE, IA04-P1-LIGNE-PLEINE)", () => {
+    // Paragraphs without spacing: a full line, then the next paragraph. Before (d1fe5af): joined, PDF 40 and DOCX 55.
+    const nextParagraph = [...line(full, 90, 700), ...line("Spécialité : anesthésie-réanimation", 90, 685.4), ...line("Anesthésie-réanimation, réanimation polyvalente", 90, 670.8), ...line("2012-2024 : CHU de Lyon", 90, 656.2)];
+    expect(read(nextParagraph)).toBe(`${full}\nSpécialité : anesthésie-réanimation\nAnesthésie-réanimation, réanimation polyvalente\n2012-2024 : CHU de Lyon\n`);
+    const fullOnly = [...line(full, 90, 700), ...line("Anesthésie-réanimation, réanimation polyvalente", 90, 685.4)];
+    expect(read(fullOnly)).toBe(`${full}\nAnesthésie-réanimation, réanimation polyvalente\n`);
+    // A paragraph already wrapped onto the line above, or a narrow cell beside another column, goes on with a capital.
+    const wrapped = [...line(full, 90, 700), ...line("réanimation polyvalente et gardes de nuit, encadrement des internes au CHU de", 90, 685.4), ...line("Lyon.", 90, 670.8)];
+    expect(read(wrapped)).toBe(`${full} réanimation polyvalente et gardes de nuit, encadrement des internes au CHU de Lyon.\n`);
+    const cell = [...line("Médecin anesthésiste", 90, 700), ...line("2012-2024 : Praticien hospitalier", 232, 700), ...line("Réanimateur", 90, 685.4), ...line("Anglais courant (C1)", 90, 660.8)];
+    expect(read(cell)).toContain("Médecin anesthésiste Réanimateur\n");
   });
 
   it("laisse une page tournée, et une page dont la recherche des lignes voisines dépasse son budget : aucune jonction, le même objet", () => {

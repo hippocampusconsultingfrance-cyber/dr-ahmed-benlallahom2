@@ -11,7 +11,7 @@ const DEFAULTS = '<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Arial" 
 
 /** A DOCX of this body (prefix `prefix` for WordprocessingML), these styles after the defaults, and its settings. */
 function docx(body: string, { styles = "", defaults = DEFAULTS, prefix = "w" } = {}) {
-  const document = `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="${W_NAMESPACE}" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><w:body>${body}${SECTION}</w:body></w:document>`;
+  const document = `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="${W_NAMESPACE}" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:v="urn:schemas-microsoft-com:vml"><w:body>${body}${SECTION}</w:body></w:document>`;
   const prefixed = (xml: string) => (prefix === "w" ? xml : xml.replace(/<(\/?)w:/g, `<$1${prefix}:`).replace(/ w:/g, ` ${prefix}:`).replace(/xmlns:w=/g, `xmlns:${prefix}=`));
   return buildZip([
     { name: "[Content_Types].xml", content: '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>' },
@@ -83,14 +83,19 @@ describe("tabulations mises en page comme Word les met, dans deux mesures du tex
     }
   });
 
-  it("une police de largeur non bornée, w:fitText, une image ou le résultat d’un champ avant la tabulation : une espace, même loin", async () => {
+  it("une police de largeur non bornée, w:fitText, une image flottante ou le résultat d’un champ avant la tabulation : une espace, même loin", async () => {
     const far = stops([8000]);
     expect(await read(docx(tabbed(far)))).toEqual([title, "Réanimateur"]);
-    for (const properties of ['<w:rFonts w:ascii="Wide Latin" w:hAnsi="Wide Latin"/>', '<w:rFonts w:ascii="Lato Black" w:hAnsi="Lato Black"/>', '<w:fitText w:val="2000" w:id="1"/>', "<w:rtl/>"]) {
+    for (const properties of ['<w:rFonts w:ascii="Wide Latin" w:hAnsi="Wide Latin"/>', '<w:rFonts w:ascii="Lato Black" w:hAnsi="Lato Black"/>', '<w:fitText w:val="2000" w:id="1"/>']) {
       expect(await read(docx(tabbed(far, title, "Réanimateur", properties))), properties).toEqual([`${title} Réanimateur`]);
     }
+    // A run of a complex script, in its complex script font (here none: bounded as an unknown font), and a picture in the line, as
+    // wide as its extent, are measured (IA04-P1-DOCX-NONMESURE); a floating picture is not.
+    expect(await read(docx(tabbed(far, title, "Réanimateur", "<w:rtl/>")))).toEqual([title, "Réanimateur"]);
     const drawing = '<w:r><w:drawing><wp:inline><wp:extent cx="100" cy="100"/></wp:inline></w:drawing></w:r>';
-    expect(await read(docx(paragraph(drawing + run(title) + tab() + run("Réanimateur"), far)))).toEqual([`${title} Réanimateur`]);
+    expect(await read(docx(paragraph(drawing + run(title) + tab() + run("Réanimateur"), far)))).toEqual([title, "Réanimateur"]);
+    const floating = '<w:r><w:drawing><wp:anchor><wp:extent cx="100" cy="100"/></wp:anchor></w:drawing></w:r>';
+    expect(await read(docx(paragraph(floating + run(title) + tab() + run("Réanimateur"), far)))).toEqual([`${title} Réanimateur`]);
     const field = '<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText>REF titre</w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>'
       + `${run(title)}<w:r><w:fldChar w:fldCharType="end"/></w:r>`;
     expect(await read(docx(paragraph(field + tab() + run("Réanimateur"), far)))).toEqual([`${title} Réanimateur`]);
@@ -208,5 +213,70 @@ describe("ce que la mise en page ne peut pas suivre, et ce qu’elle ne change p
     expect(characters((await read(file)).join("\n"))).toBe(characters(before));
     const plain = docx(paragraph(run("Karim Benali")));
     expect(docxWithLaidOutLineBreaks(plain).buffer).toBe(plain);
+  });
+});
+
+describe("ce que Word ne montre pas d’un champ, les fins de ligne écrites dans un run, les cadres et les zones de texte d’une ligne, les écritures sans métrique (IA-04)", () => {
+  const claims = ["Médecin anesthésiste ·", "Réanimateur ·", "Licence DHA"];
+  const field = (code: string) => `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> QUOTE "</w:instrText></w:r>${code}<w:r><w:instrText xml:space="preserve">" </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>${run(" ")}<w:r><w:fldChar w:fldCharType="end"/></w:r>`;
+
+  it("un saut de ligne ou une tabulation du code d’un champ, entre son début et son séparateur, n’est rien : Word n’en montre que le résultat (IA04-R4-CHAMP)", async () => {
+    // Before (d1fe5af): a line break each, a line per claim, 30 points and a score of 60.
+    const lines = await read(docx(paragraph(run(claims[0]!) + field("<w:r><w:br/></w:r>") + run(claims[1]!) + field(tab()) + run(claims[2]!), stops([9000]))));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]!.replace(/\s+/g, " ")).toBe("Médecin anesthésiste · Réanimateur · Licence DHA");
+    // The result of a field is shown: a line break there is one.
+    const result = `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText> QUOTE x </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:br/></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r>`;
+    expect(await read(docx(paragraph(run(claims[0]!) + result + run(claims[1]!))))).toEqual([claims[0], claims[1]]);
+  });
+
+  it("une fin de ligne écrite dans le texte d’un run (&#10;, U+2028, U+2029, U+0085, un saut littéral) se lit comme une espace ; &#13; reste ce qu’il est (IA04-R4-CARACTERES)", async () => {
+    for (const separator of ["&#10;", "&#xA;", " ", " ", "\u0085", "&#133;", "\n"]) {
+      const text = `<w:r><w:t xml:space="preserve">${claims.join(separator)}</w:t></w:r>`;
+      // Before: mammoth wrote each as a line's end, a line per claim.
+      expect((await read(docx(paragraph(text)))).map(line => line.replace(/\s+/g, " ")), JSON.stringify(separator)).toEqual(["Médecin anesthésiste · Réanimateur · Licence DHA"]);
+    }
+    expect(await read(docx(paragraph(`<w:r><w:t xml:space="preserve">${claims.join("&#13;")}</w:t></w:r>`)))).toEqual([claims.join("\r")]);
+  });
+
+  it("des cadres côte à côte à une même hauteur sans grand écart : une ligne ; un grand écart, ou les paragraphes d’un même cadre, des lignes (IA04-R4-CADRES)", async () => {
+    const framed = (text: string, x: number, width: number, y = 6000) => paragraph(run(text), `<w:framePr w:w="${width}" w:hSpace="0" w:wrap="around" w:vAnchor="page" w:hAnchor="page" w:x="${x}" w:y="${y}"/>`);
+    // Arial 11 pt: each frame as wide as its text, the next one right after it. Before: a line per frame, 30 points and a score of 60.
+    const side = framed("Médecin anesthésiste · ", 1134, 2400) + framed("Réanimateur · ", 3534, 1450) + framed("Licence DHA", 4984, 1500);
+    expect((await read(docx(side))).map(line => line.replace(/\s+/g, " "))).toEqual(["Médecin anesthésiste · Réanimateur · Licence DHA"]);
+    // Two columns far apart, the frames of one column one under the other: lines of their own.
+    expect(await read(docx(framed("Titre", 1134, 1500) + framed("Spécialité", 8000, 1500)))).toEqual(["Titre", "Spécialité"]);
+    expect(await read(docx(framed("Titre", 1134, 3000) + framed("Spécialité", 1134, 3000)))).toEqual(["Titre", "Spécialité"]);
+    expect(await read(docx(framed("Titre", 1134, 3000) + framed("Spécialité", 5000, 3000, 7000)))).toEqual(["Titre", "Spécialité"]);
+  });
+
+  it("des zones de texte dessinées dans la ligne d’un paragraphe, d’une ligne chacune : une ligne avec son texte ; flottantes, des lignes (IA04-R4-CADRES)", async () => {
+    const box = (text: string, style = "width:120pt;height:16pt") => `<w:r><w:pict><v:shape style="${style}" stroked="f" filled="f"><v:textbox inset="0,0,0,0"><w:txbxContent>${paragraph(run(text))}</w:txbxContent></v:textbox></v:shape></w:pict></w:r>`;
+    // Before: mammoth wrote each box's paragraph after the paragraph that draws it, a line each.
+    expect((await read(docx(paragraph(claims.map(text => box(text)).join("")))))).toHaveLength(1);
+    expect((await read(docx(paragraph(box(claims[0]!) + run(" Réanimateur · Licence DHA")))))[0]!.replace(/\s+/g, " ")).toBe("Réanimateur · Licence DHA Médecin anesthésiste ·");
+    // Floating boxes are placed anywhere: lines of their own.
+    const floating = claims.map(text => box(text, "position:absolute;margin-left:0;margin-top:0;width:120pt;height:16pt")).join("");
+    expect(await read(docx(paragraph(floating)))).toHaveLength(3);
+  });
+
+  it("les idéogrammes, l’arabe, une image en ligne mesurés : une tabulation large et des cellules écartées restent des lignes, comme dans le PDF (IA04-P1-DOCX-NONMESURE)", async () => {
+    // Chinese, an ideograph one em: a right stop at the right margin. Before (d1fe5af): not measured, a space, the title and the
+    // specialty on one line in DOCX only (PDF 47, DOCX 32).
+    expect(await read(docx(paragraph(run("麻醉科主治医师") + tab() + run("专业：麻醉与重症医学"), stops([9600, "right"]))))).toEqual(["麻醉科主治医师", "专业：麻醉与重症医学"]);
+    // A stop a few points after the ideographs: a space, as the PDF's narrow gap.
+    expect(await read(docx(paragraph(run("麻醉科") + tab() + run("主治医师"), stops([680]))))).toEqual(["麻醉科 主治医师"]);
+    // A Chinese table of labels and values.
+    expect(await read(docx(table([[[1247, paragraph(run("职称"))], [3288, paragraph(run("麻醉科主治医师"))], [1247, paragraph(run("专业"))], [3288, paragraph(run("麻醉与重症医学"))]]], 108))))
+      .toEqual(["职称", "麻醉科主治医师", "专业", "麻醉与重症医学"]);
+    // Two cells each starting with an icon (its extent, 9.9 pt): measured, apart.
+    const icon = '<w:r><w:drawing><wp:inline><wp:extent cx="125999" cy="125999"/></wp:inline></w:drawing></w:r>';
+    expect(await read(docx(table([[[4535, paragraph(icon + run(" Médecin anesthésiste-réanimateur"))], [4535, paragraph(icon + run(" Anesthésie-réanimation"))]]], 108))))
+      .toEqual(["Médecin anesthésiste-réanimateur", "Anesthésie-réanimation"]);
+    // Arabic, its letters bounded (at most an em): a right-to-left table of two cells, a right-to-left paragraph with a far right stop.
+    const arabic = (text: string) => paragraph(run(text, "<w:rtl/>"), "<w:bidi/>");
+    const rightToLeft = table([[[4535, arabic("طبيب تخدير وإنعاش")], [4535, arabic("تخدير وإنعاش")]]], 108).replace("<w:tblPr>", "<w:tblPr><w:bidiVisual/>");
+    expect(await read(docx(rightToLeft))).toEqual(["طبيب تخدير وإنعاش", "تخدير وإنعاش"]);
+    expect(await read(docx(paragraph(run("طبيب تخدير", "<w:rtl/>") + tab() + run("التخصص: تخدير", "<w:rtl/>"), `${stops([9072, "right"])}<w:bidi/>`)))).toEqual(["طبيب تخدير", "التخصص: تخدير"]);
   });
 });
