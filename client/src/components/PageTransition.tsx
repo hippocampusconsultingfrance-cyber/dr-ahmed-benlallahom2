@@ -4,8 +4,9 @@ import { useLocation } from "wouter";
 /**
  * Place le focus sur le h1 de la page affichée dans `root`, à défaut sur son <main>, sans la faire
  * défiler : elle s'ouvre toujours en haut (PUB-01). Une page chargée à la demande n'a son titre
- * qu'une fois affichée : on l'attend, au plus `timeoutMs`. Une page qui a déjà placé le focus chez
- * elle (le champ autoFocus de /search) le garde. Renvoie de quoi arrêter l'attente.
+ * qu'une fois affichée : on l'attend, au plus `timeoutMs`, sauf si le focus va ailleurs entre-temps
+ * (le visiteur passe au lien d'évitement ou au bandeau cookies) : il y reste. Une page qui a déjà placé
+ * le focus chez elle (le champ autoFocus de /search) le garde. Renvoie de quoi arrêter l'attente.
  */
 function focusPageHeading(root: HTMLElement, timeoutMs = 10_000) {
   const focusHeading = () => {
@@ -25,7 +26,9 @@ function focusPageHeading(root: HTMLElement, timeoutMs = 10_000) {
   function stop() {
     observer.disconnect();
     window.clearTimeout(timer);
+    root.ownerDocument.removeEventListener("focusin", stop);
   }
+  root.ownerDocument.addEventListener("focusin", stop);
   observer.observe(root, { childList: true, subtree: true });
   return stop;
 }

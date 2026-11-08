@@ -70,6 +70,19 @@ describe("focus après un changement de page sans rechargement (A11Y-17)", () =>
     await waitFor(() => expect(document.activeElement).toBe(heading));
   });
 
+  it("laisse le focus que le visiteur déplace pendant l’attente d’une page chargée à la demande", async () => {
+    await mountAt("/page-introuvable", "Page introuvable");
+
+    act(() => navigate("/press"));
+    // La page n'est pas encore là : le visiteur passe au lien d'évitement, hors de la page.
+    expect(screen.queryByRole("heading", { level: 1 })).toBeNull();
+    const skipLink = screen.getByRole("link", { name: "Aller au contenu principal" });
+    act(() => skipLink.focus());
+    await screen.findByRole("heading", { level: 1, name: "Informations institutionnelles, sans contenu non vérifié." }, { timeout: 5_000 });
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(document.activeElement).toBe(skipLink);
+  });
+
   it("laisse à la page le focus qu’elle a placé elle-même (champ de /search)", async () => {
     await mountAt("/page-introuvable", "Page introuvable");
 

@@ -33,6 +33,7 @@ vi.mock("wouter", () => ({
     if (path.startsWith("/admin")) view.search = path.split("?")[1] ?? "";
   }],
   useSearch: () => view.search,
+  Link: function Link() { return null; },
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() } }));
 vi.mock("@/lib/trpc", () => ({
@@ -55,6 +56,7 @@ const { default: MedicalQuestionsAdminTab } = await import("@/components/Medical
 // Candidatures is loaded on demand: the dashboard mounts its lazy component.
 const { RecruitmentTab } = await import("./adminLazyTabs");
 const { SignInButton } = await import("@clerk/react");
+const { Link } = await import("wouter");
 
 const render = () => renderStateful(AdminDashboard) as ReactElement;
 const elements = (tree: ReactElement) => elementsOf(tree);
@@ -135,6 +137,19 @@ describe("accès au tableau de bord", () => {
     expect(validate().props.disabled).toBe(false);
     (validate().props.onClick as () => void)();
     expect(view.verify).toHaveBeenCalledWith({ code: "123456" });
+  });
+
+  it.each([
+    ["compte non administrateur", { name: "Visiteur", role: "user" }, true, "Accueil"],
+    ["double authentification", { name: "Dr Ahmed", role: "admin" }, false, "Retour au site"],
+    ["tableau de bord", { name: "Dr Ahmed", role: "admin" }, true, "Site"],
+  ] as const)("%s : ramène au site par un vrai lien, et non un bouton (A11Y-17)", (_screen, user, verified, label) => {
+    view.auth = { user, loading: false };
+    view.security = { isLoading: false, data: { verified } };
+    const tree = render();
+
+    expect(elements(tree).filter(element => element.type === Link && element.props.href === "/").map(link => textOf(link).trim())).toEqual([label]);
+    expect(buttonNamed(tree, label)).toBeUndefined();
   });
 
   it("n’affiche aucune section pendant la vérification de sécurité", () => {

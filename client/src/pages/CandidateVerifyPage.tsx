@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { CheckCircle2, KeyRound, Loader2, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -84,7 +84,7 @@ export default function CandidateVerifyPage() {
         <Button type="submit" className="mt-6 w-full bg-cyan-500 text-slate-950 hover:bg-cyan-400" disabled={verification.isPending}>{verification.isPending && <Loader2 className="animate-spin" aria-hidden="true" />}{copy.activate}</Button>
       </form>}
       {verification.isSuccess && <div className="text-center" role="status"><CheckCircle2 className="mx-auto text-emerald-400" size={46} aria-hidden="true" /><h1 className="mt-5 text-2xl font-semibold">{copy.verifiedTitle}</h1><p className="mt-3 text-slate-400">{copy.verifiedDescription}</p></div>}
-      {failed && <div className="text-center"><ShieldAlert className="mx-auto text-amber-400" size={46} aria-hidden="true" /><h1 id="candidate-activation-unavailable-title" tabIndex={-1} className="mt-5 text-2xl font-semibold">{copy.invalidTitle}</h1><p className="mt-3 text-slate-400">{copy.invalidDescription}</p><Button type="button" onClick={() => navigate(candidateActivationResendPath(input.email))} className="mt-6 w-full bg-cyan-500 text-slate-950 hover:bg-cyan-400">{copy.requestNewLink}</Button><button type="button" onClick={() => navigate("/candidate/access")} className="mt-4 text-cyan-300">{copy.backToAccess}</button></div>}
+      {failed && <div className="text-center"><ShieldAlert className="mx-auto text-amber-400" size={46} aria-hidden="true" /><h1 id="candidate-activation-unavailable-title" tabIndex={-1} className="mt-5 text-2xl font-semibold">{copy.invalidTitle}</h1><p className="mt-3 text-slate-400">{copy.invalidDescription}</p>{/* De vrais liens vers la page d'accès, et non des boutons (A11Y-17). */}<Button asChild className="mt-6 w-full bg-cyan-500 text-slate-950 hover:bg-cyan-400"><Link href={candidateActivationResendPath(input.email)}>{copy.requestNewLink}</Link></Button><Link href="/candidate/access" className="mt-4 inline-block text-cyan-300">{copy.backToAccess}</Link></div>}
     </div>
     <CandidateLegalFooter />
   </main></>;

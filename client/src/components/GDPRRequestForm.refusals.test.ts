@@ -145,3 +145,16 @@ describe("GDPRRequestForm — remplissage automatique (A11Y-16)", () => {
     expect([gdprFieldIds.name, gdprFieldIds.email, gdprFieldIds.phone].map(autocomplete)).toEqual(["name", "email", "tel"]);
   });
 });
+
+describe("GDPRRequestForm — retour (A11Y-17)", () => {
+  it.each(["fr", "en", "de", "zh"] as const)("ramène à la page donnée par un vrai lien, et non un bouton (%s)", async language => {
+    const { Router } = await import("wouter");
+    view.language = language;
+    view.error = null;
+    const back = gdprRequestCopy[language].back;
+    const html = renderToStaticMarkup(createElement(Router, { ssrPath: "/gdpr" }, createElement(GDPRRequestForm, { backHref: "/" })));
+
+    expect(html).toMatch(new RegExp(`<a href="/"[^>]*><svg[^>]*>.*?</svg>${back}</a>`));
+    expect(html).not.toMatch(new RegExp(`<button[^>]*>(<svg[^>]*>.*?</svg>)?${back}</button>`));
+  });
+});
