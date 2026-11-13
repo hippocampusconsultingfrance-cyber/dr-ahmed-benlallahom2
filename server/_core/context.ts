@@ -3,7 +3,7 @@ import type { User } from "../../drizzle/schema";
 import { clerkClient, getAuth } from "@clerk/express";
 import * as db from "../db";
 import { isAdminMfaVerified } from "../adminMfa";
-import { isConfiguredAdminOpenId } from "./env";
+import { isConfiguredAdminOpenId, localDevelopmentShortcuts } from "./env";
 import { logError } from "./logError";
 
 export type TrpcContext = {
@@ -18,6 +18,11 @@ export async function createContext(
 ): Promise<TrpcContext> {
   let user: User | null = null;
   let mfaVerified = false;
+
+  // Local development without Clerk keys (CODE-15, never in production): createApp
+  // leaves clerkMiddleware out, without which getAuth throws; nobody is signed in, so
+  // every admin route, tRPC or Express, refuses as it refuses any visitor.
+  if (localDevelopmentShortcuts().includes("clerk_optional")) return { req: opts.req, res: opts.res, user, mfaVerified };
 
   const auth = getAuth(opts.req);
   if (auth.isAuthenticated && auth.userId) {

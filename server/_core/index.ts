@@ -10,7 +10,7 @@ import { registerHealthRoute } from "./health";
 import { contentSecurityPolicyHeaders, registerCspReportRoute } from "./contentSecurityPolicy";
 import { registerGoogleDriveOAuthRoutes } from "../googleDriveOAuthRoutes";
 import { appRouter } from "../routers";
-import { createContext, type TrpcContext } from "./context";
+import { createContext } from "./context";
 import { registerCandidateDocumentRoutes } from "../routes/candidateDocuments";
 import { registerClientBriefRoute } from "../routes/clientBriefs";
 import { registerRecruitmentApplyRoute } from "../routes/recruitmentApply";
@@ -69,10 +69,9 @@ export async function createApp() {
   registerCspReportRoute(app);
 
   // Local development without Clerk keys (CODE-15, never in production): no
-  // clerkMiddleware, which would answer every request with a 500, and a context
-  // without anyone signed in, so the public site works and /admin stays closed.
-  const withoutClerk = localDevelopmentShortcuts().includes("clerk_optional");
-  if (!withoutClerk) {
+  // clerkMiddleware, which would answer every request with a 500; createContext then
+  // signs nobody in, so the public site works and /admin stays closed.
+  if (!localDevelopmentShortcuts().includes("clerk_optional")) {
     app.use(clerkMiddleware({
       publishableKey: clerkPublishableKey(),
       authorizedParties: [PUBLIC_APP_ORIGIN, "http://localhost:3000", "http://127.0.0.1:3000"],
@@ -126,7 +125,7 @@ export async function createApp() {
     "/api/trpc",
     createExpressMiddleware({
       router: appRouter,
-      createContext: withoutClerk ? ({ req, res }): TrpcContext => ({ req, res, user: null, mfaVerified: false }) : createContext,
+      createContext,
       allowMethodOverride: true,
     })
   );

@@ -166,6 +166,13 @@ describe("mode local : Clerk facultatif hors de /admin", () => {
       const admin = await fetch(`${baseUrl}/api/trpc/admin.appointments.list`);
       // Refused as to any visitor who is not the administrator.
       expect([401, 403]).toContain(admin.status);
+      // So are the admin routes outside tRPC, which read the same context; and the server still answers after them.
+      for (const route of ["/api/google-drive/oauth/connect", "/api/google-drive/oauth/callback?code=x&state=y", "/api/admin/candidate-documents/1/download"]) {
+        const refused = await fetch(`${baseUrl}${route}`, { redirect: "manual" });
+        expect(refused.status, route).toBe(403);
+        expect(await refused.text(), route).toMatch(/Accès administrateur requis/);
+      }
+      expect((await fetch(`${baseUrl}${priceQuery}`)).status).toBe(200);
     } finally {
       server.close();
     }
