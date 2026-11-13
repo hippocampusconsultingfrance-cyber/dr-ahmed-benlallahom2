@@ -607,6 +607,123 @@ function expectQualityJobAsListed(workflow: string, packageJson: string) {
   expect(QUALITY_HOOKS.filter(hook => Object.hasOwn(scripts, hook)), "package.json: scripts pnpm runs by itself").toEqual([]);
 }
 
+/**
+ * The end-to-end job (CODE-22), beside the quality job and listed as it is: its keys (a
+ * PostgreSQL service of its own, the scenarios' variables, none of them a secret), its
+ * steps and the package.json scripts they run. As in the quality job, no step may pass
+ * whatever its command does, nor the job be skipped.
+ */
+const E2E_JOB: Readonly<Record<string, string>> = {
+  name: "End-to-end scenarios",
+  "runs-on": "ubuntu-latest",
+  "timeout-minutes": "20",
+  services: "",
+  env: "",
+  "env.E2E_DATABASE_URL": "postgresql://postgres:postgres@127.0.0.1:5432/e2e",
+  "env.VITE_TURNSTILE_SITE_KEY": "1x00000000000000000000AA",
+  "env.CHROMIUM": "/usr/bin/google-chrome",
+  steps: "",
+};
+
+/** Its PostgreSQL, an empty database that every run migrates (e2e/global-setup.ts). */
+const E2E_SERVICES = [
+  "    services:",
+  "      postgres:",
+  "        image: postgres:16",
+  "        env:",
+  "          POSTGRES_USER: postgres",
+  "          POSTGRES_PASSWORD: postgres",
+  "          POSTGRES_DB: e2e",
+  "        ports:",
+  "          - 5432:5432",
+  '        options: --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 12',
+].join("\n");
+
+const E2E_STEPS: readonly Readonly<Record<string, string>>[] = [
+  { name: "Check out source", uses: "actions/checkout@v4" },
+  { name: "Set up pnpm", uses: "pnpm/action-setup@v4" },
+  { name: "Set up Node.js", uses: "actions/setup-node@v4", "with.node-version-file": ".nvmrc", "with.cache": "pnpm" },
+  { name: "Install dependencies", run: INSTALL_COMMAND },
+  { name: "Verify the scenarios' types", run: "pnpm check:e2e" },
+  { name: "Build with Turnstile's test key", run: "pnpm build" },
+  { name: "Run the end-to-end scenarios", run: "pnpm test:e2e" },
+  // Only when a step before it failed: what is needed to read why, and nothing it could hide.
+  { name: "Keep the server log and traces of a failed run", if: "failure()", uses: "actions/upload-artifact@v4", "with.name": "e2e-results", "with.path": "tmp/e2e", "with.retention-days": "7" },
+];
+
+/** The scripts these steps run: the build of the quality job, the scenarios' types, Playwright with its configuration. */
+const E2E_SCRIPTS: Readonly<Record<string, string>> = {
+  "check:e2e": "tsc --noEmit -p e2e/tsconfig.json",
+  build: QUALITY_SCRIPTS.build!,
+  "test:e2e": "playwright test -c playwright.e2e.config.ts",
+};
+
+function expectE2eJobAsListed(workflow: string, packageJson: string) {
+  expect(workflowKeys(workflow, "e2e"), "ci.yml: keys of the e2e job").toEqual(E2E_JOB);
+  const job = workflow.slice(workflow.indexOf("\n  e2e:\n"));
+  expect(job.slice(job.indexOf("\n    services:\n") + 1, job.indexOf("\n\n    env:\n")), "ci.yml: services of the e2e job").toBe(E2E_SERVICES);
+  const steps = jobSteps(workflow, "e2e");
+  expect(steps.map(({ keys }) => (keys.run === undefined ? keys : { ...keys, run: keys.run.replace(/\n$/, "") })), "ci.yml: steps of the e2e job").toEqual(E2E_STEPS);
+  for (const step of steps) {
+    expect(silencersIn(step.run, `step "${step.name}"`, STEP_SILENCERS, []), step.name).toEqual([]);
+    expect(pipesWithoutPipefail(step), step.name).toEqual([]);
+  }
+  const scripts = (JSON.parse(packageJson) as { scripts?: Record<string, string> }).scripts ?? {};
+  const run = Object.fromEntries(scriptsRun(E2E_STEPS.map(step => step.run ?? "").join("\n"), scripts));
+  expect(run, "package.json: scripts the e2e job runs").toEqual(E2E_SCRIPTS);
+  for (const [name, script] of Object.entries(run)) expect(silencersIn(script, `script "${name}"`, SCRIPT_SILENCERS, []), `script "${name}"`).toEqual([]);
+  const hooks = ["pnpm:devPreinstall", "preinstall", "install", "postinstall", "preprepare", "prepare", "postprepare", ...Object.keys(E2E_SCRIPTS).flatMap(name => [`pre${name}`, `post${name}`])];
+  expect(hooks.filter(hook => Object.hasOwn(scripts, hook)), "package.json: scripts pnpm runs by itself").toEqual([]);
+}
+
+/**
+ * playwright.e2e.config.ts as it is, read as text and never run here: the step « Check this
+ * workflow » runs no code of the repository that ci.yml does not pin (CODE-14). As for
+ * vitest.config.ts, a list of what it may not hold is got round (a `testIgnore`, a `grep`,
+ * `projects`, a spread, a statement before the export): any change of it is a change of
+ * this text, read in review. No retry, one worker, no `test.only` (CODE-22).
+ */
+const PLAYWRIGHT_E2E_CONFIG = `import { defineConfig } from "@playwright/test";
+import { e2eSettings } from "./e2e/support/settings";
+
+/**
+ * End-to-end scenarios (CODE-22) of the paths that earn money or collect personal data,
+ * on the built server with a local PostgreSQL and the doubles of e2e/support: no real
+ * service is called. Run after \`VITE_TURNSTILE_SITE_KEY=1x00000000000000000000AA pnpm build\`:
+ *   E2E_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/e2e pnpm test:e2e
+ * (a database that every run empties; README, « Tests de bout en bout »). One worker and no
+ * retry: the scenarios share the server, and one that passes only on a second try fails.
+ * Chromium is Playwright's (\`pnpm exec playwright install chromium\`), or the one CHROMIUM names.
+ */
+const settings = e2eSettings();
+
+export default defineConfig({
+  testDir: "e2e",
+  testMatch: "*.spec.ts",
+  globalSetup: "./e2e/global-setup.ts",
+  outputDir: "tmp/e2e/results",
+  workers: 1,
+  fullyParallel: false,
+  retries: 0,
+  forbidOnly: true,
+  timeout: 60_000,
+  expect: { timeout: 10_000 },
+  reporter: [["list"]],
+  use: {
+    baseURL: settings.appOrigin,
+    locale: "fr-FR",
+    timezoneId: "Europe/Paris",
+    viewport: { width: 1280, height: 900 },
+    trace: "retain-on-failure",
+    launchOptions: { executablePath: process.env.CHROMIUM?.trim() || undefined, args: ["--no-sandbox", "--no-proxy-server"] },
+  },
+});
+`;
+
+function expectPlaywrightE2eConfigAsListed(config: string) {
+  expect(config, "playwright.e2e.config.ts").toBe(PLAYWRIGHT_E2E_CONFIG);
+}
+
 /** The files of these directories and of the directories within them, relative to the root, with `/` between their parts. */
 const filesIn = (...directories: string[]) => directories.flatMap(directory =>
   readdirSync(path.join(root, directory), { recursive: true, encoding: "utf8" }).map(file => `${directory}/${file.split(path.sep).join("/")}`));
@@ -1677,6 +1794,65 @@ describe("intégration continue GitHub", () => {
     expect(() => expectKnipReadsEverySource(knipWith({ ignoreIssues: { "client/src/generated/**": ["exports", "types"] }, ignoreDependencies: ["@fontsource/playfair-display", "@types/node"] }))).not.toThrow();
     expect(() => expectKnipReadsEverySource(knipWith({}), { ignoreIssues: { "server/**": ["files"] } })).toThrow(/^knip\.json: issue types ignored/);
   }, 30_000);
+
+  it("lance les scénarios de bout en bout dans un job à part, tel qu'il est listé, sans étape ni script qui passe quoi qu'il arrive (CODE-22)", async () => {
+    const [workflow, packageJson] = await Promise.all([read(".github/workflows/ci.yml"), read("package.json")]);
+    expect(() => expectE2eJobAsListed(workflow, packageJson)).not.toThrow();
+    const edit = (from: string, to: string) => {
+      expect(workflow).toContain(from);
+      return workflow.replace(from, to);
+    };
+    const scenarios = "        run: pnpm test:e2e\n";
+    const verify = (changedWorkflow: string, scripts: Record<string, string> = {}) => () => {
+      const manifest = JSON.parse(packageJson) as { scripts: Record<string, string> };
+      expectE2eJobAsListed(changedWorkflow, JSON.stringify({ ...manifest, scripts: { ...manifest.scripts, ...scripts } }));
+    };
+    // A scenario that may fail, a step skipped, the build left out, another install.
+    for (const changedWorkflow of [
+      edit(scenarios, "        run: pnpm test:e2e || true\n"),
+      edit(scenarios, `${scenarios}        continue-on-error: true\n`),
+      edit(scenarios, "        if: ${{ false }}\n" + scenarios),
+      edit("      - name: Build with Turnstile's test key\n        run: pnpm build\n", ""),
+      edit("    steps:\n      - name: Check out source\n        uses: actions/checkout@v4\n      - name: Set up pnpm\n        uses: pnpm/action-setup@v4\n      - name: Set up Node.js\n        uses: actions/setup-node@v4\n        with:\n          node-version-file: .nvmrc\n          cache: pnpm\n      - name: Install dependencies\n        run: pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile\n      - name: Verify the scenarios' types", "    steps:\n      - name: Check out source\n        uses: actions/checkout@v4\n      - name: Set up pnpm\n        uses: pnpm/action-setup@v4\n      - name: Set up Node.js\n        uses: actions/setup-node@v4\n        with:\n          node-version-file: .nvmrc\n          cache: pnpm\n      - name: Install dependencies\n        run: pnpm install --frozen-lockfile\n      - name: Verify the scenarios' types"),
+    ]) {
+      expect(verify(changedWorkflow)).toThrow(/^ci\.yml: steps of the e2e job: /);
+    }
+    // The job's own keys: a skipped job, another database, a secret of production.
+    for (const changedWorkflow of [
+      edit("    name: End-to-end scenarios\n", "    name: End-to-end scenarios\n    if: ${{ false }}\n"),
+      edit("    name: End-to-end scenarios\n", "    name: End-to-end scenarios\n    continue-on-error: true\n"),
+      edit("      E2E_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/e2e\n", "      E2E_DATABASE_URL: ${{ secrets.DATABASE_URL }}\n"),
+    ]) {
+      expect(verify(changedWorkflow)).toThrow(/^ci\.yml: keys of the e2e job: /);
+    }
+    expect(verify(edit("        image: postgres:16\n", "        image: someone/postgres:latest\n"))).toThrow(/^ci\.yml: services of the e2e job: /);
+    // A script that passes whatever happens, or runs other scenarios, or one pnpm runs by itself.
+    for (const scripts of [{ "test:e2e": "playwright test -c playwright.e2e.config.ts || true" }, { "test:e2e": "playwright test -c playwright.e2e.config.ts --grep nothing" }, { "check:e2e": "tsc --noEmit" }] as Array<Record<string, string>>) {
+      expect(verify(workflow, scripts), JSON.stringify(scripts)).toThrow(/^package\.json: scripts the e2e job runs: /);
+    }
+    expect(verify(workflow, { "pretest:e2e": "node -e 0" })).toThrow(/^package\.json: scripts pnpm runs by itself: /);
+  });
+
+  it("fait tourner les scénarios de bout en bout sans nouvel essai, un seul à la fois, et refuse un test.only, sans exécuter leur configuration (CODE-22)", async () => {
+    const config = await read("playwright.e2e.config.ts");
+    expect(() => expectPlaywrightE2eConfigAsListed(config)).not.toThrow();
+    const edit = (from: string, to: string) => {
+      expect(config).toContain(from);
+      return config.replace(from, to);
+    };
+    // A retry, scenarios left out or run elsewhere, settings spread from another module, code run on loading.
+    for (const changedConfig of [
+      edit("  retries: 0,\n", "  retries: 2,\n"),
+      edit("  forbidOnly: true,\n", "  forbidOnly: !process.env.CI,\n"),
+      edit('  testMatch: "*.spec.ts",\n', '  testMatch: "*.spec.ts",\n  testIgnore: "admin.spec.ts",\n'),
+      edit('  testMatch: "*.spec.ts",\n', '  testMatch: "*.spec.ts",\n  grep: /contact/,\n'),
+      edit("  workers: 1,\n", '  workers: 1,\n  projects: [{ name: "none", testMatch: "none" }],\n'),
+      edit('  testDir: "e2e",\n', '  testDir: "e2e",\n  ...settings.overrides,\n'),
+      edit("const settings = e2eSettings();\n", "const settings = e2eSettings();\nprocess.exitCode = 0;\n"),
+    ]) {
+      expect(() => expectPlaywrightE2eConfigAsListed(changedConfig)).toThrow(/^playwright\.e2e\.config\.ts: /);
+    }
+  });
 
   it("borne la durée de chaque job et annule la vérification dépassée d'une pull request", async () => {
     const workflow = await read(".github/workflows/ci.yml");

@@ -22,9 +22,45 @@ Prérequis : Node.js 22 (`.nvmrc`, lu par la CI ; `nvm use`) et pnpm 10 (version
 
 ```bash
 pnpm install --frozen-lockfile
-cp .env.example .env      # puis remplir les valeurs (voir le fichier)
+cp .env.example .env      # puis remplir les valeurs (voir le fichier et « Mode local » ci-dessous)
 pnpm dev                  # http://localhost:3000 (Express + Vite en mode middleware)
 ```
+
+### Mode local, sans les comptes de production
+
+`pnpm dev` démarre sans Neon, Clerk, Resend ni Stripe (CODE-15). Il suffit d'une base PostgreSQL sur la machine :
+
+```bash
+docker run --name drahmed-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=drahmed -p 5432:5432 -d postgres:16
+```
+
+Dans `.env` : `DATABASE_URL=postgresql://postgres:postgres@localhost:5432/drahmed`, `PUBLIC_APP_ORIGIN=http://localhost:3000`, `CANDIDATE_AUTH_PEPPER` (32 caractères aléatoires ou plus) et `CANDIDATE_DOCUMENT_ENCRYPTION_KEY` (`openssl rand -base64 32`). Pour les formulaires protégés, les clés de test publiées par Cloudflare, qui laissent toujours passer : `VITE_TURNSTILE_SITE_KEY=1x00000000000000000000AA`, `TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA`. Laisser vides les clés Clerk, Resend et Stripe. Puis créer le schéma et ouvrir l'agenda (l'administration, fermée sans Clerk, ne peut pas le faire) :
+
+```bash
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/drahmed pnpm exec drizzle-kit migrate
+psql postgresql://postgres:postgres@localhost:5432/drahmed -c "INSERT INTO availability_slots (day_of_week, start_time, end_time, is_active) SELECT d, '08:00', '20:00', 1 FROM generate_series(0, 6) d"
+pnpm dev
+```
+
+Au démarrage, la console liste les raccourcis actifs (`[Local mode] local_database, clerk_optional, console_emails, console_payments`) :
+
+- **base locale** : une `DATABASE_URL` sur cette machine (`localhost`, `127.x.x.x`, `[::1]`) passe par node-postgres au lieu du proxy HTTP de Neon (`server/db.ts`) ; la base doit être en UTF8 ;
+- **Clerk facultatif** : sans les clés Clerk, le site public répond et personne n'est administrateur ; `/admin` affiche que la clé n'est pas configurée ;
+- **emails dans la console** : sans `RESEND_API_KEY`, chaque email est écrit dans la console (`[Email local] À : … — Objet : …`, puis son texte) au lieu d'être envoyé ;
+- **paiements dans la console** : sans `STRIPE_SECRET_KEY`, une réservation mène à une page de paiement de test locale, dont l'adresse est écrite dans la console (`[Paiement local] …`) ; « Payer » confirme le rendez-vous comme le ferait le webhook de Stripe, « Annuler » revient sur la page d'annulation.
+
+Ces raccourcis ne s'activent qu'avec `NODE_ENV=development` et hors de Vercel (ni `VERCEL` ni `VERCEL_ENV`) : `pnpm start`, le serveur construit et la fonction Vercel n'en activent aucun, quelle que soit leur configuration (`localDevelopmentShortcuts`, `server/_core/env.ts`, testé dans `server/localDevelopment.test.ts`). Restent hors du mode local : le stockage Vercel Blob (dépôt d'un CV, copie des factures), l'analyse IA et Google Drive. Pour eux, ou pour se connecter à l'administration, utiliser des comptes de développement, jamais ceux de production : une branche Neon (*Neon > Branches > Create branch*, depuis `main`, dont l'adresse va dans `DATABASE_URL`), une instance Clerk *Development* (clés `pk_test_…` et `sk_test_…`, `CLERK_OWNER_USER_ID` de votre utilisateur de test), un magasin Blob de préproduction et le mode test de Stripe.
+
+### Tests de bout en bout
+
+Sept scénarios Playwright (`e2e/`, CODE-22) parcourent le serveur construit, comme `pnpm start` le lance, avec une base PostgreSQL vidée à chaque passage et des doubles locaux de chaque service extérieur : Stripe Checkout, Resend, Turnstile, Clerk, Vercel Blob, l'AI Gateway et Google Drive (`e2e/support/doubles.ts`). Aucun appel réel : toute connexion du serveur vers une autre machine est refusée et fait échouer le scénario, comme toute requête du navigateur vers une autre adresse que le site et ses doubles. Les scénarios : réservation et paiement jusqu'à la facture, question santé, message de contact, demande RGPD, candidature avec son CV analysé par la tâche planifiée, administration (session Clerk, double authentification par code envoyé par email, connexion de Google Drive, export d'une candidature), et espace candidat (invitation envoyée par l'administration, accès créé depuis son lien, activation par email avec le choix du mot de passe, document déposé chiffré dans le coffre puis relu par le candidat).
+
+```bash
+VITE_TURNSTILE_SITE_KEY=1x00000000000000000000AA pnpm build
+E2E_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/e2e pnpm test:e2e
+```
+
+La base de `E2E_DATABASE_URL` (en UTF8, sur cette machine seulement) est effacée à chaque passage : jamais celle du mode local. Chromium : celui de Playwright (`pnpm exec playwright install chromium`) ou celui que nomme `CHROMIUM` (`/usr/bin/google-chrome` en CI). En CI, le job « End-to-end scenarios » les lance à chaque pull request vers `main`, avec son propre PostgreSQL.
 
 ## Commandes
 
@@ -36,7 +72,9 @@ pnpm dev                  # http://localhost:3000 (Express + Vite en mode middle
 | `pnpm test:ci` | Suite utilisée par la CI, la même : aucun fichier de test écarté |
 | `pnpm build` | Build Vite, pré-rendu SEO par page (`scripts/prerender-route-seo.ts`), bundle serveur `dist/index.js` et fonction Vercel `dist/vercel/index.js`, re-exportée par `api/index.js` (versionné, inchangé par le build) |
 | `pnpm start` | Lance le build Express (hébergement hors Vercel) |
-| `pnpm test:visual` | Régression visuelle (Playwright, Chromium trouvé seul ou donné par `CHROMIUM`) ; `pnpm test:visual:record` écrit les candidats dans `tmp/visual-regression` (ignoré par git) ou `VISUAL_BASELINE_DIR` |
+| `pnpm test:visual` | Pages publiques dans un vrai navigateur (`client/src/publicPages.browser.test.ts`, aussi lancé par `pnpm test:ci`) : mise en page, focus, contrastes mesurés et axe-core en thème clair et sombre, ordinateur et téléphone (Chromium trouvé seul ou donné par `CHROMIUM` ; sans lui, la commande échoue au lieu de passer) |
+| `pnpm validate:precheckpoint` | Avant un checkpoint : `pnpm test:visual`, la gouvernance graphique et `pnpm check` |
+| `pnpm test:e2e` | Scénarios de bout en bout sur le serveur construit (voir « Tests de bout en bout ») ; `pnpm check:e2e` vérifie leurs types |
 | `pnpm check:performance` | Build + budgets de performance |
 | `node scripts/smoke-built-server.mjs` | Après `pnpm build` : démarre `api/index.js` et `dist/index.js` avec des variables factices, sans lire `.env` ni joindre d'autre machine, vérifie que chaque paquet chargé à la demande se résout, puis appelle `/api/health`, une requête tRPC anonyme, le prix d'une réservation, les webhooks Stripe et Resend et une tâche planifiée (CI) |
 | `node scripts/check-migrations-in-sync.mjs` | Vérifie que `drizzle/pg` décrit exactement `drizzle/schema.ts` (CI) |

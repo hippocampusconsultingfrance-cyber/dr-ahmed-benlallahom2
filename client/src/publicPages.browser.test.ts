@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
+import AxeBuilder from "@axe-core/playwright";
 import { chromium, type Browser, type Page } from "playwright-core";
 import superjson from "superjson";
 import { createServer, type ViteDevServer } from "vite";
@@ -14,8 +15,10 @@ import { STATIC_ROUTE_METADATA } from "@shared/routeMetadata";
  * Pages publiques dans un vrai navigateur : le client est servi par Vite et tRPC répond par des
  * données vides, sans serveur ni base. Ne tourne que si un Chromium est disponible :
  *   CHROMIUM=/chemin/vers/chrome pnpm vitest run client/src/publicPages.browser.test.ts
- * sinon le Chromium installé par Playwright, puis celui du système (/usr/bin/chromium, comme
- * scripts/visual-regression.mjs, ou /usr/bin/google-chrome, présent sur les machines de la CI).
+ * sinon le Chromium installé par Playwright, puis celui du système (/usr/bin/chromium, ou
+ * /usr/bin/google-chrome, présent sur les machines de la CI). Sans Chromium, le fichier n'est
+ * sauté que pour un `pnpm test` sur un poste : en CI (CI) et pour `pnpm test:visual`
+ * (REQUIRE_CHROMIUM), il échoue plutôt que de passer sans avoir rien vérifié.
  */
 function findChromium() {
   if (process.env.CHROMIUM) return process.env.CHROMIUM;
@@ -29,6 +32,7 @@ function findChromium() {
 }
 
 const executablePath = findChromium();
+const chromiumRequired = Boolean(process.env.CI?.trim() || process.env.REQUIRE_CHROMIUM?.trim());
 const root = path.resolve(import.meta.dirname, "../..");
 
 type Theme = "light" | "dark";
@@ -44,6 +48,10 @@ const fakeTurnstileScript = (token: string | null) => `window.turnstile = {
   remove: () => {},
   reset: () => {},
 };`;
+
+it.runIf(chromiumRequired && !executablePath)("trouve un Chromium, sans lequel aucune page publique n'est vérifiée", () => {
+  expect.fail("Aucun Chromium trouvé : donnez son chemin par CHROMIUM, ou installez celui de Playwright (pnpm exec playwright install chromium).");
+});
 
 describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
   let server: ViteDevServer;
@@ -960,6 +968,49 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
     expect(await visible()).toEqual(Array(count).fill(false));
     await page.context().close();
   }, 60_000);
+
+  /**
+   * A11Y-22 : axe-core sur les pages réellement affichées, critères WCAG 2.2 A et AA. Une
+   * violation « serious » ou « critical » fait échouer le test ; les « moderate » et « minor »
+   * relèvent de la recette manuelle (EXTERNAL_VALIDATION_REGISTER.md). Aucune règle n'est
+   * écartée : seul un élément nommé ci-dessous l'est, pour une règle, avec sa raison. Les pages
+   * s'ouvrent avec un choix de cookies enregistré ; l'accueil l'est aussi sans, avec le bandeau
+   * cookies de la première visite.
+   */
+  const AXE_ROUTES = ["/", "/booking", "/questions-anesthesie", "/recruitment", "/recruitment/standard", "/employers", "/faq", "/gdpr", "/legal", "/candidate/access"];
+  const AXE_SCREENS = [...AXE_ROUTES.map((route) => ({ route, consent: true })), { route: "/", consent: false }];
+  const AXE_EXCEPTIONS = [
+    {
+      rule: "label-content-name-mismatch",
+      target: ".brand-lockup",
+      reason: "Le nom du logo, « Dr. Ben Lallahom — Accueil », commence par son libellé principal (A11Y-18, WCAG 2.5.3) ; la signature « ABL / HIPPOCAMPUS » et les titres « MD, DESAIC » affichés autour, décoratifs, n'y sont pas répétés.",
+    },
+  ] as const;
+
+  it("ne laisse aucune violation axe sérieuse ou critique sur les pages publiques principales, en thème clair et sombre, sur ordinateur et téléphone (A11Y-22)", async () => {
+    const violations: string[] = [];
+    const excepted = new Set<string>();
+    for (const theme of ["light", "dark"] as const) {
+      for (const [width, height, touch] of [[1366, 900, false], [390, 844, true]] as const) {
+        for (const { route, consent } of AXE_SCREENS) {
+          const page = await open(route, { width, height, theme, touch, consent });
+          const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]).analyze();
+          for (const violation of results.violations.filter((found) => found.impact === "serious" || found.impact === "critical")) {
+            const nodes = violation.nodes.filter((node) => {
+              const exception = AXE_EXCEPTIONS.find(({ rule, target }) => rule === violation.id && node.target.join(" ") === target);
+              if (exception) excepted.add(`${exception.rule} ${exception.target}`);
+              return !exception;
+            });
+            if (nodes.length) violations.push(`${route}${consent ? "" : " (bandeau cookies)"} (${theme}, ${width} px) ${violation.id} : ${nodes.slice(0, 3).map((node) => node.target.join(" ")).join(" | ")}`);
+          }
+          await page.context().close();
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+    // An exception that no longer matches anything is removed rather than kept unread.
+    expect([...excepted].sort()).toEqual(AXE_EXCEPTIONS.map(({ rule, target }) => `${rule} ${target}`).sort());
+  }, 300_000);
 
   it("rend libellés et saisie de la connexion candidat lisibles en thème clair (A11Y-02)", async () => {
     for (const width of [1366, 390]) {

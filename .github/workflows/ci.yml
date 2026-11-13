@@ -104,3 +104,53 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Audit production dependencies
         run: pnpm audit --prod --audit-level=high
+
+  # The paths that earn money or collect personal data, end to end (CODE-22): the built
+  # server with a PostgreSQL of its own and the local doubles of every outside service
+  # (e2e/support), driven by Playwright in the runner's Chrome. No secret: none is needed.
+  e2e:
+    name: End-to-end scenarios
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: e2e
+        ports:
+          - 5432:5432
+        options: --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 12
+
+    env:
+      E2E_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/e2e
+      VITE_TURNSTILE_SITE_KEY: 1x00000000000000000000AA
+      CHROMIUM: /usr/bin/google-chrome
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile
+      - name: Verify the scenarios' types
+        run: pnpm check:e2e
+      - name: Build with Turnstile's test key
+        run: pnpm build
+      - name: Run the end-to-end scenarios
+        run: pnpm test:e2e
+      # The built server's log and the traces Playwright keeps of a failed scenario (dummy data only).
+      - name: Keep the server log and traces of a failed run
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results
+          path: tmp/e2e
+          retention-days: 7

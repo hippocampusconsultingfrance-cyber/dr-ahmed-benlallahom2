@@ -161,6 +161,64 @@ export function reportCriticalProductionEnvironment(
   return status;
 }
 
+/**
+ * Mode local (CODE-15) : raccourcis qui laissent lancer le site sur un poste sans les
+ * comptes de production. Seulement avec NODE_ENV=development (`pnpm dev`) et hors de
+ * Vercel (ni VERCEL ni VERCEL_ENV), quelle que soit la configuration : `pnpm start`, le
+ * serveur construit et la fonction Vercel n'en activent aucun.
+ *  - local_database : DATABASE_URL vise cette machine (localhost, 127.x.x.x, [::1]) ; le
+ *    pilote Neon y passe par node-postgres (server/db.ts) ;
+ *  - clerk_optional : sans les clés Clerk, le site public répond sans clerkMiddleware et
+ *    personne n'est administrateur (/admin fermé) ;
+ *  - console_emails : sans RESEND_API_KEY, chaque email est écrit dans la console ;
+ *  - console_payments : sans STRIPE_SECRET_KEY, un paiement de test écrit dans la
+ *    console remplace Stripe Checkout (server/_core/localServices.ts).
+ */
+export const LOCAL_DEVELOPMENT_SHORTCUTS = ["local_database", "clerk_optional", "console_emails", "console_payments"] as const;
+
+export type LocalDevelopmentShortcut = (typeof LOCAL_DEVELOPMENT_SHORTCUTS)[number];
+
+export function isLocalDevelopment(environment: NodeJS.ProcessEnv = process.env): boolean {
+  return environment.NODE_ENV === "development" && !environment.VERCEL?.trim() && !environment.VERCEL_ENV?.trim();
+}
+
+/** Machine locale, par son nom ou son adresse de bouclage, telle que l'écrit une URL. */
+const LOOPBACK_HOSTNAME = /^(?:localhost|127(?:\.\d{1,3}){3}|\[::1\])$/i;
+
+export function isLoopbackUrl(url: string | undefined): boolean {
+  try {
+    return LOOPBACK_HOSTNAME.test(new URL(url?.trim() ?? "").hostname);
+  } catch {
+    return false;
+  }
+}
+
+export function localDevelopmentShortcuts(environment: NodeJS.ProcessEnv = process.env): LocalDevelopmentShortcut[] {
+  if (!isLocalDevelopment(environment)) return [];
+  const active: Record<LocalDevelopmentShortcut, boolean> = {
+    local_database: isLoopbackUrl(environment.DATABASE_URL),
+    clerk_optional: !clerkPublishableKey(environment) || !environment.CLERK_SECRET_KEY?.trim(),
+    console_emails: !environment.RESEND_API_KEY?.trim(),
+    console_payments: !environment.STRIPE_SECRET_KEY?.trim(),
+  };
+  return LOCAL_DEVELOPMENT_SHORTCUTS.filter(shortcut => active[shortcut]);
+}
+
+/**
+ * Adresse du paiement de test local, posée par startServer quand console_payments est
+ * actif : le client Stripe s'y adresse au lieu de api.stripe.com. Ignorée hors du mode
+ * local, ou si elle ne vise pas cette machine.
+ */
+export const LOCAL_STRIPE_API_URL_VARIABLE = "LOCAL_STRIPE_API_URL";
+
+export function localStripeApiOptions(environment: NodeJS.ProcessEnv = process.env): { host: string; port: number; protocol: "http" } | undefined {
+  const url = environment[LOCAL_STRIPE_API_URL_VARIABLE]?.trim();
+  if (!isLocalDevelopment(environment) || !url || !isLoopbackUrl(url)) return undefined;
+  const { hostname, port, protocol } = new URL(url);
+  if (protocol !== "http:" || !port) return undefined;
+  return { host: hostname.replace(/^\[|\]$/g, ""), port: Number(port), protocol: "http" };
+}
+
 export function isConfiguredAdminOpenId(
   openId: string,
   environment: NodeJS.ProcessEnv = process.env,

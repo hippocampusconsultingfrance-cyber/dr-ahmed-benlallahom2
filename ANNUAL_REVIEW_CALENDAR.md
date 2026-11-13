@@ -7,7 +7,7 @@
 | Période | Contrôle | Preuve à conserver | Responsable |
 |---|---|---|---|
 | Janvier, avril, juillet, octobre | **Test de restauration Neon** : créer une branche Neon à partir d'un instant passé (dans la fenêtre d'historique de l'offre Neon), y lancer `scripts/db-invariants.sql` (lecture seule) et vérifier qu'on y retrouve les rendez-vous, candidatures et factures attendus ; supprimer la branche ensuite. | Date, instant restauré, résultat de `db-invariants.sql`, durée de l'opération. | À désigner |
-| T1 — janvier | Revue graphique : accueil, réservation, recrutement et pages légales en bureau et mobile ; cohérence de marque. | Résultat de `pnpm test:visual`, captures validées, écarts consignés. | Responsable éditorial et technique |
+| T1 — janvier | Revue graphique : accueil, réservation, recrutement et pages légales en bureau et mobile ; cohérence de marque. | Résultat de `pnpm test:visual` (pages publiques dans un vrai navigateur, axe-core compris) ; captures comparées par `node scripts/visual-regression.mjs` quand ses étalons sont accessibles, écarts consignés. | Responsable éditorial et technique |
 | T2 — avril | Revue graphique : nouvelles pages, formats mobiles, variantes DE/ZH, alternatives textuelles. | Journal d'audit visuel, état des traductions, corrections. | Responsable éditorial et technique |
 | T3 — juillet | Revue graphique : actifs ajoutés, leurs droits, leur poids et leurs états de chargement. | `VISUAL_ASSET_RIGHTS_REGISTER.md`, résultat de test. | Responsable éditorial |
 | T4 — octobre | Revue graphique annuelle : charte, contraste, régression visuelle, parcours sensibles, retrait des actifs obsolètes. | Bilan annuel et décisions de correction. | Responsable éditorial et technique |

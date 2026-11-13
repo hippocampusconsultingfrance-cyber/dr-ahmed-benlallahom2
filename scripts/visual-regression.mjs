@@ -13,7 +13,7 @@ const mismatchLimit = 0.008;
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 /**
- * Dossier où `pnpm test:visual:record` écrit les candidats à examiner (CODE-17) :
+ * Dossier où `VISUAL_BASELINE_MODE=record node scripts/visual-regression.mjs` écrit les candidats à examiner (CODE-17) :
  * VISUAL_BASELINE_DIR, sinon tmp/visual-regression dans le dépôt, que git ignore,
  * sur n'importe quelle machine (et non plus un dossier de l'ancien hébergeur Manus).
  */
@@ -35,7 +35,7 @@ export function findChromium(environment = process.env, exists = existsSync, bun
     // Pas de Chromium Playwright connu pour cette plateforme : restent ceux du système.
   }
   const found = [installed, "/usr/bin/chromium", "/usr/bin/google-chrome"].find(candidate => candidate && exists(candidate));
-  if (!found) throw new Error("Aucun Chromium trouvé : indiquez son chemin dans CHROMIUM (CHROMIUM=/chemin/vers/chrome pnpm test:visual).");
+  if (!found) throw new Error("Aucun Chromium trouvé : indiquez son chemin dans CHROMIUM (CHROMIUM=/chemin/vers/chrome node scripts/visual-regression.mjs).");
   return found;
 }
 

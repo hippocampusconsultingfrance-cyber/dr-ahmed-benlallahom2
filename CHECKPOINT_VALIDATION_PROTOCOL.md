@@ -1,6 +1,6 @@
 # Protocole de validation graphique avant checkpoint
 
-Avant chaque checkpoint qui modifie une interface publique, exécuter `pnpm validate:precheckpoint`. La commande lance notamment `pnpm test:visual`, vérifie les étalons visuels, le contrat de la matrice et la checklist de gouvernance graphique, puis contrôle TypeScript. Elle doit être complétée par une capture ciblée lorsqu’une page ou un composant a été modifié visuellement.
+Avant chaque checkpoint qui modifie une interface publique, exécuter `pnpm validate:precheckpoint`. La commande lance notamment `pnpm test:visual` (les pages publiques dans un vrai navigateur, axe-core compris), vérifie le contrat de la matrice des étalons visuels et la checklist de gouvernance graphique, puis contrôle TypeScript. La comparaison des captures à leurs étalons se lance à part : `node scripts/visual-regression.mjs` (voir `VISUAL_REGRESSION_GUIDE.md`). Elle doit être complétée par une capture ciblée lorsqu’une page ou un composant a été modifié visuellement.
 
 | Situation | Exigence avant checkpoint |
 |---|---|

@@ -1,8 +1,8 @@
 import { eq } from "drizzle-orm";
-import { neon } from "@neondatabase/serverless";
+import { neon, neonConfig } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 import { InsertUser, users } from "../drizzle/schema";
-import { isConfiguredAdminOpenId } from './_core/env';
+import { isConfiguredAdminOpenId, localDevelopmentShortcuts } from './_core/env';
 import { logError } from "./_core/logError";
 import { ensureLanguageColumns, LOCK_NOT_AVAILABLE, postgresErrorCode, waitForLanguageColumns } from "./languageColumns";
 
@@ -66,10 +66,68 @@ function languageColumnsReady(ddl: Parameters<typeof ensureLanguageColumns>[0]):
   });
 }
 
+/** The SQLSTATE fields of a PostgreSQL error, which the Neon driver copies from its proxy's reply. */
+const POSTGRES_ERROR_FIELDS = ["severity", "code", "detail", "hint", "position", "internalPosition", "internalQuery", "where", "schema", "table", "column", "dataType", "constraint", "file", "line", "routine"] as const;
+
+type NeonHttpQuery = { query: string; params?: unknown[] };
+
+/**
+ * Local database (CODE-15): a DATABASE_URL on this machine, in local development only
+ * (localDevelopmentShortcuts), is reached through node-postgres, the Neon HTTP driver
+ * left in place: its requests are answered here as Neon's proxy answers them, one query,
+ * or a batch in one transaction (db.batch), every value as text for the driver to read
+ * as it reads Neon's. "pg" is a development dependency, loaded by a name the server
+ * bundle does not follow, as the Vite toolchain is.
+ */
+export async function answerNeonQueriesLocally(connectionString: string) {
+  const driverModule = "pg";
+  const { default: pg } = (await import(driverModule)) as typeof import("pg");
+  const pool = new pg.Pool({ connectionString, max: 5 });
+  const asText = { getTypeParser: () => (value: string) => value };
+  const run = (client: import("pg").PoolClient, { query, params }: NeonHttpQuery) =>
+    client.query({ text: query, values: params ?? [], rowMode: "array", types: asText }).then(result => ({
+      fields: result.fields.map(field => ({ name: field.name, dataTypeID: field.dataTypeID })),
+      rows: result.rows,
+      command: result.command,
+      rowCount: result.rowCount,
+    }));
+  const reply = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+  neonConfig.fetchEndpoint = () => "http://localhost/sql";
+  neonConfig.fetchFunction = async (_url: string, init: { body: string; headers: Record<string, string> }) => {
+    const body = JSON.parse(init.body) as NeonHttpQuery | { queries: NeonHttpQuery[] };
+    const client = await pool.connect();
+    try {
+      if (!("queries" in body)) return reply(200, await run(client, body));
+      // Neon names the level as ReadCommitted, RepeatableRead…; PostgreSQL as READ COMMITTED.
+      const level = init.headers["Neon-Batch-Isolation-Level"]?.replace(/([a-z])([A-Z])/g, "$1 $2").toUpperCase();
+      const readOnly = init.headers["Neon-Batch-Read-Only"] === "true" ? " READ ONLY" : "";
+      const deferrable = init.headers["Neon-Batch-Deferrable"] === "true" ? " DEFERRABLE" : "";
+      await client.query(`BEGIN${level ? ` ISOLATION LEVEL ${level}` : ""}${readOnly}${deferrable}`);
+      try {
+        const results = [];
+        for (const query of body.queries) results.push(await run(client, query));
+        await client.query("COMMIT");
+        return reply(200, { results });
+      } catch (error) {
+        await client.query("ROLLBACK").catch(() => undefined);
+        throw error;
+      }
+    } catch (error) {
+      if (!(error instanceof pg.DatabaseError)) throw error;
+      return reply(400, Object.fromEntries([["message", error.message], ...POSTGRES_ERROR_FIELDS.map(field => [field, error[field]])]));
+    } finally {
+      client.release();
+    }
+  };
+}
+
+let localQueries: Promise<void> | null = null;
+
 // Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
+      if (localDevelopmentShortcuts().includes("local_database")) await (localQueries ??= answerNeonQueriesLocally(process.env.DATABASE_URL));
       const client = neon(process.env.DATABASE_URL);
       // The check and its DDL name those tables: they go through a client that does not wait.
       const ddl = drizzle(client);
@@ -86,6 +144,7 @@ export async function getDb() {
 /** Test seam: drop the cached connection and the state of the language columns check. */
 export function resetDbForTests() {
   _db = null;
+  localQueries = null;
   languageColumnsRetryAt = 0;
   languageColumnsRetryDelay = 0;
   languageColumnsLoggedFailures.clear();
