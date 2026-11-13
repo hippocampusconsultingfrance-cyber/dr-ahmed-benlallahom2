@@ -7,11 +7,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // d’une question santé) ont un libellé dans la langue de l’administration et
 // montrent leurs compteurs, seule information qu’elles portent.
 
-const view = vi.hoisted(() => ({ language: "fr", events: [] as Array<Record<string, unknown>> }));
+const view = vi.hoisted(() => ({ language: "fr", events: [] as Array<Record<string, unknown>>, recentHigh: 0 }));
 
 vi.mock("@/contexts/LanguageContext", () => ({ useLanguage: () => ({ language: view.language }) }));
 vi.mock("@/lib/trpc", () => ({
-  trpc: { adminSecurity: { events: { useQuery: () => ({ data: view.events, isLoading: false, error: null }) } } },
+  trpc: {
+    adminSecurity: {
+      events: { useQuery: () => ({ data: view.events, isLoading: false, error: null }) },
+      recentHighEvents: { useQuery: () => ({ data: { count: view.recentHigh }, isLoading: false, error: null }) },
+      sessions: { useQuery: () => ({ data: [], isLoading: false, error: null, refetch: vi.fn() }) },
+      revokeOtherSessions: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+    },
+  },
 }));
 
 const { default: SecurityOperationsTab } = await import("./SecurityOperationsTab");
@@ -21,12 +28,13 @@ const event = (id: number, category: string, counts: Record<string, number> | nu
 
 beforeEach(() => {
   view.language = "fr";
+  view.recentHigh = 0;
   view.events = [
     event(1, "admin_personal_data_erased", { contactMessagesDeleted: 2, medicalQuestionsDeleted: 1, appointmentsAnonymised: 2, upcomingAppointmentsKept: 2, recruitmentApplicationsLeft: 1 }),
     event(2, "admin_personal_data_exported", { contactMessages: 2, medicalQuestions: 1, gdprRequests: 1, appointments: 4, recruitmentApplications: 1 }),
     event(3, "admin_contact_message_deleted", { deleted: 1 }),
     event(4, "admin_medical_question_deleted", { deleted: 1 }),
-    event(5, "candidate_login", null, "anonymous"),
+    event(5, "future_category", null, "anonymous"),
     event(6, "admin_appointment_email_corrected", null),
   ];
 });
@@ -45,8 +53,8 @@ describe("RGPD-12 — traces des actions sur les données d’une personne", () 
     // EXPL-02: a patient's email corrected from the appointment card.
     expect(html).toContain("Correction de l’email d’un patient (rendez-vous)");
     for (const raw of ["admin personal data", "admin contact message", "admin medical question", "admin appointment email"]) expect(html).not.toContain(raw);
-    // Other events keep their label and show no counter.
-    expect(html).toContain("candidate login");
+    // An event no list names keeps its code, and shows no counter.
+    expect(html).toContain("future category");
   });
 
   it("les traduit dans les autres langues de l’administration", () => {
@@ -115,11 +123,12 @@ describe("ADM-07 / A11Y-12 / ADM-21 — date, gravité et période bloquée", ()
 
   it("donne aux gravités les teintes lisibles des badges de l’administration, dans les deux thèmes", () => {
     view.events = [{ ...event(1, "candidate_login", null, "anonymous"), severity: "high", outcome: "blocked" }, { ...event(2, "candidate_login", null, "anonymous"), severity: "critical", outcome: "blocked" }];
+    view.recentHigh = 2;
     const html = renderToStaticMarkup(createElement(SecurityOperationsTab));
     expect(html).toMatch(/<span class="[^"]*text-orange-700 [^"]*dark:text-orange-300[^"]*">Élevé<\/span>/);
     expect(html).toMatch(/<span class="[^"]*text-red-700 [^"]*dark:text-red-300[^"]*">Critique<\/span>/);
     // The count of the events to review, in the same tones.
-    expect(html).toMatch(/<div class="[^"]*text-orange-700 [^"]*">2 événement\(s\) à examiner<\/div>/);
+    expect(html).toMatch(/<div class="[^"]*text-orange-700 [^"]*">2 événement\(s\) élevé\(s\) ou critique\(s\) à examiner sur les dernières 24 heures<\/div>/);
   });
 
   it("nomme la période bloquée et la suspension puis la reprise des réservations, dans chaque langue", () => {

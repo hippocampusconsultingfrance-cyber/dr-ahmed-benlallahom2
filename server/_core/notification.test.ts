@@ -45,6 +45,13 @@ describe("notifyOwner", () => {
     expect(message.html).toContain("&lt;script&gt;");
   });
 
+  it("lets a word longer than a phone's screen, a Stripe session's identifier, break inside the content (MAIL-04)", async () => {
+    const { buildOwnerNotificationEmail } = await import("./notification");
+    const sessionId = `cs_live_${"a1B2c3D4".repeat(7)}`;
+    const { html } = buildOwnerNotificationEmail({ title: "Paiement", content: `Référence : APT-9\nSession Stripe : ${sessionId}` });
+    expect(html).toContain(`<div style="line-height:1.6;overflow-wrap:anywhere;word-break:break-word">Référence : APT-9<br />Session Stripe : ${sessionId}</div>`);
+  });
+
   it("passes a caller idempotency key to Resend so retries cannot duplicate the email", async () => {
     const { notifyOwner } = await import("./notification");
     await notifyOwner({ title: "Nouvelle réservation", content: "APT1" }, { idempotencyKey: "appointment-owner-APT1" });
@@ -181,7 +188,7 @@ describe("notifyOwner", () => {
       { category: "resend_quota_exceeded", severity: "high", metadata: { quota: "daily", emailKind: "owner_notification" } },
     ]);
     expect(send).toHaveBeenCalledTimes(2);
-    expect(send.mock.calls[1][0].subject).toContain("resend_quota_exceeded");
+    expect(send.mock.calls[1][0].subject).toContain("Quota d’envoi d’emails (Resend) épuisé");
   });
 });
 

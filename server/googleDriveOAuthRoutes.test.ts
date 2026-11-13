@@ -104,6 +104,22 @@ describe("connexion Google Drive : double authentification administrateur", () =
     expect(notification.content).not.toContain("remise(s) en file");
   });
 
+  it("date l’alerte à l’heure de Paris, dit quoi faire si ce n’est pas vous et donne le lien de l’onglet (MAIL-04)", async () => {
+    mocks.context = { user: { openId: "owner", role: "admin" }, mfaVerified: true };
+    mocks.connected = true;
+    vi.useFakeTimers({ now: new Date("2026-10-24T15:19:00.788Z"), toFake: ["Date"] });
+    try {
+      await call("/api/google-drive/oauth/callback", { code: "c", state: "signed-state" }, "__Host-google_drive_oauth_state=signed-state");
+    } finally {
+      vi.useRealTimers();
+    }
+    const { content } = mocks.notifyOwner.mock.calls[0]![0];
+    expect(content).toContain("Le 24 octobre 2026 à 17:19 (heure de Paris), le compte Google Drive utilisé pour copier les CV a été remplacé depuis l’administration");
+    expect(content).not.toContain("2026-10-24T");
+    expect(content).toContain("« Révoquer toutes les autres sessions » dans l’onglet « Sécurité »");
+    expect(content).toContain("Onglet « Candidatures » : https://drahmedbenlallahom.com/admin?tab=recruitment");
+  });
+
   it("à la reconnexion, remet en file les copies arrêtées par un refus du jeton, après l’enregistrement du nouveau jeton (REC-09)", async () => {
     mocks.context = { user: { openId: "owner", role: "admin" }, mfaVerified: true };
     mocks.connected = true;

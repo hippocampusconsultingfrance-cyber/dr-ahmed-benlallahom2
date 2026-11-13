@@ -4,7 +4,7 @@ import { createMemoryPg, pgTimestamp, type MemoryPg } from "./testing/memoryPgPr
 import { TEST_PEPPER } from "./testSupport/candidatePortal";
 
 // ABUS-03 — quota Resend épuisé pendant les envois qui suivent un paiement :
-// l’email « Alerte sécurité — resend_quota_exceeded » prend le créneau d’envoi
+// l’email « Alerte sécurité — Quota d’envoi d’emails (Resend) épuisé » prend le créneau d’envoi
 // du traitement, une pause après l’alerte refusée, au lieu de partir quelques
 // millisecondes après elle ; quand ce créneau tomberait après la fin du budget
 // d’un traitement immédiat, il ne part pas alors : il est mis en file et le
@@ -44,7 +44,7 @@ import { appointmentFulfillmentPacing, processAppointmentFulfillmentNow, process
 import { logSecurityEvent } from "./candidateSecurity";
 
 const PAUSE_MS = 300;
-const SECURITY_ALERT = "Alerte sécurité — resend_quota_exceeded — Hippocampus Consulting";
+const SECURITY_ALERT = "Alerte sécurité — Quota d’envoi d’emails (Resend) épuisé : emails refusés — Hippocampus Consulting";
 let memory: MemoryPg;
 
 function seedRefusedConfirmation(trackingId: string) {
@@ -149,7 +149,7 @@ describe("ABUS-03 — l’alerte « quota Resend épuisé » levée pendant les 
     const [alert] = sent(SECURITY_ALERT);
     // Said to have waited, with the quota events of the day, not only of the last hour.
     expect(alert.text).toContain("Alerte reportée : levée pendant les envois qui suivent un paiement");
-    expect(alert.text).toContain("Événements de ce type sur les dernières 24 heures : 1.");
+    expect(alert.text).toContain("1 évènement « Quota d’envoi d’emails (Resend) épuisé : emails refusés » sur les dernières 24 heures, le dernier le ");
     expect(quotaAlertJobs()).toEqual([expect.objectContaining({ status: "completed", attempts: 1, last_error: null })]);
 
     // Nothing is left for the run after.

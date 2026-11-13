@@ -176,14 +176,14 @@ describe("alertes uniques au propriétaire : le créneau n’est gardé qu’une
     state.resend = "down";
     await highSeverityFailure();
     await highSeverityFailure();
-    expect(attempts("Alerte sécurité — candidate_login")).toBe(1);
+    expect(attempts("Alerte sécurité — Connexion candidat refusée")).toBe(1);
 
     state.resend = "ok";
     later(OWNER_ALERT_RETRY_AFTER_FAILURE_MS + 1_000);
     await highSeverityFailure();
     await highSeverityFailure();
-    expect(delivered("Alerte sécurité — candidate_login")).toHaveLength(1);
-    expect(attempts("Alerte sécurité — candidate_login")).toBe(2);
+    expect(delivered("Alerte sécurité — Connexion candidat refusée")).toHaveLength(1);
+    expect(attempts("Alerte sécurité — Connexion candidat refusée")).toBe(2);
     expect(db().rows(securityEvents)).toHaveLength(4);
   });
 
@@ -192,8 +192,8 @@ describe("alertes uniques au propriétaire : le créneau n’est gardé qu’une
     await highSeverityFailure();
     // L’alerte refusée journalise le quota, dont l’alerte est refusée à son tour : la chaîne s’arrête là.
     expect(state.calls.map(call => call.subject)).toEqual([
-      "Alerte sécurité — candidate_login — Hippocampus Consulting",
-      "Alerte sécurité — resend_quota_exceeded — Hippocampus Consulting",
+      "Alerte sécurité — Connexion candidat refusée : email ou mot de passe erroné — Hippocampus Consulting",
+      "Alerte sécurité — Quota d’envoi d’emails (Resend) épuisé : emails refusés — Hippocampus Consulting",
     ]);
     for (let index = 0; index < 5; index += 1) await highSeverityFailure();
     expect(state.calls).toHaveLength(2);
@@ -201,7 +201,7 @@ describe("alertes uniques au propriétaire : le créneau n’est gardé qu’une
 
     later(OWNER_ALERT_RETRY_AFTER_FAILURE_MS + 1_000);
     await highSeverityFailure();
-    expect(attempts("Alerte sécurité — candidate_login")).toBe(2);
+    expect(attempts("Alerte sécurité — Connexion candidat refusée")).toBe(2);
   });
 
   it("analyse IA indisponible (REC-08) : une alerte perdue est renvoyée au refus suivant, puis une seule fois par jour", async () => {

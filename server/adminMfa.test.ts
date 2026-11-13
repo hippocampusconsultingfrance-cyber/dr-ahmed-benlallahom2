@@ -39,7 +39,7 @@ vi.mock("./_core/notifications", () => ({
   }),
 }));
 
-import { ADMIN_MFA_COOKIE, ADMIN_MFA_RATE_LIMITS, AdminMfaRateLimitError, isAdminMfaVerified, issueAdminMfaChallenge, revokeCurrentAdminMfaSession, verifyAdminMfaChallenge } from "./adminMfa";
+import { ADMIN_MFA_COOKIE, ADMIN_MFA_RATE_LIMITS, AdminMfaRateLimitError, isAdminMfaVerified, issueAdminMfaChallenge, revokeCurrentAdminMfaSession, revokeOtherAdminMfaSessions, verifyAdminMfaChallenge } from "./adminMfa";
 
 const OPEN_ID = "user_owner";
 let memory: MemoryPg;
@@ -160,6 +160,27 @@ describe("double authentification administrateur", () => {
     expect(logoutResponse.cleared).toEqual([{ name: ADMIN_MFA_COOKIE, options: expect.objectContaining({ httpOnly: true, secure: true, sameSite: "lax", path: "/" }) }]);
     expect(await isAdminMfaVerified(request(ip, cookie), OPEN_ID)).toBe(false);
     expect(memory.rows(adminMfaSessions)[0]!.revoked_at).not.toBeNull();
+  });
+
+  it("« Révoquer toutes les autres sessions » ferme les preuves des autres appareils et garde celle de ce navigateur (ADM-14)", async () => {
+    const cookieOf = async (ip: string) => `${ADMIN_MFA_COOKIE}=${(await verify(await begin(ip), ip)).cookies.get(ADMIN_MFA_COOKIE)!.value}`;
+    const thisBrowser = await cookieOf(`198.51.100.${ipCounter}`);
+    const lostPhone = await cookieOf(`203.0.113.${ipCounter}`);
+    const oldLaptop = await cookieOf(`192.0.2.${ipCounter}`);
+    // Another administrator's proof is not this account's to close, and an expired one is not counted.
+    memory.seed(adminMfaSessions, [
+      { open_id: "user_other_admin", token_hash: "f".repeat(64), expires_at: new Date(Date.now() + 60_000) },
+      { open_id: OPEN_ID, token_hash: "e".repeat(64), expires_at: new Date(Date.now() - 60_000) },
+    ]);
+
+    await expect(revokeOtherAdminMfaSessions({ openId: OPEN_ID, req: request("198.51.100.1", thisBrowser) })).resolves.toBe(2);
+    expect(memory.rows(adminMfaSessions).find(row => row.token_hash === "e".repeat(64))!.revoked_at).toBeNull();
+    expect(await isAdminMfaVerified(request("198.51.100.1", thisBrowser), OPEN_ID)).toBe(true);
+    expect(await isAdminMfaVerified(request("203.0.113.1", lostPhone), OPEN_ID)).toBe(false);
+    expect(await isAdminMfaVerified(request("192.0.2.1", oldLaptop), OPEN_ID)).toBe(false);
+    expect(memory.rows(adminMfaSessions).find(row => row.open_id === "user_other_admin")!.revoked_at).toBeNull();
+    // Nothing more to close the second time.
+    await expect(revokeOtherAdminMfaSessions({ openId: OPEN_ID, req: request("198.51.100.1", thisBrowser) })).resolves.toBe(0);
   });
 
   it("la déconnexion sans cookie efface quand même le cookie et ne touche pas la base", async () => {

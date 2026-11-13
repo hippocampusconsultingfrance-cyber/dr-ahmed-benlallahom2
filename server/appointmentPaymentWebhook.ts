@@ -9,6 +9,8 @@ import { formatPatientAmount, sendUnconfirmablePaymentEmail } from "./_core/noti
 import { emailLanguageFor } from "./emailLanguage";
 import { isUnconfirmedPaidAppointment } from "./appointmentAdminActions";
 import { PARIS_TIME_ZONE } from "../shared/parisTime";
+import { adminLink } from "./adminLinks";
+import { APPOINTMENT_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "../client/src/components/appointmentStatusLabels";
 
 /** Keeps the Stripe acknowledgement well inside Stripe's delivery timeout. */
 export const IMMEDIATE_FULFILLMENT_TIMEOUT_MS = 15_000;
@@ -57,11 +59,21 @@ const UNCONFIRMABLE_REASON_LABELS: Record<UnconfirmablePaymentReason, string> = 
   hold_released: "la réservation temporaire du créneau a expiré ou a été annulée avant la réception du paiement ; le créneau a pu être attribué à un autre patient",
 };
 
+/** « Annulé », « en attente de paiement »: a booking's statuses as the admin writes them, not their stored values (MAIL-04). */
+const appointmentStatusLabel = (status: string) => APPOINTMENT_STATUS_LABELS[status] ?? status;
+const paymentStatusLabel = (status: string) => (PAYMENT_STATUS_LABELS[status] ?? status).toLowerCase();
+
 /** French amount of the owner alerts, written as in the patient emails (« 100,00 € »). */
 function formatAlertAmount(cents: number | null) {
   return cents === null ? "inconnu" : formatPatientAmount(cents / 100);
 }
 
+/**
+ * MAIL-04: what happened and when (Paris time), what to do and with whom (the
+ * patient's name, email and phone, as in the alerts of a failed send), the
+ * link to the appointment, then Stripe's identifiers, long and without
+ * spaces, last.
+ */
 export function buildUnconfirmablePaymentAlert(input: {
   trackingId: string;
   reason: UnconfirmablePaymentReason;
@@ -70,18 +82,22 @@ export function buildUnconfirmablePaymentAlert(input: {
   paymentIntentId: string | null;
   paymentStatus: string;
   appointmentStatus: string;
+  patient: { name: string; email: string; phone: string };
+  receivedAt?: Date;
 }) {
-  const amount = formatAlertAmount(input.amountCents);
+  // Inside the sentence, an amount Stripe did not give reads as such, not « un paiement de inconnu ».
+  const payment = input.amountCents === null ? "un paiement d’un montant inconnu" : `un paiement de ${formatAlertAmount(input.amountCents)}`;
   return {
     title: `Paiement reçu pour un rendez-vous non confirmable (${input.trackingId})`,
     content: [
-      `Un paiement Stripe a été reçu pour le rendez-vous ${input.trackingId}, mais il n’a pas pu être confirmé automatiquement : ${UNCONFIRMABLE_REASON_LABELS[input.reason]}.`,
-      "Remboursement ou reprogrammation manuelle requis : contactez le patient, puis remboursez ce paiement depuis le tableau de bord du site (onglet Rendez-vous : « Rembourser un paiement non confirmé » avec la session Stripe ci-dessous, ou bouton « Rembourser ce paiement » sur le rendez-vous) ou depuis Stripe.",
+      `Le ${formatAlertDate(input.receivedAt ?? new Date())} (heure de Paris), Stripe a signalé ${payment} pour le rendez-vous ${input.trackingId}, qui n’a pas pu être confirmé automatiquement : ${UNCONFIRMABLE_REASON_LABELS[input.reason]}.`,
+      "Remboursement ou reprogrammation manuelle requis : contactez le patient, puis, s’il faut le rembourser, cliquez sur « Rembourser ce paiement » sur le rendez-vous (onglet « Réservations »), ou sur « Rembourser un paiement non confirmé » dans ce même onglet avec la session Stripe ci-dessous, ou remboursez-le depuis Stripe.",
+      `Patient : ${input.patient.name} — ${input.patient.email} — ${input.patient.phone}.`,
+      `Ouvrir le rendez-vous : ${adminLink("appointments", input.trackingId)}`,
+      `État du rendez-vous : ${appointmentStatusLabel(input.appointmentStatus)}, ${paymentStatusLabel(input.paymentStatus)}.`,
       `Référence : ${input.trackingId}`,
-      `Montant reçu : ${amount}`,
       `Session Stripe : ${input.sessionId}`,
       `Paiement Stripe (PaymentIntent) : ${input.paymentIntentId ?? "non communiqué"}`,
-      `État actuel du rendez-vous : paiement ${input.paymentStatus}, statut ${input.appointmentStatus}.`,
     ].join("\n"),
   };
 }
@@ -141,6 +157,7 @@ async function acknowledgeUnconfirmablePayment(input: {
     paymentIntentId: input.paymentIntentId,
     paymentStatus: input.appointment.paymentStatus,
     appointmentStatus: input.appointment.appointmentStatus,
+    patient: { name: input.appointment.customerName, email: input.appointment.customerEmail, phone: input.appointment.customerPhone },
   });
   console.error("Stripe payment received for an appointment that cannot be confirmed", {
     trackingId: input.appointment.trackingId,
@@ -348,7 +365,7 @@ export function buildStripeRefundAlert(input: {
     ? "Le rendez-vous a été annulé et son créneau libéré ; aucun rappel ne sera envoyé."
     : input.effect === "unconfirmed_payment"
       ? "Ce paiement n’était rattaché à aucun créneau confirmé : il est marqué remboursé."
-      : `Le statut du rendez-vous (${input.appointmentStatus}) est conservé ; seul le paiement est marqué remboursé.`;
+      : `Le statut du rendez-vous (${appointmentStatusLabel(input.appointmentStatus)}) est conservé ; seul le paiement est marqué remboursé.`;
   return {
     title: `Remboursement constaté chez Stripe (${input.trackingId})`,
     content: [
@@ -361,6 +378,7 @@ export function buildStripeRefundAlert(input: {
           : input.patientEmail === "refused"
             ? "L’email de remboursement au patient a été refusé par le service d’envoi (adresse email du patient refusée ou invalide, ou contenu de l’email refusé). Ce refus n’est pas passager et le site ne le renverra pas de lui-même : prévenez le patient directement ; corrigez son adresse sur le rendez-vous (onglet Réservations, « Corriger l’email du patient »), puis « Renvoyer » l’envoie à la nouvelle adresse."
           : "L’email de remboursement au patient n’est pas encore parti : le site le renvoie automatiquement (état visible sur le rendez-vous, onglet Réservations, et dans « À traiter »). Vous pouvez aussi prévenir le patient directement.",
+      `Ouvrir le rendez-vous : ${adminLink("appointments", input.trackingId)}`,
       `Référence : ${input.trackingId}`,
       `Paiement Stripe (PaymentIntent) : ${input.paymentIntentId}`,
     ].join("\n"),
@@ -373,6 +391,7 @@ export function buildPartialRefundAlert(input: { trackingId: string; refundedCen
     content: [
       `Stripe signale un remboursement partiel du paiement du rendez-vous ${input.trackingId} : ${formatAlertAmount(input.refundedCents)} remboursés au total, sur ${formatAlertAmount(input.amountCents)} payés.`,
       "Le rendez-vous reste payé et son statut est inchangé ; le site n’a envoyé aucun email au patient. Si la consultation doit être annulée, remboursez le solde : le site enregistrera alors le remboursement intégral.",
+      `Ouvrir le rendez-vous : ${adminLink("appointments", input.trackingId)}`,
       `Référence : ${input.trackingId}`,
       `Paiement Stripe (PaymentIntent) : ${input.paymentIntentId}`,
     ].join("\n"),
@@ -407,7 +426,8 @@ export function buildDisputeAlert(input: {
       ...(appointment
         ? [
             "Le rendez-vous n’est pas modifié automatiquement : décidez s’il est maintenu.",
-            `État actuel du rendez-vous : paiement ${appointment.paymentStatus}, statut ${appointment.appointmentStatus}, consultation prévue le ${formatAlertDate(appointment.appointmentDate)}.`,
+            `État du rendez-vous : ${appointmentStatusLabel(appointment.appointmentStatus)}, ${paymentStatusLabel(appointment.paymentStatus)}, consultation prévue le ${formatAlertDate(appointment.appointmentDate)} (heure de Paris).`,
+            `Ouvrir le rendez-vous : ${adminLink("appointments", appointment.trackingId)}`,
           ]
         : []),
       `Litige Stripe : ${input.disputeId}`,

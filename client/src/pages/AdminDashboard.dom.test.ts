@@ -36,8 +36,11 @@ vi.mock("@/lib/trpc", async () => {
     get: (_target, key) => key === "useQuery" || key === "useInfiniteQuery" ? () => loading : key === "useMutation" ? () => idle : procedures(),
   });
   const adminSecurity = {
-    // The security tab's journal, still loading.
+    // The security tab's journal and the admin's sessions, still loading.
     events: { useQuery: () => loading },
+    recentHighEvents: { useQuery: () => loading },
+    sessions: { useQuery: () => loading },
+    revokeOtherSessions: { useMutation: () => idle },
     status: {
       useQuery: (_input: unknown, options: { enabled: boolean }) => useQuery({
         queryKey: ["adminSecurity.status"],
