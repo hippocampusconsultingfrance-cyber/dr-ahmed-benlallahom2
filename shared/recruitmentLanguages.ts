@@ -457,73 +457,171 @@ function namesOtherLanguage(text: string) {
   return comparedText(text).others.length > 0;
 }
 
+/**
+ * IA02-R4: the words that say how a language is required, and nothing else:
+ * a requirement (« obligatoire », « un plus », « required », « erforderlich »,
+ * « 必须 »), a level or a skill (« courant », « langue maternelle », « lu »,
+ * « fluent », « mother tongue », « fließend », « 流利 »), a language test or
+ * its certificate (« IELTS », « DELF », « Goethe », « HSK », « 证书 »). In
+ * French with their feminine and plural endings, in English their plural, in
+ * German their endings; in Chinese anywhere. Not the words of a place
+ * (« pays », « région », « Region », « Nadu », « Barat », « Central », « Sud »,
+ * « Haute »), nor those of a variety (« standard », « littéraire »).
+ */
+const REQUIREMENT_WORDS: ReadonlyArray<readonly [writtenIn: "fr" | "en" | "de" | "zh", words: string]> = [
+  ["fr", "obligatoire|obligatoirement|exigé|exigence|requis|indispensable|impératif|impérative|impérativement|nécessaire|souhaité|souhaitable|apprécié|préféré|préférable|de préférence|recommandé|demandé|recherché|essentiel|essentielle|facultatif|facultative|optionnel|optionnelle|un plus|serait un plus|est un plus|un atout|atout|bonus|uniquement|seulement|exclusivement|minimum|au minimum|au moins|min|si possible|idéalement"],
+  ["fr", "courant|couramment|bilingue|natif|native|maternel|maternelle|langue|langue de travail|niveau|niv|débutant|élémentaire|intermédiaire|avancé|confirmé|expert|scolaire|notions|bases|de base|maîtrise|maîtrisé|connaissance|bon|bonne|très|excellent|parfait|parfaitement|correct|moyen|moyenne|opérationnel|opérationnelle|professionnel|professionnelle|conversation|conversationnel|conversationnelle|lu|écrit|parlé|oral|compréhension|expression|lecture|écriture|usage"],
+  ["fr", "test|test de langue|examen|certificat|certification|certifié|diplôme|attestation|attesté|justifié|score"],
+  ["en", "required|requirement|mandatory|essential|compulsory|must|must have|needed|necessary|preferred|preferable|preferably|desirable|desired|advantage|advantageous|an advantage|plus|is a plus|would be a plus|nice to have|asset|an asset|optional|only|recommended|appreciated|ideally|minimum|at least|if possible"],
+  ["en", "fluent|fluently|fluency|native|native speaker|mother tongue|first language|working language|language|bilingual|basic|basics|beginner|elementary|intermediate|upper intermediate|advanced|proficient|proficiency|working|knowledge|professional|full professional|business|conversational|good|very|excellent|spoken|written|reading|writing|speaking|listening|oral|level|skill"],
+  ["en", "test|exam|examination|certificate|certification|certified|diploma|score|grade|band"],
+  ["en", "toefl|toeic|ielts|oet|pte|celpip|cael|linguaskill|duolingo|cambridge|cae|cpe|fce|bec|tcf|tef|tefaq|delf|dalf|dele|siele|celpe|goethe|testdaf|dsh|telc|ösd|fsp|hsk|hskk|tocfl|jlpt|topik|torfl|cils|celi|plida|actfl|ilr|cefr|cecr|cecrl"],
+  ["de", "erforderlich|notwendig|zwingend|unbedingt|pflicht|vorausgesetzt|voraussetzung|wünschenswert|erwünscht|gewünscht|von vorteil|vorteilhaft|bevorzugt|nur|mindestens"],
+  ["de", "fließend|verhandlungssicher|muttersprache|muttersprachler|muttersprachlich|zweisprachig|gut|sehr|grundkenntnisse|kenntnisse|fachsprache|arbeitssprache|sprache|anfänger|fortgeschritten|schriftlich|mündlich|prüfung|fachsprachprüfung|zertifikat|zertifiziert"],
+  ["zh", "必须|必需|必备|要求|需要|优先|加分|最好|流利|流畅|熟练|精通|母语|双语|一般|良好|优秀|基础|初级|中级|高级|口语|书面|水平|能力|专业|语言|工作语言|以上|级|考试|证书|雅思|托福|托业"],
+];
+const REQUIREMENT_WORD_ENDINGS = { fr: "|e|s|es", en: "|s", de: "|e|en|er|es|em", zh: "" } as const;
+const REQUIREMENT_WORD_FORMS = REQUIREMENT_WORDS.flatMap(([writtenIn, words]) => words.split("|").map(word => {
+  const folded = foldLanguageText(word);
+  // A word of these scripts ends before another letter of them, not before a digit or an ideograph (« HSK五级 »).
+  return { folded, spaced: SPACED_SCRIPT.test(folded), ending: new RegExp(`^(?:${REQUIREMENT_WORD_ENDINGS[writtenIn]})(?!${SPACED_SCRIPT.source})`, "u") };
+}));
+const LETTER_OR_MARK = new RegExp("[\\p{L}\\p{M}]", "u");
+/** The digits a requirement is written with: those of Unicode, and the Chinese numerals (« HSK五级 », 六级). */
+const DIGIT = new RegExp("[\\p{N}〇一二三四五六七八九十百]", "u");
+
+/**
+ * Whether a part beside a dash, once its requirement words above, its digits,
+ * its punctuation and what it says between brackets are set aside, is wholly
+ * the names of languages the table does not know: « Wolof », « Wolof
+ * courant », « Tamil (C1) required », « Baskisch fließend », « 粤语流利 ». A
+ * single letter is a level's (« B2 ») or an article's (« à l'oral »). Any
+ * other word means the name of a language is part of another name, a place's
+ * (« Tamil Nadu », « Pays basque », « Basque Country », « Corse-du-Sud »,
+ * « Jawa Barat », « Province du Kongo-Central », « Sénégal wolof »), which
+ * qualifies the language beside it.
+ */
+function namesOnlyLanguages(text: string) {
+  const { core } = comparedText(text);
+  const covered = new Uint8Array(core.length);
+  const cover = (places: ReadonlyArray<readonly [number, number]>) => { for (const [start, end] of places) covered.fill(1, start, end); };
+  otherLanguageNames ??= readOtherLanguageNames();
+  otherLanguageNames.forEach((_, name) => cover(wordsPlaces(core, name)));
+  const written = writtenText(text);
+  for (const [, name] of ACCENTED_NAMES) if (containsWords(written, name)) cover(wordsPlaces(core, foldLanguageText(name)));
+  for (const word of REQUIREMENT_WORD_FORMS) {
+    for (let index = core.indexOf(word.folded); index >= 0; index = core.indexOf(word.folded, index + 1)) {
+      const ending = word.spaced ? (startsWord(core, index) ? word.ending.exec(core.slice(index + word.folded.length)) : null) : [""];
+      if (ending) covered.fill(1, index, index + word.folded.length + ending[0].length);
+    }
+  }
+  const characters = Array.from(core);
+  let index = 0;
+  return characters.every((character, position) => {
+    const at = index;
+    index += character.length;
+    if (covered[at] || !LETTER_OR_MARK.test(character) || DIGIT.test(character)) return true;
+    // A single letter, between characters that are not letters of its script (« B2 », « B级 », « l'oral »).
+    return SPACED_SCRIPT.test(character) && !SPACED_SCRIPT.test(characters[position - 1] ?? "") && !SPACED_SCRIPT.test(characters[position + 1] ?? "");
+  });
+}
+
 /** The two-letter region codes, AA to ZZ: Intl.DisplayNames names those that exist. */
 const REGION_CODES = Array.from({ length: 26 * 26 }, (_, index) => String.fromCharCode(65 + Math.floor(index / 26), 65 + (index % 26)));
+/**
+ * A region name as it is written, case aside, what it says between brackets
+ * aside, its spaces single (« indonesien », « myanmar » for « Myanmar
+ * (Burma) »), and folded as the listed names.
+ */
+type RegionName = { written: string; folded: string };
+function regionName(name: string): RegionName {
+  const written = name.normalize("NFC").toLowerCase().replace(/[(（][^)）]*[)）]/g, " ").replace(/\s+/g, " ").trim();
+  return { written, folded: foldLanguageText(written) };
+}
 /** The country names of the list above (« Myanmar »), regions also where Intl.DisplayNames is missing. */
-const LISTED_REGION_NAMES = new Set(["Myanmar"].map(foldListedName));
-/** By locale, the region names Intl.DisplayNames gives in it, long and short, folded as the listed names: each read when first asked for. */
-const REGION_NAMES = new Map<string, ReadonlySet<string>>();
+const LISTED_REGION_NAMES: readonly RegionName[] = ["Myanmar"].map(regionName);
+/** By locale, the region names Intl.DisplayNames gives in it, long and short: each read when first asked for. */
+const REGION_NAMES = new Map<string, readonly RegionName[]>();
 /** By code, the names Intl.DisplayNames gives a language in the table's four languages, folded: each read when first asked for. */
 const DISPLAYED_LANGUAGE_NAMES = new Map<string, ReadonlySet<string>>();
 
-function displayedNames(cache: Map<string, ReadonlySet<string>>, key: string, read: (add: (name: string | undefined) => void) => void) {
-  const cached = cache.get(key);
+function regionNames(locale: string) {
+  const cached = REGION_NAMES.get(locale);
+  if (cached) return cached;
+  const names = new Map<string, RegionName>();
+  if (typeof Intl.DisplayNames === "function") {
+    try {
+      for (const style of ["long", "short"] as const) {
+        const display = new Intl.DisplayNames([locale], { type: "region", style, fallback: "none" });
+        for (const region of REGION_CODES) {
+          const name = display.of(region);
+          if (name) names.set(name, regionName(name));
+        }
+      }
+    } catch {
+      // A locale this host cannot name regions in: the names read before it.
+    }
+  }
+  const read = Array.from(names.values());
+  REGION_NAMES.set(locale, read);
+  return read;
+}
+
+function displayedLanguageNames(code: string) {
+  const cached = DISPLAYED_LANGUAGE_NAMES.get(code);
   if (cached) return cached;
   const names = new Set<string>();
   if (typeof Intl.DisplayNames === "function") {
     try {
-      read(name => { if (name) names.add(foldListedName(name)); });
+      for (const locale of OTHER_LANGUAGE_LOCALES) {
+        const name = new Intl.DisplayNames([locale], { type: "language", fallback: "none" }).of(code);
+        if (name) names.add(foldListedName(name));
+      }
     } catch {
-      // A locale or a code this host cannot name: the names read before it.
+      // A code this host cannot name: the names read before it.
     }
   }
-  cache.set(key, names);
+  DISPLAYED_LANGUAGE_NAMES.set(code, names);
   return names;
 }
 
-const regionNames = (locale: string) => displayedNames(REGION_NAMES, locale, add => {
-  for (const style of ["long", "short"] as const) {
-    const display = new Intl.DisplayNames([locale], { type: "region", style, fallback: "none" });
-    for (const region of REGION_CODES) add(display.of(region));
-  }
-});
-
-const displayedLanguageNames = (code: string) => displayedNames(DISPLAYED_LANGUAGE_NAMES, code, add => {
-  for (const locale of OTHER_LANGUAGE_LOCALES) add(new Intl.DisplayNames([locale], { type: "language", fallback: "none" }).of(code));
-});
-
 /**
  * Whether the languages the table does not know that a part beside a dash
- * names are only named by a country's or a region's name, which qualifies
- * the language next to it (IA02-R4): a region name in French, English,
- * German or Chinese, or in a language the part names, is written whole in
- * its words outside brackets, unless it is that language's name in one of
- * these four, and each name of a language written there lies within such a
- * region name, whatever other words come with it (a requirement, a level,
- * a place). « English – Indonesia », « Anglais – Myanmar (Birmanie) »,
- * « Englisch – Myanmar » and « English – Myanmar required » or « English – C1
+ * names, with only requirement words beside them (above), are only named by
+ * a country's name, which qualifies the language next to it (IA02-R4): a
+ * region name of Intl.DisplayNames in French, English, German or Chinese, or
+ * in a language the part names, is written whole in its words outside
+ * brackets, accents aside, and each name of a language written there lies
+ * within such a region name. Written as Intl.DisplayNames writes it, case
+ * aside, it is a country's name whatever language also bears it (« Englisch
+ * – Indonesien », « Englisch – Georgien », « English – Nauru »); written
+ * otherwise, it is a language when it is, accents aside, that language's
+ * French, English, German or Chinese name (« Anglais – Arménien »,
+ * « Indonésien – Anglais »), and a country otherwise (« Português –
+ * Indonésia »). « English – Indonesia », « Anglais – Myanmar (Birmanie) »,
+ * « Englisch – Myanmar », « English – Myanmar required » and « English – C1
  * Myanmar » are English in a country, as « English – Malaysia required » is,
  * although « Indonesia » is Indonesian in its own language and « Myanmar » an
  * English name of Burmese, which a candidate's language still reads as;
- * « Arménien », a French name of Armenian, « Bahasa Indonesia », a name of
- * Indonesian, and « Sénégal wolof » stay languages, as « Wolof » and
- * « Serbo-croate » do.
+ * « Bahasa Indonesia », a name of Indonesian, and « Myanmar Wolof » stay
+ * languages, as « Wolof » and « Serbo-croate » do.
  */
 function namesRegion(text: string) {
   const compared = comparedText(text);
   const languages = compared.others;
+  const written = writtenText(text).replace(/\s+/g, " ");
   const regions: Array<readonly [number, number]> = [];
   for (const names of [LISTED_REGION_NAMES, ...[...OTHER_LANGUAGE_LOCALES, ...languages].map(regionNames)]) {
-    names.forEach(name => {
-      if (!languages.some(code => displayedLanguageNames(code).has(name))) regions.push(...wordsPlaces(compared.core, name));
-    });
+    for (const name of names) {
+      const places = wordsPlaces(compared.core, name.folded);
+      if (places.length && (containsWords(written, name.written) || !languages.some(code => displayedLanguageNames(code).has(name.folded)))) regions.push(...places);
+    }
   }
   if (!regions.length) return false;
   otherLanguageNames ??= readOtherLanguageNames();
   const outsideRegions = Array.from(otherLanguageNames.keys()).some(name =>
     wordsPlaces(compared.core, name).some(([start, end]) => !regions.some(region => region[0] <= start && end <= region[1])));
   if (outsideRegions) return false;
-  const written = writtenText(text);
   return !ACCENTED_NAMES.some(([, name]) => containsWords(written, name));
 }
 
@@ -533,10 +631,14 @@ function namesRegion(text: string) {
  * (« Anglais - C1 - Arabe » is « Anglais - C1 » and « Arabe »), a requirement
  * (« Anglais – obligatoire »), a variety or a region (« Arabe – Golfe »,
  * « Portugais – Brésil »). And the parts before the first one that names one
- * with it (埃 in 埃及阿拉伯语, Egyptian Arabic). A language the table does not
- * know is named by its name (« Wolof – Anglais » and « Serbo-croate –
- * Anglais » are two, as with « / »), unless the name is a country's too
- * (« English – Indonesia » is one).
+ * with it (埃 in 埃及阿拉伯语, Egyptian Arabic). A part names a language the
+ * table does not know when it is wholly its name, its requirement words aside
+ * (« Wolof – Anglais », « Serbo-croate – Anglais » and « Anglais – Wolof
+ * courant » are two, as with « / »), unless the name is a country's too
+ * (« English – Indonesia » is one); a part that holds the name among other
+ * words is a place, a use or a variety of the language beside it
+ * (« English – Tamil Nadu », « Français – Pays basque », « Anglais – Sénégal
+ * wolof » are one).
  */
 function partsBetweenNames(text: string) {
   const groups: Array<{ start: number; end: number; names: boolean }> = [];
@@ -544,7 +646,7 @@ function partsBetweenNames(text: string) {
   for (const part of partsOutsideBrackets(text, BETWEEN_NAMES)) {
     const start = text.indexOf(part, cursor);
     cursor = start + part.length;
-    const names = recruitmentLanguageCodes(part).length > 0 || (namesOtherLanguage(part) && !namesRegion(part));
+    const names = recruitmentLanguageCodes(part).length > 0 || (namesOtherLanguage(part) && namesOnlyLanguages(part) && !namesRegion(part));
     const last = groups.at(-1);
     if (last && (!names || !last.names)) Object.assign(last, { end: cursor, names: names || last.names });
     else groups.push({ start, end: cursor, names });
