@@ -189,6 +189,24 @@ describe("rétention des candidatures : effacement réel à l’échéance", () 
     expect(state.notifications[0]!.content).toContain(dossier.trackingId);
   });
 
+  it("une connexion échouée ou une demande de réinitialisation ne prolonge pas la conservation : seules les colonnes d’activité comptent (DATA-09)", async () => {
+    const longAgo = new Date(NOW.getTime() - 3 * 365 * DAY);
+    const yesterday = new Date(NOW.getTime() - DAY);
+    const dossier = seedApplication(1, new Date(NOW.getTime() - DAY));
+    // updated_at moved by a failed sign-in and a reset request, nothing else.
+    memory.seed(candidateAccounts, [{ email: "candidat1@test.local", password_hash: "x", linked_application_id: dossier.id, created_at: longAgo, terms_accepted_at: longAgo, email_verified_at: longAgo, last_login_at: longAgo, updated_at: yesterday, failed_login_count: 2, password_reset_token_hash: "reset" }]);
+    // Same for an account without application.
+    const [dormant] = memory.seed(candidateAccounts, [{ email: "dormant@test.local", password_hash: "x", created_at: longAgo, terms_accepted_at: longAgo, updated_at: yesterday, failed_login_count: 5 }]);
+    // An account activated within two years is kept.
+    const [activated] = memory.seed(candidateAccounts, [{ email: "active@test.local", password_hash: "x", created_at: longAgo, terms_accepted_at: longAgo, email_verified_at: new Date(NOW.getTime() - 100 * DAY), updated_at: longAgo }]);
+
+    const result = await runRecruitmentRetentionCleanup("vercel-cron", { now: NOW, dependencies });
+    expect(result).toMatchObject({ erased: 1, extendedForActivity: 0, inactiveCandidateAccountsErased: 1 });
+    expect(memory.rows(cvApplications)).toHaveLength(0);
+    expect(memory.rows(candidateAccounts).map(row => row.id)).toEqual([activated!.id]);
+    expect(memory.rows(candidateAccounts).map(row => row.id)).not.toContain(dormant!.id);
+  });
+
   it("journalise un effacement refusé par la base sous la référence du bilan, sans l’adresse que la requête cherchait (EXPL-11)", async () => {
     const dossier = seedApplication(1, new Date(NOW.getTime() - DAY));
     memory.failNext(/^select .* from "candidate_accounts"/, 1, "57014");

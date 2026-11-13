@@ -363,8 +363,10 @@ export async function eraseExpiredCandidateDocuments(input: { now?: Date; limit?
  * Retention of candidate accounts that belong to no application (opened on
  * /candidate/access and never followed by an application, or never
  * activated): erased with their sessions and remaining documents two years
- * after their latest activity (sign-up, account change, sign-in; a session
- * lasts 7 days and every vault document carries its own retention date). An
+ * after their latest activity (sign-up, renewed by a new registration,
+ * activation, sign-in; a session lasts 7 days and every vault document carries
+ * its own retention date). Never updated_at: a failed sign-in or a reset
+ * request also changes the row, and must not prolong the retention (DATA-09). An
  * unlinked account whose address matches an application is attached to it
  * instead and then follows that dossier's retention. Stored objects first; on
  * a storage failure nothing is removed from the database for that account.
@@ -380,7 +382,8 @@ export async function eraseInactiveCandidateAccounts(input: { now?: Date; limit?
     .where(and(
       isNull(candidateAccounts.linkedApplicationId),
       lt(candidateAccounts.createdAt, inactiveSince),
-      lt(candidateAccounts.updatedAt, inactiveSince),
+      or(isNull(candidateAccounts.termsAcceptedAt), lt(candidateAccounts.termsAcceptedAt, inactiveSince)),
+      or(isNull(candidateAccounts.emailVerifiedAt), lt(candidateAccounts.emailVerifiedAt, inactiveSince)),
       or(isNull(candidateAccounts.lastLoginAt), lt(candidateAccounts.lastLoginAt, inactiveSince)),
     ))
     .orderBy(asc(candidateAccounts.id))

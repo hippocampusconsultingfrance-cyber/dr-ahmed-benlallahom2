@@ -14,6 +14,11 @@ function enumCheck(name: string, column: string, values: readonly string[]) {
   return check(name, sql.raw(`"${column}" IN (${values.map(value => `'${value}'`).join(", ")})`));
 }
 
+// updatedAt columns are set by Drizzle on every db.update() and
+// onConflictDoUpdate() that does not set them itself ($onUpdate, DATA-09): no
+// trigger, so no migration, but raw SQL UPDATEs leave them as they are.
+// candidate_accounts is left out: see its column.
+
 /**
  * Core user table backing auth flow.
  * Extend this file with additional tables as your product grows.
@@ -32,7 +37,7 @@ export const users = pgTable("users", {
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: varcharEnum("role", ["user", "admin"]).default("user").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
 });
 
@@ -75,7 +80,7 @@ export const gdprRequests = pgTable("gdpr_requests", {
   notes: text("notes"),
   read: int("read").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
 });
 
 export type GdprRequest = typeof gdprRequests.$inferSelect;
@@ -105,7 +110,7 @@ export const medicalQuestions = pgTable("medical_questions", {
   responseSentAt: timestamp("response_sent_at"),
   publishedAt: timestamp("published_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull().$onUpdate(() => new Date()),
 }, table => ({
   privateStatusCreated: index("medical_questions_status_created_idx").on(table.status, table.createdAt),
   publicPublication: index("medical_questions_publication_idx").on(table.status, table.publishedAt),
@@ -141,7 +146,7 @@ export const testimonials = pgTable("testimonials", {
   language: varchar("language", { length: 10 }).default("fr").notNull(), // Language code
   status: varcharEnum("status", ["pending", "approved", "rejected"]).default("pending").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
 });
 
 export type Testimonial = typeof testimonials.$inferSelect;
@@ -185,7 +190,7 @@ export const appointments = pgTable("appointments", {
   // "fr", in English otherwise (EN-01). Also added at runtime: server/languageColumns.ts.
   language: varchar("language", { length: 10 }).default("fr").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
 }, table => ({
   activeSlotUnique: uniqueIndex("appointments_active_slot_unique").on(table.slotKey),
   holdExpiry: index("appointments_hold_expiry_idx").on(table.appointmentStatus, table.paymentStatus, table.holdExpiresAt),
@@ -220,7 +225,7 @@ export const appointmentFulfillmentJobs = pgTable("appointment_fulfillment_jobs"
   startedAt: timestamp("started_at"),
   finishedAt: timestamp("finished_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull().$onUpdate(() => new Date()),
 }, table => ({
   appointmentJobUnique: uniqueIndex("appointment_fulfillment_unique").on(table.appointmentId, table.jobType),
   dueJobs: index("appointment_fulfillment_due_idx").on(table.status, table.scheduledFor),
@@ -265,7 +270,7 @@ export const blogPosts = pgTable("blog_posts", {
   published: int("published").default(0).notNull(), // 1 = published, 0 = draft
   authorId: int("author_id"), // Reference to users table
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
 });
 
 export type BlogPost = typeof blogPosts.$inferSelect;
@@ -370,7 +375,7 @@ export const cvApplications = pgTable("cv_applications", {
   // above: candidate emails in French for "fr", in English otherwise (EN-02).
   language: varchar("language", { length: 10 }).default("fr").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
 }, table => ({
   // The same CV sent again by the same candidate for the same pathway and
   // target countries is one application (DATA-11), even sent simultaneously:
@@ -460,7 +465,7 @@ export const cvProcessingJobs = pgTable("cv_processing_jobs", {
   finishedAt: timestamp("finished_at"),
   lastError: text("last_error"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull().$onUpdate(() => new Date()),
 }, table => ({
   jobScheduleIdx: index("cv_processing_jobs_schedule_idx").on(table.status, table.scheduledFor),
   applicationIdx: index("cv_processing_jobs_application_idx").on(table.applicationId),
@@ -482,7 +487,7 @@ export const googleDriveConnections = pgTable("google_drive_connections", {
   connectedAt: timestamp("connected_at").defaultNow().notNull(),
   lastUsedAt: timestamp("last_used_at"),
   lastError: text("last_error"),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull().$onUpdate(() => new Date()),
 });
 
 /** Durable, idempotent copies of accepted CVs into the private Google Drive folder. */
@@ -499,7 +504,7 @@ export const cvGoogleDriveExportJobs = pgTable("cv_google_drive_export_jobs", {
   driveFileId: varchar("drive_file_id", { length: 128 }),
   driveFileUrl: varchar("drive_file_url", { length: 500 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull().$onUpdate(() => new Date()),
 }, table => ({
   dueJobs: index("cv_drive_export_due_idx").on(table.status, table.scheduledFor),
 }));
@@ -538,7 +543,7 @@ export const recruitmentMatchProfiles = pgTable("recruitment_match_profiles", {
   requiredSkills: text("required_skills"),
   active: int("active").default(1).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull().$onUpdate(() => new Date()),
 });
 
 export type RecruitmentMatchProfile = typeof recruitmentMatchProfiles.$inferSelect;
@@ -587,7 +592,7 @@ export const clientBriefCandidates = pgTable("client_brief_candidates", {
   // admin (RGPD-03): the shortlist export carries only the candidates who have one.
   candidateConsentAt: timestamp("candidate_consent_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull().$onUpdate(() => new Date()),
 }, table => ({
   briefIdx: index("client_brief_candidates_brief_idx").on(table.briefId),
   applicationIdx: index("client_brief_candidates_application_idx").on(table.applicationId),
@@ -632,7 +637,7 @@ export const recruitmentOfferTemplates = pgTable("recruitment_offer_templates", 
   active: int("active").default(1).notNull(),
   createdByOpenId: varchar("created_by_open_id", { length: 128 }).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull().$onUpdate(() => new Date()),
 }, table => ({
   activeIdx: index("recruitment_offer_templates_active_idx").on(table.active, table.updatedAt),
 }));
@@ -671,7 +676,7 @@ export const recruitmentFollowUpTasks = pgTable("recruitment_follow_up_tasks", {
   completedAt: timestamp("completed_at"),
   completedByOpenId: varchar("completed_by_open_id", { length: 128 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull().$onUpdate(() => new Date()),
 }, table => ({
   applicationIdx: index("recruitment_follow_up_tasks_application_idx").on(table.applicationId, table.status, table.dueAt),
   campaignIdx: index("recruitment_follow_up_tasks_campaign_idx").on(table.campaignId),
@@ -720,6 +725,10 @@ export const candidateAccounts = pgTable("candidate_accounts", {
   // Copied at creation from the invitation's application, else the language of the access page (EN-02).
   language: varchar("language", { length: 10 }).default("fr").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  // Without $onUpdate (DATA-09): a failed sign-in or a reset request also
+  // updates the row, and must not look like activity. Only the sign-up and
+  // the activation set it; retention reads the activity columns instead
+  // (terms_accepted_at, email_verified_at, last_login_at, sessions).
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, table => ({
   emailVerifiedIdx: index("candidate_accounts_email_verified_idx").on(table.email, table.emailVerifiedAt),
@@ -779,7 +788,7 @@ export const candidateDocuments = pgTable("candidate_documents", {
   reviewNotes: text("review_notes"),
   retentionUntil: timestamp("retention_until"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull().$onUpdate(() => new Date()),
 }, table => ({
   candidateCreatedIdx: index("candidate_documents_candidate_created_idx").on(table.candidateId, table.createdAt),
   reviewQueueIdx: index("candidate_documents_review_queue_idx").on(table.status, table.analysisStatus),
@@ -804,7 +813,7 @@ export const candidateDocumentProcessingJobs = pgTable("candidate_document_proce
   finishedAt: timestamp("finished_at"),
   lastError: text("last_error"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull().$onUpdate(() => new Date()),
 }, table => ({
   documentScheduleIdx: index("candidate_document_jobs_schedule_idx").on(table.status, table.scheduledFor),
   documentIdx: index("candidate_document_jobs_document_idx").on(table.documentId),

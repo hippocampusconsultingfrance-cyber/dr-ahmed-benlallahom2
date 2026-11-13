@@ -362,7 +362,8 @@ describe("actions d’administration du recrutement", () => {
     await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId: result.campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 1, sent: 0, failed: 1 });
     // Logged at each refusal, by the error's name only: neither the query nor
     // the tokens it carried (inspected, so that an Error object counts too).
-    const refusedTokens = memory.statements.filter(statement => unsubscribeTokenWrite.test(statement.sql) && statement.params[1] === blocked.id).map(statement => String(statement.params[0]));
+    // The application's id is the WHERE's parameter, after the token and updatedAt.
+    const refusedTokens = memory.statements.filter(statement => unsubscribeTokenWrite.test(statement.sql) && statement.params.at(-1) === blocked.id).map(statement => String(statement.params[0]));
     expect(refusedTokens).toHaveLength(2);
     expect(error).toHaveBeenCalledWith(expect.stringContaining("Unsubscribe tokens not recorded"), expect.objectContaining({ error: "Error" }));
     const logged = inspect(error.mock.calls, { depth: null });

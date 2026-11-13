@@ -68,10 +68,13 @@ export async function recruitmentRetentionDeadline(db: Database, application: { 
     .limit(1);
   dates.push(retentionAfter(recruiterActivity?.createdAt));
 
-  const accounts = await db.select({ id: candidateAccounts.id, createdAt: candidateAccounts.createdAt, updatedAt: candidateAccounts.updatedAt, lastLoginAt: candidateAccounts.lastLoginAt })
+  // The portal's activity columns, never updated_at: a failed sign-in or a
+  // reset request also changes the row (DATA-09). Sign-up (renewed by a new
+  // registration), activation, sign-in.
+  const accounts = await db.select({ id: candidateAccounts.id, createdAt: candidateAccounts.createdAt, termsAcceptedAt: candidateAccounts.termsAcceptedAt, emailVerifiedAt: candidateAccounts.emailVerifiedAt, lastLoginAt: candidateAccounts.lastLoginAt })
     .from(candidateAccounts)
     .where(or(inArray(candidateAccounts.linkedApplicationId, applicationIds), eq(candidateAccounts.email, email)));
-  for (const account of accounts) dates.push(retentionAfter(account.createdAt), retentionAfter(account.updatedAt), retentionAfter(account.lastLoginAt));
+  for (const account of accounts) dates.push(retentionAfter(account.createdAt), retentionAfter(account.termsAcceptedAt), retentionAfter(account.emailVerifiedAt), retentionAfter(account.lastLoginAt));
   const accountIds = accounts.map(account => account.id);
   const documents = await db.select({ retentionUntil: candidateDocuments.retentionUntil, createdAt: candidateDocuments.createdAt }).from(candidateDocuments)
     .where(accountIds.length
