@@ -13,6 +13,7 @@ import { postgresErrorCode } from "../languageColumns";
 import {
   BOOKING_INVALID_NAME_MESSAGE,
   BOOKING_INVALID_PHONE_MESSAGE,
+  BOOKING_LOCALES,
   BOOKING_REQUEST_SUBJECT_MAX_LENGTH,
   BOOKING_TOO_FAR_MESSAGE,
   BOOKING_TOO_SOON_MESSAGE,
@@ -114,13 +115,14 @@ const PHONE_CONTROL_CHARACTERS = new RegExp("[\\u0000-\\u001F\\u007F-\\u009F\\u2
 /**
  * Description de la ligne Stripe dans la langue de la page de réservation
  * (RES-14) : la référence, puis la date et l’heure de Paris du rendez-vous,
- * que le patient vérifie avant de payer.
+ * que le patient vérifie avant de payer, écrites dans la locale de la page
+ * (BOOKING_LOCALES).
  */
-const CHECKOUT_APPOINTMENT_DESCRIPTIONS: Record<SiteLanguage, { locale: string; describe: (trackingId: string, slot: string) => string }> = {
-  fr: { locale: "fr-FR", describe: (trackingId, slot) => `Rendez-vous : ${trackingId} – ${slot}, heure de Paris` },
-  en: { locale: "en-GB", describe: (trackingId, slot) => `Appointment: ${trackingId} – ${slot}, Paris time` },
-  de: { locale: "de-DE", describe: (trackingId, slot) => `Termin: ${trackingId} – ${slot}, Pariser Zeit` },
-  zh: { locale: "zh-CN", describe: (trackingId, slot) => `预约：${trackingId} – ${slot}，巴黎时间` },
+const CHECKOUT_APPOINTMENT_DESCRIPTIONS: Record<SiteLanguage, (trackingId: string, slot: string) => string> = {
+  fr: (trackingId, slot) => `Rendez-vous : ${trackingId} – ${slot}, heure de Paris`,
+  en: (trackingId, slot) => `Appointment: ${trackingId} – ${slot}, Paris time`,
+  de: (trackingId, slot) => `Termin: ${trackingId} – ${slot}, Pariser Zeit`,
+  zh: (trackingId, slot) => `预约：${trackingId} – ${slot}，巴黎时间`,
 };
 
 /**
@@ -129,9 +131,9 @@ const CHECKOUT_APPOINTMENT_DESCRIPTIONS: Record<SiteLanguage, { locale: string; 
  * Une langue que le site ne propose pas reste en français.
  */
 export function consultationCheckoutProductData(trackingId: string, appointmentDate: Date, language: string) {
-  const { locale, describe } = CHECKOUT_APPOINTMENT_DESCRIPTIONS[(SITE_LANGUAGES as readonly string[]).includes(language) ? language as SiteLanguage : "fr"];
-  const slot = new Intl.DateTimeFormat(locale, { timeZone: PARIS_TIME_ZONE, weekday: "short", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(appointmentDate);
-  return { name: CONSULTATION_CHECKOUT_PRODUCT_NAME, description: describe(trackingId, slot) };
+  const bookingLanguage = (SITE_LANGUAGES as readonly string[]).includes(language) ? language as SiteLanguage : "fr";
+  const slot = new Intl.DateTimeFormat(BOOKING_LOCALES[bookingLanguage], { timeZone: PARIS_TIME_ZONE, weekday: "short", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(appointmentDate);
+  return { name: CONSULTATION_CHECKOUT_PRODUCT_NAME, description: CHECKOUT_APPOINTMENT_DESCRIPTIONS[bookingLanguage](trackingId, slot) };
 }
 
 /** Montant en centimes écrit comme les colonnes base_price et final_price (« 150.00 »). */

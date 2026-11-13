@@ -1,4 +1,5 @@
 import { adminLink } from "./adminLinks";
+import { PARIS_TIME_ZONE } from "../shared/parisTime";
 
 /**
  * Owner notification for a new employer brief: everything needed to qualify
@@ -22,7 +23,7 @@ export function buildClientBriefOwnerNotification(input: {
   receivedAt?: Date;
   adminUrl?: string;
 }) {
-  const receivedAt = (input.receivedAt ?? new Date()).toLocaleString("fr-FR", { timeZone: "Europe/Paris", dateStyle: "long", timeStyle: "short" });
+  const receivedAt = (input.receivedAt ?? new Date()).toLocaleString("fr-FR", { timeZone: PARIS_TIME_ZONE, dateStyle: "long", timeStyle: "short" });
   const optional = (value: string | null | undefined) => value && value.trim() ? value.trim() : "non précisé";
   return {
     reference: input.briefId,

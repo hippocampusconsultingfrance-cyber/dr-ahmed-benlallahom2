@@ -17,6 +17,7 @@ import { buildMedicalQuestionOwnerNotification, sendMedicalQuestionAcknowledgeme
 import { adminSearchCondition, adminSearchInput } from "./adminSearch";
 import { adminLink } from "./adminLinks";
 import { emailText, multiLineText, singleLineText } from "../shared/textInput";
+import { PARIS_TIME_ZONE } from "../shared/parisTime";
 
 const privateQuestionInput = z.object({
   // INTL-05: no control character nor reversal of the text's direction.
@@ -278,7 +279,7 @@ export const medicalQuestionsRouter = router({
       const [question] = await db.select().from(medicalQuestions).where(eq(medicalQuestions.id, input.id)).limit(1);
       if (!question) throw new TRPCError({ code: "NOT_FOUND", message: "Question introuvable." });
       if (question.responseSentAt && !input.resend) {
-        throw new TRPCError({ code: "CONFLICT", message: `La réponse a déjà été envoyée le ${question.responseSentAt.toLocaleString("fr-FR", { timeZone: "Europe/Paris" })}. Utilisez « Renvoyer la réponse » pour un nouvel envoi volontaire, ou « Mettre à jour la publication ».` });
+        throw new TRPCError({ code: "CONFLICT", message: `La réponse a déjà été envoyée le ${question.responseSentAt.toLocaleString("fr-FR", { timeZone: PARIS_TIME_ZONE })}. Utilisez « Renvoyer la réponse » pour un nouvel envoi volontaire, ou « Mettre à jour la publication ».` });
       }
       if (input.resend && !question.responseSentAt) throw new TRPCError({ code: "BAD_REQUEST", message: "Aucune réponse n’a encore été envoyée pour cette question." });
       if (!input.resend && input.publish && question.publicationConsent !== 1) throw new TRPCError({ code: "BAD_REQUEST", message: "La publication exige l’accord explicite de la personne." });

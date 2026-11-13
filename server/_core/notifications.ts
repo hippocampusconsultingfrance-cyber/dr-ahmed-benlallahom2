@@ -9,6 +9,7 @@ import { appointmentCalendarFilename, buildAppointmentCalendarEvent } from "../a
 import { withEmailLanguage, type EmailLanguage } from "../emailLanguage";
 import { pauseBeforeNewTry, reportResendQuotaError, resendDeliveryFailureCode, resendRefusedThisMessage, resendRetryAfterMs, sendWithRateLimitRetry, type ResendDeliveryFailureCode } from "./resendDelivery";
 import { waitFitsDeadline } from "../processingDeadline";
+import { PARIS_TIME_ZONE } from "../../shared/parisTime";
 import {
   buildResendApplicationTags,
   buildResendAppointmentTags,
@@ -299,7 +300,7 @@ export async function sendAdminMfaCodeEmail(email: string, code: string) {
 export type { EmailLanguage };
 
 const PARIS_DATE_TIME_OPTIONS: Intl.DateTimeFormatOptions = {
-  timeZone: "Europe/Paris",
+  timeZone: PARIS_TIME_ZONE,
   weekday: "long",
   year: "numeric",
   month: "long",
@@ -612,7 +613,7 @@ export async function sendOwnerNotificationEmail(
   delivery: { idempotencyKey?: string; language?: string } = {},
 ) {
   const formattedDate = appointmentDate.toLocaleString("fr-FR", {
-    timeZone: "Europe/Paris",
+    timeZone: PARIS_TIME_ZONE,
     year: "numeric",
     month: "long",
     day: "numeric",

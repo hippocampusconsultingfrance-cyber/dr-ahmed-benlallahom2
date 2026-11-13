@@ -8,6 +8,7 @@ import { notifyOwner } from "./_core/notification";
 import { formatPatientAmount, sendUnconfirmablePaymentEmail } from "./_core/notifications";
 import { emailLanguageFor } from "./emailLanguage";
 import { isUnconfirmedPaidAppointment } from "./appointmentAdminActions";
+import { PARIS_TIME_ZONE } from "../shared/parisTime";
 
 /** Keeps the Stripe acknowledgement well inside Stripe's delivery timeout. */
 export const IMMEDIATE_FULFILLMENT_TIMEOUT_MS = 15_000;
@@ -329,7 +330,7 @@ function finiteNumber(value: unknown): number | null {
 }
 
 function formatAlertDate(date: Date) {
-  return date.toLocaleString("fr-FR", { timeZone: "Europe/Paris", dateStyle: "long", timeStyle: "short" });
+  return date.toLocaleString("fr-FR", { timeZone: PARIS_TIME_ZONE, dateStyle: "long", timeStyle: "short" });
 }
 
 export function buildStripeRefundAlert(input: {

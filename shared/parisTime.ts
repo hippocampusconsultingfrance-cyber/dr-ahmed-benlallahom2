@@ -15,7 +15,7 @@ export type AvailabilitySlot = { dayOfWeek: number; startTime: string; endTime: 
 const HOUR_MS = 60 * 60 * 1000;
 
 // Un seul formateur, lu une fois par heure UTC (getParisOffsetMs) pour les créneaux des 90 jours ;
-// les secondes gardent exact le décalage d’avant 1911 (heure de Paris de +0:09:21).
+// les secondes gardent exact le décalage d’avant 1911 (temps moyen de Paris, +0:09:21).
 const PARIS_PARTS = new Intl.DateTimeFormat("en-US", {
   timeZone: PARIS_TIME_ZONE,
   year: "numeric",
@@ -27,8 +27,25 @@ const PARIS_PARTS = new Intl.DateTimeFormat("en-US", {
   hourCycle: "h23",
 });
 
-// Décalage de Paris par heure UTC : il ne change qu'à 01:00 UTC (passage à l'heure d'été ou
-// d'hiver), donc un seul formatage par heure sert à tous les créneaux des 90 jours de la grille.
+/** Milliseconds of a wall-clock time read as UTC, years 0 to 99 included (Date.UTC reads them as 1900 to 1999). */
+function wallClockMs(year: number, month: number, day: number, hour: number, minute: number, second: number): number {
+  const date = new Date(0);
+  date.setUTCFullYear(year, month - 1, day);
+  date.setUTCHours(hour, minute, second);
+  return date.getTime();
+}
+
+/** Offset of the Paris clock at an instant, read by the formatter (to the second). */
+function readParisOffsetMs(time: number): number {
+  const second = Math.floor(time / 1000) * 1000;
+  const values = Object.fromEntries(PARIS_PARTS.formatToParts(new Date(second)).filter(part => part.type !== "literal").map(part => [part.type, Number(part.value)]));
+  return wallClockMs(values.year, values.month, values.day, values.hour, values.minute, values.second) - second;
+}
+
+// Décalage de Paris par heure UTC : depuis 1911, il ne change qu'à une heure UTC pile (passage à
+// l'heure d'été ou d'hiver), donc un seul formatage par heure sert à tous les créneaux des 90 jours
+// de la grille. Avant, le décalage de +0:09:21 a pris fin au milieu d'une heure UTC (1911-03-10
+// à 23:50:39 UTC) : un décalage qui n'est pas en heures entières est relu à l'instant même.
 const parisOffsetByUtcHour = new Map<number, number>();
 const PARIS_OFFSET_CACHE_LIMIT = 20_000;
 
@@ -36,9 +53,8 @@ function getParisOffsetMs(time: number): number {
   const utcHour = Math.floor(time / HOUR_MS);
   const cached = parisOffsetByUtcHour.get(utcHour);
   if (cached !== undefined) return cached;
-  const hourStart = utcHour * HOUR_MS;
-  const values = Object.fromEntries(PARIS_PARTS.formatToParts(new Date(hourStart)).filter(part => part.type !== "literal").map(part => [part.type, Number(part.value)]));
-  const offset = Date.UTC(values.year, values.month - 1, values.day, values.hour, values.minute, values.second) - hourStart;
+  const offset = readParisOffsetMs(utcHour * HOUR_MS);
+  if (offset % HOUR_MS !== 0) return readParisOffsetMs(time);
   if (parisOffsetByUtcHour.size >= PARIS_OFFSET_CACHE_LIMIT) parisOffsetByUtcHour.clear();
   parisOffsetByUtcHour.set(utcHour, offset);
   return offset;
@@ -69,12 +85,12 @@ export function parisDateKey(date: Date): string {
  * never shows (the hour skipped when clocks go forward), never shifted.
  */
 export function parisWallClockTime(year: number, month: number, day: number, hour = 0, minute = 0, second = 0): Date | null {
-  const wallClockMs = Date.UTC(year, month - 1, day, hour, minute, second);
-  if (!Number.isFinite(wallClockMs)) return null;
-  let utcMs = wallClockMs;
+  const wantedMs = wallClockMs(year, month, day, hour, minute, second);
+  if (!Number.isFinite(wantedMs)) return null;
+  let utcMs = wantedMs;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const parts = getParisParts(new Date(utcMs));
-    const offsetErrorMs = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second) - wallClockMs;
+    const offsetErrorMs = wallClockMs(parts.year, parts.month, parts.day, parts.hour, parts.minute, parts.second) - wantedMs;
     if (offsetErrorMs === 0) break;
     utcMs -= offsetErrorMs;
   }

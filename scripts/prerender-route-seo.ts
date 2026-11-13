@@ -43,12 +43,13 @@ import {
   renderRouteSeoHead,
   renderSitemapXml,
 } from "../server/routeSeo";
+import { parisDateKey } from "../shared/parisTime";
 
 export const SITEMAP_FILE = "sitemap.xml";
 
-/** Date du build au format AAAA-MM-JJ (heure de Paris), utilisée comme lastmod du sitemap. */
+/** Date du build au format AAAA-MM-JJ (jour de Paris, celui du site et de l’API), utilisée comme lastmod du sitemap. */
 export function buildDate(now: Date = new Date()): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+  return parisDateKey(now);
 }
 
 const SAFE_SEGMENT = /^[a-z0-9-]+$/i;

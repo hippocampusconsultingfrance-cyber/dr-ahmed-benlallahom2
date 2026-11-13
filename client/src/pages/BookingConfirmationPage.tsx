@@ -14,6 +14,7 @@ import { buildBookingIcs, downloadBookingIcs } from "@/lib/bookingCalendar";
 import { formatVisitorTime, getBookingLocale } from "@/lib/bookingTime";
 import { clearBookingDraft, clearPendingBooking } from "@/lib/pendingBooking";
 import { siteConfig } from "@/data/site-config";
+import { PARIS_TIME_ZONE } from "@shared/parisTime";
 
 export const confirmationContent = {
   fr: {
@@ -443,7 +444,7 @@ export default function BookingConfirmationPage() {
               <div>
                 <dt className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{copy.appointment.date}</dt>
                 <dd className="mt-1 font-medium text-foreground">
-                  {new Intl.DateTimeFormat(locale, { dateStyle: "full", timeStyle: "short", timeZone: "Europe/Paris" }).format(confirmedStart)} ({copy.appointment.parisTime})
+                  {new Intl.DateTimeFormat(locale, { dateStyle: "full", timeStyle: "short", timeZone: PARIS_TIME_ZONE }).format(confirmedStart)} ({copy.appointment.parisTime})
                   {confirmedLocalTime && <span className="block text-xs font-normal text-muted-foreground">{copy.appointment.localTime(confirmedLocalTime)}</span>}
                 </dd>
               </div>

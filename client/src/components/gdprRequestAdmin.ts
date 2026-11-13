@@ -1,5 +1,7 @@
 /** GDPR requests in the administration (RGPD-12): French labels and the one-month answer deadline. */
 
+import { getParisParts, PARIS_TIME_ZONE } from "@shared/parisTime";
+
 export const GDPR_REQUEST_STATUS_LABELS: Record<string, string> = {
   pending: "À traiter",
   in_progress: "En cours",
@@ -20,32 +22,18 @@ export function isGdprRequestOpen(status: string) {
 }
 
 /** Requests are dated on the controller's clock, whatever the administrator's browser. */
-export const GDPR_REQUEST_TIME_ZONE = "Europe/Paris";
+export const GDPR_REQUEST_TIME_ZONE = PARIS_TIME_ZONE;
 
-const parisClockFormat = new Intl.DateTimeFormat("en-US", {
-  timeZone: GDPR_REQUEST_TIME_ZONE,
-  year: "numeric",
-  month: "numeric",
-  day: "numeric",
-  hour: "numeric",
-  minute: "numeric",
-  second: "numeric",
-  hourCycle: "h23",
-});
-
-/** Year, month (1-12), day, hour… of an instant on the Paris clock. */
-function parisClock(date: Date) {
-  const parts = Object.fromEntries(parisClockFormat.formatToParts(date).filter(part => part.type !== "literal").map(part => [part.type, Number(part.value)]));
-  return parts as { year: number; month: number; day: number; hour: number; minute: number; second: number };
-}
-
-/** Instant at which a Paris calendar day starts; month and day may overflow, as with Date.UTC. */
+/**
+ * Instant at which a Paris calendar day starts; month and day may overflow, as with Date.UTC.
+ * The Paris clock is getParisParts, the one the booking and the API read (CODE-08).
+ */
 function parisMidnight(year: number, month: number, day: number) {
   const wallClock = Date.UTC(year, month - 1, day);
   let instant = wallClock;
   // Paris is one or two hours ahead of UTC, and no clock change skips midnight.
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const clock = parisClock(new Date(instant));
+    const clock = getParisParts(new Date(instant));
     const shown = Date.UTC(clock.year, clock.month - 1, clock.day, clock.hour, clock.minute, clock.second);
     if (shown === wallClock) break;
     instant -= shown - wallClock;
@@ -61,7 +49,7 @@ function parisMidnight(year: number, month: number, day: number) {
  * last millisecond of that day.
  */
 export function gdprRequestDeadline(receivedAt: Date | string) {
-  const received = parisClock(new Date(receivedAt));
+  const received = getParisParts(new Date(receivedAt));
   const lastDayOfNextMonth = new Date(Date.UTC(received.year, received.month + 1, 0)).getUTCDate();
   const deadlineDay = Math.min(received.day, lastDayOfNextMonth);
   return new Date(parisMidnight(received.year, received.month + 1, deadlineDay + 1).getTime() - 1);

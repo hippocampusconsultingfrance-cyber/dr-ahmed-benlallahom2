@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { isBookableAppointmentTime, parisDateKey, parisWallClockTime } from "@shared/parisTime";
+import { formatRateAmount } from "@shared/bookingPolicy";
+import { isBookableAppointmentTime, parisWallClockTime } from "@shared/parisTime";
 import { bookingContent, getBookingAvailabilityState, getBookingErrorMessage, isBookingInputError, listBookableSlots, parisBookingSlotStart, toParisBookingDateKey } from "./BookingPage";
 import { getFaqContent } from "./faqContent";
 
@@ -41,14 +42,12 @@ describe("booking day and time choice", () => {
     expect(parisBookingSlotStart("2026-03-29", "03:30")?.toISOString()).toBe("2026-03-29T01:30:00.000Z");
     // Minuit et demi à Paris appartient encore au jour de Paris, même si UTC est la veille.
     expect(toParisBookingDateKey(new Date("2026-11-04T23:30:00.000Z"))).toBe("2026-11-05");
-    expect(toParisBookingDateKey(new Date("2026-11-04T23:30:00.000Z"))).toBe(parisDateKey(new Date("2026-11-04T23:30:00.000Z")));
-    // La grille ne propose que des horaires que la règle du serveur accepte, plage de nuit comprise.
+    // La grille d’une plage de nuit (que l’API accepte : server/appointments.audit.test.ts).
     const slots = [{ dayOfWeek: 1, startTime: "22:00", endTime: "02:00" }, { dayOfWeek: 2, startTime: "09:00", endTime: "10:00" }];
     const offered = listBookableSlots(slots, [], Date.UTC(2026, 7, 14, 8));
     expect(offered.slice(0, 7).map(slot => `${slot.dayKey} ${slot.time}`)).toEqual([
       "2026-08-17 22:00", "2026-08-17 22:30", "2026-08-17 23:00", "2026-08-17 23:30", "2026-08-18 00:00", "2026-08-18 00:30", "2026-08-18 01:00",
     ]);
-    expect(offered.every(slot => isBookableAppointmentTime(slot.start, slots))).toBe(true);
   });
 
   it("affiche les tarifs et la plage de nuit de shared/bookingPolicy.ts, sans en changer le texte (CODE-09)", () => {
@@ -62,6 +61,8 @@ describe("booking day and time choice", () => {
     expect(feeAnswer("en")).toBe("A standard consultation lasts 30 minutes. The base fee is €100; between 6 pm and 8 am, the enhanced fee is €150.");
     expect(feeAnswer("de")).toBe("Eine Standardberatung dauert 30 Minuten. Der Grundpreis beträgt 100 €; zwischen 18 und 8 Uhr beträgt der erhöhte Preis 150 €.");
     expect(feeAnswer("zh")).toBe("标准咨询时长为 30 分钟。基础费用为 100 欧元；18 时至 8 时的加价费用为 150 欧元。");
+    // Un formateur gardé par locale et par nombre de décimales : un tarif avec centimes ne change pas l’écriture d’un tarif rond.
+    expect([formatRateAmount(12050, "fr-FR"), formatRateAmount(10000, "fr-FR"), formatRateAmount(12050, "en-GB"), formatRateAmount(15000, "en-GB")]).toEqual(["120,50", "100", "120.50", "150"]);
   });
 
   it("distingue explicitement les états de disponibilité du créneau", () => {

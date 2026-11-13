@@ -6,6 +6,7 @@ import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { formatAdminAmount } from "@/components/adminAmount";
 import { formatGdprRequestDate } from "@/components/gdprRequestAdmin";
 import { percentageLabel } from "@/components/recruitmentDashboardMetrics";
+import { PARIS_TIME_ZONE } from "@shared/parisTime";
 import type { Tab } from "@/pages/AdminDashboard";
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -13,7 +14,7 @@ const HOUR_MS = 60 * 60 * 1000;
 const GDPR_DEADLINE_SOON_MS = 7 * 24 * HOUR_MS;
 
 /** « 05/11/2026 », a day in Paris. */
-const parisDay = (date: Date | string) => new Date(date).toLocaleDateString("fr-FR", { timeZone: "Europe/Paris" });
+const parisDay = (date: Date | string) => new Date(date).toLocaleDateString("fr-FR", { timeZone: PARIS_TIME_ZONE });
 
 /** « 13/11/2026 » for the Paris day « 2026-11-13 ». */
 const dayLabel = (dateKey: string) => dateKey.split("-").reverse().join("/");

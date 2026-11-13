@@ -1,7 +1,8 @@
 import type { UserLanguage } from "@/contexts/userPreferences";
+import { PARIS_TIME_ZONE } from "@shared/parisTime";
 
 /** The clock of every date of the administration: the practice's, whatever the browser's (ADM-07). */
-export const ADMIN_TIME_ZONE = "Europe/Paris";
+export const ADMIN_TIME_ZONE = PARIS_TIME_ZONE;
 
 const ADMIN_DATE_LOCALES: Record<UserLanguage, string> = { fr: "fr-FR", en: "en-GB", de: "de-DE", zh: "zh-CN" };
 
