@@ -122,7 +122,31 @@ describe("source de vérité des migrations Drizzle (M32)", () => {
     }
     expect(migration).not.toMatch(/DELETE FROM cv_applications/i);
     const journal = JSON.parse(read("drizzle/pg/meta/_journal.json")) as { entries: { idx: number; tag: string }[] };
-    expect(journal.entries.at(-1)).toMatchObject({ idx: 4, tag: "0004_integrity_constraints" });
+    expect(journal.entries.find(entry => entry.idx === 4)).toMatchObject({ idx: 4, tag: "0004_integrity_constraints" });
+  });
+
+  it("0005 change les noms de pays du diplôme en codes ISO par un seul UPDATE, sans toucher au schéma (EN-11)", async () => {
+    const migration = read("drizzle/pg/0005_country_codes.sql");
+    const statements = migration.replace(/--[^\n]*\n/g, "").split(";").map(statement => statement.trim()).filter(Boolean);
+    expect(statements).toHaveLength(1);
+    expect(statements[0]).toMatch(/^UPDATE cv_applications AS application SET diploma_country = country\.code\s+FROM \(VALUES/);
+    expect(migration).not.toMatch(/\b(ALTER|CREATE|DROP|DELETE|INSERT|TRUNCATE)\b/i);
+
+    const { countryCodeOf, WORLDWIDE_COUNTRY_CODES } = await import("../client/src/lib/countrySubmission");
+    const pairs = [...migration.matchAll(/\('((?:[^']|'')+)', '([A-Z]{2})'\)/g)].map(([, name, code]) => ({ name: name.replace(/''/g, "'"), code }));
+    // Compared as the UPDATE does, with lower() on both sides.
+    expect(new Set(pairs.map(pair => pair.name.toLowerCase())).size, "un nom, un seul code").toBe(pairs.length);
+    // Each country of the forms' list, under its French, English, German and Chinese names (one when they agree).
+    expect(new Set(pairs.map(pair => pair.code))).toEqual(new Set(WORLDWIDE_COUNTRY_CODES));
+    expect(pairs.filter(pair => pair.code === "TN").map(pair => pair.name).sort()).toEqual(["Tunesien", "Tunisia", "Tunisie", "突尼斯"]);
+    expect(pairs.filter(pair => pair.code === "CI").map(pair => pair.name)).toEqual(expect.arrayContaining(["Côte d’Ivoire", "Côte d'Ivoire"]));
+    // The site reads the codes the migration writes and never gives a name another code than it does.
+    for (const { name, code } of pairs) expect([code, null], name).toContain(countryCodeOf(name));
+
+    const journal = JSON.parse(read("drizzle/pg/meta/_journal.json")) as { entries: { idx: number; tag: string }[] };
+    expect(journal.entries.at(-1)).toMatchObject({ idx: 5, tag: "0005_country_codes" });
+    const withoutIds = (file: string) => { const { id: _id, prevId: _prevId, ...snapshot } = JSON.parse(read(file)) as Record<string, unknown>; return snapshot; };
+    expect(withoutIds("drizzle/pg/meta/0005_snapshot.json")).toEqual(withoutIds("drizzle/pg/meta/0004_snapshot.json"));
   });
 
   it("la baseline crée les 36 tables du schéma", () => {

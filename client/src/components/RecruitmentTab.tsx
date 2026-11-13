@@ -3,6 +3,7 @@ import { BrainCircuit, ClipboardList, Download, Eye, FileSearch, Loader2, Mail, 
 import { keepPreviousData } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { countryLabel } from "@/lib/countrySubmission";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import AdminLoadMore from "@/components/AdminLoadMore";
 import AdminSearchField from "@/components/AdminSearchField";
@@ -591,7 +592,8 @@ export default function RecruitmentTab({ initialSearch = "" }: { initialSearch?:
                         <h3 className="font-semibold text-foreground">{application.firstName} {application.lastName}</h3>
                         <p className="text-sm text-muted-foreground">{application.specialty} · {application.trackingId}</p>
                         <p className="mt-1 text-sm text-muted-foreground">{countries.join(", ") || "Pays non précisés"}</p>
-                        {application.diplomaCountry ? <p className="mt-1 text-sm text-muted-foreground">Diplôme obtenu : {application.diplomaCountry}</p> : null}
+                        {/* EN-11: a code (« TN ») or a name recorded before it (« Tunisia »), named in French. */}
+                        {application.diplomaCountry ? <p className="mt-1 text-sm text-muted-foreground">Diplôme obtenu : {countryLabel(application.diplomaCountry, "fr")}</p> : null}
                         {searchedCertifications.length > 0 ? <p className="mt-1 text-sm text-muted-foreground">Certification recherchée : {searchedCertifications.map(certificationFactLabel).join(" ; ")}</p> : null}
                       </div>
                     </div>

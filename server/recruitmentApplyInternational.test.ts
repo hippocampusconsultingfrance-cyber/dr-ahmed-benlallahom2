@@ -4,8 +4,9 @@ import type { SQL } from "drizzle-orm";
 import { TEST_PEPPER } from "./testSupport/candidatePortal";
 import { listen, validPdfBuffer } from "./testSupport/candidateUploadApp";
 
-// /api/recruitment/apply avec des saisies internationales : le nom du CV gardé
-// tel qu'envoyé, la clé de stockage restant en ASCII (INTL-07).
+// /api/recruitment/apply avec des saisies internationales : le pays du diplôme
+// enregistré en code ISO, quelle que soit la langue du nom envoyé (EN-11), et le
+// nom du CV gardé tel qu'envoyé, la clé de stockage restant en ASCII (INTL-07).
 
 const state = vi.hoisted(() => {
   process.env.VERCEL = "1";
@@ -58,6 +59,7 @@ vi.mock("./googleDriveExport", async importOriginal => ({
 }));
 
 const { createApp } = await import("./_core/index");
+const { notifyOwner } = await import("./_core/notification");
 const dialect = new PgDialect();
 
 let baseUrl = "";
@@ -72,16 +74,17 @@ afterAll(async () => { await close(); });
 beforeEach(() => {
   state.executed.length = 0;
   state.stored.length = 0;
+  vi.mocked(notifyOwner).mockClear();
 });
 
-async function apply(input: { cvName?: string }) {
+async function apply(input: { diplomaCountry?: string; cvName?: string }) {
   const body = new FormData();
   const fields: Record<string, string> = {
     firstName: "Aisha",
     lastName: "Rahman",
     email: "aisha@example.test",
     specialty: "Anesthésie-réanimation",
-    diplomaCountry: "TN",
+    diplomaCountry: input.diplomaCountry ?? "TN",
     targetCountries: JSON.stringify(["Canada"]),
     gdprConsent: "1",
     turnstileToken: "turnstile-token-accepted-by-the-mock",
@@ -96,8 +99,33 @@ async function apply(input: { cvName?: string }) {
 function storedApplication() {
   const insert = state.executed.map(query => dialect.sqlToQuery(query as SQL)).find(query => query.sql.includes("INSERT INTO cv_applications"))!;
   const params = insert.params;
-  return { cvFileKey: params[14], cvOriginalName: params[15] };
+  return { diplomaCountry: params[6], cvFileKey: params[14], cvOriginalName: params[15] };
 }
+
+describe("EN-11 — pays du diplôme enregistré en code ISO 3166-1 alpha-2", () => {
+  it("enregistre le code envoyé par le formulaire et nomme le pays en français dans l’email du propriétaire", async () => {
+    const result = await apply({ diplomaCountry: "TN" });
+    expect(result.status, JSON.stringify(result.body)).toBe(201);
+    expect(storedApplication().diplomaCountry).toBe("TN");
+    expect(String(vi.mocked(notifyOwner).mock.calls[0][0].content)).toContain("**Pays du diplôme:** Tunisie");
+  });
+
+  it("enregistre aussi en code le nom qu’envoie une page chargée avant EN-11, dans chaque langue du site", async () => {
+    for (const name of ["Tunisie", "Tunisia", "Tunesien", "突尼斯"]) {
+      state.executed.length = 0;
+      const result = await apply({ diplomaCountry: name });
+      expect(result.status, name).toBe(201);
+      expect(storedApplication().diplomaCountry, name).toBe("TN");
+    }
+  });
+
+  it("garde tel quel un pays qu’il ne reconnaît pas, sans refuser la candidature", async () => {
+    const result = await apply({ diplomaCountry: "Atlantis" });
+    expect(result.status, JSON.stringify(result.body)).toBe(201);
+    expect(storedApplication().diplomaCountry).toBe("Atlantis");
+    expect(String(vi.mocked(notifyOwner).mock.calls[0][0].content)).toContain("**Pays du diplôme:** Atlantis");
+  });
+});
 
 describe("INTL-07 — nom du CV gardé tel qu’envoyé, clé de stockage en ASCII", () => {
   it.each([

@@ -13,24 +13,24 @@ describe("candidatures standard et VVIP — langue affichée envoyée à l’API
       form: { ...initialForm, firstName: "Amina", lastName: "Haddad", email: "amina@example.test", specialty: "Médecine d’urgence", targetCountries: ["Canada"], gdprConsent: true },
       cv: cv(),
       specialty: "Médecine d’urgence",
-      diplomaCountry: "Maroc",
+      diplomaCountry: "MA",
       turnstileToken: "turnstile-token-of-this-attempt",
       language,
     });
 
     expect(body.get("language")).toBe(language);
     expect(body.get("specialty")).toBe("Médecine d’urgence");
-    expect(body.get("diplomaCountry")).toBe("Maroc");
+    expect(body.get("diplomaCountry")).toBe("MA");
     expect(JSON.parse(String(body.get("targetCountries")))).toEqual(["Canada"]);
     expect(body.getAll("language")).toHaveLength(1);
   });
 
   it.each(languages)("envoie la langue du formulaire VVIP (%s)", language => {
     const body = buildVvipApplicationFormData({
-      form: { ...createInitialForm(language), firstName: "Amira", lastName: "Haddad", email: "amira@example.test", environments: ["Moyen-Orient (Gouvernement / VVIP)"] },
+      form: { ...createInitialForm(), firstName: "Amira", lastName: "Haddad", email: "amira@example.test", environments: ["Moyen-Orient (Gouvernement / VVIP)"], targetCountries: ["Qatar"] },
       cv: cv(),
       specialty: vvipOffshoreCopy[language].specialties[0],
-      diplomaCountry: "Maroc",
+      diplomaCountry: "MA",
       turnstileToken: "turnstile-token-of-this-attempt",
       language,
     });

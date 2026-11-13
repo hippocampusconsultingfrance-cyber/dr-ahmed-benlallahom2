@@ -854,7 +854,8 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
       { route: "/recruitment/standard", language: "en", width: 390, first: "recruitment-firstName", other: "recruitment-lastName",
         message: "Please complete or correct: First name, Last name, Professional email, Specialty / profession, Country where the diploma was obtained, Target countries, CV, Consent to data processing." },
       { route: "/recruitment/vvip-offshore", language: "en", width: 1366, first: "vvip-firstName", other: "vvip-lastName",
-        message: "Please complete or correct: First name, Last name, Professional email, Preferred Environment, Country where diploma was obtained, CV, Consent to data processing." },
+        // REC-11: no profile is chosen for the candidate, and the target countries are their own.
+        message: "Please complete or correct: First name, Last name, Professional email, Target Profile / Specialty, Preferred Environment, Target countries, Country where diploma was obtained, CV, Consent to data processing." },
       { route: "/questions-anesthesie", language: "fr", width: 390, first: "medical-question-firstName", other: "medical-question-lastName",
         message: "À compléter ou corriger : Prénom, Nom, Email, Téléphone, Votre question, Consentement au traitement de votre question, Avertissement sur les urgences." },
     ]) {

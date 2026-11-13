@@ -295,7 +295,7 @@ describe.skipIf(!executablePath)("nom du CV choisi dans les formulaires de candi
     await page.setInputFiles("#recruitment-cv", { name: "cv.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.7\n%%EOF\n") });
 
     const stored = await draft();
-    expect(stored).toMatchObject({ firstName: "Amina", lastName: "Haddad", email: "amina@example.org", specialty: "Anesthésie-réanimation", diplomaCountry: "Tunisie", targetCountries: ["Canada"], languages: ["Arabic"], message: "Mobilité au Canada en 2027." });
+    expect(stored).toMatchObject({ firstName: "Amina", lastName: "Haddad", email: "amina@example.org", specialty: "Anesthésie-réanimation", diplomaCountry: "TN", targetCountries: ["Canada"], languages: ["Arabic"], message: "Mobilité au Canada en 2027." });
     // Neither the CV nor a consent nor the honeypot is kept.
     expect(Object.keys(stored).filter((key) => /cv|consent|website|file/i.test(key))).toEqual([]);
 
@@ -304,6 +304,7 @@ describe.skipIf(!executablePath)("nom du CV choisi dans les formulaires de candi
     expect(await page.inputValue("#recruitment-firstName")).toBe("Amina");
     expect(await page.inputValue("#recruitment-email")).toBe("amina@example.org");
     expect(await page.inputValue("#recruitment-specialty")).toBe("Anesthésie-réanimation");
+    // The draft keeps the code (EN-11); the field shows the country's name.
     expect(await page.inputValue("#recruitment-diploma-country-search")).toBe("Tunisie");
     expect(await page.inputValue("#recruitment-message")).toBe("Mobilité au Canada en 2027.");
     expect(await page.isChecked("#recruitment-target-country-7")).toBe(true);
@@ -312,6 +313,13 @@ describe.skipIf(!executablePath)("nom du CV choisi dans les formulaires de candi
     expect(await page.isChecked("#recruitment-gdpr-consent")).toBe(false);
     expect(await page.getByLabel(/J’accepte de recevoir occasionnellement/).isChecked()).toBe(false);
     expect(await page.locator("#recruitment-cv").evaluate((input) => (input as HTMLInputElement).files?.length ?? 0)).toBe(0);
+
+    // A draft kept before EN-11 holds the country's name, here in English: it comes back as its code.
+    await page.evaluate((key) => sessionStorage.setItem(key, JSON.stringify({ ...JSON.parse(sessionStorage.getItem(key) ?? "{}"), diplomaCountry: "Tunisia" })), DRAFT_KEY);
+    await page.reload({ waitUntil: "networkidle" });
+    await page.locator("#recruitment-firstName").waitFor();
+    expect(await page.inputValue("#recruitment-diploma-country-search")).toBe("Tunisie");
+    expect(await draft()).toMatchObject({ diplomaCountry: "TN" });
 
     // A refused send keeps the draft; an accepted one clears it.
     let accept = false;
@@ -444,7 +452,7 @@ describe.skipIf(!executablePath)("nom du CV choisi dans les formulaires de candi
         value: field.value,
         description: describedBy ? document.getElementById(describedBy)?.textContent ?? `missing ${describedBy}` : null,
         note: [...document.querySelectorAll("p")].map((paragraph) => paragraph.textContent ?? "").find((text) => text.startsWith("Pays d’obtention du diplôme :")) ?? null,
-        // The country of the draft, "" when it has none or no draft is left.
+        // The country of the draft, as its code (EN-11), "" when it has none or no draft is left.
         draft: (JSON.parse(sessionStorage.getItem(key) ?? "{}") as { diplomaCountry?: string }).diplomaCountry ?? "",
         invalid: field.getAttribute("aria-invalid"),
       };
@@ -454,7 +462,7 @@ describe.skipIf(!executablePath)("nom du CV choisi dans les formulaires de candi
       await page.keyboard.type("Maroc");
       await page.keyboard.press("ArrowDown");
       await page.keyboard.press("Enter");
-      expect(await read()).toMatchObject({ value: "Maroc", description: "Pays d’obtention du diplôme : Maroc", note: "Pays d’obtention du diplôme : Maroc", draft: "Maroc" });
+      expect(await read()).toMatchObject({ value: "Maroc", description: "Pays d’obtention du diplôme : Maroc", note: "Pays d’obtention du diplôme : Maroc", draft: "MA" });
     };
 
     // The clear button, reached by Tab and pressed with Enter as in the audit: the country goes with the search.
@@ -477,7 +485,7 @@ describe.skipIf(!executablePath)("nom du CV choisi dans les formulaires de candi
     await choose();
     await page.keyboard.press("ControlOrMeta+a");
     await page.keyboard.type("Tun");
-    expect(await read()).toMatchObject({ value: "Tun", description: "Pays d’obtention du diplôme : Maroc", draft: "Maroc" });
+    expect(await read()).toMatchObject({ value: "Tun", description: "Pays d’obtention du diplôme : Maroc", draft: "MA" });
 
     // Cleared, the empty required field is the one to correct, and no application leaves.
     await page.getByRole("button", { name: "Effacer la recherche de pays" }).click();

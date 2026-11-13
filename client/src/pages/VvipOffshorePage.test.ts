@@ -18,18 +18,34 @@ describe("candidature VVIP — erreurs publiques", () => {
     expect(isAcceptedVvipCvFile({ name: "archive.zip", size: 400_000, type: "" })).toBe(false);
   });
 
-  it("uses checkbox environments and sends every selected environment", async () => {
+  it("uses checkbox environments and sends every selected environment, apart from the target countries", async () => {
     const { VVIP_ENVIRONMENTS, buildVvipApplicationFormData, createInitialForm } = await import("./VvipOffshorePage");
     const environments = VVIP_ENVIRONMENTS.map(environment => environment.value);
     const body = buildVvipApplicationFormData({
-      form: { ...createInitialForm("fr"), environments },
+      form: { ...createInitialForm(), environments, targetCountries: ["Qatar", "Autre pays / Mobilité mondiale"], otherTargetCountry: " Norvège " },
       cv: new File(["%PDF-1.7"], "cv.pdf", { type: "application/pdf" }),
       specialty: "Médecin urgentiste (ATLS / ACLS)",
-      diplomaCountry: "Maroc",
+      diplomaCountry: "MA",
       turnstileToken: "turnstile-token",
       language: "fr",
     });
-    expect(JSON.parse(String(body.get("targetCountries")))).toEqual(environments);
-    expect(body.get("diplomaCountry")).toBe("Maroc");
+    expect(JSON.parse(String(body.get("environments")))).toEqual(environments);
+    expect(JSON.parse(String(body.get("targetCountries")))).toEqual(["Qatar", "Autre pays : Norvège"]);
+    expect(body.get("diplomaCountry")).toBe("MA");
+  });
+
+  it("REC-11: sends no language, experience nor specialty the candidate did not give", async () => {
+    const { VVIP_ENVIRONMENTS, buildVvipApplicationFormData, createInitialForm } = await import("./VvipOffshorePage");
+    expect(createInitialForm().specialty).toBe("");
+    const form = { ...createInitialForm(), environments: [VVIP_ENVIRONMENTS[0].value], targetCountries: ["Qatar"] };
+    const send = (overrides: Partial<typeof form>) => buildVvipApplicationFormData({ form: { ...form, ...overrides }, cv: new File(["%PDF-1.7"], "cv.pdf", { type: "application/pdf" }), specialty: "Médecin urgentiste (ATLS / ACLS)", diplomaCountry: "MA", turnstileToken: "turnstile-token", language: "fr" });
+
+    const untold = send({});
+    expect(JSON.parse(String(untold.get("languages")))).toEqual([]);
+    expect(untold.get("yearsExperience")).toBe("");
+
+    const told = send({ languages: ["Arabic", "Other"], otherLanguage: "Italien, , russe ", yearsExperience: "08" });
+    expect(JSON.parse(String(told.get("languages")))).toEqual(["Arabic", "Italien", "russe"]);
+    expect(told.get("yearsExperience")).toBe("8");
   });
 });

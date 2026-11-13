@@ -14,7 +14,7 @@ const { reportFieldsToCorrect } = await import("@/lib/formFieldsToCorrect");
 
 const languages = ["fr", "en", "de", "zh"] as const;
 // What the page refuses when sent empty, before the anti-bot check has given a token.
-const emptyFormFields = vvipInvalidFields(createInitialForm("fr"), null, null, "", "fr");
+const emptyFormFields = vvipInvalidFields(createInitialForm(), null, null, "", "fr");
 const oversizedCv = { name: "cv.pdf", size: 4 * 1024 * 1024 + 1, type: "application/pdf" };
 const acceptedCv = { name: "cv.docx", size: 300_000, type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" };
 
@@ -29,23 +29,26 @@ function stubFocus() {
 afterEach(() => { vi.unstubAllGlobals(); });
 
 describe("A11Y-03 — formulaire VVIP refusé avant l’envoi", () => {
-  it.each(languages)("refuse les champs dans l’ordre du formulaire, sa spécialité étant présélectionnée (%s)", language => {
-    const empty = createInitialForm(language);
+  it.each(languages)("refuse les champs dans l’ordre du formulaire, sans spécialité choisie d’avance (%s)", language => {
+    const empty = createInitialForm();
     const specialties = vvipOffshoreCopy[language].specialties;
-    const complete = { ...empty, firstName: "Amina", lastName: "Haddad", email: "amina@example.org", environments: [VVIP_ENVIRONMENTS[1].value], gdprConsent: true };
+    const complete = { ...empty, firstName: "Amina", lastName: "Haddad", email: "amina@example.org", specialty: specialties[0], environments: [VVIP_ENVIRONMENTS[1].value], targetCountries: ["Qatar"], gdprConsent: true };
 
-    expect([...vvipInvalidFields(empty, null, null, "", language)]).toEqual(["firstName", "lastName", "email", "environments", "diplomaCountry", "cv", "gdprConsent", "turnstile"]);
-    expect([...vvipInvalidFields(complete, acceptedCv, "token", "Maroc", language)]).toEqual([]);
+    // REC-11: the specialty and the target countries are the candidate's to choose.
+    expect([...vvipInvalidFields(empty, null, null, "", language)]).toEqual(["firstName", "lastName", "email", "specialty", "environments", "targetCountries", "diplomaCountry", "cv", "gdprConsent", "turnstile"]);
+    expect([...vvipInvalidFields(complete, acceptedCv, "token", "MA", language)]).toEqual([]);
     // The last specialty of the page's language asks for the typed one.
-    expect([...vvipInvalidFields({ ...complete, specialty: specialties[specialties.length - 1] }, oversizedCv, "token", "Maroc", language)]).toEqual(["specialtyCustom", "cv"]);
-    expect([...vvipInvalidFields({ ...complete, specialty: "" }, acceptedCv, "token", "Maroc", language)]).toEqual(["specialty"]);
+    expect([...vvipInvalidFields({ ...complete, specialty: specialties[specialties.length - 1] }, oversizedCv, "token", "MA", language)]).toEqual(["specialtyCustom", "cv"]);
+    expect([...vvipInvalidFields({ ...complete, specialty: "" }, acceptedCv, "token", "MA", language)]).toEqual(["specialty"]);
+    // « Autre pays » asks for the country typed, as on the standard form.
+    expect([...vvipInvalidFields({ ...complete, targetCountries: ["Autre pays / Mobilité mondiale"] }, acceptedCv, "token", "MA", language)]).toEqual(["otherTargetCountry"]);
   });
 
   it("nomme chaque champ à reprendre au lieu de ne parler que du CV, et place le focus sur le premier", () => {
     const { flush, focused } = stubFocus();
 
     expect(reportFieldsToCorrect(vvipFieldsToCorrect(emptyFormFields, null, "fr"), "fr"))
-      .toBe("À compléter ou corriger : Prénom, Nom, Email, Environnement de prédilection, Pays d’obtention du diplôme, CV, Consentement au traitement des données, Vérification anti-bot.");
+      .toBe("À compléter ou corriger : Prénom, Nom, Email, Profil recherché / Spécialité, Environnement de prédilection, Pays ciblés, Pays d’obtention du diplôme, CV, Consentement au traitement des données, Vérification anti-bot.");
     expect(reportFieldsToCorrect(vvipFieldsToCorrect(["specialtyCustom", "environments", "gdprConsent"], null, "en"), "en"))
       .toBe("Please complete or correct: Specify your medical or allied-health specialty, Preferred Environment, Consent to data processing.");
     flush();
@@ -67,7 +70,7 @@ describe("A11Y-03 — formulaire VVIP refusé avant l’envoi", () => {
     view.language = language;
     const html = renderToStaticMarkup(createElement(VvipOffshorePage));
 
-    for (const field of vvipFieldsToCorrect(["specialty", ...emptyFormFields], null, language).filter(candidate => candidate.focusId)) {
+    for (const field of vvipFieldsToCorrect(emptyFormFields, null, language).filter(candidate => candidate.focusId)) {
       expect(html, field.label).toContain(`id="${field.focusId}"`);
     }
   });

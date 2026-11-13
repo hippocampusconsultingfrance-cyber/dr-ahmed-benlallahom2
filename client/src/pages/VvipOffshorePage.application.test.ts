@@ -4,9 +4,10 @@ import { elementsOf, renderStateful, resetStatefulHooks } from "@/testing/statef
 
 // Candidature VVIP offshore remplie et envoyée : ce qui part vers
 // /api/recruitment/apply (tous les environnements cochés, spécialité « Autre »
-// précisée et bornée, pays du diplôme y compris prérempli par un navigateur
-// mobile), la confirmation qui n’apparaît qu’avec un numéro de suivi, et un
-// sélecteur de CV utilisable au clavier.
+// précisée et bornée, pays ciblés et langues du candidat, pays du diplôme en
+// code y compris prérempli par un navigateur mobile), la confirmation qui
+// n’apparaît qu’avec un numéro de suivi, et un sélecteur de CV utilisable au
+// clavier.
 
 vi.mock("react", async importOriginal => (await import("@/testing/statefulRender")).withStatefulHooks(await importOriginal()));
 const view = vi.hoisted(() => ({ language: "fr" as "fr" | "en" | "de" | "zh" }));
@@ -18,6 +19,7 @@ vi.mock("@/components/SEOHead", () => ({ SEOHead: () => null }));
 vi.mock("wouter", () => ({ useLocation: () => ["/recruitment/vvip-offshore", vi.fn()], Link: () => null }));
 
 const { default: VvipOffshorePage, vvipOffshoreCopy, VVIP_CUSTOM_SPECIALTY_MAX_LENGTH } = await import("./VvipOffshorePage");
+const { countryOptions, professionalLanguageOptions } = await import("./RecruitmentPage");
 const { TurnstileWidget } = await import("@/components/TurnstileWidget");
 
 type Element = { type: unknown; props: Record<string, any> };
@@ -49,6 +51,7 @@ function fillRequiredFields() {
   change("vvip-email", { target: { value: "karim@example.org" } });
   change("vvip-specialty", { target: { value: t.specialties[0] } });
   change("vvip-environment-0", {});
+  change("vvip-target-country-0", {});
   change("vvip-cv", { target: { files: [new File(["%PDF-1.7\n"], "cv.pdf", { type: "application/pdf" })] } });
   change("vvip-gdpr-consent", { target: { checked: true } });
   elements().find(element => element.type === TurnstileWidget)!.props.onToken("single-use-token");
@@ -72,34 +75,69 @@ afterEach(() => {
 });
 
 describe("envoi de la candidature VVIP offshore", () => {
-  it("envoie chaque environnement coché, la spécialité « Autre » précisée et le pays du diplôme", async () => {
+  it("envoie chaque environnement coché, la spécialité « Autre » précisée, les pays ciblés et le pays du diplôme en code", async () => {
     fillRequiredFields();
     change("vvip-environment-2", {});
     change("vvip-specialty", { target: { value: t.specialties[t.specialties.length - 1] } });
     expect(byId("vvip-specialty-custom").props.maxLength).toBe(VVIP_CUSTOM_SPECIALTY_MAX_LENGTH);
     change("vvip-specialty-custom", { target: { value: "  Médecin hyperbare  " } });
-    change("vvip-diploma-country", { target: { value: "Tunisie" } });
+    change(`vvip-target-country-${countryOptions.length - 1}`, {});
+    change("vvip-other-target-country", { target: { value: " Norvège " } });
+    // The options name the countries; their value is the code (EN-11).
+    expect(byId("vvip-diploma-country").props.children[1].find((option: Element) => option.props.value === "TN").props.children).toBe("Tunisie");
+    change("vvip-diploma-country", { target: { value: "TN" } });
 
     await submit();
 
     expect(sent).toHaveLength(1);
-    const environments = JSON.parse(String(sent[0]!.get("targetCountries")));
+    const environments = JSON.parse(String(sent[0]!.get("environments")));
     expect(environments).toHaveLength(2);
     expect(String(sent[0]!.get("message"))).toContain(environments.join(", "));
+    expect(JSON.parse(String(sent[0]!.get("targetCountries")))).toEqual(["France", "Autre pays : Norvège"]);
     expect(sent[0]!.get("specialty")).toBe("[VVIP / Offshore] Médecin hyperbare");
-    expect(sent[0]!.get("diplomaCountry")).toBe("Tunisie");
+    expect(sent[0]!.get("diplomaCountry")).toBe("TN");
+  });
+
+  it("REC-11 : n’envoie que les langues et l’expérience saisies par le candidat, aucune spécialité choisie d’avance", async () => {
+    expect(byId("vvip-specialty").props.value).toBe("");
+    fillRequiredFields();
+    change("vvip-diploma-country", { target: { value: "TN" } });
+    await submit();
+    expect(JSON.parse(String(sent[0]!.get("languages")))).toEqual([]);
+    expect(sent[0]!.get("yearsExperience")).toBe("");
+  });
+
+  it("envoie les langues cochées et celles saisies sous « Autre », sous le nom commun aux deux formulaires", async () => {
+    fillRequiredFields();
+    change("vvip-diploma-country", { target: { value: "TN" } });
+    change(`vvip-language-${professionalLanguageOptions.findIndex(option => option.value === "Arabic")}`, {});
+    change(`vvip-language-${professionalLanguageOptions.length - 1}`, {});
+    change("vvip-other-language", { target: { value: "Italien, , russe " } });
+    await submit();
+    expect(JSON.parse(String(sent[0]!.get("languages")))).toEqual(["Arabic", "Italien", "russe"]);
+  });
+
+  it("refuse une candidature sans spécialité ni pays ciblé choisis, sans rien envoyer", async () => {
+    fillRequiredFields();
+    change("vvip-diploma-country", { target: { value: "TN" } });
+    change("vvip-specialty", { target: { value: "" } });
+    change("vvip-target-country-0", {});
+    await submit();
+    expect(sent).toEqual([]);
+    expect(byId("vvip-specialty").props["aria-invalid"]).toBe(true);
+    expect(byId("vvip-target-country-0").props["aria-invalid"]).toBe(true);
   });
 
   it("récupère un pays reconnu affiché par un navigateur mobile au moment de l’envoi", async () => {
     fillRequiredFields();
-    visibleFields = [["diplomaCountry", "Maroc"]];
+    visibleFields = [["diplomaCountry", "MA"]];
     await submit();
-    expect(sent[0]!.get("diplomaCountry")).toBe("Maroc");
+    expect(sent[0]!.get("diplomaCountry")).toBe("MA");
   });
 
   it("refuse l’option « Autre » sans précision, sans rien envoyer", async () => {
     fillRequiredFields();
-    change("vvip-diploma-country", { target: { value: "Tunisie" } });
+    change("vvip-diploma-country", { target: { value: "TN" } });
     change("vvip-specialty", { target: { value: t.specialties[t.specialties.length - 1] } });
     await submit();
     expect(sent).toEqual([]);
@@ -107,7 +145,7 @@ describe("envoi de la candidature VVIP offshore", () => {
 
   it("ne confirme jamais une candidature sans numéro de suivi du serveur", async () => {
     fillRequiredFields();
-    change("vvip-diploma-country", { target: { value: "Tunisie" } });
+    change("vvip-diploma-country", { target: { value: "TN" } });
     answer = async () => new Response(JSON.stringify({ success: true }), { status: 200, headers: { "Content-Type": "application/json" } });
     await submit();
     expect(sent).toHaveLength(1);

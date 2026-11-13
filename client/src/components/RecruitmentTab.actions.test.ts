@@ -326,6 +326,15 @@ describe("informations du dossier", () => {
     expect(text).toContain("Candidat2");
   });
 
+  it("nomme en français le pays du diplôme enregistré en code, comme celui enregistré avant sous un autre nom (EN-11)", () => {
+    state.applications = [dossier(1, { diplomaCountry: "TN" }), dossier(2, { diplomaCountry: "Tunisia" }), dossier(3, { diplomaCountry: "突尼斯" }), dossier(4, { diplomaCountry: "Atlantide" })];
+    const text = pageText();
+    expect(text.match(/Diplôme obtenu : Tunisie/g)).toHaveLength(3);
+    // A value that names no country is shown as recorded.
+    expect(text).toContain("Diplôme obtenu : Atlantide");
+    expect(text).not.toMatch(/Diplôme obtenu : (TN|Tunisia|突尼斯)/);
+  });
+
   it("explique une erreur d’analyse au lieu d’afficher le message technique (ADM-REC-02)", () => {
     state.applications = [dossier(1, { analysisStatus: "failed", analysisLastError: "AI Gateway requires a valid credit card (402)" })];
     open(1);
