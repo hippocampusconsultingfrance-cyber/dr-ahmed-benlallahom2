@@ -28,6 +28,16 @@ describe("validation des documents candidats", () => {
     expect(displayFileName(`${controls} `, "cv")).toBe("cv");
   });
 
+  it("retire les caractères invisibles qui font paraître deux noms identiques ou coupent la ligne, sauf ceux du persan et des emoji", () => {
+    const invisible = [0x00ad, 0x200b, 0x2028, 0x2029, 0x2060, 0x2063, 0xfeff, 0xe0001, 0xe0041, 0xe007f].map(code => String.fromCodePoint(code));
+    for (const character of invisible) expect(displayFileName(`c${character}v.pdf`, "cv"), character.codePointAt(0)!.toString(16)).toBe("cv.pdf");
+    expect(displayFileName(invisible.join(""), "document")).toBe("document");
+    // « رزومه‌ی من » (ZWNJ), « 👩‍⚕️ » (ZWJ).
+    const zwnj = String.fromCharCode(0x200c);
+    const zwj = String.fromCharCode(0x200d);
+    for (const name of [`رزومه${zwnj}ی من.pdf`, `👩${zwj}⚕️ CV.pdf`]) expect(displayFileName(name, "cv"), name).toBe(name);
+  });
+
   it("borne le nom affiché à 180 caractères sans couper un caractère en deux", () => {
     const name = `${"😀".repeat(100)}.pdf`;
     const shortened = displayFileName(name, "cv");

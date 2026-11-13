@@ -48,11 +48,16 @@ export function shortenFileName(name: string, maxLength = FILE_NAME_MAX_LENGTH):
 }
 
 /**
- * C0 and C1 controls, DEL, and the direction controls that show a name other
- * than the one stored (« CV », U+202E, « fdp.exe » reads « CVexe.pdf »),
- * written as escapes: none of them appears as such in the source.
+ * C0 and C1 controls, DEL, the direction controls that show a name other than
+ * the one stored (« CV », U+202E, « fdp.exe » reads « CVexe.pdf »), and the
+ * invisible characters with which two different names look the same or a name
+ * breaks its line: zero-width space, soft hyphen, word joiner and invisible
+ * operators, byte order mark, line and paragraph separators, tag characters.
+ * The zero-width non-joiner and joiner (U+200C, U+200D) stay: Persian words
+ * and composed emoji need them. Written as escapes: none of them appears as
+ * such in the source.
  */
-const FILE_NAME_INVISIBLE_CHARACTERS = /[\u0000-\u001F\u007F-\u009F\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/g;
+const FILE_NAME_INVISIBLE_CHARACTERS = /[\u0000-\u001F\u007F-\u009F\u00AD\u061C\u200B\u200E\u200F\u2028-\u202E\u2060-\u2069\uFEFF\u{E0000}-\u{E007F}]/gu;
 /** Path separators and the other characters Windows refuses in a file name. */
 const FILE_NAME_FORBIDDEN_CHARACTERS = /[\\/<>:"|?*]/g;
 
