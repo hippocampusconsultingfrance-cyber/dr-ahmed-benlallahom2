@@ -73,7 +73,8 @@ export const gdprRequests = pgTable("gdpr_requests", {
   name: varchar("name", { length: 255 }).notNull(),
   email: varchar("email", { length: 320 }).notNull(),
   phone: varchar("phone", { length: 50 }),
-  requestType: varcharEnum("request_type", ["access", "rectification", "deletion", "portability", "objection"]).notNull(),
+  // restriction and consent_withdrawal (RGPD-13): a varchar(32) without CHECK, no migration.
+  requestType: varcharEnum("request_type", ["access", "rectification", "deletion", "restriction", "portability", "objection", "consent_withdrawal"]).notNull(),
   description: text("description"),
   status: varcharEnum("status", ["pending", "in_progress", "completed", "rejected"]).default("pending").notNull(),
   responseDate: timestamp("response_date"),

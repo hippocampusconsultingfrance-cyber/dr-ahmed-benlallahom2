@@ -11,8 +11,10 @@ export const GDPR_REQUEST_TYPE_LABELS: Record<string, string> = {
   access: "Accès",
   rectification: "Rectification",
   deletion: "Suppression",
+  restriction: "Limitation",
   portability: "Portabilité",
   objection: "Opposition",
+  consent_withdrawal: "Retrait du consentement",
 };
 
 export function isGdprRequestOpen(status: string) {

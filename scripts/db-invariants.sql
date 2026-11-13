@@ -181,7 +181,7 @@ SELECT 'MAJ' AS famille, 'candidate_document_processing_jobs modifiées mais upd
 UNION ALL
 SELECT 'ENUM', 'users.role hors liste', 'code (TypeScript)', (SELECT count(*) FROM "users" WHERE "role" NOT IN ('user','admin'))
 UNION ALL
-SELECT 'ENUM', 'gdpr_requests.request_type hors liste', 'code (TypeScript)', (SELECT count(*) FROM "gdpr_requests" WHERE "request_type" NOT IN ('access','rectification','deletion','portability','objection'))
+SELECT 'ENUM', 'gdpr_requests.request_type hors liste', 'code (TypeScript)', (SELECT count(*) FROM "gdpr_requests" WHERE "request_type" NOT IN ('access','rectification','deletion','restriction','portability','objection','consent_withdrawal'))
 UNION ALL
 SELECT 'ENUM', 'gdpr_requests.status hors liste', 'code (TypeScript)', (SELECT count(*) FROM "gdpr_requests" WHERE "status" NOT IN ('pending','in_progress','completed','rejected'))
 UNION ALL

@@ -35,6 +35,7 @@ const NON_ADMIN_PROCEDURES = new Set([
   "adminSecurity.verify",
   "contact.submit",
   "gdpr.submit",
+  "gdpr.confirmEmail",
   "testimonials.list",
   "blog.list",
   "blog.getBySlug",

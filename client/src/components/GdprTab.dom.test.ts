@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 // sécurité expirée, comme dans l’audit) le dit, avec « Réessayer » qui relit
 // la première page.
 
-type GdprRequest = { id: number; trackingId: string; name: string; email: string; requestType: string; status: string; description: string | null; notes: string | null; createdAt: string; responseDate: string | null };
+type GdprRequest = { id: number; trackingId: string; name: string; email: string; requestType: string; status: string; description: string | null; notes: string | null; createdAt: string; responseDate: string | null; emailConfirmedAt?: string | null };
 const view = vi.hoisted(() => ({ refetch: [] as Array<ReturnType<typeof vi.fn>>, requests: null as null | GdprRequest[] }));
 
 vi.mock("@/lib/trpc", () => ({
@@ -63,6 +63,21 @@ describe("ADM-09 — demande ouverte depuis le lien d’une notification", () =>
     expect(scrolled).toEqual([linked]);
     expect(document.activeElement).toBe(linked);
     expect(screen.getByText("Personne Une").closest("[aria-current]")).toBeNull();
+  });
+
+  it("dit si la personne a confirmé son adresse par le lien de l’accusé de réception (RGPD-13)", () => {
+    view.requests = [
+      { ...request(1, "GAAAA0001", "Personne Une"), emailConfirmedAt: "2026-11-02T10:30:00.000Z" },
+      request(2, "GBBBB0002", "Personne Deux"),
+      { ...request(3, "GCCCC0003", "Personne Trois"), status: "completed", responseDate: "2026-11-05T09:00:00.000Z" },
+    ];
+    render(createElement(GdprTab));
+
+    const card = (name: string) => screen.getByText(name).closest(".bg-card")!.textContent;
+    expect(card("Personne Une")).toContain("Adresse confirmée le 02/11/2026");
+    expect(card("Personne Deux")).toContain("Adresse non confirmée par le lien de l’accusé de réception");
+    // A closed request says nothing of it.
+    expect(card("Personne Trois")).not.toContain("Adresse");
   });
 
   it("ne déplace rien pour une référence qu’aucune demande affichée n’a", () => {
