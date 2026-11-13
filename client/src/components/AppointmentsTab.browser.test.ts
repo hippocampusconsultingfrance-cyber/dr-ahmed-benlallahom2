@@ -46,13 +46,14 @@ const consultation = (from: string, id: number, dayOffset: number, appointmentSt
   };
 };
 
-type Procedure = (input: any) => unknown;
+/** A fake procedure: its input is the one the page sent, of the shape the procedure declares. */
+type Procedure = (input: never) => unknown;
 const procedures: Record<string, Procedure> = {
   "auth.me": () => ({ id: 1, openId: "user_owner", name: "Dr Test", email: "owner@test.local", role: "admin", mfaVerified: true }),
   "adminSecurity.status": () => ({ verified: true }),
   "system.configurationStatus": () => ({ ok: false, missing: ["RESEND_WEBHOOK_SECRET"] }),
   "admin.appointments.list": () => ({ items: [], total: 0 }),
-  "admin.appointments.agenda": ({ from }) => ({
+  "admin.appointments.agenda": ({ from }: { from: string }) => ({
     items: [consultation(from, 1, 0, "completed"), consultation(from, 2, 1, "confirmed"), consultation(from, 3, 2, "no_show")],
     truncated: false,
   }),
@@ -105,7 +106,7 @@ describe.skipIf(!executablePath)("Agenda des consultations imprimé", () => {
           status = 500;
           return { error: superjson.serialize({ message: "Hors du test", code: -32603, data: { code: "INTERNAL_SERVER_ERROR", httpStatus: 500, path: name } }) };
         }
-        return { result: { data: superjson.serialize(procedures[name](inputs[index] ? superjson.deserialize(inputs[index]) : undefined)) } };
+        return { result: { data: superjson.serialize(procedures[name]((inputs[index] ? superjson.deserialize(inputs[index]) : undefined) as never)) } };
       });
       return request.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
     });

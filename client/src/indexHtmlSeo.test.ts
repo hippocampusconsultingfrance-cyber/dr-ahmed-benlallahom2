@@ -9,10 +9,13 @@ import { resolveClientSeo } from "@shared/routeMetadata";
 const projectRoot = resolve(import.meta.dirname, "../..");
 const readProjectFile = (relativePath: string) => readFileSync(resolve(projectRoot, relativePath), "utf8");
 
+/** A JSON-LD block of the page, as these tests read it. */
+type StructuredData = { "@type": string; worksFor?: { url?: string }; sameAs?: string[]; contactPoint?: { email?: string; telephone?: string } };
+
 const structuredData = (html: string) =>
   Array.from(
     html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g),
-    match => JSON.parse(match[1]) as Record<string, any>,
+    match => JSON.parse(match[1]) as StructuredData,
   );
 
 describe("document HTML initial", () => {
@@ -48,8 +51,8 @@ describe("document HTML initial", () => {
 
     for (const schema of schemas.filter(item => item.sameAs)) expect(schema.sameAs).toEqual([siteConfig.linkedin]);
     for (const schema of schemas.filter(item => item.contactPoint)) {
-      expect(schema.contactPoint.email).toBe(siteConfig.email);
-      expect(schema.contactPoint.telephone).toBe(siteConfig.phone);
+      expect(schema.contactPoint?.email).toBe(siteConfig.email);
+      expect(schema.contactPoint?.telephone).toBe(siteConfig.phone);
     }
     expect(json).not.toMatch(/\.svg"/);
     expect(json).not.toContain("SearchAction");

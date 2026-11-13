@@ -45,13 +45,14 @@ const message = (id: number, trackingId: string) => ({
   createdAt: new Date(Date.UTC(2026, 9, 1, 8, id)),
 });
 
-type Procedure = (input: any) => unknown;
+/** A fake procedure: its input is the one the page sent, of the shape the procedure declares. */
+type Procedure = (input: never) => unknown;
 const searches: Array<string | undefined> = [];
 const procedures: Record<string, Procedure> = {
   "auth.me": () => ({ id: 1, openId: "user_owner", name: "Dr Test", email: "owner@test.local", role: "admin", mfaVerified: true }),
   "adminSecurity.status": () => ({ verified: true }),
   // The server's search: the reference finds its message alone.
-  "admin.contacts.list": ({ search }) => {
+  "admin.contacts.list": ({ search }: { search?: string }) => {
     searches.push(search);
     const items = [message(1, REFERENCE), message(2, "COTHERMSG0002")].filter((item) => !search || item.trackingId === search);
     return { items, total: items.length };
@@ -102,7 +103,7 @@ describe.skipIf(!executablePath)("adresse et onglets de l’admin dans un naviga
           status = 500;
           return { error: superjson.serialize({ message: "Hors du test", code: -32603, data: { code: "INTERNAL_SERVER_ERROR", httpStatus: 500, path: name } }) };
         }
-        return { result: { data: superjson.serialize(procedures[name](inputs[index] ? superjson.deserialize(inputs[index]) : {})) } };
+        return { result: { data: superjson.serialize(procedures[name]((inputs[index] ? superjson.deserialize(inputs[index]) : {}) as never)) } };
       });
       return route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
     });

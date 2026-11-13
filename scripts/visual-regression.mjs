@@ -166,6 +166,7 @@ async function captureScenario(browser, scenario) {
   const page = await context.newPage();
   await page.goto(`${baseUrl}${scenario.path}`, { waitUntil: "domcontentloaded", timeout: 20_000 });
   await page.evaluate(async () => {
+    // eslint-disable-next-line no-undef -- runs in the page, where document is the page's
     await document.fonts.ready;
   });
   await page.waitForTimeout(400);

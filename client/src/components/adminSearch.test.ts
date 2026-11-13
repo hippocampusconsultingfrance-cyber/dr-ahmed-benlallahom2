@@ -22,7 +22,7 @@ describe("ADM-02 — délai de frappe de la recherche admin", () => {
 
     for (const typed of ["D", "Du", "Dupont "]) {
       search.setText(typed);
-      search = renderStateful(useAdminSearch);
+      renderStateful(useAdminSearch);
       vi.advanceTimersByTime(ADMIN_SEARCH_DELAY_MS - 50);
       search = renderStateful(useAdminSearch);
       expect(search.search).toBeUndefined();
@@ -34,7 +34,7 @@ describe("ADM-02 — délai de frappe de la recherche admin", () => {
 
     // Spaces added at the end: same term, nothing new to send.
     search.setText("Dupont  ");
-    search = renderStateful(useAdminSearch);
+    renderStateful(useAdminSearch);
     vi.advanceTimersByTime(ADMIN_SEARCH_DELAY_MS);
     expect(renderStateful(useAdminSearch).search).toBe("Dupont");
   });
@@ -42,7 +42,7 @@ describe("ADM-02 — délai de frappe de la recherche admin", () => {
   it("efface tout de suite le texte et la recherche, sans attendre ni renvoyer l’ancien terme", () => {
     let search = renderStateful(useAdminSearch);
     search.setText("APT1");
-    search = renderStateful(useAdminSearch);
+    renderStateful(useAdminSearch);
     vi.advanceTimersByTime(ADMIN_SEARCH_DELAY_MS);
     search = renderStateful(useAdminSearch);
     expect(search.search).toBe("APT1");

@@ -254,6 +254,7 @@ const visionOcrPageSchema = z.object({
 
 const cleanText = (value: string): string =>
   value
+    // eslint-disable-next-line no-control-regex -- the NUL characters of an extracted text are what it replaces
     .replace(/\u0000/g, " ")
     .replace(/[ \t]+/g, " ")
     .replace(/\n{3,}/g, "\n\n")
@@ -1115,6 +1116,7 @@ function sameNormalizedValue(left: string, right: string) {
 }
 
 /** Arabic vowel signs, hamza marks and tatweel are ignored when naming a specialty (أ, إ and ا compare equal). */
+// eslint-disable-next-line no-misleading-character-class -- each sign is removed alone, tatweel and marks: none is read with the one before it
 const normalizeSpecialtyText = (value: string) => normalizeEvidenceText(value).replace(/[\u0640\u064b-\u065f\u0670]/g, "");
 
 const specialtyEquivalents = Object.entries(RECRUITMENT_SPECIALTY_EQUIVALENTS).map(([specialty, terms]) => ({

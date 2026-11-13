@@ -39,7 +39,7 @@ export default function TestimonialsSection() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
 
-  const content: Record<string, any> = {
+  const content: Record<string, Record<string, string>> = {
     fr: {
       title: "Témoignages des Partenaires",
       subtitle: "Ce que disent nos partenaires",

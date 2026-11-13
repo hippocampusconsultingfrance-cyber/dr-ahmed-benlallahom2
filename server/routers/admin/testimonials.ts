@@ -24,7 +24,7 @@ export const adminTestimonialsRouter = router({
       const db = await getDb();
       if (!db) throw new Error("Database connection failed");
 
-      const updateData: Record<string, any> = { status: input.status };
+      const updateData: Partial<typeof testimonials.$inferInsert> = { status: input.status };
       if (input.featured !== undefined) updateData.featured = input.featured;
 
       await db

@@ -190,7 +190,7 @@ const MODULE_ERROR = /ERR_MODULE_NOT_FOUND|Cannot find (?:package|module) '/;
 
 /** Paquets que le bundle n'importe qu'à la demande : import("x") dont x n'est pas un chemin. */
 function lazyPackageImports(bundleSource) {
-  const specifiers = Array.from(bundleSource.matchAll(/\bimport\(\s*["']([^"'.\/][^"']*)["']\s*\)/g), match => match[1]);
+  const specifiers = Array.from(bundleSource.matchAll(/\bimport\(\s*["']([^"'./][^"']*)["']\s*\)/g), match => match[1]);
   return [...new Set(specifiers.filter(specifier => !specifier.startsWith("node:")))].sort();
 }
 
@@ -359,6 +359,7 @@ export async function smokeBuiltServer(target, { root = process.cwd(), startTime
     return { port, results };
   } catch (error) {
     await stop(child, closed);
+    // eslint-disable-next-line preserve-caught-error -- le message reprend celui de l’erreur et la fin de la sortie du serveur
     throw new Error(`${target.name} : ${error instanceof Error ? error.message : error}\n--- sortie du serveur ---\n${lastLines(output)}`);
   } finally {
     await stop(child, closed);

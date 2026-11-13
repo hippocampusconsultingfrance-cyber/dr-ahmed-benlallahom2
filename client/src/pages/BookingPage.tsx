@@ -956,6 +956,7 @@ export default function BookingPage() {
     slotsRetryFocusRef.current = null;
     if (bookedSlots.isError) return;
     focusSlotGrid();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- seulement à la fin d’un nouvel essai de l’agenda : le jour et l’erreur sont lus tels qu’ils sont alors
   }, [slotsRetrying]);
 
   const chooseDay = (nextDayKey: string) => {
@@ -1047,6 +1048,7 @@ export default function BookingPage() {
   const pendingHoldExpired = Boolean(pendingBooking && new Date(pendingBooking.holdExpiresAt).getTime() <= now);
   useEffect(() => {
     if (pendingHoldExpired) forgetPendingBooking(content.pending.closed);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- une seule fois quand le maintien expire : forgetPendingBooking et le texte sont recréés à chaque rendu
   }, [pendingHoldExpired]);
 
   // Paiement en attente retrouvé (retour depuis Stripe, page restaurée du cache) : le focus passe

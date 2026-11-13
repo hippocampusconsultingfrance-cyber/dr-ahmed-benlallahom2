@@ -22,6 +22,7 @@ const { default: VvipOffshorePage, vvipOffshoreCopy, VVIP_CUSTOM_SPECIALTY_MAX_L
 const { countryOptions, professionalLanguageOptions } = await import("./RecruitmentPage");
 const { TurnstileWidget } = await import("@/components/TurnstileWidget");
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the props of any element of the tree, read and called as each test needs
 type Element = { type: unknown; props: Record<string, any> };
 const t = vvipOffshoreCopy.fr;
 const elements = () => elementsOf(renderStateful(VvipOffshorePage as () => ReactElement)) as Element[];

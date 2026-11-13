@@ -15,7 +15,7 @@ import { recruitmentAnalysisErrorLabel, recruitmentDriveExportErrorLabel, recrui
 
 vi.mock("react", async importOriginal => (await import("@/testing/statefulRender")).withStatefulHooks(await importOriginal()));
 
-type MutationOptions = { onSuccess?: (result: any, input?: any) => unknown; onError?: (error: { message: string; data?: { reason?: string } | null }) => unknown };
+type MutationOptions = { onSuccess?: (result: unknown, input?: unknown) => unknown; onError?: (error: { message: string; data?: { reason?: string } | null }) => unknown };
 const state = vi.hoisted(() => {
   const mutations: Record<string, { mutate: ReturnType<typeof vi.fn>; options?: MutationOptions }> = {};
   // The list's invalidate, read by the actions' tests as invalidateList and by « Actualiser » through utils.
@@ -87,6 +87,7 @@ vi.mock("@/lib/trpc", () => ({
 
 const { default: RecruitmentTab } = await import("./RecruitmentTab");
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the props of any element of the tree, read and called as each test needs
 type Element = { type: unknown; props: Record<string, any> };
 const textOf = (node: unknown): string => {
   if (node === null || node === undefined || typeof node === "boolean") return "";

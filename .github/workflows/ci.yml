@@ -63,6 +63,8 @@ jobs:
           node node_modules/vitest/vitest.mjs run server/ciWorkflow.test.ts --config scripts/ci-workflow.vitest.config.mjs --passWithNoTests=false
       - name: Verify TypeScript
         run: pnpm check
+      - name: Run ESLint
+        run: pnpm lint
       - name: Run test suite
         run: pnpm test:ci
       - name: Verify production build

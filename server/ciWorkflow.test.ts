@@ -5,7 +5,11 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
+import js from "@eslint/js";
+import { ESLint, type Linter } from "eslint";
 import ts from "typescript";
+import tseslint from "typescript-eslint";
 import { describe, expect, it } from "vitest";
 import { createVitest, parseCLI } from "vitest/node";
 import { LOCKED_PACKAGES_MESSAGE, lockedPackagesProblems } from "../scripts/check-locked-packages.mjs";
@@ -344,6 +348,7 @@ const REQUIRED_STEP_COMMANDS = [
   "node scripts/check-locked-packages.mjs",
   GUARD_COMMAND,
   "pnpm check",
+  "pnpm lint",
   "pnpm test:ci",
   "pnpm build",
   "node scripts/check-performance-budgets.mjs",
@@ -362,15 +367,18 @@ type ScriptTool = { command: string; options: RegExp };
  * (`"check": "pnpm run typecheck"`): as is, or with the options listed here, which change
  * how it reports, not what it checks. Any other argument fails, as most make it check
  * less: another configuration (`tsc -p tsconfig.empty.json`, `vitest -c`, `knip
- * --config`), part of the project (`vitest run server/x.test.ts`, `--shard`, `-t`,
- * `--changed`, `knip --exclude`, `--workspace`), types left unchecked (`tsc --noCheck`,
- * `--listFilesOnly`), a reporter of the project's own (`--reporter ./quiet.mjs`), the help,
+ * --config`, `eslint -c`), part of the project (`vitest run server/x.test.ts`, `--shard`, `-t`,
+ * `--changed`, `knip --exclude`, `--workspace`, `eslint --ignore-pattern`), types left unchecked
+ * (`tsc --noCheck`, `--listFilesOnly`), warnings let through or problems fixed rather than
+ * reported (`eslint --quiet`, `--max-warnings 10`, `--fix`), a reporter of the project's own
+ * (`--reporter ./quiet.mjs`), the help,
  * the version or the configuration printed instead. What `node -e '…'` or a script in a
  * file of its own (`node scripts/check-performance-budgets.mjs`) runs cannot be read here:
  * such a script is neither covered nor refused, only the steps that run it.
  */
 const REQUIRED_SCRIPT_COMMANDS: Readonly<Record<string, ScriptTool>> = {
   check: { command: "tsc --noEmit", options: /^(?: (?:(?:-p|--project)[ =](?:\.\/?|(?:\.\/)?tsconfig\.json)|--pretty))*$/ },
+  lint: { command: "eslint . --max-warnings 0", options: /^(?: (?:-f|--format)[ =](?:stylish|json)| --(?:no-)?color)*$/ },
   "test:ci": { command: "vitest run", options: /^(?: --reporter[ =](?:default|verbose|dot|tap|tap-flat|junit|json|github-actions|hanging-process))*$/ },
   build: { command: "vite build", options: /^$/ },
   knip: { command: "knip", options: /^(?: --no-progress| --reporter[ =](?:symbols|compact|codeowners|disclosure|markdown|codeclimate|json|github-actions))*$/ },
@@ -532,6 +540,7 @@ const QUALITY_STEPS: readonly Readonly<Record<string, string>>[] = [
   { name: "Install dependencies", run: INSTALL_COMMAND },
   { name: "Check this workflow", run: GUARD_STEP_RUN },
   { name: "Verify TypeScript", run: "pnpm check" },
+  { name: "Run ESLint", run: "pnpm lint" },
   { name: "Run test suite", run: "pnpm test:ci" },
   { name: "Verify production build", id: "build", run: "pnpm build" },
   { name: "Check performance budgets", run: "node scripts/check-performance-budgets.mjs" },
@@ -552,6 +561,7 @@ const QUALITY_STEPS: readonly Readonly<Record<string, string>>[] = [
 /** The package.json scripts these steps run, each as it is: test:ci leaving no test file out (CODE-11). */
 const QUALITY_SCRIPTS: Readonly<Record<string, string>> = {
   check: "tsc --noEmit",
+  lint: "eslint . --max-warnings 0",
   "test:ci": "vitest run",
   build: `NODE_ENV=production vite build && tsx scripts/prerender-route-seo.ts && esbuild server/_core/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist && esbuild server/vercelEntry.ts --platform=node --packages=external --bundle --format=esm --banner:js="import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" --outfile=dist/vercel/index.js`,
   knip: "knip",
@@ -855,6 +865,148 @@ function expectVitestConfigAsListed(config: string, rootFiles: readonly string[]
 }
 
 /**
+ * eslint.config.js as it is (CODE-04). An ESLint configuration is code, which `pnpm lint`
+ * runs before any rule: an ignore of a directory, a rule turned off or down for every file,
+ * `files` narrowed to part of the project, or `process.exitCode = 0` would leave the step
+ * green. As for vitest.config.ts, a list of what it may not hold is got round: any change of
+ * it is a change of this text, read in review. Nor may another configuration of ESLint stand
+ * anywhere in the tree: ESLint takes, for each file, the nearest one.
+ */
+const ESLINT_CONFIG = `import js from "@eslint/js";
+import { defineConfig, globalIgnores } from "eslint/config";
+import reactHooks from "eslint-plugin-react-hooks";
+import globals from "globals";
+import tseslint from "typescript-eslint";
+
+// ESLint (CODE-04): its recommended rules and typescript-eslint's, without those that need the
+// types (\`pnpm check\` reads them), on the site's code, its tests, scripts and end-to-end
+// scenarios, and the two rules of React's hooks on the React code. \`pnpm lint\` fails on any
+// warning; a rule turned off on one line says why there. server/ciWorkflow.test.ts lists this
+// file as it is.
+export default defineConfig(
+  // The build, the table scripts/generate-docx-font-metrics.mjs writes, and the copies of the
+  // repository that local tools keep (.claude).
+  globalIgnores([
+    "dist/",
+    "api/index.js",
+    "drizzle/pg/meta/",
+    "server/docxFontMetrics.ts",
+    ".claude/",
+  ]),
+  {
+    files: [
+      "{client/src,server,shared,scripts,e2e}/**/*.{js,mjs,cjs,ts,mts,cts,tsx}",
+    ],
+    extends: [js.configs.recommended, tseslint.configs.recommended],
+    languageOptions: { globals: globals.node },
+    linterOptions: { reportUnusedDisableDirectives: "error" },
+    rules: {
+      // A name that starts with \`_\` is unused on purpose: a parameter that gives a mock its
+      // signature, a property left out of a copy.
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+          destructuredArrayIgnorePattern: "^_",
+        },
+      ],
+    },
+  },
+  {
+    files: ["client/src/**/*.{ts,tsx}"],
+    plugins: { "react-hooks": reactHooks },
+    rules: {
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "warn",
+    },
+  }
+);
+`;
+
+/** A configuration file of ESLint, in any directory: eslint.config.js, .mjs, .cjs, .ts, .mts or .cts. */
+const ESLINT_CONFIG_FILE = /(?:^|\/)eslint\.config\.[cm]?[jt]s$/;
+
+function expectEslintConfigAsListed(config: string, files: readonly string[]) {
+  expect(config, "eslint.config.js").toBe(ESLINT_CONFIG);
+  expect(files.filter(file => ESLINT_CONFIG_FILE.test(file) && file !== "eslint.config.js"), "eslint: other configuration files").toEqual([]);
+}
+
+/** The directories of the root that hold no file of the project: the dependencies, git's, the build, the copies of the repository local tools keep. */
+const OUTSIDE_THE_PROJECT = new Set(["node_modules", ".git", "dist", ".claude"]);
+
+/** Every file of the project's tree, relative to the root, with `/` between its parts. */
+const treeFiles = () => readdirSync(root, { withFileTypes: true })
+  .filter(entry => !OUTSIDE_THE_PROJECT.has(entry.name))
+  .flatMap(entry => (entry.isDirectory() ? filesIn(entry.name) : [entry.name]));
+
+/** The files `pnpm lint` reads: the JavaScript and TypeScript of client/src, server, shared, scripts and e2e. */
+const lintedFiles = () => filesIn("client/src", "server", "shared", "scripts", "e2e").filter(file => /\.(?:[cm]?[jt]s|tsx)$/.test(file));
+
+/** The one such file left out: the table scripts/generate-docx-font-metrics.mjs writes. */
+const LINT_IGNORED_FILES = ["server/docxFontMetrics.ts"];
+
+/** A rule's level as ESLint computes it for a file: 0 off, 1 a warning, 2 an error. */
+function ruleLevel(rule: unknown) {
+  const level = Array.isArray(rule) ? rule[0] : rule;
+  return typeof level === "number" ? level : ({ off: 0, warn: 1, error: 2 } as Record<string, number>)[String(level)] ?? 0;
+}
+
+/** React's code, on which the rules of hooks run. */
+const isReactCode = (file: string) => file.startsWith("client/src/") && /\.tsx?$/.test(file);
+
+/**
+ * What ESLint makes of each file `pnpm lint` reads with the configuration given: the
+ * project's, read from eslint.config.js once it is as listed, or another one in the test of
+ * this check. Each file is linted but the table above, with every rule ESLint and
+ * typescript-eslint recommend for its kind of file as an error and, on React's code, the
+ * rules of hooks an error and their dependencies at least a warning, on which `pnpm lint`
+ * fails (--max-warnings 0).
+ */
+async function expectEslintLintsEverySource(options: ESLint.Options = {}) {
+  if (!options.overrideConfigFile) expectEslintConfigAsListed(readFileSync(path.join(root, "eslint.config.js"), "utf8"), treeFiles());
+  const eslint = new ESLint({ cwd: root, ...options });
+  const recommended = new ESLint({ cwd: root, overrideConfigFile: true, overrideConfig: [js.configs.recommended, ...tseslint.configs.recommended] as Linter.Config[] });
+  const recommendedByKind = new Map<string, string[]>();
+  const leftOut: string[] = [];
+  const turnedDown = new Map<string, string>();
+  for (const file of lintedFiles()) {
+    const config = (await eslint.calculateConfigForFile(file)) as Linter.Config | undefined;
+    if (!config) {
+      leftOut.push(file);
+      continue;
+    }
+    const kind = path.extname(file);
+    if (!recommendedByKind.has(kind)) {
+      const rules = ((await recommended.calculateConfigForFile(`file${kind}`)) as Linter.Config).rules ?? {};
+      recommendedByKind.set(kind, Object.keys(rules).filter(name => ruleLevel(rules[name]) === 2));
+    }
+    const required = new Map(recommendedByKind.get(kind)!.map(name => [name, 2]));
+    if (isReactCode(file)) required.set("react-hooks/rules-of-hooks", 2).set("react-hooks/exhaustive-deps", 1);
+    for (const [name, level] of required) {
+      if (ruleLevel(config.rules?.[name]) < level && !turnedDown.has(name)) turnedDown.set(name, file);
+    }
+  }
+  expect(leftOut, "eslint: files left out").toEqual(LINT_IGNORED_FILES);
+  expect([...turnedDown].map(([name, file]) => `${name} (${file})`), "eslint: rules turned down").toEqual([]);
+}
+
+/**
+ * An ESLint comment that sets a file's rules: a rule turned off for the whole file or a
+ * block, set there, or the file's globals. LINE_DISABLE is the one form allowed: rules turned
+ * off for the next line only, each named, with why after `--`.
+ */
+const ESLINT_COMMENT = /\/\/[^\S\n]*eslint[\w-]*\b[^\n]*|\/\*[^\S\n]*(?:eslint[\w-]*|globals?)\b[\s\S]*?\*\//g;
+const LINE_DISABLE = /^\/\/ eslint-disable-next-line [@\w/-]+(?:, [@\w/-]+)* -- \S.*$/;
+
+/** The ESLint comments of these files, by name, other than a rule turned off on one line with its reason. */
+function eslintCommentsBeyondOneLine(sources: Readonly<Record<string, string>>) {
+  return Object.entries(sources).flatMap(([file, text]) =>
+    Array.from(text.matchAll(ESLINT_COMMENT), ([comment]) => comment.trim()).filter(comment => !LINE_DISABLE.test(comment)).map(comment => `${file}: ${comment}`));
+}
+
+/**
  * A version range of the registry (« 3.3.7 », « ^6.29.1 », « >=1 <2 »), whose package the
  * lockfile pins by its integrity: not another package under the name (`npm:`), a directory
  * of the repository (`file:`, `link:`), a git repository or an address, whose code would run
@@ -1088,6 +1240,8 @@ jobs:
           ${GUARD_COMMAND}
       - name: Verify TypeScript
         run: pnpm check
+      - name: Run ESLint
+        run: pnpm lint
       - name: Run test suite
         run: pnpm test:ci
       - name: Verify production build
@@ -1123,6 +1277,7 @@ const FIXTURE_SCRIPTS: Record<string, string> = {
   dev: "tsx watch server/index.ts",
   build: `vite build && esbuild server/index.ts --bundle --banner:js="import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" --outfile=api/index.js`,
   check: "tsc --noEmit",
+  lint: "eslint . --max-warnings 0",
   knip: "knip",
   "test:ci": "vitest run",
 };
@@ -1294,7 +1449,7 @@ describe("intégration continue GitHub", () => {
     const verify = (workflow: string, scripts: Record<string, string> = {}, exceptions?: readonly NamedException[]) => () =>
       expectNoNeutralizedStep(workflow, fixturePackageJson(scripts), exceptions);
     const runs = jobSteps(FIXTURE_WORKFLOW, "quality").map(step => step.run).join("\n");
-    expect([...scriptsRun(runs, FIXTURE_SCRIPTS).keys()]).toEqual(["check", "test:ci", "build", "knip"]);
+    expect([...scriptsRun(runs, FIXTURE_SCRIPTS).keys()]).toEqual(["check", "lint", "test:ci", "build", "knip"]);
     expect([...scriptsRun("pnpm check", { check: "pnpm run typecheck", typecheck: "pnpm check && tsc --noEmit", lint: "eslint ." }).keys()]).toEqual(["check", "typecheck"]);
     expect([...scriptsRun("npm run --silent check && yarn knip", FIXTURE_SCRIPTS).keys()]).toEqual(["check", "knip"]);
     expect(verify(FIXTURE_WORKFLOW)).not.toThrow();
@@ -1379,7 +1534,7 @@ describe("intégration continue GitHub", () => {
     const verify = (scripts: Record<string, string>, exceptions?: readonly NamedException[]) => () =>
       expectNoNeutralizedStep(FIXTURE_WORKFLOW, fixturePackageJson(scripts), exceptions);
     // A script that only names its tool, or runs another one.
-    for (const scripts of [{ check: "echo tsc --noEmit" }, { check: "true # tsc --noEmit" }, { check: "tsc" }, { "test:ci": "node scripts/run-tests.mjs" }, { knip: "echo knip" }] as Array<Record<string, string>>) {
+    for (const scripts of [{ check: "echo tsc --noEmit" }, { check: "true # tsc --noEmit" }, { check: "tsc" }, { "test:ci": "node scripts/run-tests.mjs" }, { knip: "echo knip" }, { lint: "echo eslint . --max-warnings 0" }] as Array<Record<string, string>>) {
       const [name] = Object.keys(scripts);
       expect(verify(scripts), name).toThrow(new RegExp(`^script "${name}": `));
     }
@@ -1390,6 +1545,7 @@ describe("intégration continue GitHub", () => {
       "test:ci": ["-c vitest.empty.config.ts", "--config=vitest.empty.config.ts", "server/ciWorkflow.test.ts", "--shard=1/50", "-t nothing", "--changed", "--dir docs", "-v", "--exclude '**' --passWithNoTests", "--reporter ./quiet-reporter.mjs"].map(option => `vitest run ${option}`),
       knip: ["--exclude files,dependencies", "--directory docs", "--workspace docs", "-V", "-c knip.empty.json", "--config=knip.empty.json", "--include files", "--reporter ./quiet-reporter.mjs"].map(option => `knip ${option}`),
       build: ["vite build --config vite.empty.config.ts"],
+      lint: ["eslint .", "eslint . --max-warnings 10", "eslint server --max-warnings 0", ...["--quiet", "--fix", "-c eslint.empty.config.js", "--config=eslint.empty.config.js", "--no-config-lookup", "--rule no-undef:off", "--ignore-pattern server", "--no-warn-ignored", "--print-config server/db.ts", "-v"].map(option => `eslint . --max-warnings 0 ${option}`)],
     };
     for (const [name, scripts] of Object.entries(weakened)) {
       for (const script of scripts) expect(verify({ [name]: script }), script).toThrow(new RegExp(`^script "${name}": `));
@@ -1400,6 +1556,7 @@ describe("intégration continue GitHub", () => {
       { check: "tsc --noEmit --project ./tsconfig.json" },
       { "test:ci": "vitest run --reporter=dot" },
       { knip: "knip --reporter compact --no-progress" },
+      { lint: "eslint . --max-warnings 0 --format stylish --no-color" },
       { build: "NODE_ENV=production vite build && esbuild server/index.ts --outfile=api/index.js" },
     ] as Array<Record<string, string>>) {
       expect(verify(scripts), JSON.stringify(scripts)).not.toThrow();
@@ -1794,6 +1951,59 @@ describe("intégration continue GitHub", () => {
     expect(() => expectKnipReadsEverySource(knipWith({ ignoreIssues: { "client/src/generated/**": ["exports", "types"] }, ignoreDependencies: ["@fontsource/playfair-display", "@types/node"] }))).not.toThrow();
     expect(() => expectKnipReadsEverySource(knipWith({}), { ignoreIssues: { "server/**": ["files"] } })).toThrow(/^knip\.json: issue types ignored/);
   }, 30_000);
+
+  it("lance ESLint sur chaque fichier du code, des tests, des scripts et des scénarios, chaque règle recommandée en erreur, sans commentaire qui coupe une règle au-delà d'une ligne (CODE-04)", async () => {
+    expect(lintedFiles()).toEqual(expect.arrayContaining(["client/src/main.tsx", "server/_core/index.ts", "server/ciWorkflow.test.ts", "shared/textInput.ts", "scripts/smoke-built-server.mjs", "e2e/support/fixtures.ts"]));
+    await expectEslintLintsEverySource();
+    const sources = Object.fromEntries(lintedFiles().map(file => [file, readFileSync(path.join(root, file), "utf8")]));
+    expect(eslintCommentsBeyondOneLine(sources), "eslint: comments that turn a rule off beyond one line").toEqual([]);
+  }, 30_000);
+
+  it("refuse une configuration d'ESLint qui écarte des fichiers ou baisse une règle, une autre configuration dans l'arborescence, et un commentaire qui coupe une règle au-delà d'une ligne ou sans raison (CODE-04)", async () => {
+    const config = await read("eslint.config.js");
+    expect(() => expectEslintConfigAsListed(config, ["eslint.config.js", "server/db.ts"])).not.toThrow();
+    for (const [what, changed] of [
+      ["a directory ignored", config.replace('"server/docxFontMetrics.ts",', '"server/docxFontMetrics.ts",\n    "server/",')],
+      ["a rule turned off", config.replace('"react-hooks/rules-of-hooks": "error"', '"react-hooks/rules-of-hooks": "off"')],
+      ["an exit with success", `${config}process.exitCode = 0;\n`],
+    ] as const) {
+      expect(changed, what).not.toBe(config);
+      expect(() => expectEslintConfigAsListed(changed, ["eslint.config.js"]), what).toThrow(/^eslint\.config\.js: /);
+    }
+    for (const file of ["eslint.config.mjs", "server/eslint.config.js", "e2e/support/eslint.config.ts"]) {
+      expect(() => expectEslintConfigAsListed(config, ["eslint.config.js", file]), file).toThrow(/^eslint: other configuration files/);
+    }
+
+    // What ESLint makes of each file with the project's configuration, read once it is as listed, then weakened.
+    const { default: project } = (await import(pathToFileURL(path.join(root, "eslint.config.js")).href)) as { default: Linter.Config[] };
+    await expect(expectEslintLintsEverySource({ overrideConfigFile: true, overrideConfig: project })).resolves.toBeUndefined();
+    for (const [what, overrideConfig] of [
+      ["server ignored", [...project, { ignores: ["server/**"] }]],
+      ["only client/src", project.map(entry => (entry.files ? { ...entry, files: ["client/src/**/*.{ts,tsx}"] } : entry))],
+      ["no-explicit-any off", [...project, { rules: { "@typescript-eslint/no-explicit-any": "off" } }]],
+      ["no-control-regex a warning in shared", [...project, { files: ["shared/**"], rules: { "no-control-regex": "warn" } }]],
+      ["rules of hooks off", [...project, { files: ["client/src/**"], rules: { "react-hooks/rules-of-hooks": "off" } }]],
+    ] as Array<[string, Linter.Config[]]>) {
+      await expect(expectEslintLintsEverySource({ overrideConfigFile: true, overrideConfig }), what).rejects.toThrow(/^eslint: /);
+    }
+
+    // A rule turned off on one line, named, with its reason; nothing more.
+    const slashes = "/" + "/";
+    const block = (text: string) => `/${"*"} ${text} *${"/"}`;
+    const inFile = (comment: string) => ({ "server/example.ts": `const a = 1;\n${comment}\nconst b = 2;\n` });
+    expect(eslintCommentsBeyondOneLine(inFile(`${slashes} eslint-disable-next-line no-control-regex, no-regex-spaces -- the lines as written`))).toEqual([]);
+    for (const comment of [
+      block("eslint-disable"),
+      block("eslint-disable no-control-regex"),
+      block("eslint no-control-regex: off"),
+      block("global window"),
+      `${slashes} eslint-disable-line no-control-regex -- on its own line`,
+      `${slashes} eslint-disable-next-line no-control-regex`,
+      `${slashes} eslint-disable-next-line -- every rule`,
+    ]) {
+      expect(eslintCommentsBeyondOneLine(inFile(comment)), comment).toEqual([`server/example.ts: ${comment}`]);
+    }
+  }, 60_000);
 
   it("lance les scénarios de bout en bout dans un job à part, tel qu'il est listé, sans étape ni script qui passe quoi qu'il arrive (CODE-22)", async () => {
     const [workflow, packageJson] = await Promise.all([read(".github/workflows/ci.yml"), read("package.json")]);

@@ -11,6 +11,8 @@ const { LanguageProvider } = await import("@/contexts/LanguageContext");
 const { renderRouteSeoHead } = await import("../../../server/routeSeo");
 
 type Language = "fr" | "en" | "de" | "zh";
+/** A JSON-LD block of the page head, read as a FAQPage. */
+type FaqPageSchema = { "@type": string; mainEntity: Array<{ "@type": string; name: string; acceptedAnswer: { "@type": string; text: string } }> };
 
 function mount(language: Language) {
   localStorage.setItem("language", language);
@@ -69,7 +71,7 @@ describe("réponses de la FAQ dans la page (SEOP-03)", () => {
 
   it("publie au pré-rendu un FAQPage identique aux réponses que la page affiche en français", () => {
     const head = renderRouteSeoHead("/faq");
-    const schemas = Array.from(head.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g), match => JSON.parse(match[1]) as Record<string, any>);
+    const schemas = Array.from(head.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g), match => JSON.parse(match[1]) as FaqPageSchema);
     const faqPage = schemas.find(schema => schema["@type"] === "FAQPage");
     mount("fr");
 
@@ -77,8 +79,8 @@ describe("réponses de la FAQ dans la page (SEOP-03)", () => {
       const question = within(heading).getByRole("button");
       return { question: question.textContent, answer: answerPanel(question).textContent };
     });
-    expect(faqPage?.mainEntity.map((item: any) => ({ question: item.name, answer: item.acceptedAnswer.text }))).toEqual(shown);
-    expect(faqPage?.mainEntity.every((item: any) => item["@type"] === "Question" && item.acceptedAnswer["@type"] === "Answer")).toBe(true);
+    expect(faqPage?.mainEntity.map(item => ({ question: item.name, answer: item.acceptedAnswer.text }))).toEqual(shown);
+    expect(faqPage?.mainEntity.every(item => item["@type"] === "Question" && item.acceptedAnswer["@type"] === "Answer")).toBe(true);
   });
 });
 

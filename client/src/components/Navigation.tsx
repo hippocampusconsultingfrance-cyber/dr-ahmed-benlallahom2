@@ -42,6 +42,7 @@ function DisplayMenu({ label, toggles, open, setOpen }: { label: string; toggles
       document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("keydown", handleEscape);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- setOpen est le setter d’état de Navigation, le même à chaque rendu : seule l’ouverture pose ou retire l’écoute
   }, [open]);
 
   if (toggles.length === 0) return null;

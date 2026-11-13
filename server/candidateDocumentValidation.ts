@@ -57,6 +57,7 @@ export function shortenFileName(name: string, maxLength = FILE_NAME_MAX_LENGTH):
  * and composed emoji need them. Written as escapes: none of them appears as
  * such in the source.
  */
+// eslint-disable-next-line no-control-regex -- control characters are among those it removes
 const FILE_NAME_INVISIBLE_CHARACTERS = /[\u0000-\u001F\u007F-\u009F\u00AD\u061C\u200B\u200E\u200F\u2028-\u202E\u2060-\u2069\uFEFF\u{E0000}-\u{E007F}]/gu;
 /** Path separators and the other characters Windows refuses in a file name. */
 const FILE_NAME_FORBIDDEN_CHARACTERS = /[\\/<>:"|?*]/g;

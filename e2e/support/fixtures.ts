@@ -67,6 +67,7 @@ type Fixtures = { db: pg.Pool; blockedRequests: string[]; noRealService: void };
  * the built server (e2e/support/egress.mjs).
  */
 export const test = base.extend<Fixtures>({
+  // eslint-disable-next-line no-empty-pattern -- Playwright reads a fixture's dependencies from its first parameter, which must be an object pattern
   blockedRequests: async ({}, use) => {
     await use([]);
   },
@@ -86,6 +87,7 @@ export const test = base.extend<Fixtures>({
     });
     await use(context);
   },
+  // eslint-disable-next-line no-empty-pattern -- Playwright reads a fixture's dependencies from its first parameter, which must be an object pattern
   db: async ({}, use) => {
     const pool = new pg.Pool({ connectionString: settings.databaseUrl, max: 2 });
     await use(pool);

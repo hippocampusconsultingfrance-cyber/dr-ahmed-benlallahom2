@@ -88,7 +88,7 @@ describe("ADM-02 — recherche dans les réservations", () => {
 
     view.loading = false;
     (buttonLabelled(tree, "Payé").onClick as () => void)();
-    tree = render();
+    render();
     expect(view.requests).toEqual([{ status: "completed", search: "aptvol000010", limit: 50, offset: 0 }]);
 
     view.page = { items: [], total: 0 };

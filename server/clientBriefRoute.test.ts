@@ -81,7 +81,7 @@ const brief = {
 async function postBrief(body: string, contentType: string) {
   const response = await fetch(`${baseUrl}/api/client-briefs`, { method: "POST", headers: { "content-type": contentType }, body });
   const text = await response.text();
-  let json: Record<string, unknown> = {};
+  let json: Record<string, unknown>;
   try { json = JSON.parse(text) as Record<string, unknown>; } catch { json = { raw: text }; }
   return { status: response.status, body: json };
 }

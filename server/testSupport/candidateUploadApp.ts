@@ -53,7 +53,7 @@ export async function uploadDocument(baseUrl: string, sessionToken: string, inpu
     headers: { cookie: `candidate_portal_session=${sessionToken}`, "x-forwarded-for": "203.0.113.9" },
   });
   const text = await response.text();
-  let body: Record<string, unknown> = {};
+  let body: Record<string, unknown>;
   try { body = JSON.parse(text) as Record<string, unknown>; } catch { body = { raw: text }; }
   return { status: response.status, body };
 }

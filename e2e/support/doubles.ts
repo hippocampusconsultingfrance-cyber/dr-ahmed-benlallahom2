@@ -161,6 +161,7 @@ function answerOtherService(state: DoublesState, req: IncomingMessage, res: Serv
 /** Starts the doubles on `port` (0: any free port) for the application at `appOrigin`. */
 export async function startDoubles({ port, appOrigin, stripeWebhookSecret }: { port: number; appOrigin: string; stripeWebhookSecret: string }) {
   const state: DoublesState = { emails: [], payments: [], calls: [], blobs: new Map(), unexpected: [] };
+  // eslint-disable-next-line prefer-const -- set once the doubles listen, from the port they got; the handler above reads it
   let handleLocal: ReturnType<typeof localServicesHandler> | undefined;
   const server = createServer(async (req, res) => {
     try {

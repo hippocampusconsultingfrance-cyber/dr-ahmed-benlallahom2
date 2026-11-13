@@ -52,7 +52,7 @@ export function registerStripeWebhookRoute(app: Express) {
         const dispute = await handleChargeDisputeCreated(event.data.object);
         return res.status(dispute.httpStatus).json(dispute.body);
       } else if (event.type === "checkout.session.expired") {
-        const session = event.data.object as any;
+        const session = event.data.object;
         const trackingId = session.metadata?.trackingId;
         if (trackingId) {
           const { getDb } = await import("../db");

@@ -55,7 +55,7 @@ export const adminGdprRequestsRouter = router({
       if (input.status === "rejected" && !input.notes) throw new TRPCError({ code: "BAD_REQUEST", message: "Indiquez le motif du refus avant de refuser la demande." });
 
       const now = new Date();
-      const updateData: Record<string, any> = { status: input.status, updatedAt: now };
+      const updateData: Partial<typeof gdprRequests.$inferInsert> = { status: input.status, updatedAt: now };
       // An empty note clears the saved one; a status change without a note keeps it.
       if (input.notes !== undefined) updateData.notes = input.notes || null;
       // Answer date of a closed request, from which its 1-year retention runs (RGPD-09).

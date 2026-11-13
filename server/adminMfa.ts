@@ -105,7 +105,7 @@ export async function issueAdminMfaChallenge(input: { openId: string; email: str
   await logSecurityEvent({ actorKind: "admin", actorReference: input.openId, category: "admin_mfa_challenge_issued", outcome: "allowed", ipHash: requestIpHash(input.req.headers) });
 }
 
-export async function verifyAdminMfaChallenge(input: { openId: string; code: string; req: { headers: Record<string, unknown> }; res: { cookie: Function } }) {
+export async function verifyAdminMfaChallenge(input: { openId: string; code: string; req: { headers: Record<string, unknown> }; res: { cookie: (name: string, value: string, options: ReturnType<typeof adminMfaCookieOptions>) => unknown } }) {
   const db = await getDb();
   if (!db) throw new Error("admin_mfa_database_unavailable");
   await enforceAdminMfaRateLimit("verify", input.openId, input.req.headers);
@@ -148,7 +148,7 @@ export async function verifyAdminMfaChallenge(input: { openId: string; code: str
  */
 export async function revokeCurrentAdminMfaSession(input: {
   req: { protocol?: string; headers: Record<string, unknown> };
-  res: { clearCookie?: Function };
+  res: { clearCookie?: (name: string, options: Omit<ReturnType<typeof adminMfaCookieOptions>, "maxAge">) => unknown };
   openId?: string | null;
 }) {
   const token = cookieValue(typeof input.req.headers.cookie === "string" ? input.req.headers.cookie : undefined, ADMIN_MFA_COOKIE);

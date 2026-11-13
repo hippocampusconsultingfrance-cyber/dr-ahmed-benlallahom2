@@ -57,7 +57,8 @@ const application = {
   candidatePortalActive: false, candidatePortalInvitation: null, candidatePortalActivation: null,
 };
 
-type Procedure = (input: any) => unknown;
+/** A fake procedure: its input is the one the page sent, of the shape the procedure declares. */
+type Procedure = (input: never) => unknown;
 const procedures: Record<string, Procedure> = {
   "auth.me": () => ({ id: 1, openId: "user_owner", name: "Dr Test", email: "owner@test.local", role: "admin", mfaVerified: true }),
   "adminSecurity.status": () => ({ verified: true }),
@@ -132,7 +133,7 @@ describe.skipIf(!executablePath)("Textes saisis par des tiers dans l’admin, su
           status = 500;
           return { error: superjson.serialize({ message: "Hors du test", code: -32603, data: { code: "INTERNAL_SERVER_ERROR", httpStatus: 500, path: name } }) };
         }
-        return { result: { data: superjson.serialize(procedures[name](inputs[index] ? superjson.deserialize(inputs[index]) : undefined)) } };
+        return { result: { data: superjson.serialize(procedures[name]((inputs[index] ? superjson.deserialize(inputs[index]) : undefined) as never)) } };
       });
       return request.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
     });

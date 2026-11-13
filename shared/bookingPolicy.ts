@@ -198,7 +198,7 @@ export function isPlausiblePhoneNumber(value: string): boolean {
 }
 
 // La règle de z.string().email() (zod 4), que le serveur appliquait jusque-là.
-const BOOKING_EMAIL_ADDRESS = /^(?:[A-Za-z0-9_'+\-]+\.)*[A-Za-z0-9_'+\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\-]*\.)+[A-Za-z]{2,}$/;
+const BOOKING_EMAIL_ADDRESS = /^(?:[A-Za-z0-9_'+-]+\.)*[A-Za-z0-9_'+-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9-]*\.)+[A-Za-z]{2,}$/;
 
 /**
  * Address the confirmation and the invoice can reach (RES-10): one rule for

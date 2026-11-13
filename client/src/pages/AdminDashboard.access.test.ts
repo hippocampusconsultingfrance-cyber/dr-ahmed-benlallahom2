@@ -118,7 +118,7 @@ describe("accès au tableau de bord", () => {
 
   it("exige la double authentification de l’administrateur avant toute section", () => {
     view.security = { isLoading: false, data: { verified: false } };
-    let tree = render();
+    const tree = render();
 
     expect(view.securityQueries.at(-1)).toMatchObject({ enabled: true });
     expect(allText(tree)).toContain("Validation de sécurité");
@@ -135,7 +135,7 @@ describe("accès au tableau de bord", () => {
     const validate = () => elementsOf(codeForm().props.children).find(element => element.props.type === "submit" && textOf(element).trim() === "Valider le code")!;
     expect(validate().props.disabled).toBe(true);
     (codeInput().props.onChange as (event: { target: { value: string } }) => void)({ target: { value: "12a-34 56" } });
-    tree = render();
+    render();
     expect(codeInput().props.value).toBe("123456");
     expect(validate().props.disabled).toBe(false);
     const submit = { preventDefault: vi.fn() };

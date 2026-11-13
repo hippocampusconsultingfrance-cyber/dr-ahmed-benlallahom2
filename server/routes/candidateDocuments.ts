@@ -1,3 +1,4 @@
+import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
 import type { Express } from "express";
 import multer from "multer";
 import { z } from "zod";
@@ -196,7 +197,7 @@ export function registerCandidateDocumentRoutes(app: Express) {
 
   app.get("/api/admin/candidate-documents/:id/download", async (req, res) => {
     try {
-      const requestContext = await createContext({ req, res, info: {} as any });
+      const requestContext = await createContext({ req, res, info: {} as CreateExpressContextOptions["info"] });
       if (!requestContext.user || requestContext.user.role !== "admin") return res.status(403).json({ error: "Accès administrateur requis." });
       if (!requestContext.mfaVerified) return res.status(403).json({ error: "Double authentification requise." });
       const documentId = Number(req.params.id);

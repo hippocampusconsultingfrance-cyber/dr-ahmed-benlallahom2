@@ -1,5 +1,5 @@
 import express, { type Express } from "express";
-import { recordResendEmailEvent } from "../resendWebhookEvents";
+import { recordResendEmailEvent, type ResendWebhookEventData } from "../resendWebhookEvents";
 import { logError } from "../_core/logError";
 
 // svix is loaded at the first Resend event, not at the Vercel function's cold
@@ -38,7 +38,7 @@ export function registerResendWebhookRoute(app: Express) {
         "svix-id": String(req.headers["svix-id"] || ""),
         "svix-timestamp": String(req.headers["svix-timestamp"] || ""),
         "svix-signature": String(req.headers["svix-signature"] || ""),
-      }) as { type?: string; created_at?: string; data?: Record<string, any> };
+      }) as { type?: string; created_at?: string; data?: ResendWebhookEventData };
       const providerEventId = String(req.headers["svix-id"] || "");
       if (!providerEventId || !event.type) {
         res.status(400).send("Invalid Resend webhook payload");

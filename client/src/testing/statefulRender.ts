@@ -71,10 +71,12 @@ export function withStatefulHooks<T extends typeof React>(react: T): T {
   }
   function useCallback(callback: unknown, deps?: readonly unknown[]) {
     if (!store.active) return react.useCallback(callback as () => void, deps as never);
+    // eslint-disable-next-line react-hooks/rules-of-hooks, react-hooks/exhaustive-deps -- a stand-in for React's hooks, run outside React: useCallback is this useMemo, with its caller's deps
     return useMemo(() => callback, deps);
   }
   function useReducer(reducer: (state: unknown, action: unknown) => unknown, initialArg: unknown, init?: (arg: unknown) => unknown) {
     if (!store.active) return react.useReducer(reducer as never, initialArg as never, init as never);
+    // eslint-disable-next-line react-hooks/rules-of-hooks -- a stand-in for React's hooks, run outside React: useReducer is this useState
     const [state, setState] = useState(() => (init ? init(initialArg) : initialArg)) as [unknown, (next: (value: unknown) => unknown) => void];
     return [state, (action: unknown) => setState(previous => reducer(previous, action))];
   }

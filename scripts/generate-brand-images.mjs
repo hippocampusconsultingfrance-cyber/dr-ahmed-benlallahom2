@@ -116,6 +116,7 @@ function buildIco(pngs) {
 async function render(browser, { html, width, height, transparent }) {
   const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1 });
   await page.setContent(html, { waitUntil: "load" });
+  // eslint-disable-next-line no-undef -- runs in the page, where document is the page's
   await page.evaluate(() => document.fonts.ready);
   const data = await page.screenshot({ omitBackground: transparent, type: "png" });
   await page.close();

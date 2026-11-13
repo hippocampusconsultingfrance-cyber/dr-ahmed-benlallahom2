@@ -1,4 +1,5 @@
 import { parse as parseCookieHeader } from "cookie";
+import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
 import type { Express, Request, Response } from "express";
 import { createContext } from "./_core/context";
 import { logError } from "./_core/logError";
@@ -28,7 +29,7 @@ type GoogleDriveOAuthAuthorization =
  * as the tRPC admin procedures and the document download route.
  */
 async function authorizeGoogleDriveOAuthRequest(req: Request, res: Response, step: "connect" | "callback"): Promise<GoogleDriveOAuthAuthorization> {
-  const context = await createContext({ req, res, info: {} as any });
+  const context = await createContext({ req, res, info: {} as CreateExpressContextOptions["info"] });
   if (!context.user || context.user.role !== "admin") return { allowed: false, status: 403, message: GOOGLE_DRIVE_ADMIN_REQUIRED_MESSAGE };
   if (!context.mfaVerified) {
     await logSecurityEvent({

@@ -31,7 +31,13 @@ const UNDELIVERED_STATUSES = new Set<DeliveryStatus>(["bounced", "complained", "
  */
 const RESEND_BOUNCE_ALERT_BUDGET_MS = 5_000;
 
-export type ResendWebhookEvent = { type: string; created_at?: string; data?: Record<string, any> };
+/**
+ * An event's data, JSON from Resend: each field is checked before it is used. Its error is a
+ * text or an object with its message (a text has none).
+ */
+export type ResendWebhookEventData = { [field: string]: unknown; bounce?: { message?: unknown }; error?: { message?: unknown } };
+
+export type ResendWebhookEvent = { type: string; created_at?: string; data?: ResendWebhookEventData };
 
 /** neon-http's batch (one transaction) takes a non-empty list. */
 function nonEmpty(statements: BatchItem<"pg">[]) {
@@ -47,7 +53,7 @@ function nonEmpty(statements: BatchItem<"pg">[]) {
  */
 function eventEffects(db: Database, input: {
   deliveryStatus: DeliveryStatus | undefined;
-  data: Record<string, any>;
+  data: ResendWebhookEventData;
   occurredAt: Date;
   recipient: Pick<RecruitmentCampaignRecipient, "id" | "deliveredAt"> | undefined;
   applicationId: number | null;

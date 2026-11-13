@@ -142,6 +142,7 @@ export default function CookieConsent() {
     const handleOpen = (event: Event) => openPreferences((event as CustomEvent<HTMLElement | null>).detail ?? null);
     window.addEventListener(OPEN_COOKIE_PREFERENCES_EVENT, handleOpen);
     return () => window.removeEventListener(OPEN_COOKIE_PREFERENCES_EVENT, handleOpen);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- openPreferences, recréée à chaque rendu, ne lit que cookieConsent : l’écoute suit ce choix
   }, [cookieConsent]);
 
   const closePreferences = () => {

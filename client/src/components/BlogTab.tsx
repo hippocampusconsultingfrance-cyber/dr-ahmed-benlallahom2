@@ -1,16 +1,20 @@
 import { trpc } from "@/lib/trpc";
 import { useState } from "react";
+import type { inferRouterOutputs } from "@trpc/server";
+import type { AppRouter } from "../../../server/routers";
 import { Button } from "@/components/ui/button";
 import { Plus, Edit, Trash, Globe } from "lucide-react";
 import { toast } from "sonner";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
+
+type BlogPost = inferRouterOutputs<AppRouter>["admin"]["blog"]["list"][number];
 
 /** Not shown in the dashboard: kept as is, like BlogPage and BlogPostPage, until the owner decides on the blog (CODE-05). */
 export default function BlogTab() {
   const utils = trpc.useUtils();
   const { data: posts, isLoading, error } = trpc.admin.blog.list.useQuery();
   const [showForm, setShowForm] = useState(false);
-  const [editingPost, setEditingPost] = useState<any>(null);
+  const [editingPost, setEditingPost] = useState<BlogPost | null>(null);
   const [form, setForm] = useState({ title: "", slug: "", excerpt: "", content: "", category: "anesthesie", language: "fr", source: "", coverImage: "", published: true });
 
   const createPost = trpc.admin.blog.create.useMutation({
@@ -44,7 +48,7 @@ export default function BlogTab() {
     setForm({ title: "", slug: "", excerpt: "", content: "", category: "anesthesie", language: "fr", source: "", coverImage: "", published: true });
   };
 
-  const handleEdit = (post: any) => {
+  const handleEdit = (post: BlogPost) => {
     setEditingPost(post);
     setForm({
       title: post.title,

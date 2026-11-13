@@ -217,6 +217,7 @@ export function printLocalServiceEvent(event: LocalServiceEvent, log: (line: str
  */
 export async function startLocalServices({ appOrigin, onEvent = event => printLocalServiceEvent(event) }: { appOrigin: string; onEvent?: (event: LocalServiceEvent) => void }) {
   const stripeWebhookSecret = `whsec_local_${randomBytes(16).toString("hex")}`;
+  // eslint-disable-next-line prefer-const -- set once the doubles listen, from the port they got; the handler above reads it
   let handle: ReturnType<typeof localServicesHandler> | undefined;
   const server = createServer((req, res) => {
     handle!(req, res).then(handled => {

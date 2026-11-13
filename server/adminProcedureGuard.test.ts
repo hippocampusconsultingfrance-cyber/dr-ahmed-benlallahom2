@@ -93,7 +93,7 @@ async function context(user: TrpcContext["user"], cookie?: string, onCookie?: (n
 
 /** Calls a procedure by its path with an empty input: access control runs before input validation. */
 async function callWithoutInput(ctx: TrpcContext, path: string) {
-  const procedure = path.split(".").reduce<any>((node, key) => node[key], appRouter.createCaller(ctx));
+  const procedure = path.split(".").reduce<unknown>((node, key) => (node as Record<string, unknown>)[key], appRouter.createCaller(ctx)) as (input: unknown) => Promise<unknown>;
   try {
     await procedure(undefined);
     return "accepted";

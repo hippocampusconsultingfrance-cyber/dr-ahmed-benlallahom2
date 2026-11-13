@@ -57,6 +57,7 @@ const { default: CandidateAccessPage } = await import("@/pages/CandidateAccessPa
 const { getContactFormCopy, getGdprRequestCopy } = await import("@/lib/publicFormCopy");
 const { toast } = await import("sonner");
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the props of any element of the tree, read and called as each test needs
 type Element = { type: unknown; props: Record<string, any>; key?: string | null };
 const elements = (component: () => unknown) => elementsOf(renderStateful(component as () => ReactElement)) as Element[];
 const submitButton = (component: () => unknown) => elements(component).find(element => element.props.type === "submit")!;

@@ -162,7 +162,7 @@ describe("GDPR Request Validation", () => {
       const invalidData = {
         name: "Jane Smith",
         email: "jane@example.com",
-        requestType: "invalid" as any,
+        requestType: "invalid",
         description: "I want to access my personal data.",
       };
 

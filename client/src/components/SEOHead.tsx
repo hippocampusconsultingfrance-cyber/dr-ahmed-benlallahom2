@@ -12,7 +12,7 @@ interface SEOHeadProps {
   ogImage?: string;
   ogUrl?: string;
   twitterHandle?: string;
-  structuredData?: Record<string, any>;
+  structuredData?: Record<string, unknown>;
   noIndex?: boolean;
 }
 

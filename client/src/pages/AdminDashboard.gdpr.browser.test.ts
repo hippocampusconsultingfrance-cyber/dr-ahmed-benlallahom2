@@ -53,15 +53,16 @@ const request = (id: number) => ({
   updatedAt: new Date(Date.UTC(2026, 9, 1, 8, id)),
 });
 
-type Procedure = (input: any) => unknown;
+/** A fake procedure: its input is the one the page sent, of the shape the procedure declares. */
+type Procedure = (input: never) => unknown;
 const procedures: Record<string, Procedure> = {
   "auth.me": () => ({ id: 1, openId: "user_owner", name: "Dr Test", email: "owner@test.local", role: "admin", mfaVerified: true }),
   "adminSecurity.status": () => ({ verified: true }),
-  "admin.gdprRequests.list": ({ offset, limit }) => ({
+  "admin.gdprRequests.list": ({ offset, limit }: { offset: number; limit: number }) => ({
     items: Array.from({ length: Math.max(0, Math.min(limit, TOTAL - offset)) }, (_, index) => request(offset + index + 1)),
     total: TOTAL,
   }),
-  "admin.personalData.find": ({ email }) => ({
+  "admin.personalData.find": ({ email }: { email: string }) => ({
     email,
     contactMessages: [{ id: 1, trackingId: "CBROWSER0001", name: "Demandeur", email, phone: null, message: "Bonjour", gdprConsent: 1, read: 1, createdAt: new Date(Date.UTC(2026, 8, 1)) }],
     medicalQuestions: [],
@@ -116,7 +117,7 @@ describe.skipIf(!executablePath)("Demandes RGPD de l’admin dans un navigateur"
           status = 500;
           return { error: superjson.serialize({ message: "Hors du test", code: -32603, data: { code: "INTERNAL_SERVER_ERROR", httpStatus: 500, path: name } }) };
         }
-        return { result: { data: superjson.serialize(procedures[name](inputs[index] ? superjson.deserialize(inputs[index]) : undefined)) } };
+        return { result: { data: superjson.serialize(procedures[name]((inputs[index] ? superjson.deserialize(inputs[index]) : undefined) as never)) } };
       });
       return route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
     });

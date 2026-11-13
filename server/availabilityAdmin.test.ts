@@ -99,7 +99,7 @@ describe("administration des disponibilités — validation serveur", () => {
       .resolves.toEqual({ success: true, paidAppointments: ["APTPAID00001"] });
     expect(db.inserts[0]).toMatchObject({ table: blockedDates, values: { date: futureDate(), reason: "Congrès" } });
 
-    db = fakeDb(new Map<unknown, unknown[][]>([[blockedDates, [[]]], [appointments, [[]]]]));
+    fakeDb(new Map<unknown, unknown[][]>([[blockedDates, [[]]], [appointments, [[]]]]));
     await expect(admin().addBlockedDate({ date: futureDate() })).resolves.toEqual({ success: true, paidAppointments: [] });
   });
 });

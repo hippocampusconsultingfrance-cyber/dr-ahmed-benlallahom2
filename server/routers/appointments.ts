@@ -114,6 +114,7 @@ export const bookingCustomerEmail = emailText(z.string().max(320).refine(isBooki
  * la validation ; les marques de direction d’un numéro collé, elles, sont
  * retirées par normalizePhoneInput (INTL-09).
  */
+// eslint-disable-next-line no-control-regex -- les caractères de contrôle sont ceux que l’on refuse
 const PHONE_CONTROL_CHARACTERS = new RegExp("[\\u0000-\\u001F\\u007F-\\u009F\\u2028\\u2029]");
 
 /**

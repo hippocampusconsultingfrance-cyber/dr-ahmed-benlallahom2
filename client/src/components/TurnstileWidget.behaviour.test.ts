@@ -15,6 +15,7 @@ const turnstile = vi.hoisted(() => ({ renders: [] as Options[], removed: [] as s
 const { TurnstileWidget, TurnstileLoadError } = await import("./TurnstileWidget");
 const { getTurnstileWidgetCopy } = await import("@/lib/publicFormCopy");
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the props of any element of the tree, read and called as each test needs
 type Element = { type: unknown; props: Record<string, any> };
 let submitListeners: Array<(event: { preventDefault: () => void }) => void>;
 let headScripts: Array<{ id: string; src: string }>;

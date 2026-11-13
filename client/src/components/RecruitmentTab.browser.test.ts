@@ -50,7 +50,8 @@ const application = {
   candidatePortalActive: false, candidatePortalInvitation: null, candidatePortalActivation: null,
 };
 
-type Procedure = (input: any) => unknown;
+/** A fake procedure: its input is the one the page sent, of the shape the procedure declares. */
+type Procedure = (input: never) => unknown;
 
 describe.skipIf(!executablePath)("Candidatures de l’admin dans un navigateur", () => {
   let server: ViteDevServer;
@@ -103,7 +104,7 @@ describe.skipIf(!executablePath)("Candidatures de l’admin dans un navigateur",
           status = 500;
           return { error: superjson.serialize({ message: "Hors du test", code: -32603, data: { code: "INTERNAL_SERVER_ERROR", httpStatus: 500, path: name } }) };
         }
-        return { result: { data: superjson.serialize(procedures[name](inputs[index] ? superjson.deserialize(inputs[index]) : undefined)) } };
+        return { result: { data: superjson.serialize(procedures[name]((inputs[index] ? superjson.deserialize(inputs[index]) : undefined) as never)) } };
       });
       return request.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
     });

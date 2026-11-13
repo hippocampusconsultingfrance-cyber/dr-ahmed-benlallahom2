@@ -20,7 +20,7 @@ export default function TestimonialsPage() {
     }
   );
 
-  const content: Record<string, any> = {
+  const content: Record<string, Record<string, string>> = {
     fr: {
       title: "Témoignages des Partenaires",
       subtitle: "Découvrez les expériences de nos partenaires",

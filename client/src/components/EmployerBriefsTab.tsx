@@ -158,6 +158,7 @@ export default function EmployerBriefsTab({ reference = "" }: { reference?: stri
     setSelectedBriefId(null);
     setMissionGoneNotice(true);
     void utils.admin.clientBriefs.list.invalidate();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- once each time the mission is found gone; utils is the same tRPC client at every render
   }, [missionGone]);
   const activeBrief = missionGone ? null : matches.data?.brief ?? null;
   // Never offer an empty shortlist export: the server refuses it (REC-01),

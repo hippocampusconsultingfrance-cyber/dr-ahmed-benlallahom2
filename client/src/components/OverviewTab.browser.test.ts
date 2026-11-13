@@ -40,7 +40,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /** The GDPR deadline the overview shows, set before each page. */
 let gdprDeadlineInDays = 3;
 
-type Procedure = (input: any) => unknown;
+/** A fake procedure: its input is the one the page sent, of the shape the procedure declares. */
+type Procedure = (input: never) => unknown;
 const procedures: Record<string, Procedure> = {
   "auth.me": () => ({ id: 1, openId: "user_owner", name: "Dr Test", email: "owner@test.local", role: "admin", mfaVerified: true }),
   "adminSecurity.status": () => ({ verified: true }),
@@ -102,7 +103,7 @@ describe.skipIf(!executablePath)("Vue d’ensemble de l’administration dans un
           status = 500;
           return { error: superjson.serialize({ message: "Hors du test", code: -32603, data: { code: "INTERNAL_SERVER_ERROR", httpStatus: 500, path: name } }) };
         }
-        return { result: { data: superjson.serialize(procedures[name](undefined)) } };
+        return { result: { data: superjson.serialize(procedures[name](undefined as never)) } };
       });
       return request.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
     });

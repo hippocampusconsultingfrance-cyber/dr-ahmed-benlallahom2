@@ -55,6 +55,7 @@ export function cutToVisibleCharacters(text: string, max: number): string {
 }
 
 // Written as escapes: line breaks and the other control characters (INTL-05).
+// eslint-disable-next-line no-control-regex -- control characters are what it replaces
 const LINE_BREAKS = new RegExp("[\\u0000-\\u001F\\u007F-\\u009F\\u2028\\u2029]+", "g");
 const oneLine = (text: string) => text.replace(LINE_BREAKS, " ").trim();
 

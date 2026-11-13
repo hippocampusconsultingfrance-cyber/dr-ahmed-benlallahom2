@@ -112,7 +112,7 @@ function DialogContent({
       // Check both the native isComposing property and our context state
       // This handles Safari's timing issues with composition events
       const isCurrentlyComposing = shouldPreventDialogEscape(
-        (e as any).isComposing,
+        e.isComposing,
         isComposing(),
       );
 

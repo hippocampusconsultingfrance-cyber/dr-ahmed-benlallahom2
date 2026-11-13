@@ -95,7 +95,7 @@ function parseListField(value: unknown): string[] {
 
 /** Public recruitment application: multipart form with the CV, parsed by Multer. */
 export function registerRecruitmentApplyRoute(app: Express) {
-  app.post("/api/recruitment/apply", (req, res, next) => {
+  app.post("/api/recruitment/apply", (req, res) => {
     recruitmentUpload.single("cv")(req, res, async uploadError => {
       if (uploadError) {
         const tooLarge = uploadError instanceof multer.MulterError && uploadError.code === "LIMIT_FILE_SIZE";

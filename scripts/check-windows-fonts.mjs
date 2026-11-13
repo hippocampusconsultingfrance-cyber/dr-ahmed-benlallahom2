@@ -47,6 +47,7 @@ const fontCharacters = Array.from(JSON.parse(/export const DOCX_FONT_CHARACTERS 
 const AS_BASE = constant("DOCX_FONT_AS_BASE");
 const measuredIndex = new Map(fontCharacters.map((character, at) => [character, at]));
 const bases = fontCharacters.map(character => measuredIndex.get(character.normalize("NFD")[0]) ?? 0);
+// eslint-disable-next-line no-control-regex, no-regex-spaces -- the table's lines as the generator writes them, newlines and indentation
 const signsMetrics = new RegExp('\n  "signs": \\{\n    line: (\\d+),\n    regular: "([^"]*)",(?:\n    italic: "[^"]*",)?\n    bold: "([^"]*)"', "s").exec(source);
 const decodeWidths = digits => {
   const widths = [];

@@ -200,6 +200,7 @@ export default function PersonalDataSearchPanel({ requestedEmail = "", reveal = 
     if (!reveal) return;
     revealPersonalDataSearch(sectionRef.current, titleRef.current);
     onRevealed?.();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- once per request to reveal: onRevealed is a new function at each render of the GDPR tab
   }, [reveal]);
   // Written after the first render, even for results already in cache, so that each one is read out.
   const summary = found.data ? describePersonalDataFound(found.data) : "";

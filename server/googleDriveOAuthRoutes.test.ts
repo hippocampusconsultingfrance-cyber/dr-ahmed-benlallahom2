@@ -1,3 +1,4 @@
+import type { Express } from "express";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -26,9 +27,10 @@ vi.mock("./googleDriveExport", () => ({
 
 import { GOOGLE_DRIVE_MFA_REQUIRED_MESSAGE, registerGoogleDriveOAuthRoutes } from "./googleDriveOAuthRoutes";
 
-type Handler = (req: any, res: any) => Promise<unknown>;
+/** A route's handler, given the request and the response these tests fake. */
+type Handler = (req: { query: Record<string, string>; headers: Record<string, string> }, res: ReturnType<typeof fakeResponse>) => Promise<unknown>;
 const handlers = new Map<string, Handler>();
-registerGoogleDriveOAuthRoutes({ get: (path: string, handler: Handler) => handlers.set(path, handler) } as any);
+registerGoogleDriveOAuthRoutes({ get: (path: string, handler: Handler) => handlers.set(path, handler) } as unknown as Express);
 
 function fakeResponse() {
   const response = {

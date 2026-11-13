@@ -15,7 +15,7 @@ import { elementsOf, renderStateful, resetStatefulHooks } from "@/testing/statef
 
 vi.mock("react", async importOriginal => (await import("@/testing/statefulRender")).withStatefulHooks(await importOriginal()));
 
-type MutationOptions = { onSuccess?: (result: any) => unknown };
+type MutationOptions = { onSuccess?: (result: unknown) => unknown };
 const state = vi.hoisted(() => {
   const mutations: Record<string, ReturnType<typeof vi.fn>> = {};
   return {
@@ -54,6 +54,7 @@ vi.mock("@/lib/trpc", () => ({
 const { default: MedicalQuestionsAdminTab } = await import("./MedicalQuestionsAdminTab");
 const { default: AdminStatusBadge, adminStatusLabel } = await import("./AdminStatusBadge");
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the props of any element of the tree, read and called as each test needs
 type Element = { type: unknown; props: Record<string, any> };
 const textOf = (node: unknown): string => {
   if (node === null || node === undefined || typeof node === "boolean") return "";

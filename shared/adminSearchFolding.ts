@@ -58,6 +58,7 @@ export function foldAdminSearchText(text: string): string {
 
 const INVISIBLE = new Set(INVISIBLE_CHARACTERS);
 /** Control characters other than the spaces (tab, line breaks), which separate the words like a space. */
+// eslint-disable-next-line no-control-regex -- control characters are what it finds
 const CONTROL_CHARACTER = /[\u0000-\u0008\u000e-\u001f\u007f-\u009f]/;
 
 /**

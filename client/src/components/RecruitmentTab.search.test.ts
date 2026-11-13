@@ -102,7 +102,7 @@ describe("ADM-02 — recherche dans les candidatures", () => {
     (propsOf(tree, AdminSearchField).onChange as (value: string) => void)("CV1");
     render();
     vi.advanceTimersByTime(ADMIN_SEARCH_DELAY_MS);
-    tree = render();
+    render();
     expect(view.requests).toEqual([{ status: "shortlisted", search: "CV1", limit: 50, offset: 0 }]);
 
     view.page = { items: [], total: 0 };

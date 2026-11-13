@@ -24,7 +24,7 @@ const headerName = (document: Document) => Array.from(document.querySelectorAll(
 const footerOf = (document: Document) => Array.from(document.querySelectorAll("td")).at(-1)!;
 const preheaderOf = (document: Document) => {
   const first = document.body.firstElementChild as HTMLElement | null;
-  return first?.tagName === "DIV" && first.style.display === "none" ? first.textContent!.replace(/[͏‌ ]/g, "").trim() : null;
+  return first?.tagName === "DIV" && first.style.display === "none" ? first.textContent!.replace(/[\u034f\u200c\u00a0]/g, "").trim() : null;
 };
 
 function channel(hex: string, offset: number) {

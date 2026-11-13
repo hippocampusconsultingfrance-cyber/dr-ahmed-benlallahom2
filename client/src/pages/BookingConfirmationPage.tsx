@@ -395,6 +395,7 @@ export default function BookingConfirmationPage() {
       // Le créneau est libéré ; la saisie reste disponible pour une nouvelle tentative.
       cancelPending.mutate({ sessionId }, { onSuccess: () => clearPendingBooking({ checkoutSessionId: sessionId }) });
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- une seule libération par paiement annulé : la mutation change d’objet à chaque rendu
   }, [canceled, sessionId]);
 
   useEffect(() => {

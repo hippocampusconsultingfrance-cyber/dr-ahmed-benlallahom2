@@ -131,6 +131,7 @@ export function inspectDocxArchive(buffer: Buffer, limits: DocumentDecompression
       try {
         content = inflateRawSync(data, { maxOutputLength: Math.max(1, remaining) });
       } catch (error) {
+        // eslint-disable-next-line preserve-caught-error -- the refusal's code is all that is said of it; zlib's error adds nothing
         if (isBufferTooLarge(error)) throw new Error("cv_validation_docx_decompressed_size_exceeded");
         throw invalid();
       }

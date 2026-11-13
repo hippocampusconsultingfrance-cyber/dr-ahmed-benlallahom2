@@ -30,7 +30,8 @@ function findChromium() {
 const executablePath = findChromium();
 const root = path.resolve(import.meta.dirname, "../../..");
 
-type Procedure = (input: any) => unknown;
+/** A fake procedure: its input is the one the page sent, of the shape the procedure declares. */
+type Procedure = (input: never) => unknown;
 type TrpcError = { trpcError: { code: string; httpStatus: number; message: string; reason?: string } };
 const refuse = (code: string, httpStatus: number, message: string, reason?: string): TrpcError => ({ trpcError: { code, httpStatus, message, reason } });
 
@@ -82,7 +83,7 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
       for (const [key, value] of Object.entries(storedSession)) sessionStorage.setItem(key, value);
     }, { storedLanguage: language, storedSession: session, consent: { key: COOKIE_CONSENT_STORAGE_KEY, value: JSON.stringify(createCookieConsent(false)) } });
     const page = await context.newPage();
-    const calls: Array<{ procedure: string; input: any }> = [];
+    const calls: Array<{ procedure: string; input: unknown }> = [];
     const alerts: string[] = [];
     page.on("dialog", (dialog) => {
       alerts.push(dialog.message());
@@ -99,7 +100,7 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
       const body = await Promise.all(names.map(async (name, index) => {
         const input = inputs[index] ? superjson.deserialize(inputs[index]) : undefined;
         calls.push({ procedure: name, input });
-        const result = procedures[name] ? await procedures[name](input) : null;
+        const result = procedures[name] ? await procedures[name](input as never) : null;
         if (result && typeof result === "object" && "trpcError" in result) {
           const { code, httpStatus, message, reason } = (result as TrpcError).trpcError;
           status = httpStatus;
@@ -133,7 +134,7 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
     "availability.getSlots": () => EVENING_SLOTS,
     "availability.getBlockedDates": () => [],
     "availability.getBookedSlots": () => [],
-    "appointments.calculatePrice": ({ appointmentDate }) => priceFor(appointmentDate),
+    "appointments.calculatePrice": ({ appointmentDate }: { appointmentDate: string }) => priceFor(appointmentDate),
     ...overrides,
   });
 
@@ -163,7 +164,7 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
     const taken = parisBookingSlotStart(thirdDay, "18:30")!;
     const { page, calls } = await open("/booking", bookingProcedures({
       "availability.getBlockedDates": () => [{ date: blockedDay }],
-      "availability.getBookedSlots": ({ date }) => (date === thirdDay ? [taken] : []),
+      "availability.getBookedSlots": ({ date }: { date: string }) => (date === thirdDay ? [taken] : []),
     }), { timezoneId: "Asia/Dubai" });
 
     const days = await page.locator("#booking-day option").evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).value));
@@ -304,7 +305,7 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
     };
     const { page, calls } = await open("/booking", bookingProcedures({
       // Comme le serveur (calendarDateInput) : un jour vide est refusé.
-      "availability.getBookedSlots": ({ date }) => (date ? [] : refuse("BAD_REQUEST", 400, "Invalid date")),
+      "availability.getBookedSlots": ({ date }: { date: string }) => (date ? [] : refuse("BAD_REQUEST", 400, "Invalid date")),
     }), { session: { "booking:pending:v1": JSON.stringify(pending) }, beforeGoto: (page) => page.clock.install() });
     const card = page.getByRole("region", { name: bookingContent.fr.pending.title });
     await card.waitFor();
@@ -366,7 +367,7 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
     let blocked: Array<{ date: string }> = [];
     const { page, alerts } = await open("/booking", bookingProcedures({
       "availability.getBlockedDates": () => blocked,
-      "availability.getBookedSlots": ({ date }) => (date === secondDay ? secondDayStarts : []),
+      "availability.getBookedSlots": ({ date }: { date: string }) => (date === secondDay ? secondDayStarts : []),
       // Le jour vient d'être fermé dans l'administration pendant que la page était ouverte.
       "appointments.create": () => {
         blocked = [{ date: firstDay }];
@@ -541,7 +542,7 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
     await page.getByRole("group", { name: bookingContent.en.form.slotsLegend }).getByRole("radio").first().locator("xpath=..").click();
     await page.locator("#booking-details").fill("Practical questions");
     const submit = page.getByRole("button", { name: bookingContent.en.form.submit });
-    const createInputs = () => calls.filter((call) => call.procedure === "appointments.create").map((call) => call.input);
+    const createInputs = () => calls.filter((call) => call.procedure === "appointments.create").map((call) => call.input as { turnstileToken: string });
 
     // Parcours normal : aucune vérification affichée ni jeton envoyé.
     await page.locator("#availability-status[data-state='available']").waitFor();
@@ -571,7 +572,7 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
     let release = () => {};
     const { page, calls } = await open("/booking", bookingProcedures({
       // Service rétabli : la réponse est retenue jusqu'à release(), le temps de vérifier le bouton pendant le nouvel essai.
-      "availability.getBookedSlots": ({ date }) => (bookedSlotsDown
+      "availability.getBookedSlots": ({ date }: { date: string }) => (bookedSlotsDown
         ? refuse("INTERNAL_SERVER_ERROR", 500, "Internal error")
         : new Promise((resolve) => { release = () => resolve(date === secondDay ? secondDayStarts : []); })),
     }), { language: "en" });
@@ -641,7 +642,7 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
       "availability.getSlots": agenda(() => EVENING_SLOTS),
       "availability.getBlockedDates": agenda(() => []),
       "availability.getBookedSlots": agenda(() => []),
-      "appointments.calculatePrice": async (input) => {
+      "appointments.calculatePrice": async (input: { appointmentDate: string }) => {
         if (agendaDown || priceDown || failNextPrice) {
           failNextPrice = false;
           return refuse("INTERNAL_SERVER_ERROR", 500, "Internal error");

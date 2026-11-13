@@ -16,6 +16,7 @@ const { COOKIE_CONSENT_STORAGE_KEY, createCookieConsent } = await import("./cook
 const { Dialog, DialogContent } = await import("@/components/ui/dialog");
 const { default: WhatsAppButton } = await import("./WhatsAppButton");
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the props of any element of the tree, read and called as each test needs
 type Element = { type: unknown; props: Record<string, any> };
 const copy = cookieCopy.fr;
 const textOf = (node: unknown): string => {

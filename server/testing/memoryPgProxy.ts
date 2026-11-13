@@ -690,9 +690,9 @@ export function createMemoryPg(tables: PgTable[], options: { now?: () => Date; m
     if (method === "execute") {
       // Statements without RETURNING resolve to the driver result object, like
       // drizzle-orm/neon-http ({ rows, rowCount }).
-      return { rows: { rows: result.rows, rowCount: result.rowCount } as any };
+      return { rows: { rows: result.rows, rowCount: result.rowCount } as unknown as unknown[] };
     }
-    return { rows: result.rows as any };
+    return { rows: result.rows };
   });
 
   // drizzle's pg-proxy has no batch. neon-http sends one as a transaction: when

@@ -143,7 +143,7 @@ async function logCandidateAudit(input: {
   });
 }
 
-async function createCandidateSession(candidateId: number, req: { protocol?: string; headers: Record<string, unknown> }, res: { cookie: Function }) {
+async function createCandidateSession(candidateId: number, req: { protocol?: string; headers: Record<string, unknown> }, res: { cookie: (name: string, value: string, options: ReturnType<typeof candidateSessionCookieOptions>) => unknown }) {
   const db = databaseOrThrow(await getDb());
   const token = createCandidateToken();
   const expiresAt = new Date(Date.now() + CANDIDATE_SESSION_MAX_AGE_SECONDS * 1000);

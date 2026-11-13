@@ -33,7 +33,7 @@ export default function AvailabilityTab() {
       setShowSlotForm(false);
       setSlotForm({ dayOfWeek: 1, startTime: "09:00", endTime: "10:00" });
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: e => toast.error(e.message),
   });
 
   const deleteSlot = trpc.admin.availability.deleteSlot.useMutation({
@@ -107,7 +107,7 @@ export default function AvailabilityTab() {
       toast.success("Date débloquée");
       utils.admin.availability.listBlockedDates.invalidate();
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: e => toast.error(e.message),
   });
 
   const dayNames = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];

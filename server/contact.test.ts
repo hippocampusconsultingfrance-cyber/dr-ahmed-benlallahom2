@@ -1,3 +1,4 @@
+import type { TRPCError } from "@trpc/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { appRouter } from "./routers";
 import { createTestContext } from "./testSupport/trpcContext";
@@ -141,7 +142,8 @@ describe("contact.submit", () => {
         gdprConsent: 0,
       });
       expect.fail("Should have thrown an error");
-    } catch (error: any) {
+    } catch (caught) {
+      const error = caught as TRPCError;
       expect(error.code).toBe("BAD_REQUEST");
       expect(error.message).toContain("RGPD");
     }

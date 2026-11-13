@@ -46,6 +46,7 @@ const { default: CandidateAccessPage, candidateAccessCopy, getCandidateActivatio
 const { candidateActivationResendPath } = await import("./CandidateVerifyPage");
 const { TurnstileWidget } = await import("@/components/TurnstileWidget");
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the props of any element of the tree, read and called as each test needs
 type Element = { type: unknown; props: Record<string, any>; key?: string | null };
 const elements = () => elementsOf(renderStateful(CandidateAccessPage as () => ReactElement)) as Element[];
 const byId = (id: string) => elements().find(element => element.props.id === id);

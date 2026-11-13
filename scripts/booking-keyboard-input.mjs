@@ -81,6 +81,7 @@ try {
   }
 
   const { context, page } = await openPage("Pixel 7", "/booking?lang=en");
+  // eslint-disable-next-line no-undef -- runs in the page, where window is the page's
   await page.waitForFunction(() => !window.location.search.includes("lang="));
   const heading = await page.locator("h1").first().innerText();
   const menu = await page.locator('button[aria-label="Change language"]').count();

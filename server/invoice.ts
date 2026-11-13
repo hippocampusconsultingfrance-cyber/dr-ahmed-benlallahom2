@@ -337,7 +337,7 @@ export interface InvoiceData {
 // Helvetica, police de repli (WinAnsi), n’a pas l’espace fine insécable
 // qu’Intl insère en français : on la remplace par une espace normale.
 function pdfSafeSpaces(value: string): string {
-  return value.replace(/[  ]/g, " ");
+  return value.replace(/[\u202f\u00a0]/g, " ");
 }
 
 /** Montant au format français : « 1 150,00 € ». */

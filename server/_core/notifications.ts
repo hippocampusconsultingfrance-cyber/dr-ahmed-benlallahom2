@@ -327,7 +327,7 @@ export function formatPatientDateTime(date: Date, language: EmailLanguage = "fr"
 
 /** "100,00 €" in French, "€100.00" in English (regular spaces, safe in every mail client). */
 export function formatPatientAmount(amount: number | string, language: EmailLanguage = "fr"): string {
-  return EURO_FORMAT[language].format(Number(amount)).replace(/[  ]/g, " ");
+  return EURO_FORMAT[language].format(Number(amount)).replace(/[\u202f\u00a0]/g, " ");
 }
 
 type PatientEmailContent = {
@@ -1363,10 +1363,6 @@ export async function sendCandidatePortalAccessEmail(input: CandidatePortalAcces
     if (candidatePortalAccessEmailFailureCode(firstError) !== "delivery_exception") {
       throw firstError;
     }
-    try {
-      return await sendOnce();
-    } catch (retryError) {
-      throw retryError;
-    }
+    return await sendOnce();
   }
 }
