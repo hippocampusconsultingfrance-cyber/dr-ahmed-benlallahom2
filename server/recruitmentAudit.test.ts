@@ -76,6 +76,19 @@ describe("recruitment matching profiles", () => {
     expect(matchesRecruitmentProfile({ ...candidate, languages: ["Wolof"], profile: profile(["wolof"]) })).toBe(true);
   });
 
+  it("lit les langues d’un profil, saisies avec des virgules, comme un seul texte : ce qui ne nomme aucune langue qualifie la langue d’avant (IA02-R5-SEPARATEUR-QUALIFICATIFS)", () => {
+    const candidate = { score: 70, specialty: "Anesthésie-réanimation", targetCountries: ["Émirats arabes unis"], languages: ["English"], extractedSkills: [] };
+    const profile = (requiredLanguages: string[]) => ({ targetCountry: null, specialty: null, minimumScore: 0, requiredLanguages: JSON.stringify(requiredLanguages), requiredSkills: null });
+    // Before: « écrit » and « parlé », typed after a comma, were two requirements nobody meets.
+    for (const required of [["Anglais – lu", "écrit", "parlé"], ["English – UAE", "Qatar"], ["Anglais – C1", "C2"], ["obligatoire", "Anglais"]]) {
+      expect(matchesRecruitmentProfile({ ...candidate, profile: profile(required) }), required.join(", ")).toBe(true);
+    }
+    for (const required of [["Anglais", "arabe"], ["Anglais", "Wolof serait un atout"], ["Anglais – Wolof", "Dakar"]]) {
+      expect(matchesRecruitmentProfile({ ...candidate, profile: profile(required) }), required.join(", ")).toBe(false);
+    }
+    expect(matchesRecruitmentProfile({ ...candidate, languages: ["English", "Wolof"], profile: profile(["Anglais – Wolof", "Dakar"]) })).toBe(true);
+  });
+
   it("handles malformed JSON safely", () => {
     expect(parseRecruitmentJsonArray("not-json")).toEqual([]);
     expect(parseRecruitmentJsonArray(JSON.stringify(["France", 1, null]))).toEqual(["France"]);

@@ -1,5 +1,5 @@
 import { certificationDateIsCurrent, certificationExpiry, type RecruitmentFact, type RecruitmentFactOrigin } from "../shared/recruitmentFactOrigins";
-import { givesRequiredLanguage, meetsRequiredLanguage, recruitmentLanguageCodes, recruitmentLanguageRequirements } from "../shared/recruitmentLanguages";
+import { givesRequiredLanguage, meetsRequiredLanguage, recruitmentLanguageCodes, recruitmentLanguageListRequirements } from "../shared/recruitmentLanguages";
 
 type BriefForMatching = {
   specialtyNeeded: string;
@@ -267,8 +267,9 @@ export function computeBriefCandidateMatch(brief: BriefForMatching, candidate: C
   // « English (polished) ». Each language a term names counts on its own
   // (« Anglais/Arabe », « anglais et arabe »: two), as for a matching profile
   // and the Langue filter, a choice once (« anglais ou arabe », by either);
-  // one the table does not know by its words, whole.
-  const requiredLanguages = parseTerms(brief.requiredLanguages).flatMap(recruitmentLanguageRequirements);
+  // one the table does not know by its words, whole. A term that names no
+  // language qualifies the one before it (« Anglais – lu, écrit, parlé »: one).
+  const requiredLanguages = recruitmentLanguageListRequirements(parseTerms(brief.requiredLanguages));
   const candidateLanguages = candidate.languageFacts || [];
   const candidateLanguageNames = candidateLanguages.map(fact => fact.name);
   const matchedLanguages: string[] = [];

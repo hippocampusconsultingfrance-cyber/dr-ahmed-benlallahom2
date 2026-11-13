@@ -102,12 +102,27 @@ function nameForms(folded: string, writtenIn: string) {
  * « Vereinigte Arabische Emirate », « الإمارات العربية المتحدة », « المملكة
  * العربية السعودية », the Mandarin Oriental hotels. Those that only start
  * like one (Grèce, Germany, Deutschland, Polska) end with no inflection of
- * its name.
+ * its name. IA02-R5: the seas, the states and the regions named with the
+ * name of a language of the table, in French, English and German (« Persian
+ * Gulf », « Russian Federation », « Dutch Caribbean », « Suisse italienne »,
+ * « Kurdistan turc », « monde arabe »), with the countries and territories
+ * Intl.DisplayNames names so (« Polynésie française », « French Guiana »,
+ * « Französisch-Polynesien », « Îles Turques-et-Caïques »), which are also
+ * listed here where it is missing.
  */
-const NOT_LANGUAGES = [
+const LISTED_NOT_LANGUAGES = [
   "Émirats arabes", "Arabische Emirate", "الإمارات العربية", "المملكة العربية", "Mandarin Oriental",
   "golfe Persique", "golfe-Persique", "golfe arabo-persique", "golfe Arabique", "péninsule Arabique", "gomme arabique", "République hellénique",
-].map(foldLanguageText);
+  "Persian Gulf", "Persischer Golf", "Persischen Golf", "Persische Golf", "Arabischer Golf", "Arabischen Golf", "Arabische Halbinsel", "Arabischen Halbinsel",
+  "monde arabe", "pays arabes", "Ligue arabe", "arabische Welt", "arabischen Welt", "arabische Länder", "arabischen Ländern", "Arabische Liga", "Arabischen Liga",
+  "Russian Federation", "Russische Föderation", "Russischen Föderation",
+  "Dutch Caribbean", "Caraïbes néerlandaises", "Antilles néerlandaises", "Niederländische Karibik", "Niederländischen Karibik", "Niederländische Antillen", "Niederländischen Antillen",
+  "French Polynesia", "Polynésie française", "Französisch-Polynesien", "French Guiana", "Guyane française", "Französisch-Guayana",
+  "French West Indies", "French Antilles", "Antilles françaises", "Französische Antillen", "Französischen Antillen",
+  "Flandre française", "Pays basque français", "Pays basque espagnol", "Catalogne française", "Communauté française",
+  "Suisse italienne", "Suisse allemande", "Italian Switzerland", "italienische Schweiz", "italienischen Schweiz", "französische Schweiz", "französischen Schweiz", "deutsche Schweiz", "deutschen Schweiz",
+  "Kurdistan turc", "Turkish Kurdistan", "Türkisch-Kurdistan", "Chypre turque", "Turkish Cyprus", "Chinese Taipei", "Taipei chinois", "Chinesisch Taipeh", "Chinesisch-Taipeh",
+];
 
 const LANGUAGE_NAMES = RECRUITMENT_LANGUAGES.flatMap(language =>
   [
@@ -116,21 +131,60 @@ const LANGUAGE_NAMES = RECRUITMENT_LANGUAGES.flatMap(language =>
     ...language.otherNames.map(name => ["other", name] as const),
   ].map(([writtenIn, name]) => {
     const folded = foldLanguageText(name);
-    return { code: language.code as RecruitmentLanguageCode, folded, atWordStart: SPACED_SCRIPT.test(folded), forms: nameForms(folded, writtenIn) };
+    return { code: language.code as RecruitmentLanguageCode, writtenIn, folded, atWordStart: SPACED_SCRIPT.test(folded), forms: nameForms(folded, writtenIn) };
   }),
 );
 
 /** Whether a word starts at this index: the text's start, or after a character that is neither a letter nor a digit. */
 const startsWord = (folded: string, index: number) => index === 0 || !LETTER_OR_DIGIT.test(folded[index - 1]!);
 
-function namesLanguage(folded: string, entry: (typeof LANGUAGE_NAMES)[number]) {
-  if (!entry.atWordStart) return folded.includes(entry.folded);
-  return entry.forms.some(({ stem, ending }) => {
+/** Each place where this folded text writes one of the table's names, with its inflection: its start and its end. */
+function namePlaces(folded: string, entry: (typeof LANGUAGE_NAMES)[number]) {
+  const places: Array<readonly [number, number]> = [];
+  if (!entry.atWordStart) {
+    for (let index = folded.indexOf(entry.folded); index >= 0; index = folded.indexOf(entry.folded, index + 1)) places.push([index, index + entry.folded.length]);
+    return places;
+  }
+  for (const { stem, ending } of entry.forms) {
     for (let index = folded.indexOf(stem); index >= 0; index = folded.indexOf(stem, index + 1)) {
-      if (startsWord(folded, index) && ending.test(folded.slice(index + stem.length))) return true;
+      const inflection = startsWord(folded, index) ? ending.exec(folded.slice(index + stem.length)) : null;
+      if (inflection) places.push([index, index + stem.length + inflection[0].length]);
     }
-    return false;
-  });
+  }
+  return places;
+}
+
+const namesLanguage = (folded: string, entry: (typeof LANGUAGE_NAMES)[number]) => namePlaces(folded, entry).length > 0;
+
+/** The codes of the languages of the table this folded text names. */
+function namedCodes(folded: string) {
+  const codes: RecruitmentLanguageCode[] = [];
+  for (const entry of LANGUAGE_NAMES) {
+    if (!codes.includes(entry.code) && namesLanguage(folded, entry)) codes.push(entry.code);
+  }
+  return codes;
+}
+
+/**
+ * The places above, folded, the region names of Intl.DisplayNames and the
+ * names of the languages the table does not know that hold a name of the
+ * table among other words: « Polynésie française », « Îles Turques-et-Caïques »,
+ * « 库尔德语 » (Kurdish, not 德语), « 南非荷兰语 » (Afrikaans, not 荷兰语),
+ * « Hakka Chinese », « Jamaican Creole English ». Read when first asked for.
+ */
+let notLanguages: readonly string[] | undefined;
+
+function readNotLanguages() {
+  const phrases = new Set(LISTED_NOT_LANGUAGES.map(foldLanguageText));
+  const add = (whole: string) => {
+    const places = LANGUAGE_NAMES.flatMap(entry => namePlaces(whole, entry));
+    // Wholly a name of the table (Italien, Italy in German): a language where the text is written in its language, below.
+    if (places.length && !places.some(([start, end]) => start === 0 && end === whole.length)) phrases.add(whole);
+  };
+  for (const locale of OTHER_LANGUAGE_LOCALES) for (const region of regionNames(locale)) add(foldLanguageText(region.name));
+  otherLanguageNames ??= readOtherLanguageNames();
+  otherLanguageNames.forEach((_, name) => add(name));
+  return Array.from(phrases);
 }
 
 const OPENING_BRACKETS = "([{（［";
@@ -160,7 +214,7 @@ const writtenText = (text: string) => blankBrackets(text.normalize("NFC").toLowe
  * folded and looked up once. Only texts the length of a language mention, and
  * emptied once full.
  */
-type ComparedText = { folded: string; core: string; codes: readonly RecruitmentLanguageCode[]; readonly others: readonly string[] };
+type ComparedText = { folded: string; searched: string; core: string; codes: readonly RecruitmentLanguageCode[]; readonly others: readonly string[] };
 const COMPARED_TEXTS = new Map<string, ComparedText>();
 const COMPARED_TEXTS_LIMIT = 2_000;
 const COMPARED_TEXT_MAX_LENGTH = 200;
@@ -169,16 +223,14 @@ function comparedText(text: string): ComparedText {
   const cached = COMPARED_TEXTS.get(text);
   if (cached) return cached;
   const folded = foldLanguageText(text);
-  const searched = NOT_LANGUAGES.reduce((current, phrase) => current.replaceAll(phrase, " ".repeat(phrase.length)), folded);
-  const codes: RecruitmentLanguageCode[] = [];
-  for (const entry of LANGUAGE_NAMES) {
-    if (!codes.includes(entry.code) && namesLanguage(searched, entry)) codes.push(entry.code);
-  }
+  notLanguages ??= readNotLanguages();
+  const searched = notLanguages.reduce((current, phrase) => current.replaceAll(phrase, " ".repeat(phrase.length)), folded);
+  const codes = namedCodes(searched);
   const core = blankBrackets(folded).replaceAll("\u0000", " ").replace(/\s+/g, " ").trim() || folded.trim();
   // The languages the table does not know it names outside brackets, by their codes: read when first asked for.
   let others: readonly string[] | undefined;
   const compared = {
-    folded, core, codes: Object.freeze(codes),
+    folded, searched, core, codes: Object.freeze(codes),
     get others() { return (others ??= Object.freeze(otherLanguageCodes(core, writtenText(text)))); },
   };
   if (text.length <= COMPARED_TEXT_MAX_LENGTH) {
@@ -251,7 +303,8 @@ const READ_REQUIREMENTS = new Map<string, readonly RecruitmentLanguageRequiremen
  * Hmong; Bhojpuri, Maithili, Konkani, Santali, Manipuri, Rajasthani, Awadhi,
  * Magahi, Dogri, Bodo and Mizo; Minangkabau, Balinese, Madurese, Buginese,
  * Sasak, Tetum and Tok Pisin; Tarifit, Montenegrin and Southern Kurdish, of
- * the families below. Not those whose name is mostly a place's
+ * the families below; Serer, Jola, Balochi, Tulu, Saraiki and Sylheti. Not
+ * those whose name is mostly a place's
  * (Douala, Bassa, Lunda, Aceh, Banjar, Pampanga) or, accents aside, a word
  * (« moré », Mooré: « more », read with its accent only, below), nor Swiss
  * German, a variety of German. Not
@@ -268,6 +321,7 @@ const OTHER_LANGUAGE_CODES = [
   "yue hak nan prs ckb kmr tig ceb hil ilo war bik pag fuc dyu lua nso snk fon kri pcm luo kam kln bem nyn cgg tum loz kmb umb sus men tem tiv efi ibb bin ewo",
   "mfe crs jam kea pap srn hmn bho mai kok sat mni raj awa mag doi brx lus min ban mad bug sas tet tpi",
   "rif cnr sdh",
+  "srr dyo bal tcy skr syl",
 ].join(" ").split(" ");
 /** The languages their names are read in, from Intl.DisplayNames: the table's four, and each language in its own (« srpski », « Taqbaylit »). */
 const OTHER_LANGUAGE_LOCALES = ["fr", "en", "de", "zh"];
@@ -293,7 +347,9 @@ const OTHER_LANGUAGE_LOCALES = ["fr", "en", "de", "zh"];
  * Intl.DisplayNames does not give as its own (Srpski, the Latin spelling of
  * Serbian; کوردی; پنجابی, Punjabi in Shahmukhi; Oʻzbek; Bokmål and Nynorsk;
  * Tarifit and rifain), and the English names still in use for a country's
- * language (Montenegrin, Myanmar, Cambodian, Laotian, Pilipino).
+ * language (Montenegrin, Myanmar, Cambodian, Laotian, Pilipino). And the
+ * names of Jola, Balochi, Saraiki and Sylheti it gives none of, and Hakka and
+ * Min Nan as 客家话 and 闽南话.
  */
 const OTHER_LANGUAGE_NAMES: ReadonlyArray<readonly [codes: string, ...names: string[]]> = [
   ["hbs", "Serbo-croate", "Serbo-Croatian", "Serbokroatisch", "塞尔维亚-克罗地亚语"],
@@ -366,6 +422,12 @@ const OTHER_LANGUAGE_NAMES: ReadonlyArray<readonly [codes: string, ...names: str
   ["km", "Cambodian", "Cambodgien"],
   ["lo", "Laotian", "Laotien"],
   ["tl fil", "Pilipino"],
+  ["dyo", "Diola", "Jola", "Joola"],
+  ["bal", "Balochi"],
+  ["skr", "Saraiki", "Seraiki", "Siraiki"],
+  ["syl", "Sylheti"],
+  ["hak", "客家话", "客家話"],
+  ["nan", "闽南话", "閩南話"],
 ];
 
 /** Names of a language that are words accents aside (« moré », « more »): found only as written, with their accents, case aside. */
@@ -462,23 +524,36 @@ function namesOtherLanguage(text: string) {
  * a requirement (« obligatoire », « un plus », « required », « erforderlich »,
  * « 必须 »), a level or a skill (« courant », « langue maternelle », « lu »,
  * « fluent », « mother tongue », « fließend », « 流利 »), a language test or
- * its certificate (« IELTS », « DELF », « Goethe », « HSK », « 证书 »). In
- * French with their feminine and plural endings, in English their plural, in
- * German their endings; in Chinese anywhere. Not the words of a place
- * (« pays », « région », « Region », « Nadu », « Barat », « Central », « Sud »,
- * « Haute »), nor those of a variety (« standard », « littéraire »).
+ * its certificate (« IELTS », « DELF », « Goethe », « HSK », « 证书 »), and the
+ * words these are said with (IA02-R5): the verbs and the articles of a
+ * requirement (« serait un atout », « is required », « would be an
+ * advantage », « wäre von Vorteil », « ein Plus », « 为母语 », « 者优先 »), its
+ * intensifiers (« fortement », « vivement », « strongly », « highly »,
+ * « big », « strong »), the verbs of a skill (« command of », « 熟练掌握 »,
+ * « 能熟练使用 », « 会说 », « 听说读写 », « 沟通 »), the words that join two
+ * levels (« et », « and », « und », « ou », « or », « oder », « above »,
+ * « höher »). In French with their feminine and plural endings, in English
+ * their plural, in German their endings; in Chinese anywhere; a hyphen as a
+ * space (« must-have », « near-native », « upper-intermediate »). Not the
+ * words of a place (« pays », « région », « Region », « Nadu », « Barat »,
+ * « Central », « Sud », « Haute »), nor a preposition that says where (« en
+ * Corse », « in Afar », « de Dakar »), nor those of a variety (« standard »,
+ * « littéraire »).
  */
 const REQUIREMENT_WORDS: ReadonlyArray<readonly [writtenIn: "fr" | "en" | "de" | "zh", words: string]> = [
-  ["fr", "obligatoire|obligatoirement|exigé|exigence|requis|indispensable|impératif|impérative|impérativement|nécessaire|souhaité|souhaitable|apprécié|préféré|préférable|de préférence|recommandé|demandé|recherché|essentiel|essentielle|facultatif|facultative|optionnel|optionnelle|un plus|serait un plus|est un plus|un atout|atout|bonus|uniquement|seulement|exclusivement|minimum|au minimum|au moins|min|si possible|idéalement"],
-  ["fr", "courant|couramment|bilingue|natif|native|maternel|maternelle|langue|langue de travail|niveau|niv|débutant|élémentaire|intermédiaire|avancé|confirmé|expert|scolaire|notions|bases|de base|maîtrise|maîtrisé|connaissance|bon|bonne|très|excellent|parfait|parfaitement|correct|moyen|moyenne|opérationnel|opérationnelle|professionnel|professionnelle|conversation|conversationnel|conversationnelle|lu|écrit|parlé|oral|compréhension|expression|lecture|écriture|usage"],
-  ["fr", "test|test de langue|examen|certificat|certification|certifié|diplôme|attestation|attesté|justifié|score"],
-  ["en", "required|requirement|mandatory|essential|compulsory|must|must have|needed|necessary|preferred|preferable|preferably|desirable|desired|advantage|advantageous|an advantage|plus|is a plus|would be a plus|nice to have|asset|an asset|optional|only|recommended|appreciated|ideally|minimum|at least|if possible"],
-  ["en", "fluent|fluently|fluency|native|native speaker|mother tongue|first language|working language|language|bilingual|basic|basics|beginner|elementary|intermediate|upper intermediate|advanced|proficient|proficiency|working|knowledge|professional|full professional|business|conversational|good|very|excellent|spoken|written|reading|writing|speaking|listening|oral|level|skill"],
+  ["fr", "obligatoire|obligatoirement|exigé|exigence|exigible|requis|indispensable|impératif|impérative|impérativement|nécessaire|souhaité|souhaitable|apprécié|préféré|préférable|de préférence|recommandé|demandé|recherché|attendu|essentiel|essentielle|facultatif|facultative|optionnel|optionnelle|plus|atout|avantage|bonus|uniquement|seulement|exclusivement|minimum|au minimum|au moins|min|si possible|idéalement"],
+  ["fr", "un|une|est|serait|sera|constitue|représente|fortement|vivement|absolument|vrai|réel|réelle|véritable|et|ou|supérieur|équivalent"],
+  ["fr", "courant|couramment|bilingue|natif|native|maternel|maternelle|langue|langue de travail|niveau|niv|débutant|élémentaire|intermédiaire|avancé|confirmé|expert|scolaire|notions|bases|de base|maîtrise|maîtrisé|connaissance|bon|bonne|très|excellent|parfait|parfaitement|correct|moyen|moyenne|opérationnel|opérationnelle|professionnel|professionnelle|conversation|conversationnel|conversationnelle|lu|écrit|parlé|oral|aisance|aisé|compréhension|expression|lecture|écriture|usage"],
+  ["fr", "test|test de langue|test de niveau|examen|certificat|certificat de langue|certification|certifié|diplôme|attestation|attestation de niveau|attesté|justifié|score"],
+  ["en", "required|requirement|mandatory|essential|compulsory|must|must have|needed|necessary|preferred|preferable|preferably|desirable|desired|advantage|advantageous|an advantage|plus|nice to have|asset|an asset|optional|only|recommended|appreciated|considered|expected|ideally|minimum|at least|if possible"],
+  ["en", "is|are|be|would|will|should|an|strongly|highly|very|big|great|strong|absolutely|definitely|and|or|above|higher|better|equivalent"],
+  ["en", "fluent|fluently|fluency|native|native speaker|near native|mother tongue|first language|working language|language|bilingual|basic|basics|beginner|elementary|intermediate|upper intermediate|advanced|proficient|proficiency|working|knowledge|knowledge of|command|command of|professional|full professional|business|conversational|good|excellent|spoken|written|verbal|reading|writing|speaking|listening|oral|communication|level|skill"],
   ["en", "test|exam|examination|certificate|certification|certified|diploma|score|grade|band"],
   ["en", "toefl|toeic|ielts|oet|pte|celpip|cael|linguaskill|duolingo|cambridge|cae|cpe|fce|bec|tcf|tef|tefaq|delf|dalf|dele|siele|celpe|goethe|testdaf|dsh|telc|ösd|fsp|hsk|hskk|tocfl|jlpt|topik|torfl|cils|celi|plida|actfl|ilr|cefr|cecr|cecrl"],
   ["de", "erforderlich|notwendig|zwingend|unbedingt|pflicht|vorausgesetzt|voraussetzung|wünschenswert|erwünscht|gewünscht|von vorteil|vorteilhaft|bevorzugt|nur|mindestens"],
-  ["de", "fließend|verhandlungssicher|muttersprache|muttersprachler|muttersprachlich|zweisprachig|gut|sehr|grundkenntnisse|kenntnisse|fachsprache|arbeitssprache|sprache|anfänger|fortgeschritten|schriftlich|mündlich|prüfung|fachsprachprüfung|zertifikat|zertifiziert"],
-  ["zh", "必须|必需|必备|要求|需要|优先|加分|最好|流利|流畅|熟练|精通|母语|双语|一般|良好|优秀|基础|初级|中级|高级|口语|书面|水平|能力|专业|语言|工作语言|以上|级|考试|证书|雅思|托福|托业"],
+  ["de", "ist|sind|wäre|wären|sein|ein|und|oder|höher|besser|äußerst|absolut"],
+  ["de", "fließend|verhandlungssicher|muttersprache|muttersprachler|muttersprachlich|auf muttersprachlichem niveau|zweisprachig|gut|sehr|fundiert|sicher|solide|ausgezeichnet|perfekt|grundkenntnisse|kenntnisse|sprachkenntnis|sprachkenntnisse|fachsprache|arbeitssprache|sprache|niveau|anfänger|fortgeschritten|schriftlich|mündlich|in wort|in schrift|in wort und schrift|wort und schrift|prüfung|fachsprachprüfung|zertifikat|zertifiziert"],
+  ["zh", "必须|必需|必备|要求|需要|优先|者优先|加分|最好|流利|流畅|熟练|精通|掌握|熟练掌握|会|能|使用|运用|者|为|说|讲|听|读|写|听说读写|读写|沟通|交流|会话|对话|日常|具备|具有|非常|很|母语|双语|一般|良好|优秀|基础|初级|中级|高级|口语|书面|水平|能力|专业|语言|工作语言|以上|级|考试|证书|雅思|托福|托业"],
 ];
 const REQUIREMENT_WORD_ENDINGS = { fr: "|e|s|es", en: "|s", de: "|e|en|er|es|em", zh: "" } as const;
 const REQUIREMENT_WORD_FORMS = REQUIREMENT_WORDS.flatMap(([writtenIn, words]) => words.split("|").map(word => {
@@ -502,16 +577,34 @@ const DIGIT = new RegExp("[\\p{N}〇一二三四五六七八九十百]", "u");
  * qualifies the language beside it.
  */
 function namesOnlyLanguages(text: string) {
+  return saysOnly(text, true);
+}
+
+/**
+ * Whether a part says nothing but how a language is required: its
+ * requirement words above, its digits, its punctuation and what it says
+ * between brackets aside, nothing is left (« écrit », « C2 », « above »,
+ * « bilingual », « höher »).
+ */
+function saysOnlyRequirements(text: string) {
+  return saysOnly(text, false);
+}
+
+function saysOnly(text: string, languages: boolean) {
   const { core } = comparedText(text);
   const covered = new Uint8Array(core.length);
   const cover = (places: ReadonlyArray<readonly [number, number]>) => { for (const [start, end] of places) covered.fill(1, start, end); };
-  otherLanguageNames ??= readOtherLanguageNames();
-  otherLanguageNames.forEach((_, name) => cover(wordsPlaces(core, name)));
-  const written = writtenText(text);
-  for (const [, name] of ACCENTED_NAMES) if (containsWords(written, name)) cover(wordsPlaces(core, foldLanguageText(name)));
+  if (languages) {
+    otherLanguageNames ??= readOtherLanguageNames();
+    otherLanguageNames.forEach((_, name) => cover(wordsPlaces(core, name)));
+    const written = writtenText(text);
+    for (const [, name] of ACCENTED_NAMES) if (containsWords(written, name)) cover(wordsPlaces(core, foldLanguageText(name)));
+  }
+  // A hyphen joins the words of a requirement as a space does (« must-have », « near-native »), one character for one.
+  const words = core.replace(/[-\u2010\u2011]/g, " ");
   for (const word of REQUIREMENT_WORD_FORMS) {
-    for (let index = core.indexOf(word.folded); index >= 0; index = core.indexOf(word.folded, index + 1)) {
-      const ending = word.spaced ? (startsWord(core, index) ? word.ending.exec(core.slice(index + word.folded.length)) : null) : [""];
+    for (let index = words.indexOf(word.folded); index >= 0; index = words.indexOf(word.folded, index + 1)) {
+      const ending = word.spaced ? (startsWord(words, index) ? word.ending.exec(words.slice(index + word.folded.length)) : null) : [""];
       if (ending) covered.fill(1, index, index + word.folded.length + ending[0].length);
     }
   }
@@ -529,14 +622,14 @@ function namesOnlyLanguages(text: string) {
 /** The two-letter region codes, AA to ZZ: Intl.DisplayNames names those that exist. */
 const REGION_CODES = Array.from({ length: 26 * 26 }, (_, index) => String.fromCharCode(65 + Math.floor(index / 26), 65 + (index % 26)));
 /**
- * A region name as it is written, case aside, what it says between brackets
- * aside, its spaces single (« indonesien », « myanmar » for « Myanmar
- * (Burma) »), and folded as the listed names.
+ * A region name as Intl.DisplayNames gives it, as it is written, case aside,
+ * what it says between brackets aside, its spaces single (« indonesien »,
+ * « myanmar » for « Myanmar (Burma) »), and folded as the listed names.
  */
-type RegionName = { written: string; folded: string };
+type RegionName = { name: string; written: string; folded: string };
 function regionName(name: string): RegionName {
   const written = name.normalize("NFC").toLowerCase().replace(/[(（][^)）]*[)）]/g, " ").replace(/\s+/g, " ").trim();
-  return { written, folded: foldLanguageText(written) };
+  return { name, written, folded: foldLanguageText(written) };
 }
 /** The country names of the list above (« Myanmar »), regions also where Intl.DisplayNames is missing. */
 const LISTED_REGION_NAMES: readonly RegionName[] = ["Myanmar"].map(regionName);
@@ -626,6 +719,81 @@ function namesRegion(text: string) {
 }
 
 /**
+ * IA02-R5: the region names of Intl.DisplayNames in French, English, German
+ * or Chinese that are wholly a name of the table in another of them: « Italien »,
+ * Italy in German and Italian in French. Each read when first asked for, with
+ * the languages it is a language's name in.
+ */
+type RegionNamedAsLanguage = RegionName & { locale: string; languageLocales: readonly string[] };
+let regionsNamedAsLanguages: readonly RegionNamedAsLanguage[] | undefined;
+
+function readRegionsNamedAsLanguages() {
+  const found: RegionNamedAsLanguage[] = [];
+  for (const locale of OTHER_LANGUAGE_LOCALES) {
+    for (const region of regionNames(locale)) {
+      const languageLocales = new Set<string>();
+      for (const entry of LANGUAGE_NAMES) {
+        if (namePlaces(region.folded, entry).some(([start, end]) => start === 0 && end === region.folded.length)) languageLocales.add(entry.writtenIn);
+      }
+      if (languageLocales.size && !languageLocales.has(locale)) found.push({ ...region, locale, languageLocales: Array.from(languageLocales) });
+    }
+  }
+  return found;
+}
+
+/** This folded text with each place where these folded words are found whole written as spaces. */
+const blankWords = (folded: string, words: string) =>
+  wordsPlaces(folded, words).reduce((current, [start, end]) => current.slice(0, start) + " ".repeat(end - start) + current.slice(end), folded);
+
+/**
+ * The region names above that a required text writes as Intl.DisplayNames
+ * writes them, accents included, case aside, in the language the text is
+ * written in, and that are no language there: in « Englisch – Italien », the
+ * German of « Englisch » makes « Italien » Italy; in « Anglais – Italien »,
+ * the French of « Anglais » keeps it Italian, as in « Italien » alone. The
+ * language a text is written in is that of the names of the table it writes
+ * beside the region's.
+ */
+function regionsReadAsPlaces(required: string): readonly RegionName[] {
+  regionsNamedAsLanguages ??= readRegionsNamedAsLanguages();
+  const { searched } = comparedText(required);
+  const written = writtenText(required);
+  const present = regionsNamedAsLanguages.filter(region => containsWords(written, region.written) && containsWords(searched, region.folded));
+  if (!present.length) return [];
+  const beside = present.reduce((current, region) => blankWords(current, region.folded), searched);
+  const locales = new Set(LANGUAGE_NAMES.filter(entry => namesLanguage(beside, entry)).map(entry => entry.writtenIn));
+  return present.filter(region => locales.has(region.locale) && !region.languageLocales.some(locale => locales.has(locale)));
+}
+
+/** The codes of the languages of the table a part of a required text names, the regions it writes read as places aside. */
+function codesBeside(text: string, places: readonly RegionName[]) {
+  const compared = comparedText(text);
+  const written = writtenText(text);
+  const present = places.filter(region => containsWords(written, region.written) && containsWords(compared.searched, region.folded));
+  if (!present.length) return compared.codes;
+  return namedCodes(present.reduce((current, region) => blankWords(current, region.folded), compared.searched));
+}
+
+/**
+ * Whether a part between separators names a language: one of the table (or
+ * the start of its name, three letters at least, as the Langue filter reads
+ * it during typing), or one it does not know that is no country's name
+ * (« Wolof », « Tamil Nadu »; not « Indonesia », « Qatar », « Herzegovina »,
+ * « écrit », « C2 »).
+ */
+function namesLanguageAmong(part: string, places: readonly RegionName[]) {
+  if (codesBeside(part, places).length) return true;
+  if (namesOtherLanguage(part)) return !namesRegion(part);
+  return recruitmentLanguagePrefixCodes(part).length > 0 && !isRegionName(part);
+}
+
+/** Whether this text is wholly a region name of Intl.DisplayNames in French, English, German or Chinese (« Russia », « Japan », « Chine »). */
+function isRegionName(text: string) {
+  const { core } = comparedText(text);
+  return [LISTED_REGION_NAMES, ...OTHER_LANGUAGE_LOCALES.map(regionNames)].some(names => names.some(name => name.folded === core));
+}
+
+/**
  * The parts of a text at a Chinese conjunction or a dash, each that names a
  * language with the parts after it that name none, which qualify it: a level
  * (« Anglais - C1 - Arabe » is « Anglais - C1 » and « Arabe »), a requirement
@@ -638,20 +806,44 @@ function namesRegion(text: string) {
  * (« English – Indonesia » is one); a part that holds the name among other
  * words is a place, a use or a variety of the language beside it
  * (« English – Tamil Nadu », « Français – Pays basque », « Anglais – Sénégal
- * wolof » are one).
+ * wolof » are one). A name of the table in a place's name names no language
+ * (« English – Persian Gulf », « Anglais – Polynésie française »), nor a
+ * country's name written in the language of the text (« Englisch – Italien »).
  */
-function partsBetweenNames(text: string) {
-  const groups: Array<{ start: number; end: number; names: boolean }> = [];
+function partsBetweenNames(text: string, places: readonly RegionName[]) {
+  return groupedParts(text, BETWEEN_NAMES, part =>
+    codesBeside(part, places).length > 0 || (namesOtherLanguage(part) && namesOnlyLanguages(part) && !namesRegion(part)));
+}
+
+/** Where each part of a text between these separators lies in it: its start and its end. */
+type PartPlace = { start: number; end: number };
+
+/**
+ * The parts of a text between these separators, each that names a language
+ * with the parts after it that name none, and the parts before the first one
+ * that names one with it: their starts and ends in the text.
+ */
+function groupedParts(text: string, separator: RegExp, names: (part: string) => boolean) {
+  const groups: Array<PartPlace & { names: boolean }> = [];
+  for (const { start, end } of partPlaces(text, separator)) {
+    const named = names(text.slice(start, end));
+    const last = groups.at(-1);
+    if (last && (!named || !last.names)) Object.assign(last, { end, names: named || last.names });
+    else groups.push({ start, end, names: named });
+  }
+  return groups;
+}
+
+/** Where the parts of a text between the separators found outside its brackets lie, each trimmed, those with a letter or a digit. */
+function partPlaces(text: string, separator: RegExp) {
+  const places: PartPlace[] = [];
   let cursor = 0;
-  for (const part of partsOutsideBrackets(text, BETWEEN_NAMES)) {
+  for (const part of partsOutsideBrackets(text, separator)) {
     const start = text.indexOf(part, cursor);
     cursor = start + part.length;
-    const names = recruitmentLanguageCodes(part).length > 0 || (namesOtherLanguage(part) && namesOnlyLanguages(part) && !namesRegion(part));
-    const last = groups.at(-1);
-    if (last && (!names || !last.names)) Object.assign(last, { end: cursor, names: names || last.names });
-    else groups.push({ start, end: cursor, names });
+    places.push({ start, end: cursor });
   }
-  return groups.map(({ start, end }) => text.slice(start, end));
+  return places;
 }
 
 /** The parts of a text between the separators found outside its brackets, each trimmed, those with a letter or a digit. */
@@ -669,33 +861,107 @@ function partsOutsideBrackets(text: string, separator: RegExp) {
 }
 
 /**
+ * IA02-R5: the requirements of a text at its separators, each part that names
+ * a language split at its dashes (above), each part that names none
+ * qualifying the requirement before it, as after a dash: « Anglais – parlé et
+ * écrit », « Anglais – C1/C2 », « English – UAE and Qatar » and « English –
+ * Bosnia and Herzegovina » are one, met by English; « Anglais et arabe »,
+ * « Anglais – obligatoire, Arabe – souhaité » and « Anglais – Wolof, Dakar »
+ * are two. The parts before the first that names one qualify the first
+ * requirement (« obligatoire : anglais, arabe »). When none names a
+ * language, each is a requirement of its own, as before.
+ */
+function requirementTexts(required: string, separator: RegExp, places: readonly RegionName[]) {
+  const parts = partPlaces(required, separator).map(part => ({ ...part, names: namesLanguageAmong(required.slice(part.start, part.end), places) }));
+  const naming = parts.some(part => part.names);
+  const requirements: PartPlace[] = [];
+  let leading: number | undefined;
+  for (const { start, end, names } of parts) {
+    if (naming && !names) {
+      // A qualifier of the requirement before it, or of the first one.
+      if (requirements.length) requirements.at(-1)!.end = end;
+      else leading ??= start;
+      continue;
+    }
+    const groups = partsBetweenNames(required.slice(start, end), places).map(group => ({ start: start + group.start, end: start + group.end }));
+    if (leading !== undefined) groups[0]!.start = leading;
+    leading = undefined;
+    requirements.push(...groups);
+  }
+  return requirements.map(({ start, end }) => required.slice(start, end));
+}
+
+/**
  * The languages a required text names, each a requirement of its own
  * (« Anglais/Arabe », « anglais et arabe », « Englisch und Arabisch »,
  * « Anglais - Arabe », « 英语和阿拉伯语 »: two), so that the matching
  * profiles, the missions and the Langue filter count them alike. Not split
- * inside brackets (« Anglais (C1/C2) » is one), nor at a Chinese conjunction
- * or a dash before a part that names no language (« Anglais - courant » is
- * one). A part that names several languages without a separator (« anglais
- * arabe ») requires them all; a text that offers a choice (« Anglais ou
- * arabe », « anglais et/ou arabe ») is one requirement, met by any of its
- * languages.
+ * inside brackets (« Anglais (C1/C2) » is one), nor at a Chinese conjunction,
+ * a dash or a separator before a part that names no language (« Anglais -
+ * courant », « Anglais – parlé et écrit » are one). A part that names several
+ * languages without a separator (« anglais arabe ») requires them all; a
+ * text that offers a choice (« Anglais ou arabe », « anglais et/ou arabe »)
+ * is one requirement, met by any of its languages, and a choice between two
+ * levels (« English – Tamil B2 or above », « Anglais – C1 ou C2 ») none.
  */
 export function recruitmentLanguageRequirements(required: string): readonly RecruitmentLanguageRequirement[] {
   // A profile reads its requirements again for each of its 10 000 dossiers: each text is split once.
   const cached = READ_REQUIREMENTS.get(required);
   if (cached) return cached;
   let requirements: RecruitmentLanguageRequirement[];
-  if (ALTERNATIVE.test(blankBrackets(required))) {
+  const places = regionsReadAsPlaces(required);
+  // The options of a choice, each with the requirement words that follow it, up to a dash (« B2 or above »: one option).
+  const options = ALTERNATIVE.test(blankBrackets(required))
+    ? groupedParts(required, OPTION_SEPARATOR, part => !saysOnlyRequirements(partsOutsideBrackets(part, BETWEEN_NAMES)[0] ?? part))
+      .map(({ start, end }) => required.slice(start, end))
+    : [];
+  if (options.length > 1) {
     const text = required.trim();
-    const anyOf = partsOutsideBrackets(text, OPTION_SEPARATOR).map(option => option.replace(OPTION_CONNECTOR, "")).filter(option => LETTER_OR_DIGIT.test(option));
-    requirements = anyOf.length ? [{ text, codes: recruitmentLanguageCodes(text), anyOf }] : [];
+    const anyOf = options.map(option => option.replace(OPTION_CONNECTOR, "").trim()).filter(option => LETTER_OR_DIGIT.test(option));
+    requirements = [{ text, codes: codesBeside(text, places), anyOf }];
   } else {
-    requirements = partsOutsideBrackets(required, REQUIREMENT_SEPARATOR).flatMap(partsBetweenNames)
-      .map(text => ({ text, codes: recruitmentLanguageCodes(text), anyOf: [] }));
+    requirements = requirementTexts(required, options.length ? OPTION_SEPARATOR : REQUIREMENT_SEPARATOR, places)
+      .map(text => ({ text, codes: codesBeside(text, places), anyOf: [] }));
   }
   if (required.length <= COMPARED_TEXT_MAX_LENGTH) {
     if (READ_REQUIREMENTS.size >= COMPARED_TEXTS_LIMIT) READ_REQUIREMENTS.clear();
     READ_REQUIREMENTS.set(required, Object.freeze(requirements));
+  }
+  return requirements;
+}
+
+/** The lists of required languages already read, as the texts above. */
+const READ_LISTS = new Map<string, readonly RecruitmentLanguageRequirement[]>();
+
+/**
+ * IA02-R5: the requirements of a list of required languages, a mission's (its
+ * text split at its commas, semicolons and lines) or a matching profile's
+ * (typed with commas), read as one text: each term that names no language
+ * qualifies the term before it, or the first, as within one text:
+ * « Anglais – lu », « écrit », « parlé » are one requirement, met by English;
+ * « Anglais », « arabe » are two.
+ */
+export function recruitmentLanguageListRequirements(terms: readonly string[]): readonly RecruitmentLanguageRequirement[] {
+  const key = JSON.stringify(terms);
+  const cached = READ_LISTS.get(key);
+  if (cached) return cached;
+  const places = regionsReadAsPlaces(terms.join(", "));
+  const naming = terms.map(term => namesLanguageAmong(term, places));
+  const joined: string[] = [];
+  let leading: string[] = [];
+  terms.forEach((term, index) => {
+    if (naming.some(Boolean) && !naming[index]) {
+      if (joined.length) joined[joined.length - 1] += `, ${term}`;
+      else leading.push(term);
+      return;
+    }
+    joined.push([...leading, term].join(", "));
+    leading = [];
+  });
+  const requirements = Object.freeze(joined.flatMap(recruitmentLanguageRequirements));
+  if (key.length <= COMPARED_TEXT_MAX_LENGTH * 4) {
+    if (READ_LISTS.size >= COMPARED_TEXTS_LIMIT) READ_LISTS.clear();
+    READ_LISTS.set(key, requirements);
   }
   return requirements;
 }

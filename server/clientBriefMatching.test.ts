@@ -118,6 +118,21 @@ describe("matching mission–candidat", () => {
     expect(languagePoints("埃及阿拉伯语", ["Arabic"])).toBe(15);
   });
 
+  it("garde avec sa langue ce que le texte de la mission écrit après une virgule ou un point-virgule quand il ne nomme aucune langue (IA02-R5-SEPARATEUR-QUALIFICATIFS)", () => {
+    const candidate = { specialty: "Anesthésie-réanimation", targetCountries: '["Émirats arabes unis"]' };
+    const match = (requiredLanguages: string, declared: string[]) =>
+      computeBriefCandidateMatch({ specialtyNeeded: "Anesthésie-réanimation", country: "Émirats arabes unis", requiredCertifications: null, requiredLanguages }, { ...candidate, languageFacts: languageFacts(JSON.stringify(declared), []) });
+    // Before: « Anglais – lu », « écrit » and « parlé », three requirements, one met (5 language points of 15).
+    for (const required of ["Anglais – lu, écrit, parlé", "Anglais – parlé; écrit", "English – UAE, Qatar", "Anglais – C1, C2", "Anglais – parlé et écrit"]) {
+      expect(match(required, ["English"]).breakdown.languages, required).toBe(15);
+      expect(match(required, ["English"]).matchedLanguages, required).toEqual([required.replace(";", ",")]);
+    }
+    // Two languages are still two requirements, with what qualifies each.
+    expect(match("Anglais, arabe", ["English"]).breakdown.languages).toBe(8);
+    expect(match("Anglais – obligatoire, Arabe – souhaité", ["English", "Arabic"]).matchedLanguages).toEqual(["Anglais – obligatoire", "Arabe – souhaité"]);
+    expect(match("Anglais, Wolof serait un atout", ["English"]).breakdown.languages).toBe(8);
+  });
+
   it("une certification déclarée par le candidat compte, elle aussi, une fois confirmée", () => {
     const declaredOnly = computeBriefCandidateMatch(brief, { ...anaesthetist, certificationFacts: certificationFacts("ACLS, ATLS", []) });
     expect(declaredOnly.breakdown.certifications).toBe(0);
