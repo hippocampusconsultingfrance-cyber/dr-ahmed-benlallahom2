@@ -327,7 +327,7 @@ describe("alerte de paiement non confirmable", () => {
     });
     expect(alert.content.split("\n")).toEqual([
       "Le 12 novembre 2026 à 15:05 (heure de Paris), Stripe a signalé un paiement de 100,00 € pour le rendez-vous APT-9, qui n’a pas pu être confirmé automatiquement : la réservation temporaire du créneau a expiré ou a été annulée avant la réception du paiement ; le créneau a pu être attribué à un autre patient.",
-      "Remboursement ou reprogrammation manuelle requis : contactez le patient, puis, s’il faut le rembourser, cliquez sur « Rembourser ce paiement » sur le rendez-vous (onglet « Réservations ») ou remboursez-le depuis Stripe.",
+      "Remboursement ou reprogrammation manuelle requis : contactez le patient, puis, s’il faut le rembourser, cliquez sur « Rembourser ce paiement » sur le rendez-vous (onglet « Réservations »), ou sur « Rembourser un paiement non confirmé » dans ce même onglet avec la session Stripe ci-dessous, ou remboursez-le depuis Stripe.",
       "Patient : Jeanne Martin — jeanne@test.local — +33 6 12 34 56 78.",
       "Ouvrir le rendez-vous : https://drahmedbenlallahom.com/admin?tab=appointments&ref=APT-9",
       "État du rendez-vous : Annulé, en attente de paiement.",
