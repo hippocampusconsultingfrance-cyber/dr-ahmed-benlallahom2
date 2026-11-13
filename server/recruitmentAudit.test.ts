@@ -106,6 +106,19 @@ describe("recruitment matching profiles", () => {
     expect(matchesRecruitmentProfile({ ...candidate, languages: ["English"], profile: profile(["Anglais – Riyad", "Dubaï"]) })).toBe(true);
   });
 
+  it("garde comme exigence une langue écrite avec d’autres mots, saisie après les lieux qu’un tiret ouvre (IA02-R6-LANGUE-APRES-LIEUX)", () => {
+    const candidate = { score: 70, specialty: "Anesthésie-réanimation", targetCountries: ["Émirats arabes unis"], extractedSkills: [] };
+    const profile = (requiredLanguages: string[]) => ({ targetCountry: null, specialty: null, minimumScore: 0, requiredLanguages: JSON.stringify(requiredLanguages), requiredSkills: null });
+    // Before (b1544cf): the créole and the swahili went on with the places, and the candidate who had only French or English was in the profile.
+    for (const [required, lead, all] of [
+      [["Français – Martinique", "créole martiniquais"], ["French"], ["French", "Créole martiniquais"]],
+      [["Anglais – Dubaï", "swahili pour les patients"], ["English"], ["English", "Swahili"]],
+    ] as const) {
+      expect(matchesRecruitmentProfile({ ...candidate, languages: [...lead], profile: profile([...required]) }), required.join(", ")).toBe(false);
+      expect(matchesRecruitmentProfile({ ...candidate, languages: [...all], profile: profile([...required]) }), required.join(", ")).toBe(true);
+    }
+  });
+
   it("handles malformed JSON safely", () => {
     expect(parseRecruitmentJsonArray("not-json")).toEqual([]);
     expect(parseRecruitmentJsonArray(JSON.stringify(["France", 1, null]))).toEqual(["France"]);

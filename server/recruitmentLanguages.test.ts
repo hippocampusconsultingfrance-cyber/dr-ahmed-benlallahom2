@@ -547,20 +547,51 @@ describe("langues du recrutement comparées par code (IA-02)", () => {
     }
   });
 
-  it("lit les lieux qu’un tiret ouvre comme un tout, après une virgule ou une conjonction, quel que soit leur ordre (IA02-R5-LIEU-APRES-SEPARATEUR)", () => {
+  it("lit les lieux qu’un tiret ouvre comme un tout, après une virgule ou une conjonction, tant qu’ils ne nomment aucune langue (IA02-R5-LIEU-APRES-SEPARATEUR)", () => {
     const met = (required: string, names: string[]) => recruitmentLanguageRequirements(required).filter(requirement => meetsRequiredLanguage(names, requirement)).length;
-    // Before: « English – Tamil Nadu and Kerala » was one requirement, « English – Kerala and Tamil Nadu » two (« Tamil Nadu »
-    // a requirement nobody meets); a place that holds a language's name among other words now qualifies after a separator too.
-    for (const required of [
-      "English – Kerala and Tamil Nadu", "English – Tamil Nadu and Kerala", "English – Dubai, Somali Region", "Anglais – Dubaï et Pays haoussa",
-      "Anglais – Pays haoussa et Dubaï", "English – Abu Dhabi and Dubai", "Englisch – Riad, Dubai",
-    ]) {
+    // Before (749519f): « Kerala », « Dubai » or « Dubaï » after a separator was a requirement nobody meets.
+    for (const required of ["English – Tamil Nadu and Kerala", "Anglais – Pays haoussa et Dubaï", "English – Abu Dhabi and Dubai", "Englisch – Riad, Dubai"]) {
       expect(recruitmentLanguageRequirements(required), required).toEqual([{ text: required, codes: ["en"], anyOf: [] }]);
       expect(met(required, ["English"]), required).toBe(1);
     }
-    // Wholly the name of a language, as beside a dash, it is a second requirement; a level opens no places.
-    for (const required of ["English – Kerala, Tamil", "Anglais – Dubaï et Wolof courant", "Anglais – courant, Dubaï"]) {
+    // After a separator, a part that names a language is a second requirement, whatever words are written with it, even a
+    // place's (IA02-R6-LANGUE-APRES-LIEUX: a language is never lost; one requirement too many, as on c97413e and 749519f);
+    // a level opens no places.
+    for (const required of [
+      "English – Kerala, Tamil", "Anglais – Dubaï et Wolof courant", "Anglais – courant, Dubaï",
+      "English – Kerala and Tamil Nadu", "English – Dubai, Somali Region", "Anglais – Dubaï et Pays haoussa",
+    ]) {
       expect(recruitmentLanguageRequirements(required), required).toHaveLength(2);
+    }
+  });
+
+  it("garde comme exigence une langue connue écrite avec d’autres mots après les lieux qu’un tiret ouvre, dans le texte comme dans une liste (IA02-R6-LANGUE-APRES-LIEUX)", () => {
+    // Before (b1544cf): among the places a dash opened, a part was a second language only when wholly a language's name:
+    // « créole martiniquais », « swahili pour les patients » went on with the places, and the speaker of the language at the
+    // head met all the requirement (15 language points of 15, the profile and the Langue filter), as on neither c97413e nor 749519f.
+    for (const [required, lead, texts, other] of [
+      ["Français – Martinique, créole martiniquais", "French", ["Français – Martinique", "créole martiniquais"], "Créole martiniquais"],
+      ["Français – La Réunion, créole réunionnais", "Français", ["Français – La Réunion", "créole réunionnais"], "Créole réunionnais"],
+      ["Français – Guadeloupe, créole guadeloupéen", "Français", ["Français – Guadeloupe", "créole guadeloupéen"], "Créole"],
+      ["Anglais – Cameroun, pidgin camerounais", "English", ["Anglais – Cameroun", "pidgin camerounais"], "Pidgin"],
+      ["Anglais – Dubaï, swahili pour les patients", "English", ["Anglais – Dubaï", "swahili pour les patients"], "Swahili"],
+      ["English – Dubai, Tagalog for patient communication", "English", ["English – Dubai", "Tagalog for patient communication"], "Tagalog"],
+      ["Anglais – Riyad, tagalog avec les patients", "Anglais", ["Anglais – Riyad", "tagalog avec les patients"], "Tagalog"],
+      ["Anglais – Golfe, wolof du Sénégal", "Anglais", ["Anglais – Golfe", "wolof du Sénégal"], "Wolof"],
+      ["Englisch – Dubai, Tigrinya für Patienten", "Englisch", ["Englisch – Dubai", "Tigrinya für Patienten"], "Tigrinya"],
+      ["Anglais – Dubaï, swahili également", "Anglais", ["Anglais – Dubaï", "swahili également"], "Swahili"],
+    ] as const) {
+      // A mission's text, and a profile typed with commas as the page splits it.
+      for (const requirements of [recruitmentLanguageRequirements(required), recruitmentLanguageListRequirements(required.split(",").map(term => term.trim()))]) {
+        expect(requirements.map(requirement => requirement.text), required).toEqual(texts);
+        expect(requirements.filter(requirement => meetsRequiredLanguage([lead], requirement)), required).toHaveLength(1);
+        expect(requirements.filter(requirement => meetsRequiredLanguage([lead, other], requirement)), required).toHaveLength(2);
+      }
+    }
+    // The places a dash opened still go on with the words no list knows, and the countries known here.
+    for (const required of ["Anglais – Riyad, Dubaï", "Arabe – Golfe, Levant", "英语 – 利雅得、迪拜", "English – UAE, Qatar", "Portugais – Brésil, Angola", "Anglais – Tamil Nadu et Kerala, Dubaï"]) {
+      expect(recruitmentLanguageRequirements(required), required).toHaveLength(1);
+      expect(recruitmentLanguageListRequirements(required.split(/[,、]/).map(term => term.trim())), required).toHaveLength(1);
     }
   });
 

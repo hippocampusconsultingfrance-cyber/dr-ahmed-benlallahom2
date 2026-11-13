@@ -882,36 +882,39 @@ function codesBeside(text: string, places: readonly RegionName[]) {
  * Whether a part between separators names a language: one of the table (or
  * the start of its name, three letters at least, as the Langue filter reads
  * it during typing), or one it does not know that is no country's name
- * (« Wolof », « Tamil Nadu »; not « Indonesia », « Qatar », « Herzegovina »,
- * « écrit », « C2 »). Among the places a dash opened (`besidePlaces`, below),
- * a language the table does not know only when the part is wholly its name,
- * as beside a dash (« Wolof », « Wolof courant »; not « Tamil Nadu »,
- * « Somali Region », « Pays haoussa »).
+ * (« Wolof », « Tamil Nadu », « créole martiniquais », « swahili pour les
+ * patients »; not « Indonesia », « Qatar », « Herzegovina », « écrit »,
+ * « C2 »), whatever words are written with it, among the places a dash
+ * opened too (IA02-R6-LANGUE-APRES-LIEUX): a language's name is never lost
+ * there, at the cost of a place that holds one (« Tamil Nadu », « Somali
+ * Region ») read as a requirement of its own after a separator.
  */
-function namesLanguageAmong(part: string, places: readonly RegionName[], besidePlaces = false) {
+function namesLanguageAmong(part: string, places: readonly RegionName[]) {
   if (codesBeside(part, places).length) return true;
-  if (namesOtherLanguage(part)) return (!besidePlaces || namesOnlyLanguages(part)) && !namesRegion(part);
+  if (namesOtherLanguage(part)) return !namesRegion(part);
   return recruitmentLanguagePrefixCodes(part).length > 0 && !isRegionName(part);
 }
 
 /**
  * IA02-R6: how a part between separators is read, after the parts before it.
- * A part that names a language is a requirement. A part that names none
- * qualifies the requirement before it only when it is wholly the known words
- * a language is qualified with (« écrit », « C1/C2 », « 5 ans », « Qatar »),
- * or when it goes on with the places a dash opened beside the language
- * before it (« Anglais – Riyad, Dubaï », « Arabe – Golfe, Levant », « English
- * – Kerala and Tamil Nadu », « English – Dubai, Somali Region »). Any other
- * part, a word no list knows in it, is a requirement of its own, read by its
- * words, as before the lists were read whole: « Français, Darija »,
- * « Deutsch, Arabisch, Somalisch », « Anglais – courant, Darija » and
- * « Anglais – Wolof, Dakar » keep each part, so that no language is lost.
+ * A part that names a language is a requirement, among the places a dash
+ * opened too, whatever words are written with the language's name
+ * (« Français – Martinique, créole martiniquais », « Anglais – Dubaï, swahili
+ * pour les patients »: two). A part that names none qualifies the requirement
+ * before it only when it is wholly the known words a language is qualified
+ * with (« écrit », « C1/C2 », « 5 ans », « Qatar »), or when it goes on with
+ * the places a dash opened beside the language before it (« Anglais – Riyad,
+ * Dubaï », « Arabe – Golfe, Levant », « English – Tamil Nadu and Kerala »).
+ * Any other part, a word no list knows in it, is a requirement of its own,
+ * read by its words, as before the lists were read whole: « Français,
+ * Darija », « Deutsch, Arabisch, Somalisch », « Anglais – courant, Darija »
+ * and « Anglais – Wolof, Dakar » keep each part, so that no language is lost.
  * `placesOpen`: whether the parts after it go on with places a dash opened.
  */
 type PartReading = { requires: boolean; placesOpen: boolean };
 
 function readPart(part: string, places: readonly RegionName[], placesOpen: boolean): PartReading {
-  if (namesLanguageAmong(part, places, placesOpen)) return { requires: true, placesOpen: opensPlaces(part, places) };
+  if (namesLanguageAmong(part, places)) return { requires: true, placesOpen: opensPlaces(part, places) };
   if (placesOpen || saysOnlyQualifiers(part)) return { requires: false, placesOpen };
   return { requires: true, placesOpen: opensPlaces(part, places) };
 }

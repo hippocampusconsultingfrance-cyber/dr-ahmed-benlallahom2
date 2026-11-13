@@ -148,6 +148,17 @@ describe("matching mission–candidat", () => {
     expect(match("Anglais – Riyad, Dubaï", ["English"]).breakdown.languages).toBe(15);
   });
 
+  it("garde comme exigence une langue écrite avec d’autres mots après les lieux qu’un tiret ouvre (IA02-R6-LANGUE-APRES-LIEUX)", () => {
+    const candidate = { specialty: "Anesthésie-réanimation", targetCountries: '["Émirats arabes unis"]' };
+    const match = (requiredLanguages: string, declared: string[]) =>
+      computeBriefCandidateMatch({ specialtyNeeded: "Anesthésie-réanimation", country: "Émirats arabes unis", requiredCertifications: null, requiredLanguages }, { ...candidate, languageFacts: languageFacts(JSON.stringify(declared), []) });
+    // Before (b1544cf): the créole and the swahili went on with the places, and French or English alone gave 15 language points of 15.
+    expect(match("Français – Martinique, créole martiniquais", ["French"]).breakdown.languages).toBe(8);
+    expect(match("Français – Martinique, créole martiniquais", ["French", "Créole martiniquais"]).breakdown.languages).toBe(15);
+    expect(match("Anglais – Dubaï, swahili pour les patients", ["English"]).breakdown.languages).toBe(8);
+    expect(match("Anglais – Dubaï, swahili pour les patients", ["English", "Swahili"]).breakdown.languages).toBe(15);
+  });
+
   it("une certification déclarée par le candidat compte, elle aussi, une fois confirmée", () => {
     const declaredOnly = computeBriefCandidateMatch(brief, { ...anaesthetist, certificationFacts: certificationFacts("ACLS, ATLS", []) });
     expect(declaredOnly.breakdown.certifications).toBe(0);
