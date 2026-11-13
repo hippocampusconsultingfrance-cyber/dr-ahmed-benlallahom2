@@ -284,8 +284,10 @@ describe("actions d’administration du recrutement", () => {
       "0612345678": "06 12 34 56 78",
       "0021651000010": "00 21651000010",
       "21651000010": "2 16 51 00 00 10",
-      "51 000 010": "51 00 00 10",
-      "06-12-34": "06 12 34",
+      // Several runs of digits: every space and every sign typed between two digits kept, the first space doubled or a space
+      // after the first sign, which neither number nor date has.
+      "51 000 010": "51  000 010",
+      "06-12-34": "06- 12-34",
       // Already text: left as typed, a « + » aside.
       "+1-202-555-0143": "001-202-555-0143",
       "07911 123456": "07911 123456",
@@ -308,18 +310,21 @@ describe("actions d’administration du recrutement", () => {
   it("exporte en texte tout numéro de chiffres et de signes que Calc lirait comme un nombre, en français, anglais ou allemand, « 00 » compris (ADM-26)", async () => {
     // Read as numbers by LibreOffice Calc before: in French, a first group of any length then groups of three
     // (34612345678, its « 00 » lost); in all three, parentheses (-612345678), a final dot in English, a fraction.
+    // Grouped by three, every space kept and the first doubled, with which no spreadsheet groups: the groups cannot be
+    // told from a number and its extension (« 0612 345 678 913 »).
     const typed = {
-      "+34 612 345 678": "00 34612345678",
-      "+351 912 345 678": "00 351912345678",
-      "+971 501 234 567": "00 971501234567",
-      "0033 612 345 678": "00 33612345678",
-      "0612 345 678": "06 12 34 56 78",
-      "0661 234 567": "06 61 23 45 67",
+      "+34 612 345 678": "0034  612 345 678",
+      "+351 912 345 678": "00351  912 345 678",
+      "+971 501 234 567": "00971  501 234 567",
+      "0033 612 345 678": "0033  612 345 678",
+      "0612 345 678": "0612  345 678",
+      "0661 234 567": "0661  234 567",
       "(0612345678)": "06 12 34 56 78",
       "0612345678.": "06 12 34 56 78",
       "0612345678-": "06 12 34 56 78",
-      "0612 34/56": "06 12 34 56",
-      "126,465/103": "1 26 46 51 03",
+      // A fraction: its « / » and its « , » kept.
+      "0612 34/56": "06 12 34 / 56",
+      "126,465/103": "126,465 / 1 03",
       "+123": "0 01 23",
       "06": "'06",
       "6E12": "'6E12",
@@ -350,7 +355,7 @@ describe("actions d’administration du recrutement", () => {
       // Read by Calc as a decimal or a fraction: each number written as it would be alone, their separator kept.
       "0612345678,0698765432": "06 12 34 56 78, 06 98 76 54 32",
       "+33612345678,0033698765432": "00 33612345678, 00 33698765432",
-      "0612 345 678,0698765432": "06 12 34 56 78, 06 98 76 54 32",
+      "0612 345 678,0698765432": "0612  345 678, 06 98 76 54 32",
       "0033 612345678 / 0612348024": "0033 612345678 / 06 12 34 80 24",
       // Text in Calc, left as typed: dots between pairs, two decimal signs, spaces around the separator.
       "06.12.34.56.78 / 06.98.76.54.32": "06.12.34.56.78 / 06.98.76.54.32",
@@ -361,9 +366,9 @@ describe("actions d’administration du recrutement", () => {
       "0612345678 / 0698765432": "0612345678 / 0698765432",
       "06 12 34 56 78 / 06 98 76 54 32": "06 12 34 56 78 / 06 98 76 54 32",
       "06.12.34.56.78, 06.98.76.54.32": "06.12.34.56.78, 06.98.76.54.32",
-      // Not two numbers: a fraction and a decimal, too short for a phone number on one side.
-      "0612 34/56": "06 12 34 56",
-      "126,465/103": "1 26 46 51 03",
+      // A number of six digits and its variant, a fraction: their « / » and « , » kept.
+      "0612 34/56": "06 12 34 / 56",
+      "126,465/103": "126,465 / 1 03",
     };
     const candidates = Object.keys(typed).map((phone, index) => seedCandidate(index + 1, { phone }));
     const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-PHONE-4", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Qatar" }]);
@@ -386,11 +391,12 @@ describe("actions d’administration du recrutement", () => {
       "06 12345678/9": "06 12 34 56 78 / 9",
       // « 00 33612345678 / 02 » would be a fraction too.
       "0033 612345678/02": "0033612345678 / 02",
-      // One number, « / » after its area code: country and area codes are not a number of their own.
-      "+49 151/23456789": "00 4915123456789",
-      "+43 664/1234567": "00 436641234567",
-      "+49 33203/12345": "00 493320312345",
-      "+961 312345/6": "00 9613123456",
+      // One number, « / » after its area code: country and area codes are not a number of their own, its « / » and its space
+      // kept, the run that forms a number of its own set apart, or else its « 00 », which makes no fraction.
+      "+49 151/23456789": "0049 151/23 45 67 89",
+      "+43 664/1234567": "0043 664/1 23 45 67",
+      "+49 33203/12345": "00 49 33203/12345",
+      "+961 312345/6": "00961 31 23 45/6",
       // Text in Calc, left as typed: a separator typed at the end or twice, dots between pairs, no date has a part of seven digits.
       "06.12.34.56.78 / 06.98.76.54.32 /": "06.12.34.56.78 / 06.98.76.54.32 /",
       "0612345678,0698765432,": "0612345678,0698765432,",
@@ -402,9 +408,9 @@ describe("actions d’administration du recrutement", () => {
       "06 12 34 56 78/79": "06 12 34 56 78/79",
       "0612345678-79": "0612345678-79",
       "01/5123456": "01/5123456",
-      // Read by Calc as a number, spaces inside its parentheses, or as a date of a negative year.
+      // Read by Calc as a number, spaces inside its parentheses, or as a date of a negative year, its signs kept.
       "( 0612345678 )": "06 12 34 56 78",
-      "6/8/-72": "68 72",
+      "6/8/-72": "6/ 8/-72",
     };
     const candidates = Object.keys(typed).map((phone, index) => seedCandidate(index + 1, { phone }));
     const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-PHONE-5", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Qatar" }]);
@@ -459,7 +465,7 @@ describe("actions d’administration du recrutement", () => {
       "+33471234567,802": "00 33471234567, 802",
       "0612345678,5": "06 12 34 56 78, 5",
       "+12025550143,123": "00 12025550143, 123",
-      "0471 234 567,802": "04 71 23 45 67, 802",
+      "0471 234 567,802": "0471  234 567, 802",
       "0471234567,802,913": "04 71 23 45 67, 802, 913",
       // Text in Calc, left as typed: a space or a second comma after the comma.
       "0471234567, 802": "0471234567, 802",
@@ -511,9 +517,9 @@ describe("actions d’administration du recrutement", () => {
       "(0612345678 913)": "06 12 34 56 78 913",
       "0612345678 913/14": "06 12 34 56 78 913 / 14",
       "0612345678 913,802": "06 12 34 56 78 913, 802",
-      // A single number grouped by three from its start, its first part not a number on its own.
-      "0612 345 678": "06 12 34 56 78",
-      "0034 612 345 678": "00 34612345678",
+      // A number grouped by three from its start, its first part not a number on its own: every space kept, the first doubled.
+      "0612 345 678": "0612  345 678",
+      "0034 612 345 678": "0034  612 345 678",
       // Text in Calc, left as typed: an extension of fewer or more than three digits, pairs, a country code apart.
       "0612345678 12": "0612345678 12",
       "0612345678 8021": "0612345678 8021",
@@ -552,9 +558,9 @@ describe("actions d’administration du recrutement", () => {
       "44123456 802 913": "44 12 34 56 802 913",
       "76123415 181 / 20": "76 12 34 15 181 / 20",
       "36123456 689,554": "36 12 34 56 689, 554",
-      // A single number: an international one grouped by three after its country code, a number alone or with its extension after a comma.
-      "+9613123 456": "00 9613123456",
-      "+33612345 678": "00 33612345678",
+      // An international number grouped by three after its country code, its space kept; a number alone or with its extension after a comma.
+      "+9613123 456": "00 9613123 456",
+      "+33612345 678": "00 33612345 678",
       "44123456": "44 12 34 56",
       "44123456,802": "44 12 34 56, 802",
       "+97444123456 802": "00 97444123456 802",
@@ -588,10 +594,10 @@ describe("actions d’administration du recrutement", () => {
       "0312 3426/844": "03 12 34 26 / 844",
       "0048 512345680/130": "0048512345680 / 130",
       "0661 234567/91": "06 61 23 45 67 / 91",
-      // One number, « / » after its area code; not a number on either side of the « / ».
-      "+49 33203/12345": "00 493320312345",
-      "+961 312345/6": "00 9613123456",
-      "0612 34/56": "06 12 34 56",
+      // One number, « / » after its area code, kept as typed; a number of six digits and its variant.
+      "+49 33203/12345": "00 49 33203/12345",
+      "+961 312345/6": "00961 31 23 45/6",
+      "0612 34/56": "06 12 34 / 56",
       // Text in Calc, left as typed: no integer before the number, groups of four after the « / ».
       "6111234/424": "6111234/424",
       "6111 234 / 4 24": "6111 234 / 4 24",
@@ -638,10 +644,10 @@ describe("actions d’administration du recrutement", () => {
       "(0612345678)": "06 12 34 56 78",
       // Its « 00 » kept apart before a variant, which a decimal sign keeps from making a fraction.
       "+33471234567.802/3": "00 33471234567.802 / 3",
-      // One number: grouped by dots, its country code before the dot, a dot at its end.
-      "0612.345.678": "06 12 34 56 78",
-      "671.234.567": "6 71 23 45 67",
-      "+2165100.0010": "00 21651000010",
+      // One number: grouped by dots, its dots kept and a space after the first; its country code before the dot; a dot at its end.
+      "0612.345.678": "0612. 345.678",
+      "671.234.567": "671. 234.567",
+      "+2165100.0010": "00 2165100.0010",
       "0612345678.": "06 12 34 56 78",
       // Text in Calc, left as typed: dots between pairs, a space after the dot.
       "06.12.34.56.78": "06.12.34.56.78",
@@ -649,6 +655,127 @@ describe("actions d’administration du recrutement", () => {
     };
     const candidates = Object.keys(typed).map((phone, index) => seedCandidate(index + 1, { phone }));
     const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-PHONE-11", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Qatar" }]);
+    memory.seed(clientBriefCandidates, candidates.map(candidate => ({ brief_id: brief!.id, application_id: candidate.id, association_status: "shortlisted", candidate_consent_at: consentAt })));
+    const phones = (csv: string) => {
+      const [header, ...rows] = csv.split("\n");
+      const column = header!.split(";").indexOf("\"Téléphone\"");
+      return Object.fromEntries(rows.map(row => [row.split(";")[2], row.split(";")[column]]));
+    };
+    const expected = Object.fromEntries(Object.values(typed).map((phone, index) => [`"c${index + 1}@test.local"`, `"${phone}"`]));
+
+    expect(phones((await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: candidates.map(candidate => candidate.id as number) })).csv)).toEqual(expected);
+    expect(phones((await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number })).csv)).toEqual(expected);
+  });
+
+  it("garde chaque espace d’un numéro écrit par groupes de trois et suivi de son poste, que le français lit comme un seul nombre, sans coller le poste au numéro ni décaler ses paires (ADM-26)", async () => {
+    // Calc in French read « 71 123 456 802 » as 71123456802, and the export set every digit apart by two from the end, the extension
+    // run into the number and its pairs shifted: « 7 11 23 45 68 02 »; « 0612 345 678 913 » gave « 0 61 23 45 67 89 13 ». Where a number
+    // ends among groups of three cannot be told from their form, so every space is kept, the first doubled, with which no spreadsheet groups.
+    const typed = {
+      // Tunisia, Lebanon, Spain, Saudi Arabia, 4-3-3: the value as typed, its first space doubled, the signs around it dropped.
+      "71 123 456 802": "71  123 456 802",
+      "71\u00a0123\u00a0456\u00a0802": "71\u00a0\u00a0123\u00a0456\u00a0802",
+      "03 123 456 986": "03  123 456 986",
+      "612 345 678 913": "612  345 678 913",
+      "920 012 345 802": "920  012 345 802",
+      "0612 345 678 913": "0612  345 678 913",
+      "(71 123 456 802)": "71  123 456 802",
+      "98 123 456 238-": "98  123 456 238",
+      "+34 612 345 939 840-": "0034  612 345 939 840",
+      // Its extension after a comma, the comma kept.
+      "71 123 456,802": "71  123 456, 802",
+      // Controls: a whole number then the groups as typed, a value Calc keeps as text.
+      "71123456 802": "71 12 34 56 802",
+      "0612345678 913": "06 12 34 56 78 913",
+      "0471234594 612 345 678": "04 71 23 45 94 612 345 678",
+      "+216 71 123 456 802": "00216 71 123 456 802",
+    };
+    const candidates = Object.keys(typed).map((phone, index) => seedCandidate(index + 1, { phone }));
+    const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-PHONE-12", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Qatar" }]);
+    memory.seed(clientBriefCandidates, candidates.map(candidate => ({ brief_id: brief!.id, application_id: candidate.id, association_status: "shortlisted", candidate_consent_at: consentAt })));
+    const phones = (csv: string) => {
+      const [header, ...rows] = csv.split("\n");
+      const column = header!.split(";").indexOf("\"Téléphone\"");
+      return Object.fromEntries(rows.map(row => [row.split(";")[2], row.split(";")[column]]));
+    };
+    const expected = Object.fromEntries(Object.values(typed).map((phone, index) => [`"c${index + 1}@test.local"`, `"${phone}"`]));
+
+    expect(phones((await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: candidates.map(candidate => candidate.id as number) })).csv)).toEqual(expected);
+    expect(phones((await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number })).csv)).toEqual(expected);
+  });
+
+  it("garde le séparateur d’un numéro de six chiffres suivi d’un poste, d’une variante ou d’un second numéro, chaque numéro écrit comme seul (Nouvelle-Calédonie, Wallis-et-Futuna, Saint-Pierre-et-Miquelon, Andorre, Luxembourg) (ADM-26)", async () => {
+    // A number of six digits was no number of its own: Calc read « 281234,91 » as a decimal and the export dropped the comma, « 28 12 34 91 »;
+    // « +687 281234/281372 », a fraction, gave « 00 687281234281372 », two numbers run into one.
+    const typed = {
+      // Its extension after a comma, a dot or a space, as typed.
+      "281234,91": "28 12 34, 91",
+      "(281234,91)": "(281234, 91)",
+      "411234,60": "41 12 34, 60",
+      "812725.3172": "81 27 25.3172",
+      "721234.12": "72 12 34.12",
+      "+352441234.12": "00 352441234.12",
+      "281234 172": "28 12 34 172",
+      "411234 802": "41 12 34 802",
+      "(281934 953)": "28 19 34 953",
+      // Its variant after a « / », as typed.
+      "812 723/55": "81 27 23 / 55",
+      "812 750 /52": "81 27 50 / 52",
+      "+508 411234/237": "00508 41 12 34/237",
+      // A second number, each written as it would be alone.
+      "+687 281234/281372": "00687 281234 / 28 13 72",
+      "+376 812277 / 812735": "00376 812277 / 81 27 35",
+      "281234,0612345678": "28 12 34, 06 12 34 56 78",
+      "441234,441234": "44 12 34, 44 12 34",
+      "(812 626/0512345293)": "81 26 26 / 05 12 34 52 93",
+      "812 345 / 0612345678": "812  345 / 06 12 34 56 78",
+      // Controls: a number of seven digits and its variant or its extension.
+      "6111 234/424": "6 11 12 34 / 424",
+      "6111234 915": "6 11 12 34 915",
+    };
+    const candidates = Object.keys(typed).map((phone, index) => seedCandidate(index + 1, { phone }));
+    const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-PHONE-13", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Qatar" }]);
+    memory.seed(clientBriefCandidates, candidates.map(candidate => ({ brief_id: brief!.id, application_id: candidate.id, association_status: "shortlisted", candidate_consent_at: consentAt })));
+    const phones = (csv: string) => {
+      const [header, ...rows] = csv.split("\n");
+      const column = header!.split(";").indexOf("\"Téléphone\"");
+      return Object.fromEntries(rows.map(row => [row.split(";")[2], row.split(";")[column]]));
+    };
+    const expected = Object.fromEntries(Object.values(typed).map((phone, index) => [`"c${index + 1}@test.local"`, `"${phone}"`]));
+
+    expect(phones((await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: candidates.map(candidate => candidate.id as number) })).csv)).toEqual(expected);
+    expect(phones((await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number })).csv)).toEqual(expected);
+  });
+
+  it("laisse tel que saisi ce que Calc ne lit pas comme une date : une espace entre deux suites de chiffres, des parenthèses, une ponctuation qu’il refuse, une année de deux chiffres en tête hors « - » (ADM-26)", async () => {
+    // The spaces were removed before the date test: « 28.12.34 172 » was read as a date of the year 34172 and gave « 2 81 23 41 72 », the
+    // extension run into the number; parentheses, a final comma and « 41.11.09 », a year first, gave « 28 12 34 » and « 41 11 09 ».
+    const typed = {
+      // Text in Calc in English, French and German: left as typed.
+      "28.12.34 172": "28.12.34 172",
+      "28-12-34 172": "28-12-34 172",
+      "28/12/34 172": "28/12/34 172",
+      "28.12.34\u00a0172": "28.12.34\u00a0172",
+      "(28.12.34 172)": "(28.12.34 172)",
+      "( 28.12.71 508 )": "( 28.12.71 508 )",
+      "(28.12.34)": "(28.12.34)",
+      "( 28.12.34 )": "( 28.12.34 )",
+      "28.12.34,": "28.12.34,",
+      "41.11.09": "41.11.09",
+      "41.11.09,": "41.11.09,",
+      "41/11/09": "41/11/09",
+      "28 - 12 - 34": "28 - 12 - 34",
+      "(+687 28.12.17)": "(+687 28.12.17)",
+      "(+508 41.11.09)": "(+508 41.11.09)",
+      // Read by Calc as dates: rewritten, every sign kept, a space after the first.
+      "28.12.34": "28. 12.34",
+      "28-12-34": "28- 12-34",
+      "28/12/34": "28/ 12/34",
+      "41-11-09": "41- 11-09",
+      "12/06": "12/ 06",
+    };
+    const candidates = Object.keys(typed).map((phone, index) => seedCandidate(index + 1, { phone }));
+    const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-PHONE-14", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Qatar" }]);
     memory.seed(clientBriefCandidates, candidates.map(candidate => ({ brief_id: brief!.id, application_id: candidate.id, association_status: "shortlisted", candidate_consent_at: consentAt })));
     const phones = (csv: string) => {
       const [header, ...rows] = csv.split("\n");
