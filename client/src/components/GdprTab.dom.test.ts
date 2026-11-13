@@ -75,7 +75,8 @@ describe("ADM-09 — demande ouverte depuis le lien d’une notification", () =>
 
     const card = (name: string) => screen.getByText(name).closest(".bg-card")!.textContent;
     expect(card("Personne Une")).toContain("Adresse confirmée le 02/11/2026");
-    expect(card("Personne Deux")).toContain("Adresse non confirmée par le lien de l’accusé de réception");
+    // Not « the person did not confirm »: the link may never have been sent.
+    expect(card("Personne Deux")).toContain("Adresse non confirmée (ou lien de confirmation non envoyé)");
     // A closed request says nothing of it.
     expect(card("Personne Trois")).not.toContain("Adresse");
   });

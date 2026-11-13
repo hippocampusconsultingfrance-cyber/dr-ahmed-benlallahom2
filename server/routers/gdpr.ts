@@ -9,15 +9,13 @@ import { gdprRequests, securityEvents } from "../../drizzle/schema";
 import { countPublicFormDailyVolume, releasePublicEmailIpRateLimit } from "../publicFormRateLimit";
 import { enforcePublicFormRateLimit, verifyPublicFormTurnstile, enforcePublicFormIpLimit, createPublicTrackingId } from "./publicForms";
 import { emailText, multiLineText, singleLineText } from "../../shared/textInput";
-import { adminLink } from "../adminLinks";
 import { logError } from "../_core/logError";
 import { requestIpHash, securityEventInsert } from "../candidateSecurity";
 import { emailLanguageFor, SITE_LANGUAGES, withEmailLanguage } from "../emailLanguage";
 import { sendPublicFormAcknowledgement } from "../publicFormAcknowledgements";
 import { DEFAULT_PUBLIC_ORIGIN } from "./publicOrigin";
-
-/** Rights the form lets a person exercise: those of the privacy policy, and the withdrawal of a consent (RGPD-13). */
-export const GDPR_REQUEST_TYPES = ["access", "rectification", "deletion", "restriction", "portability", "objection", "consent_withdrawal"] as const;
+import { GDPR_REQUEST_TYPES } from "../../shared/gdprRequestTypes";
+import { buildGdprRequestOwnerNotification } from "../gdprRequestNotification";
 
 /** Security journal entry of an address confirmed by its link: one per request, which makes the link single-use. */
 export const GDPR_REQUEST_EMAIL_CONFIRMED = "gdpr_request_email_confirmed";
@@ -119,31 +117,14 @@ export const gdprRouter = router({
         }
       }
 
-      // Notify the owner via Manus notification system
-      const requestTypeLabels: Record<(typeof GDPR_REQUEST_TYPES)[number], string> = {
-        access: "Accès aux données",
-        rectification: "Rectification de données",
-        deletion: "Suppression de données (droit à l'oubli)",
-        restriction: "Limitation du traitement",
-        portability: "Portabilité des données",
-        objection: "Opposition au traitement",
-        consent_withdrawal: "Retrait du consentement",
-      };
-
       // ABUS-01 : au-delà du volume du jour, la demande est gardée sans email
       // au propriétaire ni accusé de réception au demandeur.
       if (await countPublicFormDailyVolume("gdpr")) {
         // RGPD-13 : la référence, le délai et le lien de confirmation, sans recopier la description.
         const confirmationUrl = gdprConfirmationUrl(trackingId, input.language);
         const acknowledged = await sendPublicFormAcknowledgement({ kind: "gdprRequest", email: input.email, reference: trackingId, language: input.language, confirmationUrl });
-        await notifyOwner({
-          // INTL-11 : « [G…] Demande RGPD – Nom », la référence d’abord.
-          reference: trackingId,
-          title: "Demande RGPD",
-          name: input.name,
-          // RGPD-13 : la description, qui peut parler de santé, reste dans l’administration.
-          content: `**Numéro de suivi:** ${trackingId}\n**Type de demande:** ${requestTypeLabels[input.requestType]}\n**De:** ${input.name}\n**Email:** ${input.email}\n**Téléphone:** ${input.phone || "Non renseigné"}\n**Description:** ${input.description ? "à lire dans l’administration" : "aucune"}\n\n**Accusé de réception:** ${acknowledged ? "envoyé, avec un lien qui confirme l’adresse ; l’onglet RGPD indique si la personne a confirmé" : "non envoyé (voir les journaux du serveur)"}\n\n**Ouvrir la demande:** ${adminLink("gdpr", trackingId)}`,
-        });
+        // RGPD-13 : la description, qui peut parler de santé, reste dans l’administration.
+        await notifyOwner(buildGdprRequestOwnerNotification({ trackingId, requestType: input.requestType, name: input.name, email: input.email, phone: input.phone, hasDescription: Boolean(input.description), acknowledged }));
       }
 
       return { success: true, trackingId } as const;

@@ -2,9 +2,10 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { siteConfig } from "@/data/site-config";
 import { trpc } from "@/lib/trpc";
 import { getGdprRequestCopy, publicFormCopy, publicFormErrorMessage } from "@/lib/publicFormCopy";
+import { GDPR_REQUEST_TYPES, type GdprRequestType } from "@shared/gdprRequestTypes";
 import { cleanTextInput } from "@shared/textInputCleaning";
 import { CheckCircle, Loader2, ArrowLeft } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Link } from "wouter";
 import { TurnstileWidget } from "./TurnstileWidget";
@@ -18,10 +19,6 @@ export const gdprFieldIds = {
   requestType: "gdpr-request-type",
   description: "gdpr-request-description",
 } as const;
-
-/** Types de demande, dans l’ordre des droits de la politique de confidentialité, puis le retrait d’un consentement (RGPD-13). */
-const GDPR_REQUEST_TYPES = ["access", "rectification", "deletion", "restriction", "portability", "objection", "consent_withdrawal"] as const;
-type GdprRequestType = (typeof GDPR_REQUEST_TYPES)[number];
 
 /** Jeton du lien de confirmation de l’adresse (?confirm=…), envoyé avec l’accusé de réception (RGPD-13). */
 function gdprConfirmationTokenOf(search: string) {
@@ -84,6 +81,14 @@ export default function GDPRRequestForm({ backHref }: GDPRRequestFormProps) {
   const { content, language } = useLanguage();
   const copy = getGdprRequestCopy(language);
   const [confirmationToken, setConfirmationToken] = useState(() => typeof window === "undefined" ? "" : gdprConfirmationTokenOf(window.location.search));
+  // Lu une fois, le jeton quitte aussitôt l’adresse (le reste de l’adresse, ?lang= compris, est gardé) :
+  // ni l’historique ni la mesure d’audience ne gardent ce lien à usage unique.
+  useEffect(() => {
+    if (!gdprConfirmationTokenOf(window.location.search)) return;
+    const address = new URL(window.location.href);
+    address.searchParams.delete("confirm");
+    window.history.replaceState(window.history.state, "", `${address.pathname}${address.search}${address.hash}`);
+  }, []);
   const [formData, setFormData] = useState<{ name: string; email: string; phone: string; requestType: GdprRequestType; description: string }>({
     name: "",
     email: "",
@@ -130,11 +135,8 @@ export default function GDPRRequestForm({ backHref }: GDPRRequestFormProps) {
     });
   };
 
-  // Retour au formulaire depuis la confirmation : le jeton quitte l’adresse.
-  const leaveConfirmation = () => {
-    window.history.replaceState(window.history.state, "", window.location.pathname);
-    setConfirmationToken("");
-  };
+  // Retour au formulaire depuis la confirmation.
+  const leaveConfirmation = () => setConfirmationToken("");
 
   return (
     <section className="py-28 sm:py-36 relative">

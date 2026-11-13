@@ -95,11 +95,13 @@ export default function GdprTab({ reference = "" }: { reference?: string } = {})
                       ) : req.responseDate ? (
                         <span>Répondue le {formatGdprRequestDate(req.responseDate)}</span>
                       ) : null}
-                      {/* RGPD-13: the link sent with the acknowledgement proves that the person holds the address. */}
+                      {/* RGPD-13: the link sent with the acknowledgement proves that the person holds the address.
+                          Without a confirmation, the link may never have left (beyond the day's volume, Resend
+                          unavailable, request older than the acknowledgement): the line says so. */}
                       {req.emailConfirmedAt ? (
                         <span className="text-emerald-700 dark:text-emerald-400">Adresse confirmée le {formatAdminDateTime(req.emailConfirmedAt)}</span>
                       ) : open ? (
-                        <span>Adresse non confirmée par le lien de l’accusé de réception</span>
+                        <span>Adresse non confirmée (ou lien de confirmation non envoyé)</span>
                       ) : null}
                     </div>
                     {req.description && (

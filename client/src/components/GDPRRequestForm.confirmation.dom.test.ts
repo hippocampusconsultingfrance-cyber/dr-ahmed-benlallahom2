@@ -87,6 +87,8 @@ describe("confirmation de l’adresse depuis le lien de l’email (RGPD-13)", ()
     expect(screen.queryByRole("button", { name: "Confirmer mon adresse" })).toBeNull();
     cleanup();
 
+    // The link opened again: the page took the token out of the address the first time.
+    window.history.replaceState(null, "", `/gdpr?confirm=${TOKEN}`);
     view.language = "en";
     view.confirm = refused("gdpr_confirmation_invalid");
     render(createElement(GDPRRequestForm));
@@ -94,12 +96,18 @@ describe("confirmation de l’adresse depuis le lien de l’email (RGPD-13)", ()
     expect(document.body.textContent).not.toContain("Texte français du serveur.");
   });
 
-  it("ramène au formulaire et retire le jeton de l’adresse", () => {
-    window.history.replaceState(null, "", `/gdpr?confirm=${TOKEN}`);
+  it("retire le jeton de l’adresse dès l’ouverture, le garde pour le clic, puis ramène au formulaire", () => {
+    window.history.replaceState(null, "", `/gdpr?confirm=${TOKEN}&lang=en#form`);
     render(createElement(GDPRRequestForm));
 
+    // Neither the history nor the audience measurement keep the single-use link; ?lang= stays for the language.
+    expect(window.location.pathname).toBe("/gdpr");
+    expect(window.location.search).toBe("?lang=en");
+    expect(window.location.hash).toBe("#form");
+    fireEvent.click(screen.getByRole("button", { name: "Confirmer mon adresse" }));
+    expect(view.confirm!.mutate).toHaveBeenCalledWith({ token: TOKEN });
+
     fireEvent.click(screen.getByRole("button", { name: "Faire une autre demande" }));
-    expect(window.location.search).toBe("");
     expect(screen.getByLabelText("Adresse email")).toBeTruthy();
   });
 });
