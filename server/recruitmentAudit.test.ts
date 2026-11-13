@@ -119,6 +119,25 @@ describe("recruitment matching profiles", () => {
     }
   });
 
+  it("garde comme exigence, dans un profil saisi avec des virgules, une langue écrite après un qualificatif de l’une des quatre langues, un autre nom d’une langue de la table et une partie qui a son propre tiret (IA02-R7)", () => {
+    const candidate = { score: 70, specialty: "Anesthésie-réanimation", targetCountries: ["Émirats arabes unis"], extractedSkills: [] };
+    const profile = (requiredLanguages: string[]) => ({ targetCountry: null, specialty: null, minimumScore: 0, requiredLanguages: JSON.stringify(requiredLanguages), requiredSkills: null });
+    // Before (daf844a): the candidate who had only English, or Arabic and Romani, was in the profile.
+    for (const [required, lead, all] of [
+      [["English – read", "written", "spoken", "Darija"], ["English"], ["English", "Darija"]],
+      [["Englisch – zwei Jahre", "Tigrinisch"], ["English"], ["English", "Tigrinisch"]],
+      [["Anglais – deux ans", "Shimaoré"], ["English"], ["English", "Shimaoré"]],
+      [["英语 – 两年以上", "上海话"], ["English"], ["English", "上海话"]],
+      [["Englisch – Dubai", "Hocharabisch"], ["English"], ["English", "Arabic"]],
+      [["Arabe – courant ; Wolof – Dakar ; Romani – notions"], ["Arabic", "Romani"], ["Arabic", "Wolof", "Romani"]],
+    ] as const) {
+      expect(matchesRecruitmentProfile({ ...candidate, languages: [...lead], profile: profile([...required]) }), required.join(", ")).toBe(false);
+      expect(matchesRecruitmentProfile({ ...candidate, languages: [...all], profile: profile([...required]) }), required.join(", ")).toBe(true);
+    }
+    // The qualifiers alone are still one requirement, met by English.
+    expect(matchesRecruitmentProfile({ ...candidate, languages: ["English"], profile: profile(["English – read", "written", "spoken"]) })).toBe(true);
+  });
+
   it("handles malformed JSON safely", () => {
     expect(parseRecruitmentJsonArray("not-json")).toEqual([]);
     expect(parseRecruitmentJsonArray(JSON.stringify(["France", 1, null]))).toEqual(["France"]);

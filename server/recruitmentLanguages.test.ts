@@ -624,6 +624,94 @@ describe("langues du recrutement comparées par code (IA-02)", () => {
     expect(recruitmentLanguageRequirements("Anglais – Arabe du Golfe").map(requirement => requirement.codes)).toEqual([["en"], ["ar"]]);
   });
 
+  it("lit les mêmes mots de compétence, de durée en lettres et d’expérience dans les quatre langues : un nom de langue écrit après eux reste une exigence (IA02-R7-QUALIFICATIF-HORS-LISTE)", () => {
+    // Before (daf844a): « lu, écrit, parlé » and « 2 ans » were known, « read », « gelesen », « deux ans », « two years »,
+    // « 两年 » or « 3 years of experience » were not: written after a dash, they opened « places », the language no list knows
+    // that followed went on with them, and the speaker of the language at the head met all (15 language points of 15, the
+    // profile and the Langue filter), as in neither the French nor the digits.
+    for (const [lead, speaker, qualifiers, separator, name] of [
+      ["Anglais", "English", ["lu, écrit, parlé", "compris", "deux ans", "deux ans minimum", "3 ans d'expérience", "3 ans d'exercice"], ", ", "Darija"],
+      ["English", "English", ["read, written, spoken", "read and written", "understood", "two years", "two years minimum", "3 years of experience", "3 years of practice"], ", ", "Teochew"],
+      ["Englisch", "English", ["gelesen, geschrieben, gesprochen", "verstanden", "Lesen und Schreiben", "zwei Jahre", "mindestens zwei Jahre", "3 Jahre Berufserfahrung"], ", ", "Tigrinisch"],
+      ["英语", "English", ["两年", "两年以上", "听得懂", "三年工作经验", "三年以上经验"], "，", "上海话"],
+    ] as const) {
+      for (const qualifier of qualifiers) {
+        const required = `${lead} – ${qualifier}${separator}${name}`;
+        // The qualifier alone is still one requirement met by the language at the head.
+        expect(recruitmentLanguageRequirements(`${lead} – ${qualifier}`), qualifier).toHaveLength(1);
+        expect(meetsRequiredLanguage([speaker], recruitmentLanguageRequirements(`${lead} – ${qualifier}`)[0]!), qualifier).toBe(true);
+        // A mission's text (and the Langue filter), the same text split as a mission does, a profile typed with commas.
+        for (const requirements of [
+          recruitmentLanguageRequirements(required),
+          recruitmentLanguageListRequirements(required.split(/[,;\n，]/).map(term => term.trim())),
+          recruitmentLanguageListRequirements(required.split(",").map(term => term.trim())),
+        ]) {
+          expect(requirements.map(requirement => requirement.text).at(-1), required).toBe(name);
+          expect(requirements.filter(requirement => meetsRequiredLanguage([speaker], requirement)), required).toHaveLength(requirements.length - 1);
+          expect(requirements.every(requirement => meetsRequiredLanguage([speaker, name], requirement)), required).toBe(true);
+        }
+      }
+    }
+  });
+
+  it("lit les autres noms courants d’une langue de la table comme cette langue, entiers seulement, et 国语 après un pays comme la langue de ce pays (IA02-R7-ALIAS)", () => {
+    // Before (daf844a): no list knew these names; after the places a dash opened they went on with them, and the
+    // language of the table they name was lost.
+    for (const [names, code] of [
+      [["Castilian", "Kastilisch", "Kastilische"], "es"],
+      [["Putonghua", "Hochchinesisch", "Standardchinesisch", "国语", "國語", "台湾国语"], "zh"],
+      [["MSA", "Modern Standard Arabic", "Fusha", "Fus'ha", "Khaleeji", "Khaliji", "Hocharabisch", "Modernes Hocharabisch", "Standardarabisch", "Golfarabisch"], "ar"],
+      [["Hochdeutsch"], "de"],
+      [["Flemish", "Flamand", "flamande", "Flämisch", "弗拉芒语"], "nl"],
+      [["韩国语", "韓國語"], "ko"],
+    ] as const) {
+      for (const name of names) expect(recruitmentLanguageCodes(name), name).toEqual([code]);
+    }
+    for (const [required, lead, other] of [
+      ["English – Dubai, Castilian", "English", "Spanish"], ["Englisch – Dubai, Hocharabisch", "English", "Arabic"],
+      ["英语 – 迪拜，国语", "English", "中文"], ["English – Riyadh, MSA", "English", "العربية"], ["Anglais – Dubaï, Putonghua", "English", "Mandarin"],
+    ] as const) {
+      for (const requirements of [recruitmentLanguageRequirements(required), recruitmentLanguageListRequirements(required.split(/[,，]/).map(term => term.trim()))]) {
+        expect(requirements, required).toHaveLength(2);
+        expect(requirements.every(requirement => meetsRequiredLanguage([lead], requirement)), required).toBe(false);
+        expect(requirements.every(requirement => meetsRequiredLanguage([lead, other], requirement)), required).toBe(true);
+      }
+    }
+    // 国语 after a country's name, or a word for countries, is no Mandarin; the words these names start with are no language being typed.
+    for (const text of ["外国语", "外国语言", "泰国语", "多国语言", "精通多国语言"]) expect(recruitmentLanguageCodes(text), text).toEqual([]);
+    for (const text of ["Golf", "Hoch", "Standard", "Flam", "Modern", "Khal"]) expect(recruitmentLanguagePrefixCodes(text), text).toEqual([]);
+    expect(recruitmentLanguageRequirements("Arabisch – Levante, Golf")).toEqual([{ text: "Arabisch – Levante, Golf", codes: ["ar"], anyOf: [] }]);
+    // Another name of the language beside a dash is a variety of it, as « Arabe – Golfe » is: one requirement.
+    for (const [required, code] of [["Arabe – MSA", "ar"], ["Chinois – Mandarin", "zh"], ["Arabic – Gulf Arabic", "ar"], ["Espagnol – castillan", "es"]] as const) {
+      expect(recruitmentLanguageRequirements(required), required).toEqual([{ text: required, codes: [code], anyOf: [] }]);
+    }
+  });
+
+  it("lit une partie qui a son propre tiret, après un séparateur, comme une nouvelle exigence menée par ce qui précède son tiret, jamais avec l’exigence d’avant (IA02-R7-TIRET-PROPRE)", () => {
+    // Before (daf844a): « Wolof – Dakar » opened places, « Romani – notions » went on with them in one requirement that either
+    // language met: Wolof, a language the lists know, was no longer required.
+    for (const [required, texts, languages] of [
+      ["Arabe – courant ; Wolof – Dakar ; Romani – notions", ["Arabe – courant", "Wolof – Dakar", "Romani – notions"], ["Arabic", "Wolof", "Romani"]],
+      ["English – fluent; Amharic – read, written and spoken; Aramaic – basic", ["English – fluent", "Amharic – read, written and spoken", "Aramaic – basic"], ["English", "Amharic", "Aramaic"]],
+      ["Anglais – Dubaï, Darija – Casablanca", ["Anglais – Dubaï", "Darija – Casablanca"], ["English", "Darija"]],
+      ["Englisch – Dubai; Tigrinisch – Grundkenntnisse", ["Englisch – Dubai", "Tigrinisch – Grundkenntnisse"], ["English", "Tigrinisch"]],
+      ["英语 – 迪拜；上海话 – 流利", ["英语 – 迪拜", "上海话 – 流利"], ["English", "上海话"]],
+    ] as const) {
+      expect(recruitmentLanguageRequirements(required).map(requirement => requirement.text), required).toEqual(texts);
+      // A mission's text split at its semicolons and commas, and each language: none can be left out.
+      for (const requirements of [recruitmentLanguageRequirements(required), recruitmentLanguageListRequirements(required.split(/[,;\n；]/).map(term => term.trim()))]) {
+        expect(requirements.every(requirement => meetsRequiredLanguage([...languages], requirement)), required).toBe(true);
+        for (const left of languages) {
+          expect(requirements.every(requirement => meetsRequiredLanguage(languages.filter(language => language !== left), requirement)), `${required} sans ${left}`).toBe(false);
+        }
+      }
+    }
+    // What precedes the dash qualifies the language when it is only known qualification words, or a known place.
+    for (const required of ["Anglais – Riyad, niveau – C1", "English – UAE, Qatar – Doha", "Anglais – C1, 5 ans minimum", "English – UAE, Qatar"]) {
+      expect(recruitmentLanguageRequirements(required), required).toEqual([{ text: required, codes: ["en"], anyOf: [] }]);
+    }
+  });
+
   it("sans Intl.DisplayNames (un navigateur ou un Node.js sans ses données), garde les noms de sa propre liste et ce qui qualifie une langue (IA-02)", async () => {
     vi.stubGlobal("Intl", { ...Intl, DisplayNames: undefined });
     vi.resetModules();

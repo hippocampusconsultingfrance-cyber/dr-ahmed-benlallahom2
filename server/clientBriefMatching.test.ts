@@ -159,6 +159,29 @@ describe("matching mission–candidat", () => {
     expect(match("Anglais – Dubaï, swahili pour les patients", ["English", "Swahili"]).breakdown.languages).toBe(15);
   });
 
+  it("lit les mêmes mots de qualification dans les quatre langues, les autres noms d’une langue de la table et une partie qui a son propre tiret comme une exigence (IA02-R7)", () => {
+    const candidate = { specialty: "Anesthésie-réanimation", targetCountries: '["Émirats arabes unis"]' };
+    const match = (requiredLanguages: string, declared: string[]) =>
+      computeBriefCandidateMatch({ specialtyNeeded: "Anesthésie-réanimation", country: "Émirats arabes unis", requiredCertifications: null, requiredLanguages }, { ...candidate, languageFacts: languageFacts(JSON.stringify(declared), []) });
+    // Before (daf844a): English, or Arabic and Romani, gave 15 language points of 15: Darija, Teochew, 上海话, Castilian or
+    // Wolof was lost after « read », « two years », « 两年以上 », a place, or within the requirement before it.
+    for (const [required, lead, all] of [
+      ["English – read, written, spoken, Darija", ["English"], ["English", "Darija"]],
+      ["Englisch – gelesen, geschrieben, gesprochen, Darija", ["English"], ["English", "Darija"]],
+      ["English – two years, Teochew", ["English"], ["English", "Teochew"]],
+      ["英语 – 两年以上，上海话", ["English"], ["English", "上海话"]],
+      ["English – Dubai, Castilian", ["English"], ["English", "Spanish"]],
+      ["Arabe – courant ; Wolof – Dakar ; Romani – notions", ["Arabic", "Romani"], ["Arabic", "Wolof", "Romani"]],
+    ] as const) {
+      expect(match(required, [...lead]).breakdown.languages, required).toBeLessThan(15);
+      expect(match(required, [...all]).breakdown.languages, required).toBe(15);
+    }
+    // A qualifier alone, in any of the four languages, is still met by the language it qualifies.
+    for (const required of ["English – read, written, spoken", "Englisch – zwei Jahre", "英语 – 两年以上", "Anglais – deux ans d'expérience"]) {
+      expect(match(required, ["English"]).breakdown.languages, required).toBe(15);
+    }
+  });
+
   it("une certification déclarée par le candidat compte, elle aussi, une fois confirmée", () => {
     const declaredOnly = computeBriefCandidateMatch(brief, { ...anaesthetist, certificationFacts: certificationFacts("ACLS, ATLS", []) });
     expect(declaredOnly.breakdown.certifications).toBe(0);
