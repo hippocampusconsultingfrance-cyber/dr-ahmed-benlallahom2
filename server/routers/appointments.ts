@@ -25,17 +25,21 @@ import {
   type BookingRefusalReason,
 } from "../../shared/bookingPolicy";
 import { cleanTextInput, emailText, multiLineText, singleLineText, TEXT_INPUT_INVALID_CHARACTERS } from "../../shared/textInput";
+import { localStripeApiOptions } from "../_core/env";
 import { getSafeCheckoutOrigin } from "./publicOrigin";
 import { enforcePublicFormRateLimit, givePublicFormAttemptBack, withinBookingGiveBackCap } from "./publicForms";
 import { parisDateKey, parseAppointmentDate, isNightRateForParis, isBookableAppointmentTime } from "./parisTime";
 
 let stripeClient: Stripe | undefined;
 
-/** Shared Stripe client (also used by the hold cleanup job); throws when the key is not configured. */
+/**
+ * Shared Stripe client (also used by the hold cleanup job); throws when the key is not
+ * configured. In local development only, it may target the local payment double (CODE-15).
+ */
 export function getStripeClient(): Stripe {
   const apiKey = process.env.STRIPE_SECRET_KEY?.trim();
   if (!apiKey) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Le service de paiement n’est pas configuré." });
-  stripeClient ??= new Stripe(apiKey);
+  stripeClient ??= new Stripe(apiKey, localStripeApiOptions());
   return stripeClient;
 }
 

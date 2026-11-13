@@ -22,9 +22,34 @@ Prérequis : Node.js 22 (`.nvmrc`, lu par la CI ; `nvm use`) et pnpm 10 (version
 
 ```bash
 pnpm install --frozen-lockfile
-cp .env.example .env      # puis remplir les valeurs (voir le fichier)
+cp .env.example .env      # puis remplir les valeurs (voir le fichier et « Mode local » ci-dessous)
 pnpm dev                  # http://localhost:3000 (Express + Vite en mode middleware)
 ```
+
+### Mode local, sans les comptes de production
+
+`pnpm dev` démarre sans Neon, Clerk, Resend ni Stripe (CODE-15). Il suffit d'une base PostgreSQL sur la machine :
+
+```bash
+docker run --name drahmed-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=drahmed -p 5432:5432 -d postgres:16
+```
+
+Dans `.env` : `DATABASE_URL=postgresql://postgres:postgres@localhost:5432/drahmed`, `PUBLIC_APP_ORIGIN=http://localhost:3000`, `CANDIDATE_AUTH_PEPPER` (32 caractères aléatoires ou plus) et `CANDIDATE_DOCUMENT_ENCRYPTION_KEY` (`openssl rand -base64 32`). Pour les formulaires protégés, les clés de test publiées par Cloudflare, qui laissent toujours passer : `VITE_TURNSTILE_SITE_KEY=1x00000000000000000000AA`, `TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA`. Laisser vides les clés Clerk, Resend et Stripe. Puis créer le schéma et ouvrir l'agenda (l'administration, fermée sans Clerk, ne peut pas le faire) :
+
+```bash
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/drahmed pnpm exec drizzle-kit migrate
+psql postgresql://postgres:postgres@localhost:5432/drahmed -c "INSERT INTO availability_slots (day_of_week, start_time, end_time, is_active) SELECT d, '08:00', '20:00', 1 FROM generate_series(0, 6) d"
+pnpm dev
+```
+
+Au démarrage, la console liste les raccourcis actifs (`[Local mode] local_database, clerk_optional, console_emails, console_payments`) :
+
+- **base locale** : une `DATABASE_URL` sur cette machine (`localhost`, `127.x.x.x`, `[::1]`) passe par node-postgres au lieu du proxy HTTP de Neon (`server/db.ts`) ; la base doit être en UTF8 ;
+- **Clerk facultatif** : sans les clés Clerk, le site public répond et personne n'est administrateur ; `/admin` affiche que la clé n'est pas configurée ;
+- **emails dans la console** : sans `RESEND_API_KEY`, chaque email est écrit dans la console (`[Email local] À : … — Objet : …`, puis son texte) au lieu d'être envoyé ;
+- **paiements dans la console** : sans `STRIPE_SECRET_KEY`, une réservation mène à une page de paiement de test locale, dont l'adresse est écrite dans la console (`[Paiement local] …`) ; « Payer » confirme le rendez-vous comme le ferait le webhook de Stripe, « Annuler » revient sur la page d'annulation.
+
+Ces raccourcis ne s'activent qu'avec `NODE_ENV=development` et hors de Vercel (ni `VERCEL` ni `VERCEL_ENV`) : `pnpm start`, le serveur construit et la fonction Vercel n'en activent aucun, quelle que soit leur configuration (`localDevelopmentShortcuts`, `server/_core/env.ts`, testé dans `server/localDevelopment.test.ts`). Restent hors du mode local : le stockage Vercel Blob (dépôt d'un CV, copie des factures), l'analyse IA et Google Drive. Pour eux, ou pour se connecter à l'administration, utiliser des comptes de développement, jamais ceux de production : une branche Neon (*Neon > Branches > Create branch*, depuis `main`, dont l'adresse va dans `DATABASE_URL`), une instance Clerk *Development* (clés `pk_test_…` et `sk_test_…`, `CLERK_OWNER_USER_ID` de votre utilisateur de test), un magasin Blob de préproduction et le mode test de Stripe.
 
 ## Commandes
 

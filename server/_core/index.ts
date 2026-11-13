@@ -5,12 +5,12 @@ import { serveStatic } from "./static";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { clerkMiddleware } from "@clerk/express";
-import { assertCriticalProductionEnvironment, clerkPublishableKey } from "./env";
+import { assertCriticalProductionEnvironment, clerkPublishableKey, LOCAL_STRIPE_API_URL_VARIABLE, localDevelopmentShortcuts } from "./env";
 import { registerHealthRoute } from "./health";
 import { contentSecurityPolicyHeaders, registerCspReportRoute } from "./contentSecurityPolicy";
 import { registerGoogleDriveOAuthRoutes } from "../googleDriveOAuthRoutes";
 import { appRouter } from "../routers";
-import { createContext } from "./context";
+import { createContext, type TrpcContext } from "./context";
 import { registerCandidateDocumentRoutes } from "../routes/candidateDocuments";
 import { registerClientBriefRoute } from "../routes/clientBriefs";
 import { registerRecruitmentApplyRoute } from "../routes/recruitmentApply";
@@ -68,10 +68,16 @@ export async function createApp() {
   // Reports of the report-only CSP (SECU-02), before clerkMiddleware for the same reason.
   registerCspReportRoute(app);
 
-  app.use(clerkMiddleware({
-    publishableKey: clerkPublishableKey(),
-    authorizedParties: [PUBLIC_APP_ORIGIN, "http://localhost:3000", "http://127.0.0.1:3000"],
-  }));
+  // Local development without Clerk keys (CODE-15, never in production): no
+  // clerkMiddleware, which would answer every request with a 500, and a context
+  // without anyone signed in, so the public site works and /admin stays closed.
+  const withoutClerk = localDevelopmentShortcuts().includes("clerk_optional");
+  if (!withoutClerk) {
+    app.use(clerkMiddleware({
+      publishableKey: clerkPublishableKey(),
+      authorizedParties: [PUBLIC_APP_ORIGIN, "http://localhost:3000", "http://127.0.0.1:3000"],
+    }));
+  }
 
   // Stripe and Resend webhooks (MUST be before express.json() to receive raw body)
   registerStripeWebhookRoute(app);
@@ -120,7 +126,7 @@ export async function createApp() {
     "/api/trpc",
     createExpressMiddleware({
       router: appRouter,
-      createContext,
+      createContext: withoutClerk ? ({ req, res }): TrpcContext => ({ req, res, user: null, mfaVerified: false }) : createContext,
       allowMethodOverride: true,
     })
   );
@@ -152,6 +158,24 @@ async function startServer() {
 
   if (port !== preferredPort) {
     console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
+  }
+
+  // Local development (CODE-15): without Resend or Stripe keys, local doubles write
+  // every email and payment to the console (server/_core/localServices.ts).
+  const shortcuts = localDevelopmentShortcuts();
+  if (shortcuts.length > 0) console.log(`[Local mode] ${shortcuts.join(", ")} (README, « Mode local »)`);
+  if (shortcuts.includes("console_emails") || shortcuts.includes("console_payments")) {
+    const { startLocalServices } = await import("./localServices");
+    const local = await startLocalServices({ appOrigin: `http://127.0.0.1:${port}` });
+    if (shortcuts.includes("console_emails")) {
+      process.env.RESEND_API_KEY = "re_local_console";
+      process.env.RESEND_BASE_URL = local.origin;
+    }
+    if (shortcuts.includes("console_payments")) {
+      process.env.STRIPE_SECRET_KEY = "sk_test_local_console";
+      process.env.STRIPE_WEBHOOK_SECRET = local.stripeWebhookSecret;
+      process.env[LOCAL_STRIPE_API_URL_VARIABLE] = local.origin;
+    }
   }
 
   server.listen(port, () => {
