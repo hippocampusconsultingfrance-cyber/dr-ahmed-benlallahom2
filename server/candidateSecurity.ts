@@ -6,6 +6,7 @@ import { notifyOwner } from "./_core/notification";
 import { alertSendSlot, deferAlertToNextRun } from "./_core/resendDelivery";
 import { adminLink } from "./adminLinks";
 import { securityEventLabel } from "../shared/securityEventLabels";
+import { PARIS_TIME_ZONE } from "../shared/parisTime";
 
 const HIBP_CACHE_TTL_MS = 10 * 60 * 1000;
 const pwnedSuffixCache = new Map<string, { expiresAt: number; suffixes: Set<string> }>();
@@ -100,7 +101,7 @@ const SECURITY_ALERT_ADVICE: Record<string, string> = {
   resend_quota_exceeded: "Plus aucun email ne part, ni les codes de sécurité de l’administration ni les emails après paiement : vérifiez le quota dans Resend. Une fois rétabli : « Renvoyer » sur les rendez-vous signalés (onglet « Réservations »), « Relancer les échecs » sur une campagne (onglet « Mailing »).",
 };
 
-const PARIS_ALERT_TIME = new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", dateStyle: "long", timeStyle: "short" });
+const PARIS_ALERT_TIME = new Intl.DateTimeFormat("fr-FR", { timeZone: PARIS_TIME_ZONE, dateStyle: "long", timeStyle: "short" });
 
 /**
  * Aggregates high-severity alerts: the first event of a category in a window

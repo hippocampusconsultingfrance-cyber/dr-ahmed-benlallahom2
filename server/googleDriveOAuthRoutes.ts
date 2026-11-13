@@ -6,6 +6,7 @@ import { notifyOwner } from "./_core/notification";
 import { adminLink } from "./adminLinks";
 import { logSecurityEvent, requestIpHash } from "./candidateSecurity";
 import { buildGoogleDriveAuthorizationUrl, createGoogleDriveOAuthState, exchangeGoogleDriveAuthorizationCode, googleDriveExportStatus, requeueGoogleDriveExportsAfterReconnection, saveGoogleDriveConnection, verifyGoogleDriveOAuthState } from "./googleDriveExport";
+import { PARIS_TIME_ZONE } from "../shared/parisTime";
 
 const STATE_COOKIE = "__Host-google_drive_oauth_state";
 
@@ -60,7 +61,7 @@ async function recordGoogleDriveConnection(input: { openId: string; req: Request
     logError("[GoogleDrive] Unable to record the connection security event", error, { req: input.req });
   }
   // MAIL-04: what happened and when, on the Paris clock, what to do if it was not you, and where.
-  const parisTime = at.toLocaleString("fr-FR", { timeZone: "Europe/Paris", dateStyle: "long", timeStyle: "short" });
+  const parisTime = at.toLocaleString("fr-FR", { timeZone: PARIS_TIME_ZONE, dateStyle: "long", timeStyle: "short" });
   await notifyOwner({
     title: input.reconnection ? "Sécurité : Google Drive reconnecté à l’administration" : "Sécurité : Google Drive connecté à l’administration",
     content: [
