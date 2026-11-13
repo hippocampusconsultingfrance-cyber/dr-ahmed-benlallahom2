@@ -610,9 +610,11 @@ describe("actions d’administration du recrutement", () => {
     expect(phones((await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number })).csv)).toEqual(expected);
   });
 
-  it("garde le point et le poste qui suivent un numéro entier que Calc lit comme un nombre, décimal en anglais ou groupé en allemand (ADM-26)", async () => {
+  it("garde le point et le poste qui suivent un numéro entier que Calc lit comme un nombre, décimal en anglais ou groupé en allemand, entre parenthèses ou non (ADM-26)", async () => {
     // Calc in English read « 0612345678.913 » as 612345678.913, in German as 612345678913, and the export dropped the dot, the pairs
-    // shifted: « 0 61 23 45 67 89 13 »; « +33471234567.802 » gave « 00 33471234567802 ».
+    // shifted: « 0 61 23 45 67 89 13 »; « +33471234567.802 » gave « 00 33471234567802 ». Inside parentheses, a negative number in English
+    // and German, the number before the dot, text on its own by its opening parenthesis, was kept as typed, the value so rejoined was the
+    // typed one, and the export ran the extension into the number: « (44123456.802) » gave « 4 41 23 45 68 02 ».
     const typed = {
       // The number written as it would be alone, then its dot and its extension as typed.
       "0612345678.913": "06 12 34 56 78.913",
@@ -620,6 +622,20 @@ describe("actions d’administration du recrutement", () => {
       "44123456.802": "44 12 34 56.802",
       "0612345678.5": "06 12 34 56 78.5",
       "0612345678.0698765432": "06 12 34 56 78.06 98 76 54 32",
+      // Likewise inside parentheses, the number written as it would be alone and without them, even if it is text on its own.
+      "(44123456.802)": "44 12 34 56.802",
+      "( 44123456.802 )": "44 12 34 56.802",
+      "(0612345678.913)": "06 12 34 56 78.913",
+      "(03123456.986)": "03 12 34 56.986",
+      "(6111234.915)": "6 11 12 34.915",
+      "(0033471234567.802)": "00 33471234567.802",
+      "(0612345678.0698765432)": "06 12 34 56 78.06 98 76 54 32",
+      // Controls: a comma and a space after the number keep the value text once rejoined, a « + » inside parentheses is text in Calc,
+      // a single number inside parentheses.
+      "(44123456,802)": "(44123456, 802)",
+      "(44123456 802)": "44 12 34 56 802",
+      "(+33471234567.802)": "(+33471234567.802)",
+      "(0612345678)": "06 12 34 56 78",
       // Its « 00 » kept apart before a variant, which a decimal sign keeps from making a fraction.
       "+33471234567.802/3": "00 33471234567.802 / 3",
       // One number: grouped by dots, its country code before the dot, a dot at its end.

@@ -243,9 +243,12 @@ const PHONE_NUMBER_SEPARATORS = [
  * « / », the variants of the first one likewise, their digits as typed (« 0661 234567/91 » and « 6111 234/424 » give
  * « 06 61 23 45 67 / 91 » and « 6 11 12 34 / 424 »); after a decimal sign, a shorter part as typed,
  * the extension a phone dials after its pause (« 0471234567,802 », « +33471234567,802 » and « 0612345678.913 » give
- * « 04 71 23 45 67, 802 », « 00 33471234567, 802 » and « 06 12 34 56 78.913 »). A separator typed at the start or
- * at the end separates nothing (« 0612345678,0698765432, »). Null for a single number, or if the numbers so joined
- * could still be read as a number, each set apart (ADM-26).
+ * « 04 71 23 45 67, 802 », « 00 33471234567, 802 » and « 06 12 34 56 78.913 »). A number that is text on its own only
+ * by a sign typed around the whole value, which the parts so joined would close again, is written as it would be alone
+ * and without that sign, as before a variant (« (44123456.802) » and « (0612345678.0698765432) » give
+ * « 44 12 34 56.802 » and « 06 12 34 56 78.06 98 76 54 32 »). A separator typed at the start or at the end separates
+ * nothing (« 0612345678,0698765432, »). Null for a single number, or if the numbers so joined could still be read as a
+ * number, each set apart (ADM-26).
  */
 function severalPhoneNumbersAsText(value: string): string | null {
   for (const { separator, joint, shorter, international } of PHONE_NUMBER_SEPARATORS) {
@@ -255,8 +258,10 @@ function severalPhoneNumbersAsText(value: string): string | null {
     const variant = (part: string | undefined) => shorter === "variant" && whole && part !== undefined && phoneNumberDigits(part) < PHONE_NUMBER_DIGITS;
     const extension = (part: string) => shorter === "extension" && whole && phoneNumberDigits(part) < PHONE_NUMBER_DIGITS;
     if (!parts.every((part, index) => phoneNumberDigits(part) >= PHONE_NUMBER_DIGITS || (index > 0 && (variant(part) || extension(part))))) continue;
+    // A variant or an extension as typed: its digits and the signs between them, without the signs at its ends (« 91) » gives « 91 »).
+    const shorterAsTyped = (part: string) => part.replace(/^\D+|\D+$/g, "");
     const write = (beforeVariant: (part: string) => string, variantAsTyped: boolean) => parts.map((part, index) => {
-      if (variant(part)) return variantAsTyped ? part.replace(/^\D+|\D+$/g, "") : part.replace(/\D/g, "").replace(BY_TWO_FROM_THE_END, " ");
+      if (variant(part)) return variantAsTyped ? shorterAsTyped(part) : part.replace(/\D/g, "").replace(BY_TWO_FROM_THE_END, " ");
       if (extension(part)) return part;
       return variant(parts[index + 1]) ? beforeVariant(part) : phoneAsText(part);
     }).join(joint);
@@ -265,7 +270,11 @@ function severalPhoneNumbersAsText(value: string): string | null {
     // (« 0048512345680 / 130 »). If that still makes a number, its « 00 » is kept apart, as a decimal sign after it makes no fraction
     // (« 00 33471234567.802 / 3 »); failing that, the number is set apart all through and its variant by two from the end.
     const alone = (part: string, zeros: string) => phoneNumberThenGroupsAsText(part) ?? (severalPhoneNumbersAsText(part) ?? phoneDigitsSetApart(part)).replace(/^00 /, zeros);
-    const writings = [() => write(part => alone(part, "00"), true), () => write(part => alone(part, "00 "), true), () => write(part => phoneDigitsSetApart(part).replace(/^00 /, "00"), false)];
+    // Last, a number kept as typed because it is text on its own only by a sign typed around the whole value, which the parts so joined close again
+    // (« (44123456.802) », « (0612345678.0698765432) »): every number is written as it would be alone and without those signs, as before a variant,
+    // even if it is text on its own, its « 00 » kept apart, and a variant or an extension as typed (« 44 12 34 56.802 », « 06 12 34 56 78.06 98 76 54 32 »).
+    const everyNumberAlone = () => parts.map(part => (variant(part) || extension(part) ? shorterAsTyped(part) : alone(part, "00 "))).join(joint);
+    const writings = [() => write(part => alone(part, "00"), true), () => write(part => alone(part, "00 "), true), () => write(part => phoneDigitsSetApart(part).replace(/^00 /, "00"), false), everyNumberAlone];
     for (const writing of writings) {
       const written = writing();
       if (!spreadsheetMayReadAsNumberOrDate(written)) return written;
@@ -335,7 +344,8 @@ function phoneAsText(written: string): string {
  * (« 0612345678,0698765432 », « 0661 234567/91 », « 6111 234/424 »,
  * « +33471234567,802 » and « 0612345678.913 » give
  * « 06 12 34 56 78, 06 98 76 54 32 », « 06 61 23 45 67 / 91 »,
- * « 6 11 12 34 / 424 », « 00 33471234567, 802 » and « 06 12 34 56 78.913 »:
+ * « 6 11 12 34 / 424 », « 00 33471234567, 802 » and « 06 12 34 56 78.913 »,
+ * and « (44123456.802) » gives « 44 12 34 56.802 », as « 44123456.802 »:
  * severalPhoneNumbersAsText). A whole number and the groups of three after
  * its space, which French reads as thousands, leave likewise, the groups as
  * typed (« 0612345678 913 », « 44123456 802 » and « +33471234567 802 » give
