@@ -21,7 +21,8 @@ test("dépose une candidature avec son CV, qui est gardé, accusé, puis lu et a
 
   await expect(page.getByRole("heading", { name: "Candidature reçue" })).toBeVisible();
   const { rows: [application] } = await db.query("SELECT id, tracking_id, specialty, diploma_country, file_validation_status, analysis_status, cv_file_key FROM cv_applications WHERE email = $1", [email]);
-  expect(application).toMatchObject({ specialty: "Anesthésie-réanimation", diploma_country: "France", file_validation_status: "quarantined", analysis_status: "queued" });
+  // The diploma country chosen by its name is recorded as its ISO 3166-1 code (EN-11).
+  expect(application).toMatchObject({ specialty: "Anesthésie-réanimation", diploma_country: "FR", file_validation_status: "quarantined", analysis_status: "queued" });
   await expect(page.getByText(application.tracking_id)).toBeVisible();
   expect((await doublesState()).blobs).toContain(application.cv_file_key);
   const [acknowledgement] = await emailsTo(email);
