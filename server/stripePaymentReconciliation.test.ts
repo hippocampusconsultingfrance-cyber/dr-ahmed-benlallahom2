@@ -779,7 +779,7 @@ describe("RES-06 — remboursements et contestations faits dans Stripe", () => {
     expect(appointmentRow()).toMatchObject({ paymentStatus: "refunded", appointmentStatus: "completed", slotKey: appointmentDate.toISOString(), refundAmount: "100.00" });
     expect(emails.sendRefundConfirmationEmail).toHaveBeenCalledWith(expect.anything(), expect.anything(), TRACKING_ID, expect.any(Date), "100.00", expect.objectContaining({ context: "refund" }));
     expect(owner.notifyOwner).toHaveBeenCalledTimes(1);
-    expect(owner.notifyOwner.mock.calls[0][0].content).toContain("Le statut du rendez-vous (completed) est conservé");
+    expect(owner.notifyOwner.mock.calls[0][0].content).toContain("Le statut du rendez-vous (Terminé) est conservé");
   });
 
   it("n’écrit pas au patient d’un rendez-vous anonymisé remboursé dans Stripe, le dit au médecin et ne relance que son alerte (RGPD-12)", async () => {

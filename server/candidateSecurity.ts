@@ -4,6 +4,8 @@ import { candidateSecurityRateLimits, securityEvents } from "../drizzle/schema";
 import { getDb } from "./db";
 import { notifyOwner } from "./_core/notification";
 import { alertSendSlot, deferAlertToNextRun } from "./_core/resendDelivery";
+import { adminLink } from "./adminLinks";
+import { securityEventLabel } from "../shared/securityEventLabels";
 
 const HIBP_CACHE_TTL_MS = 10 * 60 * 1000;
 const pwnedSuffixCache = new Map<string, { expiresAt: number; suffixes: Set<string> }>();
@@ -64,13 +66,27 @@ export async function logSecurityEvent(input: SecurityEvent) {
 /** At most one owner alert email per event category in this window (CAND-15). */
 export const SECURITY_ALERT_EMAIL_WINDOW_MS = 30 * 60 * 1000;
 
+/** Who caused the last event, in words: the administrator's Clerk identifier and the hashes stay out of it (MAIL-04). */
 function describeSecurityActor(input: { actorKind: string; actorReference?: string | null }): string {
-  if (!input.actorReference) return input.actorKind === "system" ? "système" : "non identifié";
-  if (input.actorKind === "candidate") return `compte candidat n° ${input.actorReference}`;
-  if (input.actorKind === "admin") return `administrateur ${input.actorReference.slice(0, 32)}`;
-  // Anonymous references are already pseudonymised hashes: show a short prefix only.
-  return `empreinte ${input.actorReference.slice(0, 12)}…`;
+  if (input.actorKind === "admin") return "votre compte administrateur";
+  if (input.actorKind === "candidate") return input.actorReference ? `le compte candidat n° ${input.actorReference}` : "un compte candidat";
+  if (input.actorKind === "system") return "le site lui-même";
+  return "un visiteur non connecté";
 }
+
+/**
+ * What the owner does on the alert of each category that can raise one (a
+ * high-severity event refused or failed, logSecurityEvent): from the code
+ * that raises it, and from docs/EXPLOITATION.md for the used-up quota.
+ */
+const SECURITY_ALERT_ADVICE: Record<string, string> = {
+  admin_mfa_verify: "Ces codes ont été saisis après une connexion réussie à votre compte administrateur : si ce n’est pas vous, votre mot de passe est connu. Changez-le dans Clerk, puis, dans l’onglet « Sécurité », cliquez sur « Révoquer toutes les autres sessions ».",
+  candidate_login: "Quelqu’un essaie des mots de passe sur ce compte candidat ; le site freine ces essais de lui-même (blocage temporaire, puis vérification anti-robot). Rien à faire si cela cesse ; sinon, consultez le journal de sécurité.",
+  candidate_login_challenge_enabled: "La vérification anti-robot est désormais demandée pour se connecter à ce compte candidat. Rien à faire si les essais cessent ; sinon, consultez le journal de sécurité.",
+  resend_quota_exceeded: "Plus aucun email ne part, ni les codes de sécurité de l’administration ni les emails après paiement : vérifiez le quota dans Resend. Une fois rétabli : « Renvoyer » sur les rendez-vous signalés (onglet « Réservations »), « Relancer les échecs » sur une campagne (onglet « Mailing »).",
+};
+
+const PARIS_ALERT_TIME = new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", dateStyle: "long", timeStyle: "short" });
 
 /**
  * Aggregates high-severity alerts: the first event of a category in a window
@@ -127,20 +143,34 @@ async function sendSecurityAlertEmail(input: SecurityAlertInput, options: { queu
   const db = await getDb();
   if (!db) return false;
   const since = new Date(Date.now() - (options.queued ? 24 * 60 * 60 * 1000 : 2 * SECURITY_ALERT_EMAIL_WINDOW_MS));
-  const recent = await db.select({ id: securityEvents.id }).from(securityEvents).where(and(
+  const recent = await db.select({ id: securityEvents.id, createdAt: securityEvents.createdAt }).from(securityEvents).where(and(
     eq(securityEvents.category, input.category),
     gte(securityEvents.createdAt, since),
     inArray(securityEvents.severity, ["high", "critical"]),
   )).limit(10_000);
   const windowMinutes = Math.round(SECURITY_ALERT_EMAIL_WINDOW_MS / 60_000);
+  const lastAt = recent.reduce<Date | null>((latest, event) => {
+    const at = asDate(event.createdAt);
+    return at && (!latest || at > latest) ? at : latest;
+  }, null) ?? new Date();
+  // MAIL-04: what happens, when (Paris time) and what to do, then where to look; the codes last.
+  const label = securityEventLabel(input.category, input.outcome, "fr");
+  const technical = [
+    `code ${input.category}`,
+    ...input.ipHash ? [`réseau ${input.ipHash.slice(0, 12)}…`] : [],
+    // Anonymous references are already pseudonymised hashes: a short prefix only.
+    ...input.actorKind === "anonymous" && input.actorReference ? [`empreinte ${input.actorReference.slice(0, 12)}…`] : [],
+  ];
   return notifyOwner({
-    title: `Alerte sécurité — ${input.category} — Hippocampus Consulting`,
+    title: `Alerte sécurité — ${label} — Hippocampus Consulting`,
     content: [
       ...options.queued ? ["Alerte reportée : levée pendant les envois qui suivent un paiement, elle ne pouvait pas partir avant leur réponse ; elle part au passage suivant, que l’incident dure encore ou non."] : [],
-      `Catégorie : ${input.category} · ${input.outcome} (gravité ${input.severity ?? "high"}).`,
-      `Événements de ce type sur ${options.queued ? "les dernières 24 heures" : "la dernière heure"} : ${recent.length}.`,
-      `Dernier acteur : ${describeSecurityActor(input)}${input.ipHash ? ` · réseau ${input.ipHash.slice(0, 12)}…` : ""}.`,
-      `Les événements suivants de cette catégorie sont enregistrés sans nouvel email pendant au moins ${windowMinutes} minutes ; consultez le journal de sécurité de l’administration.`,
+      // A queued alert no longer knows who caused its last event.
+      `${recent.length} évènement${recent.length > 1 ? "s" : ""} « ${label} » sur ${options.queued ? "les dernières 24 heures" : "la dernière heure"}, le dernier le ${PARIS_ALERT_TIME.format(lastAt)} (heure de Paris)${options.queued ? "" : `, par ${describeSecurityActor(input)}`}.`,
+      SECURITY_ALERT_ADVICE[input.category] ?? "Consultez le journal de sécurité de l’administration.",
+      `Journal de sécurité : ${adminLink("security")}`,
+      `Les évènements suivants de ce type sont enregistrés sans nouvel email pendant au moins ${windowMinutes} minutes.`,
+      `Pour le journal : ${technical.join(" · ")}.`,
     ].join("\n"),
   });
 }

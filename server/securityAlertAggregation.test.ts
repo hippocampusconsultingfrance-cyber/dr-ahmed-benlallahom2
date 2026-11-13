@@ -25,11 +25,41 @@ describe("CAND-15 — agrégation des alertes de sécurité envoyées au propri�
     expect(db().rows(securityEvents)).toHaveLength(30);
     expect(state.notifyOwner).toHaveBeenCalledTimes(1);
     const { title, content } = state.notifyOwner.mock.calls[0][0];
-    expect(title).toContain("candidate_login");
-    expect(content).toMatch(/Événements de ce type sur la dernière heure : \d+\./);
-    expect(content).toContain("compte candidat n° 42");
+    expect(title).toBe("Alerte sécurité — Connexion candidat refusée : email ou mot de passe erroné — Hippocampus Consulting");
+    expect(content).toMatch(/^\d+ évènements? « Connexion candidat refusée : email ou mot de passe erroné » sur la dernière heure, le dernier le /);
+    expect(content).toContain("par le compte candidat n° 42.");
     expect(content).toContain(`au moins ${SECURITY_ALERT_EMAIL_WINDOW_MS / 60_000} minutes`);
     expect(content).not.toContain("a".repeat(64));
+  });
+
+  it("dit en phrases ce qui se passe, l’heure de Paris, quoi faire et où regarder, les codes à la fin (MAIL-04)", async () => {
+    vi.useFakeTimers({ now: new Date("2026-11-12T14:05:00Z"), toFake: ["Date"] });
+    try {
+      for (let index = 0; index < 3; index += 1) {
+        await logSecurityEvent({ actorKind: "admin", actorReference: "user_2abcHarnessOwner", category: "admin_mfa_verify", outcome: "failed", severity: "high", ipHash: "b".repeat(64) });
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(state.notifyOwner).toHaveBeenCalledTimes(1);
+    const { title, content } = state.notifyOwner.mock.calls[0][0];
+    expect(title).toBe("Alerte sécurité — Code de sécurité admin erroné ou expiré — Hippocampus Consulting");
+    const lines = content.split("\n");
+    // The first of the burst is the one that sends the email: it counts itself.
+    expect(lines[0]).toBe("1 évènement « Code de sécurité admin erroné ou expiré » sur la dernière heure, le dernier le 12 novembre 2026 à 15:05 (heure de Paris), par votre compte administrateur.");
+    expect(lines[1]).toContain("Changez-le dans Clerk, puis, dans l’onglet « Sécurité », cliquez sur « Révoquer toutes les autres sessions ».");
+    expect(lines[2]).toBe("Journal de sécurité : https://drahmedbenlallahom.com/admin?tab=security");
+    expect(lines.at(-1)).toBe(`Pour le journal : code admin_mfa_verify · réseau ${"b".repeat(12)}….`);
+    // The administrator's Clerk identifier is not written.
+    expect(content).not.toContain("user_2abcHarnessOwner");
+  });
+
+  it("dit d’un visiteur qu’il n’est pas connecté, son empreinte seulement avec les codes", async () => {
+    await logSecurityEvent({ actorKind: "anonymous", actorReference: "c".repeat(64), category: "candidate_login_challenge_enabled", outcome: "alert", severity: "high" });
+    const { content } = state.notifyOwner.mock.calls[0][0];
+    expect(content).toContain("« Nombreux essais sur un compte candidat : vérification anti-robot désormais demandée »");
+    expect(content).toContain("par un visiteur non connecté.");
+    expect(content.split("\n").at(-1)).toBe(`Pour le journal : code candidate_login_challenge_enabled · empreinte ${"c".repeat(12)}….`);
   });
 
   it("alerte séparément chaque catégorie et ignore les événements non critiques ou autorisés", async () => {
@@ -38,8 +68,8 @@ describe("CAND-15 — agrégation des alertes de sécurité envoyées au propri�
     await logSecurityEvent({ actorKind: "anonymous", category: "candidate_register_turnstile", outcome: "blocked", severity: "warning" });
     await logSecurityEvent({ actorKind: "candidate", category: "candidate_login", outcome: "allowed", severity: "high" });
     expect(state.notifyOwner.mock.calls.map(call => call[0].title)).toEqual([
-      expect.stringContaining("candidate_login"),
-      expect.stringContaining("admin_mfa_verify"),
+      expect.stringContaining("Connexion candidat refusée"),
+      expect.stringContaining("Code de sécurité admin erroné"),
     ]);
   });
 
@@ -53,7 +83,7 @@ describe("CAND-15 — agrégation des alertes de sécurité envoyées au propri�
     }
     await failure();
     expect(state.notifyOwner).toHaveBeenCalledTimes(2);
-    expect(state.notifyOwner.mock.calls[1][0].content).toContain("Événements de ce type sur la dernière heure : 6.");
+    expect(state.notifyOwner.mock.calls[1][0].content).toMatch(/^6 évènements « Connexion candidat refusée : email ou mot de passe erroné » sur la dernière heure, /);
   });
 
   it("n’empêche jamais l’enregistrement de l’événement si l’envoi échoue", async () => {

@@ -45,6 +45,9 @@ function heldAppointment(overrides: Record<string, unknown> = {}) {
   return {
     id: 42,
     trackingId: "APT-42",
+    customerName: "Jeanne Martin",
+    customerEmail: "jeanne@test.local",
+    customerPhone: "+33 6 12 34 56 78",
     finalPrice: "100.00",
     paymentStatus: "pending",
     appointmentStatus: "held",
@@ -124,6 +127,9 @@ describe("webhook Stripe checkout.session.completed", () => {
     expect(alert.title).toContain("non confirmable");
     expect(alert.title).toContain("APT-42");
     expect(alert.content).toContain("Remboursement ou reprogrammation manuelle requis");
+    // MAIL-04: whom to call, and where the appointment is.
+    expect(alert.content).toContain("Patient : Jeanne Martin — jeanne@test.local — +33 6 12 34 56 78.");
+    expect(alert.content).toContain("Ouvrir le rendez-vous : https://drahmedbenlallahom.com/admin?tab=appointments&ref=APT-42");
     expect(alert.content).toContain("pi_test_1");
     expect(fulfillment.enqueueAppointmentFulfillment).not.toHaveBeenCalled();
   });
@@ -299,9 +305,36 @@ describe("alerte de paiement non confirmable", () => {
       paymentIntentId: "pi_9",
       paymentStatus: "pending",
       appointmentStatus: "cancelled",
+      patient: { name: "Jeanne Martin", email: "jeanne@test.local", phone: "+33 6 12 34 56 78" },
     });
     expect(alert.title).toBe("Paiement reçu pour un rendez-vous non confirmable (APT-9)");
     expect(alert.content).toContain("120,00 €");
     expect(alert.content).toContain("Remboursement ou reprogrammation manuelle requis");
+  });
+
+  it("dit quoi, quand (heure de Paris), quoi faire et avec qui, avec le lien du rendez-vous et les identifiants Stripe à la fin (MAIL-04)", () => {
+    const sessionId = `cs_live_${"a1B2c3D4".repeat(7)}`;
+    const alert = buildUnconfirmablePaymentAlert({
+      trackingId: "APT-9",
+      reason: "hold_released",
+      amountCents: 10000,
+      sessionId,
+      paymentIntentId: "pi_3Q9",
+      paymentStatus: "pending",
+      appointmentStatus: "cancelled",
+      patient: { name: "Jeanne Martin", email: "jeanne@test.local", phone: "+33 6 12 34 56 78" },
+      receivedAt: new Date("2026-11-12T14:05:00Z"),
+    });
+    expect(alert.content.split("\n")).toEqual([
+      "Le 12 novembre 2026 à 15:05 (heure de Paris), Stripe a signalé un paiement de 100,00 € pour le rendez-vous APT-9, qui n’a pas pu être confirmé automatiquement : la réservation temporaire du créneau a expiré ou a été annulée avant la réception du paiement ; le créneau a pu être attribué à un autre patient.",
+      "Remboursement ou reprogrammation manuelle requis : contactez le patient, puis, s’il faut le rembourser, cliquez sur « Rembourser ce paiement » sur le rendez-vous (onglet « Réservations ») ou remboursez-le depuis Stripe.",
+      "Patient : Jeanne Martin — jeanne@test.local — +33 6 12 34 56 78.",
+      "Ouvrir le rendez-vous : https://drahmedbenlallahom.com/admin?tab=appointments&ref=APT-9",
+      "État du rendez-vous : Annulé, en attente de paiement.",
+      "Référence : APT-9",
+      `Session Stripe : ${sessionId}`,
+      "Paiement Stripe (PaymentIntent) : pi_3Q9",
+    ]);
+    expect(alert.content).not.toMatch(/onglet Rendez-vous|pending|cancelled|100\.00/);
   });
 });

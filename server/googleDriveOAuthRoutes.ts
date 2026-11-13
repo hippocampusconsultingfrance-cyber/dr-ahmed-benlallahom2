@@ -3,6 +3,7 @@ import type { Express, Request, Response } from "express";
 import { createContext } from "./_core/context";
 import { logError } from "./_core/logError";
 import { notifyOwner } from "./_core/notification";
+import { adminLink } from "./adminLinks";
 import { logSecurityEvent, requestIpHash } from "./candidateSecurity";
 import { buildGoogleDriveAuthorizationUrl, createGoogleDriveOAuthState, exchangeGoogleDriveAuthorizationCode, googleDriveExportStatus, requeueGoogleDriveExportsAfterReconnection, saveGoogleDriveConnection, verifyGoogleDriveOAuthState } from "./googleDriveExport";
 
@@ -58,13 +59,15 @@ async function recordGoogleDriveConnection(input: { openId: string; req: Request
   } catch (error) {
     logError("[GoogleDrive] Unable to record the connection security event", error, { req: input.req });
   }
+  // MAIL-04: what happened and when, on the Paris clock, what to do if it was not you, and where.
+  const parisTime = at.toLocaleString("fr-FR", { timeZone: "Europe/Paris", dateStyle: "long", timeStyle: "short" });
   await notifyOwner({
     title: input.reconnection ? "Sécurité : Google Drive reconnecté à l’administration" : "Sécurité : Google Drive connecté à l’administration",
     content: [
-      `Le compte Google Drive utilisé pour copier les CV vient d’être ${input.reconnection ? "remplacé" : "connecté"} depuis l’administration (${at.toISOString()}).`,
-      "L’opération a été réalisée par une session administrateur ayant validé la double authentification.",
+      `Le ${parisTime} (heure de Paris), le compte Google Drive utilisé pour copier les CV a été ${input.reconnection ? "remplacé" : "connecté"} depuis l’administration, par une session administrateur ayant validé le code de sécurité.`,
       ...(input.requeuedExports > 0 ? [`${input.requeuedExports} copie(s) de CV arrêtée(s) par un refus du jeton Google ont été remise(s) en file ; elles seront copiées au prochain passage du traitement.`] : []),
-      "Si vous n’êtes pas à l’origine de cette action, révoquez l’accès de l’application dans votre compte Google et reconnectez le Drive du cabinet depuis l’onglet Candidatures.",
+      "Si vous n’êtes pas à l’origine de cette action : révoquez l’accès de l’application dans votre compte Google, changez le mot de passe de votre compte administrateur dans Clerk, cliquez sur « Révoquer toutes les autres sessions » dans l’onglet « Sécurité », puis reconnectez le Drive du cabinet depuis l’onglet « Candidatures ».",
+      `Onglet « Candidatures » : ${adminLink("recruitment")}`,
     ].join("\n\n"),
   }).catch(() => false);
 }
