@@ -5,12 +5,13 @@
 -- Lecture seule : coller le fichier entier dans l'éditeur SQL de Neon (branche de
 -- production) ou lancer `psql "$DATABASE_URL" -f scripts/db-invariants.sql`.
 -- Chaque ligne dont « violations » est > 0 est un invariant violé, sauf dans la
--- famille MAJ : indicative, elle compte des dates de mise à jour qu'aucun code ne
--- tient et sort > 0 sur une base saine (voir plus bas) ; « tenu_par »
--- dit qui le tient aujourd'hui (la base, le code, l'admin ou rien). À passer une
--- fois avant chaque migration de la production, et quand le bilan quotidien de
--- sécurité signale un « Contrôle de cohérence de la base » : le cron
--- security-posture refait chaque jour ceux qu'aucun état normal ne déclenche
+-- famille MAJ : indicative, elle compte des lignes modifiées dont la date de mise
+-- à jour n'a pas suivi, ce que le code empêche depuis DATA-09, et sort > 0 tant
+-- qu'il reste des lignes modifiées avant ce déploiement (voir plus bas) ;
+-- « tenu_par » dit qui le tient aujourd'hui (la base, le code, l'admin ou
+-- rien). À passer une fois avant chaque migration de la production, et quand le
+-- bilan quotidien de sécurité signale un « Contrôle de cohérence de la base » :
+-- le cron security-posture refait chaque jour ceux qu'aucun état normal ne déclenche
 -- (server/scheduledJobs.ts, dataIntegrityPending : payés sans tâche, documents
 -- sans tâche, tâches restées « running », statuts de tâche hors liste, sessions
 -- d'un compte fermé ou absent), après deux jours laissés aux reprises
@@ -41,9 +42,11 @@
 --   garde sa décision, et le cron ferme sa tâche interrompue (EXPL-12).
 -- - listes de statuts : celles de drizzle/schema.ts aujourd'hui (dont les
 --   alertes et remboursements de la file d'après paiement).
--- - famille MAJ : indicative (aucun code ne tient ces dates), pas de donnée à
---   corriger ; un rendez-vous payé, un document analysé ou une tâche terminée
---   normalement y comptent déjà.
+-- - famille MAJ : indicative, pas de donnée à corriger. Depuis DATA-09, le code
+--   date chaque modification faite par Drizzle ($onUpdate de drizzle/schema.ts) ;
+--   le compteur ne relève plus que les lignes modifiées avant ce déploiement (un
+--   rendez-vous payé, un document analysé ou une tâche terminée normalement y
+--   comptent) ou par une requête SQL brute, qui ne tient pas cette date.
 WITH params AS (SELECT timestamp '2026-09-01 00:00:00' AS queue_live_since)
 SELECT 'FK' AS famille, 'cv_candidate_certifications sans candidature' AS invariant, 'code (effacement)' AS tenu_par, (SELECT count(*) FROM (select id from cv_candidate_certifications c where not exists (select 1 from cv_applications a where a.id=c.application_id)) q) AS violations
 UNION ALL
@@ -167,17 +170,17 @@ SELECT 'ETAT' AS famille, 'compte candidat ''erased''/''disabled'' avec session 
 UNION ALL
 SELECT 'ETAT' AS famille, 'demande RGPD ''completed'' sans date de réponse' AS invariant, 'code' AS tenu_par, (SELECT count(*) FROM (select id from gdpr_requests where status='completed' and response_date is null) q) AS violations
 UNION ALL
-SELECT 'MAJ' AS famille, 'appointments modifiés mais updatedAt = createdAt' AS invariant, 'rien (pas de \$onUpdate ni déclencheur)' AS tenu_par, (SELECT count(*) FROM (select id, tracking_id from appointments where "updatedAt" = "createdAt" and (cancelled_at is not null or refunded_at is not null or payment_status<>'pending' or appointment_status<>'held' or email_sent=1 or reminder_sent=1)) q) AS violations
+SELECT 'MAJ' AS famille, 'appointments modifiés mais updatedAt = createdAt' AS invariant, 'code ($onUpdate, depuis DATA-09)' AS tenu_par, (SELECT count(*) FROM (select id, tracking_id from appointments where "updatedAt" = "createdAt" and (cancelled_at is not null or refunded_at is not null or payment_status<>'pending' or appointment_status<>'held' or email_sent=1 or reminder_sent=1)) q) AS violations
 UNION ALL
-SELECT 'MAJ' AS famille, 'medical_questions modifiées mais updated_at = created_at' AS invariant, 'rien' AS tenu_par, (SELECT count(*) FROM (select id from medical_questions where updated_at = created_at and (status<>'submitted' or response_sent_at is not null)) q) AS violations
+SELECT 'MAJ' AS famille, 'medical_questions modifiées mais updated_at = created_at' AS invariant, 'code ($onUpdate, depuis DATA-09)' AS tenu_par, (SELECT count(*) FROM (select id from medical_questions where updated_at = created_at and (status<>'submitted' or response_sent_at is not null)) q) AS violations
 UNION ALL
-SELECT 'MAJ' AS famille, 'candidate_documents modifiés mais updated_at = created_at' AS invariant, 'rien' AS tenu_par, (SELECT count(*) FROM (select id from candidate_documents where updated_at = created_at and (status<>'uploaded' or reviewed_at is not null or analyzed_at is not null)) q) AS violations
+SELECT 'MAJ' AS famille, 'candidate_documents modifiés mais updated_at = created_at' AS invariant, 'code ($onUpdate, depuis DATA-09)' AS tenu_par, (SELECT count(*) FROM (select id from candidate_documents where updated_at = created_at and (status<>'uploaded' or reviewed_at is not null or analyzed_at is not null)) q) AS violations
 UNION ALL
-SELECT 'MAJ' AS famille, 'cv_processing_jobs modifiées mais updated_at = created_at' AS invariant, 'rien' AS tenu_par, (SELECT count(*) FROM (select id from cv_processing_jobs where updated_at = created_at and (job_status<>'queued' or attempts>0)) q) AS violations
+SELECT 'MAJ' AS famille, 'cv_processing_jobs modifiées mais updated_at = created_at' AS invariant, 'code ($onUpdate, depuis DATA-09)' AS tenu_par, (SELECT count(*) FROM (select id from cv_processing_jobs where updated_at = created_at and (job_status<>'queued' or attempts>0)) q) AS violations
 UNION ALL
-SELECT 'MAJ' AS famille, 'gdpr_requests traitées mais updatedAt = createdAt' AS invariant, 'rien' AS tenu_par, (SELECT count(*) FROM (select id from gdpr_requests where "updatedAt" = "createdAt" and status<>'pending') q) AS violations
+SELECT 'MAJ' AS famille, 'gdpr_requests traitées mais updatedAt = createdAt' AS invariant, 'code ($onUpdate, depuis DATA-09)' AS tenu_par, (SELECT count(*) FROM (select id from gdpr_requests where "updatedAt" = "createdAt" and status<>'pending') q) AS violations
 UNION ALL
-SELECT 'MAJ' AS famille, 'candidate_document_processing_jobs modifiées mais updated_at = created_at' AS invariant, 'rien' AS tenu_par, (SELECT count(*) FROM (select id from candidate_document_processing_jobs where updated_at = created_at and (status<>'queued' or attempts>0)) q) AS violations
+SELECT 'MAJ' AS famille, 'candidate_document_processing_jobs modifiées mais updated_at = created_at' AS invariant, 'code ($onUpdate, depuis DATA-09)' AS tenu_par, (SELECT count(*) FROM (select id from candidate_document_processing_jobs where updated_at = created_at and (status<>'queued' or attempts>0)) q) AS violations
 UNION ALL
 SELECT 'ENUM', 'users.role hors liste', 'code (TypeScript)', (SELECT count(*) FROM "users" WHERE "role" NOT IN ('user','admin'))
 UNION ALL
