@@ -727,10 +727,16 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
           const style = getComputedStyle(field);
           context.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
           const text = field instanceof HTMLSelectElement ? field.selectedOptions[0]?.text ?? "" : field.placeholder;
-          // La flèche d'un select occupe environ 20 px en plus de la marge intérieure.
-          const room = field.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) - (field instanceof HTMLSelectElement ? 20 : 0);
+          // Place du texte dans la boîte dessinée : largeur moins bordures et marges intérieures. Le
+          // clientWidth d'un champ ne compte pas toujours ses marges intérieures selon la version de
+          // Chrome ; la boîte dessinée, si. La flèche d'un select occupe environ 20 px en plus.
+          const box = field.getBoundingClientRect().width;
+          const room = box
+            - parseFloat(style.borderLeftWidth) - parseFloat(style.borderRightWidth)
+            - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
+            - (field instanceof HTMLSelectElement ? 20 : 0);
           const needed = context.measureText(text).width;
-          return needed > room ? [`« ${text} » : ${Math.ceil(needed)} px pour ${Math.floor(room)}`] : [];
+          return needed > room ? [`« ${text} » : ${Math.ceil(needed)} px pour ${Math.floor(room)} (champ de ${box.toFixed(1)} px, clientWidth ${field.clientWidth})`] : [];
         });
       });
       expect(clipped, `${route} à ${width} px`).toEqual([]);
