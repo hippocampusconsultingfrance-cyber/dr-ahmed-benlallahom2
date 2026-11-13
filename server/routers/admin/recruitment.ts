@@ -428,7 +428,7 @@ function phoneAsText(written: string): string {
  * « 00508 41 12 34/237 » and « 28- 12-34 »: everySignKeptAsText). The other
  * columns keep the protection.
  */
-function csvPhoneValue(phone: string | null) {
+export function csvPhoneValue(phone: string | null) {
   if (!phone) return phone;
   const typed = phone.trim();
   return phoneAsText(typed.startsWith("+") ? `00${typed.slice(1)}` : typed);
