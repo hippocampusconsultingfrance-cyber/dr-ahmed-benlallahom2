@@ -7,7 +7,7 @@ import { postgresConstraintName } from "./databaseConstraints";
 import { postgresErrorCode } from "./languageColumns";
 import { foldAdminSearchText } from "../shared/adminSearchFolding";
 import { AUDIT_NOT_RECORDED_REASON } from "../shared/databaseRefusalReasons";
-import { meetsRequiredLanguage, recruitmentLanguageRequirements } from "../shared/recruitmentLanguages";
+import { meetsRequiredLanguage, recruitmentLanguageListRequirements } from "../shared/recruitmentLanguages";
 
 export type RecruitmentAuditAction =
   | "download"
@@ -142,7 +142,8 @@ export function matchesRecruitmentProfile(input: {
   if (profile.targetCountry && !input.targetCountries.some(country => foldProfileText(country).includes(foldProfileText(profile.targetCountry!)))) return false;
 
   const skills = new Set(input.extractedSkills.map(value => value.toLowerCase()));
-  const requiredLanguages = parseRecruitmentJsonArray(profile.requiredLanguages).flatMap(recruitmentLanguageRequirements);
+  // Typed with commas, as one text: « Anglais – parlé, écrit » is one requirement (IA02-R5).
+  const requiredLanguages = recruitmentLanguageListRequirements(parseRecruitmentJsonArray(profile.requiredLanguages));
   const requiredSkills = parseRecruitmentJsonArray(profile.requiredSkills);
   // Each required language the dossier has under any of its names (IA-02),
   // the form recording « French » or « Arabic » where the admin types

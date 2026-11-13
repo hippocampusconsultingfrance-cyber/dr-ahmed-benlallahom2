@@ -78,6 +78,8 @@ export type NormalizedExperience = {
   sourceLocation: string;
   confidence: number;
   evidenceVerified: boolean;
+  /** Read on a page the vision transcribed, as for CvEvidenceReference (IA-07). */
+  fromTranscription?: true;
 };
 
 export type NormalizedCertification = {
@@ -89,6 +91,8 @@ export type NormalizedCertification = {
   sourceLocation: string;
   confidence: number;
   evidenceVerified: boolean;
+  /** Read on a page the vision transcribed (IA-07): kept with the verified facts, and shown « à contrôler sur le scan ». */
+  fromTranscription?: true;
 };
 
 export type NormalizedLanguage = {
@@ -98,6 +102,8 @@ export type NormalizedLanguage = {
   sourceLocation: string;
   confidence: number;
   evidenceVerified: boolean;
+  /** Read on a page the vision transcribed, as for NormalizedCertification (IA-07). */
+  fromTranscription?: true;
 };
 
 export type RecruitmentAnalysisResult = {
@@ -264,19 +270,142 @@ export const escapeCvPageMarkers = (value: string): string =>
  */
 const CANDIDATE_DATA_TAG = "donnees_candidat";
 /**
- * Our tag written in the candidate's text, opening or closing, whatever its
- * case, spacing or brackets (full width, or as an HTML entity), with its
- * attributes up to its closing bracket.
+ * Characters a reader could take for those of our tag (IA-05), beyond what
+ * the compatibility form already brings back (the full width letters, < and
+ * >): the angle brackets and slashes that look like ours (〈〉 ⟨⟩ ‹› ❮❯ ❬❭ ❰❱
+ * 《》 ⟪⟫…), and the Cyrillic or Greek letters drawn like those of its name.
  */
-const CANDIDATE_DATA_TAG_IN_TEXT = /(?:[<＜﹤]|&lt;)\s*\/?\s*donn(?:e\u0301?|\u00e9)es[\s_-]*candidat(?:[^<>＜＞﹤﹥\n]{0,200}?(?:[>＞﹥]|&gt;))?/gi;
-/** A « --- » line, which delimited the CV in earlier prompts and could feign its end. */
-const SEPARATOR_LINE = /^[ \t]*-{3,}[ \t]*$/gm;
+const TAG_LOOKALIKES = new Map<string, string>([
+  ...[0x3008, 0x27e8, 0x2039, 0x02c2, 0x1438, 0x276e, 0x29fc, 0x276c, 0x2770, 0x300a, 0x27ea].map(code => [String.fromCodePoint(code), "<"] as const),
+  ...[0x3009, 0x27e9, 0x203a, 0x02c3, 0x1433, 0x276f, 0x29fd, 0x276d, 0x2771, 0x300b, 0x27eb].map(code => [String.fromCodePoint(code), ">"] as const),
+  ...[0x2215, 0x2044, 0x29f8].map(code => [String.fromCodePoint(code), "/"] as const),
+  ...([[0x0430, "a"], [0x03b1, "a"], [0x0251, "a"], [0x0441, "c"], [0x03f2, "c"], [0x0501, "d"], [0x0435, "e"], [0x0456, "i"],
+    [0x03b9, "i"], [0x0131, "i"], [0x043e, "o"], [0x03bf, "o"], [0x0455, "s"], [0x0578, "n"]] as const)
+    .map(([code, letter]) => [String.fromCodePoint(code), letter] as const),
+]);
+/** An HTML entity a reader could decode into a character of the tag: any numeric one, and the named ones for < > / _ -. */
+const TAG_ENTITY = new RegExp("&(?:#(\\d{1,7})|#x([\\da-f]{1,6})|(lt|gt|sol|lowbar|hyphen|dash));?", "iy");
+const NAMED_TAG_ENTITIES: Record<string, string> = { lt: "<", gt: ">", sol: "/", lowbar: "_", hyphen: "-", dash: "-" };
+
+function decodedTagEntity(entity: RegExpExecArray) {
+  if (entity[3]) return NAMED_TAG_ENTITIES[entity[3].toLowerCase()]!;
+  const code = entity[1] ? Number(entity[1]) : parseInt(entity[2]!, 16);
+  return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : "";
+}
+
+/**
+ * Accents and format characters (zero width space, soft hyphen, word joiner…),
+ * which a reader skips, and the blank letters drawn as nothing: the Hangul
+ * fillers (U+115F, U+1160, U+3164, U+FFA0) and the blank Braille pattern.
+ */
+const MARK_OR_FORMAT = new RegExp("[\\p{M}\\p{Cf}\\u115f\\u1160\\u3164\\uffa0\\u2800]", "gu");
+/**
+ * The tag characters U+E0020 to U+E007E: invisible, each the copy of an ASCII
+ * character (« ASCII smuggling »), which a model may read as that character,
+ * or skip as the format characters they are.
+ */
+const TAG_CHARACTER_FIRST = 0xe0020;
+const TAG_CHARACTER_LAST = 0xe007e;
+const TAG_CHARACTER = new RegExp("[\\u{e0020}-\\u{e007e}]", "u");
+
+/**
+ * The candidate's text as a lenient reader of our tag would read it (IA-05):
+ * entities decoded, in compatibility form, without accents, format
+ * characters (zero width space, soft hyphen, word joiner…), blank letters or
+ * case, look-alikes replaced; the tag characters read as their ASCII
+ * (`tagCharactersAsAscii`) or, as the other format characters, skipped.
+ * `starts` and `ends` give, for each character of `text`, the part of the
+ * original text it was read from.
+ */
+function readAsTag(value: string, tagCharactersAsAscii: boolean) {
+  const read = new Map<string, string>();
+  const readCharacter = (character: string) => {
+    let reading = read.get(character);
+    if (reading === undefined) {
+      const code = character.codePointAt(0)!;
+      const shown = tagCharactersAsAscii && code >= TAG_CHARACTER_FIRST && code <= TAG_CHARACTER_LAST ? String.fromCodePoint(code - 0xe0000) : character;
+      reading = Array.from(
+        shown.normalize("NFKD").replace(MARK_OR_FORMAT, "").toLowerCase(),
+        letter => TAG_LOOKALIKES.get(letter) ?? letter
+      ).join("");
+      read.set(character, reading);
+    }
+    return reading;
+  };
+  let text = "";
+  const starts: number[] = [];
+  const ends: number[] = [];
+  for (let index = 0; index < value.length;) {
+    // ASCII but « & », the most of a CV: read as it is, lowercased.
+    const code = value.charCodeAt(index);
+    if (code < 0x80 && code !== 0x26) {
+      text += code >= 0x41 && code <= 0x5a ? String.fromCharCode(code + 0x20) : value[index];
+      starts.push(index);
+      ends.push(index + 1);
+      index += 1;
+      continue;
+    }
+    TAG_ENTITY.lastIndex = index;
+    const entity = value[index] === "&" ? TAG_ENTITY.exec(value) : null;
+    const source = entity ? decodedTagEntity(entity) : String.fromCodePoint(value.codePointAt(index)!);
+    const length = entity ? entity[0].length : source.length;
+    const reading = Array.from(source, readCharacter).join("");
+    for (let unit = 0; unit < reading.length; unit += 1) {
+      starts.push(index);
+      ends.push(index + length);
+    }
+    text += reading;
+    index += length;
+  }
+  return { text, starts, ends };
+}
+
+/**
+ * Our tag in the candidate's text as readAsTag reads it, opening or closing,
+ * whatever its spacing or the dash between its words, with its attributes up
+ * to its closing bracket.
+ */
+const CANDIDATE_DATA_TAG_READ = new RegExp("<[\\s/\\\\]*donne{1,2}s?[\\s\\p{Pd}\\p{Pc}]*candidats?(?:[^<>\\n]{0,200}?>)?", "gu");
+/** A line of three dashes or more (« --- », « ——— », « ___ »), which delimited the CV in earlier prompts and could feign its end. */
+const SEPARATOR_LINE = new RegExp("^[ \\t]*[\\p{Pd}\\p{Pc}]{3,}[ \\t]*$", "gmu");
+
+/** Where the tags of this reading of the candidate's text lie in the original text. */
+function candidateDataTagSpans(value: string, tagCharactersAsAscii: boolean) {
+  const reading = readAsTag(value, tagCharactersAsAscii);
+  return Array.from(reading.text.matchAll(CANDIDATE_DATA_TAG_READ), match =>
+    [reading.starts[match.index]!, reading.ends[match.index + match[0].length - 1]!] as const);
+}
+
+/**
+ * `value` with what reads as our tag replaced, in the original text, by a
+ * mark. With tag characters, in both readings of them: a reader that skips
+ * them sees « </donnees_candidat> » in « </donn\u{E0078}ees_candidat> », one
+ * that reads their ASCII sees it in the tag written in them.
+ */
+function withoutCandidateDataTags(value: string) {
+  const spans = [
+    ...candidateDataTagSpans(value, true),
+    ...(TAG_CHARACTER.test(value) ? candidateDataTagSpans(value, false) : []),
+  ].sort(([left], [right]) => left - right);
+  let result = "";
+  let kept = 0;
+  for (const [start, end] of spans) {
+    // A tag both readings find, or that overlaps one already marked, is one mark.
+    if (start < kept) {
+      kept = Math.max(kept, end);
+      continue;
+    }
+    result += `${value.slice(kept, start)}[balise retirée]`;
+    kept = end;
+  }
+  return result + value.slice(kept);
+}
 
 export const newCandidateDataId = () => randomBytes(9).toString("base64url");
 
 /** The candidate's text, unable to close the tags around it or to open others. */
 export const neutralizeCandidateData = (value: string): string =>
-  value.replace(CANDIDATE_DATA_TAG_IN_TEXT, "[balise retirée]").replace(SEPARATOR_LINE, "- - -");
+  withoutCandidateDataTags(value).replace(SEPARATOR_LINE, "- - -");
 
 /** `content` from the candidate, between the server's tags of id `id`; `source` says what it is (formulaire, cv, document…). */
 export const candidateDataBlock = (id: string, source: string, content: string): string =>
@@ -1223,45 +1352,69 @@ function locationPage(sourceLocation: string) {
 }
 
 /**
- * Where a quote was read (IA-04): the quote, with the page it was checked on
- * when the text has [PAGE n] markers. Never the wording of sourceLocation,
- * which the AI writes freely: « page 1, en-tête » and « page 1, rubrique
- * Titre » cite the same sentence. Without markers (a DOCX), the quote alone,
- * whatever section the AI names.
+ * What a quote cites (IA-04): the quote itself, normalized. Never the wording
+ * of sourceLocation, which the AI writes freely (« page 1, en-tête » and
+ * « page 1, rubrique Titre » cite the same sentence), nor its page: a header
+ * or a footer repeated on each page, cited page by page, is one sentence, and
+ * the same quote written on two pages is one place, as it is in a DOCX.
  */
-function evidenceProvenance(item: { evidence: string; sourceLocation: string }, paged: boolean) {
-  return `${normalizeEvidenceText(item.evidence)}|${paged ? locationPage(item.sourceLocation) ?? "" : ""}`;
+const evidenceProvenance = (item: { evidence: string }) => normalizeEvidenceText(item.evidence);
+
+/**
+ * The places of a quote read at most (IA04-R41): far more than a CV writes
+ * the same specialty quote, few enough that comparing the 80 quotes the AI may
+ * give, two by two, stays a matter of milliseconds.
+ */
+const QUOTE_PLACES_READ = 1_000;
+
+/**
+ * Where a normalized quote is written in the normalized text, the start of
+ * each place in order, the first QUOTE_PLACES_READ of them: `all` tells
+ * whether these are all of them.
+ */
+function quotePlaces(text: string, quote: string) {
+  const starts: number[] = [];
+  let index = quote ? text.indexOf(quote) : -1;
+  for (; index !== -1 && starts.length < QUOTE_PLACES_READ; index = text.indexOf(quote, index + 1)) starts.push(index);
+  return { starts, length: quote.length, all: index === -1 };
 }
 
-const hasPageMarkers = (sourceText: string) => /\[PAGE\s+\d+\]/i.test(sourceText);
+type QuotePlaces = ReturnType<typeof quotePlaces>;
 
-/** Where a normalized quote is written in the normalized text: the start and end of each place. */
-function quotePlaces(text: string, quote: string) {
-  const places: Array<[number, number]> = [];
-  for (let index = text.indexOf(quote); index !== -1 && quote; index = text.indexOf(quote, index + 1)) places.push([index, index + quote.length]);
-  return places;
+/**
+ * Whether one of the places read of `quote` overlaps no place of `other`, all
+ * of whose places must be known: otherwise one of those not read could be
+ * the one it overlaps. Both are in order and each quote's places have one
+ * length, so one pass over each does: the places of `other` that end before
+ * one of `quote` begins end before the next ones too.
+ */
+function placeOutside(quote: QuotePlaces, other: QuotePlaces) {
+  if (!other.all) return false;
+  let next = 0;
+  for (const start of quote.starts) {
+    while (next < other.starts.length && other.starts[next]! + other.length <= start) next += 1;
+    if (next === other.starts.length || other.starts[next]! >= start + quote.length) return true;
+  }
+  return false;
 }
 
 /**
  * Two different quotes written in two places of the text (IA-04): one of them
  * is written somewhere that overlaps no place of the other. A header repeated
  * on each page, cited whole for one field and in part (or overlapping) for the
- * other, overlaps itself on every page: it stays one quote.
+ * other, overlaps itself on every page: it stays one quote. A quote written
+ * more than QUOTE_PLACES_READ times is apart from another only by one of its
+ * places read that overlaps none of the other's (IA04-R41).
  */
-function quotesAreApart(text: string, left: string, right: string) {
-  if (left === right) return false;
-  const leftPlaces = quotePlaces(text, left);
-  const rightPlaces = quotePlaces(text, right);
-  const placeOutside = (places: Array<[number, number]>, others: Array<[number, number]>) =>
-    places.some(([start, end]) => others.every(([otherStart, otherEnd]) => end <= otherStart || otherEnd <= start));
-  return leftPlaces.length > 0 && rightPlaces.length > 0 &&
-    (placeOutside(leftPlaces, rightPlaces) || placeOutside(rightPlaces, leftPlaces));
+function quotesAreApart(left: QuotePlaces, right: QuotePlaces) {
+  return left.starts.length > 0 && right.starts.length > 0 &&
+    (placeOutside(left, right) || placeOutside(right, left));
 }
 
-function distinctEvidence<T extends EvidenceBearing>(evidence: T[], paged: boolean): T[] {
+function distinctEvidence<T extends EvidenceBearing>(evidence: T[]): T[] {
   const unique = new Map<string, T>();
   for (const item of evidence) {
-    const key = evidenceProvenance(item, paged);
+    const key = evidenceProvenance(item);
     const existing = unique.get(key);
     if (!existing || (!isVerifiedFact(existing) && isVerifiedFact(item)))
       unique.set(key, item);
@@ -1295,7 +1448,6 @@ function verifiedScoreBreakdown(input: {
   certifications: NormalizedCertification[];
   sourceText: string;
 }) {
-  const paged = hasPageMarkers(input.sourceText);
   const verifiedFields = input.fieldEvidence.filter(isVerifiedFact);
   const hasVerifiedField = (field: CvEvidenceField) =>
     verifiedFields.some(item => item.field === field);
@@ -1306,7 +1458,7 @@ function verifiedScoreBreakdown(input: {
   );
   const verifiedExperiences = distinctEvidence(distinctExperiencesByFact(
     input.experiences.filter(isVerifiedFact)
-  ), paged);
+  ));
   const languagePoints = new Map<string, number>();
   const proficiencyPoints: Record<NormalizedLanguage["proficiency"], number> = {
     basic: 3,
@@ -1349,9 +1501,11 @@ function verifiedScoreBreakdown(input: {
       )
       .map(item => normalizeEvidenceText(item.evidence))
   );
+  // Each quote's places read once (IA04-R41): its pairs compare them.
   const normalizedSource = specialtyQuotes.length > 1 ? normalizeEvidenceText(input.sourceText) : "";
-  const twoSpecialtyQuotes = specialtyQuotes.some((quote, index) =>
-    specialtyQuotes.slice(index + 1).some(other => quotesAreApart(normalizedSource, quote, other)));
+  const specialtyPlaces = specialtyQuotes.length > 1 ? specialtyQuotes.map(quote => quotePlaces(normalizedSource, quote)) : [];
+  const twoSpecialtyQuotes = specialtyPlaces.some((places, index) =>
+    specialtyPlaces.slice(index + 1).some(other => quotesAreApart(places, other)));
   return {
     specialtyMatch: twoSpecialtyQuotes ? 30 : specialtyQuotes.length > 0 ? 15 : 0,
     experienceEvidence: Math.min(
@@ -1392,14 +1546,18 @@ export function normalizeRecruitmentAnalysis(
       `Confiance OCR insuffisante (${declared.extractionConfidence} %) : toutes les preuves nécessitent une vérification manuelle.`
     );
   }
-  const paged = hasPageMarkers(sourceText);
   // IA-07: on a scan, and on the pages the vision read again, a quote is found
   // in what the vision transcribed, not in the file: the admin is told to
   // compare it with the scan. The marking changes no score: whether the score
   // of a CV the vision read is capped or withheld is left to the owner.
+  // Every fact quoted there is marked, an experience, a language or a
+  // certification as a field's quote: it is a licence read on a scan that the
+  // admin is asked to confirm.
   const transcribedPages = new Set(declared.invisibleText?.unverifiable?.rereadPages ?? []);
   const fromTranscription = (sourceLocation: string) =>
     declared.extractionMethod === "pdf_vision" || transcribedPages.has(locationPage(sourceLocation) ?? 0);
+  const transcriptionMark = (sourceLocation: string) =>
+    fromTranscription(sourceLocation) ? { fromTranscription: true as const } : {};
   const normalizedExperiences = analysis.normalizedExperiences.map(item => {
     const initiallyMarked = markEvidence(
       item,
@@ -1462,6 +1620,7 @@ export function normalizeRecruitmentAnalysis(
         ? item.country
         : null,
       durationMonths: timeline.durationMonths,
+      ...transcriptionMark(item.sourceLocation),
     };
   });
   const normalizedLanguages = analysis.normalizedLanguages.map(item => {
@@ -1489,6 +1648,7 @@ export function normalizeRecruitmentAnalysis(
       proficiency: isVerifiedFact(marked)
         ? verifiedLanguageProficiency(associatedSegments.join("\n"), item.proficiency)
         : "unknown" as const,
+      ...transcriptionMark(item.sourceLocation),
     };
   });
   const certifications = analysis.certifications.map(item => {
@@ -1533,6 +1693,7 @@ export function normalizeRecruitmentAnalysis(
       expiresAt: baseVerified && evidenceContainsDate(unambiguousEvidence, item.expiresAt)
         ? item.expiresAt
         : null,
+      ...transcriptionMark(item.sourceLocation),
     };
   });
   const fieldEvidence = analysis.fieldEvidence
@@ -1549,7 +1710,7 @@ export function normalizeRecruitmentAnalysis(
     .map((item): CvEvidenceReference => {
       const marked = {
         ...markEvidence(item, sourceText, [item.value], declared.extractionConfidence),
-        ...(fromTranscription(item.sourceLocation) ? { fromTranscription: true as const } : {}),
+        ...transcriptionMark(item.sourceLocation),
       };
       if (fieldEvidenceMatchesAnalysis(item, analysis)) return marked;
       return {
@@ -1579,7 +1740,7 @@ export function normalizeRecruitmentAnalysis(
         [item.documentValue],
         declared.extractionConfidence
       ),
-      ...(fromTranscription(item.sourceLocation) ? { fromTranscription: true as const } : {}),
+      ...transcriptionMark(item.sourceLocation),
     }));
   const evidenceExperiences = distinctExperiencesByFact(normalizedExperiences);
   const allEvidence = distinctEvidence([
@@ -1587,7 +1748,7 @@ export function normalizeRecruitmentAnalysis(
     ...normalizedLanguages,
     ...certifications,
     ...fieldEvidence,
-  ], paged);
+  ]);
   const evidenceCoverage = evidenceCoverageOf(allEvidence);
   const uniqueContradictions = contradictions;
   const unverifiedCount =
@@ -1645,26 +1806,34 @@ export function normalizeRecruitmentAnalysis(
   const verifiedEvidenceCount = allEvidence.filter(isVerifiedFact).length;
   // A "verified" fact only means its quote was found in the text read from the
   // CV, which can hold passages invisible on screen: the wording shown to the
-  // admin says so and never calls it verified (IA-01).
+  // admin says so and never calls it verified (IA-01). Found in what the vision
+  // transcribed from a scan, it is said to be checked on the scan (IA-07).
+  const readIn = <T extends { fromTranscription?: true }>(items: T[], value: (item: T) => string) => ({
+    text: uniqueStrings(items.filter(item => !item.fromTranscription).map(value)),
+    transcription: uniqueStrings(items.filter(item => item.fromTranscription).map(value)),
+  });
+  const foundStrengths = (found: string, read: string, items: { text: string[]; transcription: string[] }) => [
+    ...(items.text.length > 0 ? [`${found} dans le texte lu par l’outil : ${items.text.join(", ")}.`] : []),
+    ...(items.transcription.length > 0 ? [`${read} dans la transcription automatique du scan, à contrôler sur le scan : ${items.transcription.join(", ")}.`] : []),
+  ];
+  const titleField = verifiedFields.find(item => item.field === "professionalTitle");
+  const transcribedExperiences = verifiedExperiences.filter(item => item.fromTranscription).length;
   const deterministicStrengths = uniqueStrings([
-    ...(verifiedProfessionalTitle
-      ? [`Titre professionnel trouvé dans le texte lu par l’outil : ${verifiedProfessionalTitle}.`]
+    ...(titleField
+      ? [titleField.fromTranscription
+          ? `Titre professionnel lu dans la transcription automatique du scan, à contrôler sur le scan : ${verifiedProfessionalTitle}.`
+          : `Titre professionnel trouvé dans le texte lu par l’outil : ${verifiedProfessionalTitle}.`]
       : []),
-    ...(verifiedSpecialties.length > 0
-      ? [`Spécialité(s) trouvée(s) dans le texte lu par l’outil : ${verifiedSpecialties.join(", ")}.`]
+    ...foundStrengths("Spécialité(s) trouvée(s)", "Spécialité(s) lue(s)", readIn(verifiedFields.filter(item => item.field === "specialty"), item => item.value)),
+    ...(verifiedExperiences.length > transcribedExperiences
+      ? [`${verifiedExperiences.length - transcribedExperiences} expérience(s) professionnelle(s) sourcée(s).`]
       : []),
-    ...(verifiedExperiences.length > 0
-      ? [`${verifiedExperiences.length} expérience(s) professionnelle(s) sourcée(s).`]
+    ...(transcribedExperiences > 0
+      ? [`${transcribedExperiences} expérience(s) professionnelle(s) lue(s) dans la transcription automatique du scan, à contrôler sur le scan.`]
       : []),
-    ...(verifiedSkills.length > 0
-      ? [`Compétence(s) trouvée(s) dans le texte lu par l’outil : ${verifiedSkills.join(", ")}.`]
-      : []),
-    ...(verifiedLanguages.length > 0
-      ? [`Langue(s) trouvée(s) dans le texte lu par l’outil : ${verifiedLanguages.join(", ")}.`]
-      : []),
-    ...(verifiedCertifications.length > 0
-      ? [`Certification(s) trouvée(s) dans le texte lu par l’outil : ${verifiedCertifications.map(item => item.name).join(", ")}.`]
-      : []),
+    ...foundStrengths("Compétence(s) trouvée(s)", "Compétence(s) lue(s)", readIn(verifiedFields.filter(item => item.field === "skill"), item => item.value)),
+    ...foundStrengths("Langue(s) trouvée(s)", "Langue(s) lue(s)", readIn(normalizedLanguages.filter(isVerifiedFact), item => item.language)),
+    ...foundStrengths("Certification(s) trouvée(s)", "Certification(s) lue(s)", readIn(verifiedCertifications, item => item.name)),
   ]);
   const deterministicGaps = uniqueStrings([
     ...(!verifiedProfessionalTitle && verifiedSpecialties.length === 0
@@ -1981,11 +2150,12 @@ export async function saveCvAnalysis(
     ? { certifications: [], languages: [], experiences: [], skills: [] }
     : verifiedRecruitmentFacts(analysis);
   // The AI was unavailable (IA-02): this analysis did not read the CV and says
-  // nothing of the certifications and languages read there. Their rows stay,
-  // with the CV's dates, so that a certification the CV says has expired is
-  // not left merely « déclarée » and a language keeps its reading in the CV,
-  // and so do the facts the filters read, when the previous analysis was
-  // under this prompt. A CV that hides text is still not trusted (IA-01).
+  // nothing of the certifications and languages read there. The certification
+  // rows stay, with the CV's dates, so that a certification the CV says has
+  // expired is not left merely « déclarée », and so do the facts the filters
+  // read (the normalized ones, the languages read in the CV), when the
+  // previous analysis was under this prompt. A CV that hides text is still
+  // not trusted (IA-01).
   const aiUnavailable = generation?.model === MANUAL_REVIEW_FALLBACK_MODEL;
   const cvNotRead = aiUnavailable
     && !visibilityRequiresReview(analysis.invisibleText) && !analysis.visibilityUnchecked;
@@ -2092,7 +2262,12 @@ export async function saveCvAnalysis(
         isNull(cvCandidateCertifications.confirmedAt),
         cvNotReadByAi ? ne(cvCandidateCertifications.source, "cv_expiry") : undefined
       ));
-  const deleteLanguages = cvNotRead
+  // The languages read in the CV are among the facts the filters read: they
+  // stay only when the previous analysis was under this prompt. Read under an
+  // older one, which the Langue filter and a mission ignore, they would count
+  // again once this analysis carries the current version without having read
+  // them.
+  const deleteLanguages = cvNotRead && keptNormalizedFacts
     ? db.select({ id: cvApplications.id }).from(cvApplications).where(sql`FALSE`)
     : db
       .delete(cvCandidateLanguages)

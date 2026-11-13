@@ -1,5 +1,5 @@
 import { certificationDateIsCurrent, certificationExpiry, type RecruitmentFact, type RecruitmentFactOrigin } from "../shared/recruitmentFactOrigins";
-import { givesRequiredLanguage, meetsRequiredLanguage, recruitmentLanguageCodes, recruitmentLanguageRequirements } from "../shared/recruitmentLanguages";
+import { givesRequiredLanguage, meetsRequiredLanguage, recruitmentLanguageCodes, recruitmentLanguageListRequirements } from "../shared/recruitmentLanguages";
 
 type BriefForMatching = {
   specialtyNeeded: string;
@@ -49,9 +49,13 @@ type CandidateForMatching = {
  * the CV gives a declared certification when its analysis retained no facts
  * (IA-02).
  */
-export type CertificationRow = { name: string; source: "declared" | "extracted" | "renewed" | "cv_expiry"; confirmedAt: Date | string | null; expiresAt: string | null };
-/** cv_candidate_languages row, read in the CV by the AI. */
-export type LanguageRow = { language: string; source: "declared" | "extracted" };
+export type CertificationRow = { name: string; source: "declared" | "extracted" | "renewed" | "cv_expiry"; confirmedAt: Date | string | null; expiresAt: string | null; fromTranscription?: boolean };
+/**
+ * cv_candidate_languages row, read in the CV by the AI. `fromTranscription`,
+ * for both: the analysis that stored the row read it in what the vision
+ * transcribed from a scan (IA-07), as its verified facts say.
+ */
+export type LanguageRow = { language: string; source: "declared" | "extracted"; fromTranscription?: boolean };
 
 const normalise = (value: string) => value
   .normalize("NFD")
@@ -152,6 +156,7 @@ export function certificationFacts(declared: string | null | undefined, rows: Ce
     if (row.source === "cv_expiry") continue;
     const fact = addFact(facts, row.name, row.source === "renewed" ? "confirmed" : row.source, create);
     if (!fact) continue;
+    if (row.source === "extracted" && row.fromTranscription) fact.fromTranscription = true;
     if (row.confirmedAt) addFact(facts, row.name, "confirmed", create);
     rowsByFact.set(fact, [...(rowsByFact.get(fact) ?? []), row]);
   }
@@ -184,7 +189,10 @@ export function languageFacts(declared: string | null | undefined, rows: Languag
   const facts: RecruitmentFact[] = [];
   const create = (name: string): RecruitmentFact => ({ name, origins: [] });
   for (const name of parseTerms(declared)) addFact(facts, name, "declared", create, sameLanguageFact);
-  for (const row of rows) addFact(facts, row.language, row.source, create, sameLanguageFact);
+  for (const row of rows) {
+    const fact = addFact(facts, row.language, row.source, create, sameLanguageFact);
+    if (fact && row.source === "extracted" && row.fromTranscription) fact.fromTranscription = true;
+  }
   return facts;
 }
 
@@ -259,8 +267,9 @@ export function computeBriefCandidateMatch(brief: BriefForMatching, candidate: C
   // « English (polished) ». Each language a term names counts on its own
   // (« Anglais/Arabe », « anglais et arabe »: two), as for a matching profile
   // and the Langue filter, a choice once (« anglais ou arabe », by either);
-  // one the table does not know by its words, whole.
-  const requiredLanguages = parseTerms(brief.requiredLanguages).flatMap(recruitmentLanguageRequirements);
+  // one the table does not know by its words, whole. A term that names no
+  // language qualifies the one before it (« Anglais – lu, écrit, parlé »: one).
+  const requiredLanguages = recruitmentLanguageListRequirements(parseTerms(brief.requiredLanguages));
   const candidateLanguages = candidate.languageFacts || [];
   const candidateLanguageNames = candidateLanguages.map(fact => fact.name);
   const matchedLanguages: string[] = [];

@@ -65,6 +65,12 @@ describe("analyse structurée des documents candidats", () => {
     for (const date of ["2026-02-30", "2026-13-01", "03/2027", "2027-03", "valide jusqu’en 2030", "2027-03-01 (à confirmer)", 20270301]) {
       expect(parseCandidateDocumentAnalysis(answer({ issueDate: date, expiryDate: date })), String(date)).toMatchObject({ issueDate: null, expiryDate: null });
     }
+    // Nor a year no document gives: before 1950, or more than 30 years ahead.
+    const thirtyYearsAhead = new Date().getUTCFullYear() + 30;
+    expect(parseCandidateDocumentAnalysis(answer({ issueDate: "1950-01-01", expiryDate: `${thirtyYearsAhead}-12-31` }))).toMatchObject({ issueDate: "1950-01-01", expiryDate: `${thirtyYearsAhead}-12-31` });
+    for (const date of ["0000-01-01", "1949-12-31", `${thirtyYearsAhead + 1}-01-01`, "9999-12-31"]) {
+      expect(parseCandidateDocumentAnalysis(answer({ issueDate: date, expiryDate: date })), date).toMatchObject({ issueDate: null, expiryDate: null });
+    }
   });
 });
 

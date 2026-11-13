@@ -8,13 +8,30 @@
 export const RECRUITMENT_FACT_ORIGINS = ["declared", "extracted", "confirmed"] as const;
 export type RecruitmentFactOrigin = (typeof RECRUITMENT_FACT_ORIGINS)[number];
 
-export const RECRUITMENT_FACT_ORIGIN_LABELS: Record<RecruitmentFactOrigin, string> = {
+/**
+ * The words of each origin in a screen's language, and `transcribed`, said
+ * instead of `extracted` when the AI read the fact in what the vision
+ * transcribed from a scan (IA-07).
+ */
+export type RecruitmentFactOriginLabels = Record<RecruitmentFactOrigin, string> & { transcribed: string };
+
+export const RECRUITMENT_FACT_ORIGIN_LABELS: RecruitmentFactOriginLabels = {
   declared: "déclarée par le candidat",
   extracted: "extraite du CV par l’IA",
   confirmed: "confirmée par l’admin",
+  transcribed: "extraite par l’IA de la transcription automatique du scan, à contrôler sur le scan",
 };
 
-export type RecruitmentFact = { name: string; origins: RecruitmentFactOrigin[] };
+/**
+ * `fromTranscription`: read by the AI in the automatic transcription of a
+ * scanned CV, not in the file's own text (IA-07). The words of its
+ * `extracted` origin then say to check it on the scan.
+ */
+export type RecruitmentFact = { name: string; origins: RecruitmentFactOrigin[]; fromTranscription?: true };
+
+/** How a screen words one origin of a fact: `extracted` from a scan's transcription as `transcribed` (IA-07). */
+export const recruitmentFactOriginLabel = (fact: Pick<RecruitmentFact, "fromTranscription">, origin: RecruitmentFactOrigin, labels: RecruitmentFactOriginLabels) =>
+  origin === "extracted" && fact.fromTranscription ? labels.transcribed : labels[origin];
 
 const comparable = (value: string) => value.normalize("NFD").replace(/[̀-ͯ]/g, "").toLocaleLowerCase("fr-FR").trim();
 
@@ -25,9 +42,9 @@ export function recruitmentFactNameContains(name: string, search: string) {
 }
 
 /** The fact with its origins, in the order above, named by `labels` (a screen translated into the admin's language). */
-export function recruitmentFactLabelWith(fact: RecruitmentFact, labels: Record<RecruitmentFactOrigin, string>) {
+export function recruitmentFactLabelWith(fact: RecruitmentFact, labels: RecruitmentFactOriginLabels) {
   const origins = RECRUITMENT_FACT_ORIGINS.filter(origin => fact.origins.includes(origin));
-  return origins.length ? `${fact.name} (${origins.map(origin => labels[origin]).join(", ")})` : fact.name;
+  return origins.length ? `${fact.name} (${origins.map(origin => recruitmentFactOriginLabel(fact, origin, labels)).join(", ")})` : fact.name;
 }
 
 /** « Licence DHA (extraite du CV par l’IA) », origins in the order above. */
