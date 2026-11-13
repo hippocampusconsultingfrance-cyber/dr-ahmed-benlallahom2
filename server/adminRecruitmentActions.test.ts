@@ -747,6 +747,54 @@ describe("actions d’administration du recrutement", () => {
     expect(phones((await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number })).csv)).toEqual(expected);
   });
 
+  it("garde l’espace entre un numéro entier et le poste ou le second numéro qui le suit avant le « / » d’une variante, chacun écrit comme seul, sans décaler ses paires ni coller deux numéros (ADM-26)", async () => {
+    // Calc reads « 0612345678 5/6 » as the fraction 612345678 + 5/6, and the export set every digit before the « / » apart by two from the
+    // end, the extension run into the number and its pairs shifted: « 0 61 23 45 67 85 / 6 »; with a « + », two numbers ran into one,
+    // « +97444123712 55123456/7 » gave « 009744412371255123456 / 7 ».
+    const typed = {
+      // A whole number, an extension or a second number after a space, then a variant: each run as it would be alone, the spaces as typed.
+      "0612345678 5/6": "06 12 34 56 78 5 / 6",
+      "(0612345678 5/6)": "06 12 34 56 78 5 / 6",
+      "0612345678 5 / 6": "06 12 34 56 78 5 / 6",
+      "0612345678 5/6": "06 12 34 56 78 5 / 6",
+      "0612345678  255/61": "06 12 34 56 78  255 / 61",
+      "0145678901 21345/46": "01 45 67 89 01 21345 / 46",
+      "71123456 5/6": "71 12 34 56 5 / 6",
+      "44123456 1/2": "44 12 34 56 1 / 2",
+      "281234 6/7": "28 12 34 6 / 7",
+      "( 281234 6/7 )": "28 12 34 6 / 7",
+      "0471234567 021234567/68": "04 71 23 45 67 0 21 23 45 67 / 68",
+      "0612345678 0698765432/33": "06 12 34 56 78 06 98 76 54 32 / 33",
+      "+97444123712 55123456/7": "0097444123712 55 12 34 56 / 7",
+      "+97444123456 55123456 / 57": "0097444123456 55 12 34 56 / 57",
+      "+33612345678 0145678901/02": "0033612345678 01 45 67 89 01 / 02",
+      "+212661234567 0522123456/57": "00212661234567 05 22 12 34 56 / 57",
+      // Its « 00 » kept apart, joined to it the number and its extension would make a fraction (« 0021671123456 7 / 8 »).
+      "+21671123456 7/8": "00 21671123456 7 / 8",
+      "+687281234 5/6": "00 687281234 5 / 6",
+      // Controls: a first run that is no number of its own, a country code, groups of three, a second number after the « / ».
+      "6111 234/424": "6 11 12 34 / 424",
+      "0661 234567/91": "06 61 23 45 67 / 91",
+      "0048 512345680/130": "0048512345680 / 130",
+      "+33 612345678/79": "0033612345678 / 79",
+      "0612345678 913/914": "06 12 34 56 78 913 / 914",
+      "44123456 802/3": "44 12 34 56 802 / 3",
+      "+687 281234/281372": "00687 281234 / 28 13 72",
+    };
+    const candidates = Object.keys(typed).map((phone, index) => seedCandidate(index + 1, { phone }));
+    const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-PHONE-15", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Qatar" }]);
+    memory.seed(clientBriefCandidates, candidates.map(candidate => ({ brief_id: brief!.id, application_id: candidate.id, association_status: "shortlisted", candidate_consent_at: consentAt })));
+    const phones = (csv: string) => {
+      const [header, ...rows] = csv.split("\n");
+      const column = header!.split(";").indexOf("\"Téléphone\"");
+      return Object.fromEntries(rows.map(row => [row.split(";")[2], row.split(";")[column]]));
+    };
+    const expected = Object.fromEntries(Object.values(typed).map((phone, index) => [`"c${index + 1}@test.local"`, `"${phone}"`]));
+
+    expect(phones((await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: candidates.map(candidate => candidate.id as number) })).csv)).toEqual(expected);
+    expect(phones((await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number })).csv)).toEqual(expected);
+  });
+
   it("laisse tel que saisi ce que Calc ne lit pas comme une date : une espace entre deux suites de chiffres, des parenthèses, une ponctuation qu’il refuse, une année de deux chiffres en tête hors « - » (ADM-26)", async () => {
     // The spaces were removed before the date test: « 28.12.34 172 » was read as a date of the year 34172 and gave « 2 81 23 41 72 », the
     // extension run into the number; parentheses, a final comma and « 41.11.09 », a year first, gave « 28 12 34 » and « 41 11 09 ».

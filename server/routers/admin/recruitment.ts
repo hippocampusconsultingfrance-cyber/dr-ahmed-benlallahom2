@@ -286,8 +286,10 @@ function severalPhoneNumbersAsText(value: string): string | null {
     // (« 0661 234567 / 91 », « 00 33612345678 / 02 »). Groups after it make none (« 00 33471234567 802 / 03 »), and its variant keeps its digits as typed
     // (« 0048512345680 / 130 »). If that still makes a number, its « 00 » is kept apart, as a decimal sign after it makes no fraction
     // (« 00 33471234567.802 / 3 »); failing that, the number is set apart all through and its variant by two from the end. A number is set apart
-    // as one, the spaces typed in it aside, as a fraction has but one between its integer and its numerator (« 6111 234/424 »), and the other
-    // signs typed in it are kept (wholeRunsSetApart).
+    // as one, the spaces typed in it aside, as a fraction has but one between its integer and its numerator (« 6111 234/424 »), unless its first
+    // run is a whole number on its own: what follows it is then its extension or another number, each run on its own and the spaces kept as typed
+    // (« 0612345678 5/6 » and « +97444123712 55123456/7 » give « 06 12 34 56 78 5 / 6 » and « 0097444123712 55 12 34 56 / 7 »); the other signs
+    // typed in it are kept (wholeRunsSetApart).
     const setApart = (part: string) => wholeRunsSetApart(part, true);
     const alone = (part: string, zeros: string) => phoneNumberThenGroupsAsText(part) ?? (severalPhoneNumbersAsText(part) ?? setApart(part)).replace(/^00 /, zeros);
     // Last, a number kept as typed because it is text on its own only by a sign typed around the whole value, which the parts so joined close again
@@ -305,12 +307,12 @@ function severalPhoneNumbersAsText(value: string): string | null {
 }
 
 /**
- * The fewest digits after its « 00 » of an international number groups of three typed after a space follow as its
- * extension or another number: nine, its country code included (« +33471234567 802 », « +97444123456 802 »). A
- * shorter first part is that of a single number grouped by three after its country code (« +9613123 456 »,
- * « +33612345 678 »).
+ * The fewest digits after its « 00 » of an international number a space follows as the end of a whole number, groups
+ * of three or another run of digits after it then its extension, its variant or another number: nine, its country code
+ * included (« +33471234567 802 », « +97444123456 802 », « +687281234 5/6 »). A shorter first part is that of a single
+ * number grouped by spaces after its country code (« +9613123 456 », « +33612345 678 », « +33 612345678/79 »).
  */
-const INTERNATIONAL_PHONE_NUMBER_THEN_GROUPS_DIGITS = 9;
+const INTERNATIONAL_WHOLE_PHONE_NUMBER_BEFORE_SPACE_DIGITS = 9;
 
 /** A number, then groups of three after a space or a no-break space, as French groups thousands (SPREADSHEET_LOCALES), signs around them. */
 const PHONE_NUMBER_THEN_GROUPS = new RegExp(String.raw`^(\D*\d+)((?:${SPREADSHEET_LOCALES[1].group}\d{3})+)\D*$`);
@@ -328,7 +330,7 @@ const PHONE_NUMBER_THEN_GROUPS = new RegExp(String.raw`^(\D*\d+)((?:${SPREADSHEE
  */
 function phoneNumberThenGroupsAsText(value: string): string | null {
   const [, number, groups] = PHONE_NUMBER_THEN_GROUPS.exec(value) ?? [];
-  if (number === undefined || groups === undefined || !wholePhoneNumber(number, INTERNATIONAL_PHONE_NUMBER_THEN_GROUPS_DIGITS)) return null;
+  if (number === undefined || groups === undefined || !wholePhoneNumber(number, INTERNATIONAL_WHOLE_PHONE_NUMBER_BEFORE_SPACE_DIGITS)) return null;
   const written = phoneDigitsSetApart(number) + groups;
   return spreadsheetMayReadAsNumberOrDate(written) ? null : written;
 }
@@ -338,16 +340,21 @@ function phoneNumberThenGroupsAsText(value: string): string | null {
  * « 00 » aside) set apart as phoneDigitsSetApart does, the signs typed between two runs kept, those typed around the
  * value dropped and a « + » among those before it written « 00 », in pieces: a run, the signs after it, the next run…
  * (« +508 411234/237 » gives « 00508 », a space, « 41 12 34 », « / » and « 237 »). With `spacesGroup`, the runs only
- * spaces separate count as one, a number grouped by spaces (« 6111 234 » gives « 6 11 12 34 »).
+ * spaces separate count as one, a number grouped by spaces (« 6111 234 » gives « 6 11 12 34 »), unless the first of
+ * them is a whole number on its own (wholePhoneNumber, as before groups of three after a space): what follows it after
+ * those spaces is then its extension, its variant or another number, so each run stays on its own and the spaces stay as
+ * typed (« 0612345678 5 » and « 0097444123712 55123456 » give « 06 12 34 56 78 5 » and « 00 97444123712 55 12 34 56 »,
+ * not « 0 61 23 45 67 85 », another number, nor « 00 9744412371255123456 », two numbers run into one).
  */
 function wholeRunsSetApart(value: string, spacesGroup: true): string;
 function wholeRunsSetApart(value: string, spacesGroup: false): string[];
 function wholeRunsSetApart(value: string, spacesGroup: boolean): string | string[] {
   const before = /^\D*/.exec(value)![0];
   const pieces = value.slice(before.length).replace(/\D+$/, "").split(spacesGroup ? /(\D*[^\d\s]\D*)/ : /(\D+)/);
-  if (pieces.length === 1) return spacesGroup ? phoneDigitsSetApart(value) : [phoneDigitsSetApart(value)];
   pieces[0] = `${/\+/.test(before) ? "00" : ""}${pieces[0]}`;
-  const written = pieces.map((piece, index) => (index % 2 === 0 && phoneNumberDigits(piece) >= PHONE_NUMBER_DIGITS ? phoneDigitsSetApart(piece) : piece));
+  const runs = pieces.flatMap((piece, index) => (spacesGroup && index % 2 === 0 && wholePhoneNumber(/^\d*/.exec(piece)![0], INTERNATIONAL_WHOLE_PHONE_NUMBER_BEFORE_SPACE_DIGITS) ? piece.split(/(\s+)/) : [piece]));
+  if (runs.length === 1) return spacesGroup ? phoneDigitsSetApart(value) : [phoneDigitsSetApart(value)];
+  const written = runs.map((run, index) => (index % 2 === 0 && phoneNumberDigits(run) >= PHONE_NUMBER_DIGITS ? phoneDigitsSetApart(run) : run));
   return spacesGroup ? written.join("") : written;
 }
 
@@ -415,7 +422,11 @@ function phoneAsText(written: string): string {
  * « 06 61 23 45 67 / 91 », « 6 11 12 34 / 424 », « 00 33471234567, 802 »,
  * « 06 12 34 56 78.913 » and « 28 12 34, 91 », « +687 281234/281372 » gives
  * « 00687 281234 / 28 13 72 », and « (44123456.802) » gives
- * « 44 12 34 56.802 », as « 44123456.802 »: severalPhoneNumbersAsText). A
+ * « 44 12 34 56.802 », as « 44123456.802 »: severalPhoneNumbersAsText);
+ * before a variant, a whole number keeps the space typed after it and what
+ * follows it, an extension or another number, written as it would be alone
+ * (« 0612345678 5/6 » and « +97444123712 55123456/7 » give
+ * « 06 12 34 56 78 5 / 6 » and « 0097444123712 55 12 34 56 / 7 »). A
  * whole number and the groups of three after its space, which French reads as
  * thousands, leave likewise, the groups as typed (« 0612345678 913 »,
  * « 44123456 802 » and « +33471234567 802 » give « 06 12 34 56 78 913 »,
