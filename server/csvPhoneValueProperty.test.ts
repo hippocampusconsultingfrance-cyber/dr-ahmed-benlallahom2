@@ -7,8 +7,8 @@ import { csvPhoneValue } from "./routers/admin/recruitment";
  * ADM-26: the property every phone the exports rewrite holds, a value a spreadsheet keeps as text leaving as typed: the
  * digits of the typed value in the same order, a « + » written « 00 », and every sign typed between two digits still
  * there between the same two digits, a space between two groups of one number aside. For an honest value, made of a
- * number and what follows it (its extension, its variant, another number), what is typed between them stays too, a
- * space as a space.
+ * number and what follows it (its extension, its variant, another number, up to three items), what is typed between
+ * each two items stays too, a space as a space.
  */
 
 /** The digits of a phone and what is typed between each two of them, a « + » after signs only read « 00 », as the export writes it. */
@@ -19,8 +19,8 @@ function digitsAndGaps(value: string) {
 
 let rewritten = 0;
 
-/** What the export of a phone loses of it, if it rewrites it: its digits, a sign typed between two digits, the space or the sign between a number and what follows it. */
-function lost(input: string, joinerGap?: number) {
+/** What the export of a phone loses of it, if it rewrites it: its digits, a sign typed between two digits, the space or the sign between two of its items (`limits`, the gaps between them). */
+function lost(input: string, limits: number[] = []) {
   const trimmed = input.trim();
   const typed = trimmed.startsWith("+") ? `00${trimmed.slice(1)}` : trimmed;
   const exported = csvPhoneValue(input)!;
@@ -32,7 +32,7 @@ function lost(input: string, joinerGap?: number) {
   return before.gaps.flatMap((gap, index) => {
     const kept = after.gaps[index]!;
     if (signs(gap) !== signs(kept)) return [`sign ${JSON.stringify(gap)}: ${JSON.stringify(input)} gives ${JSON.stringify(exported)}`];
-    if (index === joinerGap && /\s/.test(gap) && !/\s/.test(kept)) return [`space: ${JSON.stringify(input)} gives ${JSON.stringify(exported)}`];
+    if (limits.includes(index) && /\s/.test(gap) && !/\s/.test(kept)) return [`space: ${JSON.stringify(input)} gives ${JSON.stringify(exported)}`];
     return [];
   });
 }
@@ -81,29 +81,35 @@ function phone() {
   return `${pick(["+", "00", "(+", "+ "])}${code}${pick(["", " ", ".", "-", ") "])}${grouped(national)}`.replace(/^\(\+(\d+)$/, "(+$1)");
 }
 
-/** Honest values: a number alone or followed by its extension, its variant or a second number, the sign typed between them recorded, signs around them or not. */
+/**
+ * Honest values: a number alone or followed by one or two items, each its extension, its variant or another number
+ * (« 0612345678 5/6 », « +97444123712 55123456/7 »), the gap between each two items recorded, signs around them or not.
+ */
 function honest(count: number) {
   return Array.from({ length: count }, () => {
-    const number = phone();
     const [before, after] = pick([["", ""], ["", ""], ["(", ")"], ["( ", " )"], ["-", ""], ["", "-"], ["", "."], ["", ","]]);
-    if (next() < 0.25) return { input: `${before}${number}${after}` };
-    const joiner = pick([" ", " ", ",", ", ", ".", " . ", "/", " / ", " /", "/ ", " - ", "  "]);
-    const rest = next() < 0.6 ? digits(1 + Math.floor(next() * 5), "0123456789") : phone();
-    return { input: `${before}${number}${joiner}${rest}${after}`, joinerGap: digitsAndGaps(`${before}${number}`).digits.length - 1 };
+    let input = `${before}${phone()}`;
+    const limits: number[] = [];
+    for (let items = pick([1, 2, 2, 3, 3]); items > 1; items--) {
+      limits.push(digitsAndGaps(input).digits.length - 1);
+      input += pick([" ", " ", ",", ", ", ".", " . ", "/", " / ", " /", "/ ", " - ", "  "]) + (next() < 0.6 ? digits(1 + Math.floor(next() * 5), "0123456789") : phone());
+    }
+    return { input: `${input}${after}`, limits };
   });
 }
 
 /**
- * The fuzz and the honest corpora of the earlier checks (1 584 004 values), too large for the repository: a list of JSON
- * files of values or of { input, number, rest } and { input, number, joiner, rest } records, given by
- * ADM26_PHONE_CORPORA (paths separated as in PATH).
+ * The fuzz and the honest corpora of the earlier checks (1 584 004 values, and 60 000 of three items), too large for the
+ * repository: a list of JSON files of values, of { input, number, rest } and { input, number, joiner, rest } records, or
+ * of { input, before } records, `before` what precedes each item after the first, given by ADM26_PHONE_CORPORA (paths
+ * separated as in PATH).
  */
 const CORPORA = (process.env.ADM26_PHONE_CORPORA ?? "").split(delimiter).filter(Boolean);
 
 describe("export des téléphones (ADM-26)", () => {
   it("ne perd, dans une valeur réécrite, aucun chiffre ni aucun signe saisi entre deux chiffres, et garde ce qui sépare un numéro de ce qui le suit", () => {
     rewritten = 0;
-    const failures = [...fuzz(40_000).flatMap(value => lost(value)), ...honest(40_000).flatMap(({ input, joinerGap }) => lost(input, joinerGap))];
+    const failures = [...fuzz(40_000).flatMap(value => lost(value)), ...honest(40_000).flatMap(({ input, limits }) => lost(input, limits))];
     expect(failures.slice(0, 20)).toEqual([]);
     // Not a vacuous property: a good share of the values is read as a number, a date or a fraction, and rewritten.
     expect(rewritten).toBeGreaterThan(5_000);
@@ -114,12 +120,12 @@ describe("export des téléphones (ADM-26)", () => {
     const seen = new Set<string>();
     rewritten = 0;
     for (const file of CORPORA) {
-      for (const entry of JSON.parse(readFileSync(file, "utf8")) as Array<string | { input: string; number?: string; rest?: string }>) {
+      for (const entry of JSON.parse(readFileSync(file, "utf8")) as Array<string | { input: string; number?: string; rest?: string; before?: string[] }>) {
         const input = typeof entry === "string" ? entry : entry.input;
         if (seen.has(input)) continue;
         seen.add(input);
-        const joinerGap = typeof entry === "object" && entry.number !== undefined && /\d/.test(entry.rest ?? "") ? digitsAndGaps(entry.number).digits.length - 1 : undefined;
-        failures.push(...lost(input, joinerGap));
+        const before = typeof entry === "string" ? [] : (entry.before ?? (entry.number !== undefined && /\d/.test(entry.rest ?? "") ? [entry.number] : []));
+        failures.push(...lost(input, before.map(items => digitsAndGaps(items).digits.length - 1)));
       }
     }
     expect({ values: seen.size, failures: failures.slice(0, 20) }).toEqual({ values: seen.size, failures: [] });
