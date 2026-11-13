@@ -14,7 +14,7 @@
     "test:ci": "vitest run",
     "test:e2e": "playwright test -c playwright.e2e.config.ts",
     "check:e2e": "tsc --noEmit -p e2e/tsconfig.json",
-    "test:visual": "vitest run client/src/publicPages.browser.test.ts",
+    "test:visual": "REQUIRE_CHROMIUM=1 vitest run client/src/publicPages.browser.test.ts",
     "test:booking-keyboard": "node scripts/booking-keyboard-input.mjs",
     "emails:preview": "tsx scripts/emails-preview.mts",
     "validate:precheckpoint": "pnpm test:visual && pnpm vitest run client/src/components/visualRegressionHarness.test.ts client/src/components/graphicGovernance.test.ts && pnpm check",

@@ -146,3 +146,11 @@ jobs:
         run: pnpm build
       - name: Run the end-to-end scenarios
         run: pnpm test:e2e
+      # The built server's log and the traces Playwright keeps of a failed scenario (dummy data only).
+      - name: Keep the server log and traces of a failed run
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results
+          path: tmp/e2e
+          retention-days: 7

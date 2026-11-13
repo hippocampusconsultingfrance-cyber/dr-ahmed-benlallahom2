@@ -53,7 +53,7 @@ Ces raccourcis ne s'activent qu'avec `NODE_ENV=development` et hors de Vercel (n
 
 ### Tests de bout en bout
 
-Six scénarios Playwright (`e2e/`, CODE-22) parcourent le serveur construit, comme `pnpm start` le lance, avec une base PostgreSQL vidée à chaque passage et des doubles locaux de chaque service extérieur : Stripe Checkout, Resend, Turnstile, Clerk, Vercel Blob, l'AI Gateway et Google Drive (`e2e/support/doubles.ts`). Aucun appel réel : toute connexion du serveur vers une autre machine est refusée et fait échouer le scénario, comme toute requête du navigateur vers une autre adresse que le site et ses doubles. Les scénarios : réservation et paiement jusqu'à la facture, question santé, message de contact, demande RGPD, candidature avec son CV analysé par la tâche planifiée, et administration (session Clerk, double authentification par code envoyé par email, connexion de Google Drive, export d'une candidature).
+Sept scénarios Playwright (`e2e/`, CODE-22) parcourent le serveur construit, comme `pnpm start` le lance, avec une base PostgreSQL vidée à chaque passage et des doubles locaux de chaque service extérieur : Stripe Checkout, Resend, Turnstile, Clerk, Vercel Blob, l'AI Gateway et Google Drive (`e2e/support/doubles.ts`). Aucun appel réel : toute connexion du serveur vers une autre machine est refusée et fait échouer le scénario, comme toute requête du navigateur vers une autre adresse que le site et ses doubles. Les scénarios : réservation et paiement jusqu'à la facture, question santé, message de contact, demande RGPD, candidature avec son CV analysé par la tâche planifiée, administration (session Clerk, double authentification par code envoyé par email, connexion de Google Drive, export d'une candidature), et espace candidat (invitation envoyée par l'administration, accès créé depuis son lien, activation par email avec le choix du mot de passe, document déposé chiffré dans le coffre puis relu par le candidat).
 
 ```bash
 VITE_TURNSTILE_SITE_KEY=1x00000000000000000000AA pnpm build
@@ -72,7 +72,7 @@ La base de `E2E_DATABASE_URL` (en UTF8, sur cette machine seulement) est effacé
 | `pnpm test:ci` | Suite utilisée par la CI, la même : aucun fichier de test écarté |
 | `pnpm build` | Build Vite, pré-rendu SEO par page (`scripts/prerender-route-seo.ts`), bundle serveur `dist/index.js` et fonction Vercel `dist/vercel/index.js`, re-exportée par `api/index.js` (versionné, inchangé par le build) |
 | `pnpm start` | Lance le build Express (hébergement hors Vercel) |
-| `pnpm test:visual` | Pages publiques dans un vrai navigateur (`client/src/publicPages.browser.test.ts`, aussi lancé par `pnpm test:ci`) : mise en page, focus, contrastes mesurés et axe-core en thème clair et sombre, ordinateur et téléphone (Chromium trouvé seul ou donné par `CHROMIUM`) |
+| `pnpm test:visual` | Pages publiques dans un vrai navigateur (`client/src/publicPages.browser.test.ts`, aussi lancé par `pnpm test:ci`) : mise en page, focus, contrastes mesurés et axe-core en thème clair et sombre, ordinateur et téléphone (Chromium trouvé seul ou donné par `CHROMIUM` ; sans lui, la commande échoue au lieu de passer) |
 | `pnpm validate:precheckpoint` | Avant un checkpoint : `pnpm test:visual`, la gouvernance graphique et `pnpm check` |
 | `pnpm test:e2e` | Scénarios de bout en bout sur le serveur construit (voir « Tests de bout en bout ») ; `pnpm check:e2e` vérifie leurs types |
 | `pnpm check:performance` | Build + budgets de performance |

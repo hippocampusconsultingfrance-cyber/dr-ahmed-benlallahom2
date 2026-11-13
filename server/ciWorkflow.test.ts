@@ -647,6 +647,8 @@ const E2E_STEPS: readonly Readonly<Record<string, string>>[] = [
   { name: "Verify the scenarios' types", run: "pnpm check:e2e" },
   { name: "Build with Turnstile's test key", run: "pnpm build" },
   { name: "Run the end-to-end scenarios", run: "pnpm test:e2e" },
+  // Only when a step before it failed: what is needed to read why, and nothing it could hide.
+  { name: "Keep the server log and traces of a failed run", if: "failure()", uses: "actions/upload-artifact@v4", "with.name": "e2e-results", "with.path": "tmp/e2e", "with.retention-days": "7" },
 ];
 
 /** The scripts these steps run: the build of the quality job, the scenarios' types, Playwright with its configuration. */
@@ -672,6 +674,54 @@ function expectE2eJobAsListed(workflow: string, packageJson: string) {
   for (const [name, script] of Object.entries(run)) expect(silencersIn(script, `script "${name}"`, SCRIPT_SILENCERS, []), `script "${name}"`).toEqual([]);
   const hooks = ["pnpm:devPreinstall", "preinstall", "install", "postinstall", "preprepare", "prepare", "postprepare", ...Object.keys(E2E_SCRIPTS).flatMap(name => [`pre${name}`, `post${name}`])];
   expect(hooks.filter(hook => Object.hasOwn(scripts, hook)), "package.json: scripts pnpm runs by itself").toEqual([]);
+}
+
+/**
+ * playwright.e2e.config.ts as it is, read as text and never run here: the step « Check this
+ * workflow » runs no code of the repository that ci.yml does not pin (CODE-14). As for
+ * vitest.config.ts, a list of what it may not hold is got round (a `testIgnore`, a `grep`,
+ * `projects`, a spread, a statement before the export): any change of it is a change of
+ * this text, read in review. No retry, one worker, no `test.only` (CODE-22).
+ */
+const PLAYWRIGHT_E2E_CONFIG = `import { defineConfig } from "@playwright/test";
+import { e2eSettings } from "./e2e/support/settings";
+
+/**
+ * End-to-end scenarios (CODE-22) of the paths that earn money or collect personal data,
+ * on the built server with a local PostgreSQL and the doubles of e2e/support: no real
+ * service is called. Run after \`VITE_TURNSTILE_SITE_KEY=1x00000000000000000000AA pnpm build\`:
+ *   E2E_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/e2e pnpm test:e2e
+ * (a database that every run empties; README, « Tests de bout en bout »). One worker and no
+ * retry: the scenarios share the server, and one that passes only on a second try fails.
+ * Chromium is Playwright's (\`pnpm exec playwright install chromium\`), or the one CHROMIUM names.
+ */
+const settings = e2eSettings();
+
+export default defineConfig({
+  testDir: "e2e",
+  testMatch: "*.spec.ts",
+  globalSetup: "./e2e/global-setup.ts",
+  outputDir: "tmp/e2e/results",
+  workers: 1,
+  fullyParallel: false,
+  retries: 0,
+  forbidOnly: true,
+  timeout: 60_000,
+  expect: { timeout: 10_000 },
+  reporter: [["list"]],
+  use: {
+    baseURL: settings.appOrigin,
+    locale: "fr-FR",
+    timezoneId: "Europe/Paris",
+    viewport: { width: 1280, height: 900 },
+    trace: "retain-on-failure",
+    launchOptions: { executablePath: process.env.CHROMIUM?.trim() || undefined, args: ["--no-sandbox", "--no-proxy-server"] },
+  },
+});
+`;
+
+function expectPlaywrightE2eConfigAsListed(config: string) {
+  expect(config, "playwright.e2e.config.ts").toBe(PLAYWRIGHT_E2E_CONFIG);
 }
 
 /** The files of these directories and of the directories within them, relative to the root, with `/` between their parts. */
@@ -1783,12 +1833,25 @@ describe("intégration continue GitHub", () => {
     expect(verify(workflow, { "pretest:e2e": "node -e 0" })).toThrow(/^package\.json: scripts pnpm runs by itself: /);
   });
 
-  it("fait tourner les scénarios de bout en bout sans nouvel essai, un seul à la fois, et refuse un test.only (CODE-22)", async () => {
-    // Read as Playwright reads it, in a process of its own (tsx), outside this test's module graph.
-    const script = "import('./playwright.e2e.config.ts').then(({ default: c }) => console.log(JSON.stringify({ retries: c.retries, workers: c.workers, forbidOnly: c.forbidOnly, testDir: c.testDir, globalSetup: c.globalSetup })))";
-    const loaded = spawnSync(process.execPath, [path.join(root, "node_modules/tsx/dist/cli.mjs"), "-e", script], { cwd: root, encoding: "utf8" });
-    expect(loaded.status, loaded.stderr).toBe(0);
-    expect(JSON.parse(loaded.stdout)).toEqual({ retries: 0, workers: 1, forbidOnly: true, testDir: "e2e", globalSetup: "./e2e/global-setup.ts" });
+  it("fait tourner les scénarios de bout en bout sans nouvel essai, un seul à la fois, et refuse un test.only, sans exécuter leur configuration (CODE-22)", async () => {
+    const config = await read("playwright.e2e.config.ts");
+    expect(() => expectPlaywrightE2eConfigAsListed(config)).not.toThrow();
+    const edit = (from: string, to: string) => {
+      expect(config).toContain(from);
+      return config.replace(from, to);
+    };
+    // A retry, scenarios left out or run elsewhere, settings spread from another module, code run on loading.
+    for (const changedConfig of [
+      edit("  retries: 0,\n", "  retries: 2,\n"),
+      edit("  forbidOnly: true,\n", "  forbidOnly: !process.env.CI,\n"),
+      edit('  testMatch: "*.spec.ts",\n', '  testMatch: "*.spec.ts",\n  testIgnore: "admin.spec.ts",\n'),
+      edit('  testMatch: "*.spec.ts",\n', '  testMatch: "*.spec.ts",\n  grep: /contact/,\n'),
+      edit("  workers: 1,\n", '  workers: 1,\n  projects: [{ name: "none", testMatch: "none" }],\n'),
+      edit('  testDir: "e2e",\n', '  testDir: "e2e",\n  ...settings.overrides,\n'),
+      edit("const settings = e2eSettings();\n", "const settings = e2eSettings();\nprocess.exitCode = 0;\n"),
+    ]) {
+      expect(() => expectPlaywrightE2eConfigAsListed(changedConfig)).toThrow(/^playwright\.e2e\.config\.ts: /);
+    }
   });
 
   it("borne la durée de chaque job et annule la vérification dépassée d'une pull request", async () => {

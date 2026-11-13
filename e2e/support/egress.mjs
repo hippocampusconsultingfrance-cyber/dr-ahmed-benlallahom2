@@ -15,7 +15,8 @@ import pg from "pg";
 import Stripe from "stripe";
 
 const doubles = new URL(process.env.E2E_DOUBLES_ORIGIN ?? "");
-const loopback = host => !host || /^(?:localhost|127(?:\.\d+){3}|::1|::ffff:127(?:\.\d+){3})$/i.test(host);
+// A URL keeps the brackets of an IPv6 address ([::1]), a socket does not (::1).
+const loopback = host => !host || /^(?:localhost|127(?:\.\d+){3}|::1|::ffff:127(?:\.\d+){3})$/i.test(host.replace(/^\[(.*)\]$/, "$1"));
 if (!loopback(doubles.hostname) || !loopback(new URL(process.env.DATABASE_URL ?? "").hostname)) {
   throw new Error("e2e: the doubles and the database must be on this machine (E2E_DOUBLES_ORIGIN, DATABASE_URL)");
 }
