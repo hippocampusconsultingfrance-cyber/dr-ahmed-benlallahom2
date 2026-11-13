@@ -8,6 +8,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import js from "@eslint/js";
 import { ESLint, type Linter } from "eslint";
+import * as prettier from "prettier";
 import ts from "typescript";
 import tseslint from "typescript-eslint";
 import { describe, expect, it } from "vitest";
@@ -349,6 +350,7 @@ const REQUIRED_STEP_COMMANDS = [
   GUARD_COMMAND,
   "pnpm check",
   "pnpm lint",
+  "pnpm format:check",
   "pnpm test:ci",
   "pnpm build",
   "node scripts/check-performance-budgets.mjs",
@@ -369,8 +371,8 @@ type ScriptTool = { command: string; options: RegExp };
  * less: another configuration (`tsc -p tsconfig.empty.json`, `vitest -c`, `knip
  * --config`, `eslint -c`), part of the project (`vitest run server/x.test.ts`, `--shard`, `-t`,
  * `--changed`, `knip --exclude`, `--workspace`, `eslint --ignore-pattern`), types left unchecked
- * (`tsc --noCheck`, `--listFilesOnly`), warnings let through or problems fixed rather than
- * reported (`eslint --quiet`, `--max-warnings 10`, `--fix`), a reporter of the project's own
+ * (`tsc --noCheck`, `--listFilesOnly`), warnings let through or files fixed rather than
+ * reported (`eslint --quiet`, `--max-warnings 10`, `--fix`, `prettier --write`), a reporter of the project's own
  * (`--reporter ./quiet.mjs`), the help,
  * the version or the configuration printed instead. What `node -e '…'` or a script in a
  * file of its own (`node scripts/check-performance-budgets.mjs`) runs cannot be read here:
@@ -379,6 +381,7 @@ type ScriptTool = { command: string; options: RegExp };
 const REQUIRED_SCRIPT_COMMANDS: Readonly<Record<string, ScriptTool>> = {
   check: { command: "tsc --noEmit", options: /^(?: (?:(?:-p|--project)[ =](?:\.\/?|(?:\.\/)?tsconfig\.json)|--pretty))*$/ },
   lint: { command: "eslint . --max-warnings 0", options: /^(?: (?:-f|--format)[ =](?:stylish|json)| --(?:no-)?color)*$/ },
+  "format:check": { command: "prettier --check .", options: /^(?: --no-color)*$/ },
   "test:ci": { command: "vitest run", options: /^(?: --reporter[ =](?:default|verbose|dot|tap|tap-flat|junit|json|github-actions|hanging-process))*$/ },
   build: { command: "vite build", options: /^$/ },
   knip: { command: "knip", options: /^(?: --no-progress| --reporter[ =](?:symbols|compact|codeowners|disclosure|markdown|codeclimate|json|github-actions))*$/ },
@@ -541,6 +544,7 @@ const QUALITY_STEPS: readonly Readonly<Record<string, string>>[] = [
   { name: "Check this workflow", run: GUARD_STEP_RUN },
   { name: "Verify TypeScript", run: "pnpm check" },
   { name: "Run ESLint", run: "pnpm lint" },
+  { name: "Check formatting", run: "pnpm format:check" },
   { name: "Run test suite", run: "pnpm test:ci" },
   { name: "Verify production build", id: "build", run: "pnpm build" },
   { name: "Check performance budgets", run: "node scripts/check-performance-budgets.mjs" },
@@ -562,6 +566,7 @@ const QUALITY_STEPS: readonly Readonly<Record<string, string>>[] = [
 const QUALITY_SCRIPTS: Readonly<Record<string, string>> = {
   check: "tsc --noEmit",
   lint: "eslint . --max-warnings 0",
+  "format:check": "prettier --check .",
   "test:ci": "vitest run",
   build: `NODE_ENV=production vite build && tsx scripts/prerender-route-seo.ts && esbuild server/_core/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist && esbuild server/vercelEntry.ts --platform=node --packages=external --bundle --format=esm --banner:js="import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" --outfile=dist/vercel/index.js`,
   knip: "knip",
@@ -1007,6 +1012,93 @@ function eslintCommentsBeyondOneLine(sources: Readonly<Record<string, string>>) 
 }
 
 /**
+ * Prettier's configuration and the files it leaves out, as they are (CODE-04): `pnpm
+ * format:check` passes on whatever .prettierignore leaves out (`**`), and a configuration
+ * can load code (`plugins`). Any change of them is a change of these texts, read in review;
+ * nor may another configuration of Prettier stand anywhere in the tree (it takes, for each
+ * file, the nearest one), nor a `prettier` key in a package.json.
+ */
+const PRETTIER_CONFIG = `{
+  "semi": true,
+  "trailingComma": "es5",
+  "singleQuote": false,
+  "printWidth": 80,
+  "tabWidth": 2,
+  "useTabs": false,
+  "bracketSpacing": true,
+  "bracketSameLine": false,
+  "arrowParens": "avoid",
+  "endOfLine": "lf",
+  "quoteProps": "as-needed",
+  "jsxSingleQuote": false,
+  "proseWrap": "preserve"
+}
+`;
+const PRETTIER_IGNORE = `# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+*.dist
+
+# Generated files: the table scripts/generate-docx-font-metrics.mjs writes, drizzle-kit's snapshots
+*.tsbuildinfo
+coverage/
+server/docxFontMetrics.ts
+drizzle/pg/meta/
+drizzle/legacy-mysql/meta/
+
+# Package files, written by npm and pnpm
+package-lock.json
+pnpm-lock.yaml
+pnpm-workspace.yaml
+
+# Audits and archives, kept as they were written
+docs/audits/
+docs/archive/
+
+# Test fixtures and snapshots, compared as they are
+server/testing/fixtures/
+**/__snapshots__/
+
+# Copies of the repository that local tools keep
+.claude/
+`;
+
+/** A configuration file of Prettier, in any directory: .prettierrc and its variants, prettier.config.*. */
+const PRETTIER_CONFIG_FILE = /(?:^|\/)(?:\.prettierrc(?:\.\w+)?|prettier\.config\.\w+)$/;
+
+type PrettierSettings = { config: string; ignore: string; files: readonly string[]; packageJsons: Readonly<Record<string, string>> };
+
+function expectPrettierConfigAsListed({ config, ignore, files, packageJsons }: PrettierSettings) {
+  expect(config, ".prettierrc").toBe(PRETTIER_CONFIG);
+  expect(ignore, ".prettierignore").toBe(PRETTIER_IGNORE);
+  expect(files.filter(file => PRETTIER_CONFIG_FILE.test(file) && file !== ".prettierrc"), "prettier: other configuration files").toEqual([]);
+  expect(Object.keys(packageJsons).filter(file => Object.hasOwn(JSON.parse(packageJsons[file]!) as object, "prettier")), "prettier: package.json key").toEqual([]);
+}
+
+/** The one file `pnpm format:check` leaves out of those `pnpm lint` reads: the table that `pnpm lint` leaves out too. */
+const FORMAT_IGNORED_FILES = ["server/docxFontMetrics.ts"];
+
+/**
+ * What Prettier makes of each file `pnpm lint` reads, at the root of the project (`base`,
+ * another directory in the test of this check): `prettier --check .` leaves out what the
+ * .gitignore and the .prettierignore there list, and the files of no language it knows.
+ * Each one is checked, but the table above.
+ */
+async function expectPrettierChecksEverySource(base = root) {
+  const ignorePath = [path.join(base, ".gitignore"), path.join(base, ".prettierignore")];
+  const leftOut: string[] = [];
+  for (const file of lintedFiles()) {
+    const info = await prettier.getFileInfo(path.join(base, file), { ignorePath });
+    if (info.ignored || !info.inferredParser) leftOut.push(file);
+  }
+  expect(leftOut, "prettier: files left out").toEqual(FORMAT_IGNORED_FILES);
+}
+
+/**
  * A version range of the registry (« 3.3.7 », « ^6.29.1 », « >=1 <2 »), whose package the
  * lockfile pins by its integrity: not another package under the name (`npm:`), a directory
  * of the repository (`file:`, `link:`), a git repository or an address, whose code would run
@@ -1242,6 +1334,8 @@ jobs:
         run: pnpm check
       - name: Run ESLint
         run: pnpm lint
+      - name: Check formatting
+        run: pnpm format:check
       - name: Run test suite
         run: pnpm test:ci
       - name: Verify production build
@@ -1278,6 +1372,7 @@ const FIXTURE_SCRIPTS: Record<string, string> = {
   build: `vite build && esbuild server/index.ts --bundle --banner:js="import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" --outfile=api/index.js`,
   check: "tsc --noEmit",
   lint: "eslint . --max-warnings 0",
+  "format:check": "prettier --check .",
   knip: "knip",
   "test:ci": "vitest run",
 };
@@ -1449,7 +1544,7 @@ describe("intégration continue GitHub", () => {
     const verify = (workflow: string, scripts: Record<string, string> = {}, exceptions?: readonly NamedException[]) => () =>
       expectNoNeutralizedStep(workflow, fixturePackageJson(scripts), exceptions);
     const runs = jobSteps(FIXTURE_WORKFLOW, "quality").map(step => step.run).join("\n");
-    expect([...scriptsRun(runs, FIXTURE_SCRIPTS).keys()]).toEqual(["check", "lint", "test:ci", "build", "knip"]);
+    expect([...scriptsRun(runs, FIXTURE_SCRIPTS).keys()]).toEqual(["check", "lint", "format:check", "test:ci", "build", "knip"]);
     expect([...scriptsRun("pnpm check", { check: "pnpm run typecheck", typecheck: "pnpm check && tsc --noEmit", lint: "eslint ." }).keys()]).toEqual(["check", "typecheck"]);
     expect([...scriptsRun("npm run --silent check && yarn knip", FIXTURE_SCRIPTS).keys()]).toEqual(["check", "knip"]);
     expect(verify(FIXTURE_WORKFLOW)).not.toThrow();
@@ -1534,7 +1629,7 @@ describe("intégration continue GitHub", () => {
     const verify = (scripts: Record<string, string>, exceptions?: readonly NamedException[]) => () =>
       expectNoNeutralizedStep(FIXTURE_WORKFLOW, fixturePackageJson(scripts), exceptions);
     // A script that only names its tool, or runs another one.
-    for (const scripts of [{ check: "echo tsc --noEmit" }, { check: "true # tsc --noEmit" }, { check: "tsc" }, { "test:ci": "node scripts/run-tests.mjs" }, { knip: "echo knip" }, { lint: "echo eslint . --max-warnings 0" }] as Array<Record<string, string>>) {
+    for (const scripts of [{ check: "echo tsc --noEmit" }, { check: "true # tsc --noEmit" }, { check: "tsc" }, { "test:ci": "node scripts/run-tests.mjs" }, { knip: "echo knip" }, { lint: "echo eslint . --max-warnings 0" }, { "format:check": "echo prettier --check ." }] as Array<Record<string, string>>) {
       const [name] = Object.keys(scripts);
       expect(verify(scripts), name).toThrow(new RegExp(`^script "${name}": `));
     }
@@ -1546,6 +1641,7 @@ describe("intégration continue GitHub", () => {
       knip: ["--exclude files,dependencies", "--directory docs", "--workspace docs", "-V", "-c knip.empty.json", "--config=knip.empty.json", "--include files", "--reporter ./quiet-reporter.mjs"].map(option => `knip ${option}`),
       build: ["vite build --config vite.empty.config.ts"],
       lint: ["eslint .", "eslint . --max-warnings 10", "eslint server --max-warnings 0", ...["--quiet", "--fix", "-c eslint.empty.config.js", "--config=eslint.empty.config.js", "--no-config-lookup", "--rule no-undef:off", "--ignore-pattern server", "--no-warn-ignored", "--print-config server/db.ts", "-v"].map(option => `eslint . --max-warnings 0 ${option}`)],
+      "format:check": ["prettier --check server", "prettier --list-different .", "prettier --write .", ...["--ignore-path docs.ignore", "--no-config", "--config other.json", "--plugin ./ci-plugin.mjs", "--ignore-unknown", "--log-level silent"].map(option => `prettier --check . ${option}`)],
     };
     for (const [name, scripts] of Object.entries(weakened)) {
       for (const script of scripts) expect(verify({ [name]: script }), script).toThrow(new RegExp(`^script "${name}": `));
@@ -1557,6 +1653,7 @@ describe("intégration continue GitHub", () => {
       { "test:ci": "vitest run --reporter=dot" },
       { knip: "knip --reporter compact --no-progress" },
       { lint: "eslint . --max-warnings 0 --format stylish --no-color" },
+      { "format:check": "prettier --check . --no-color" },
       { build: "NODE_ENV=production vite build && esbuild server/index.ts --outfile=api/index.js" },
     ] as Array<Record<string, string>>) {
       expect(verify(scripts), JSON.stringify(scripts)).not.toThrow();
@@ -2004,6 +2101,41 @@ describe("intégration continue GitHub", () => {
       expect(eslintCommentsBeyondOneLine(inFile(comment)), comment).toEqual([`server/example.ts: ${comment}`]);
     }
   }, 60_000);
+
+  it("vérifie la mise en forme de chaque fichier du code, des tests, des scripts et des scénarios avec la configuration de Prettier listée (CODE-04)", async () => {
+    const files = treeFiles();
+    const packageJsons = Object.fromEntries(await Promise.all(files.filter(file => /(?:^|\/)package\.json$/.test(file)).map(async file => [file, await read(file)] as const)));
+    expect(Object.keys(packageJsons)).toContain("package.json");
+    expectPrettierConfigAsListed({ config: await read(".prettierrc"), ignore: await read(".prettierignore"), files, packageJsons });
+    await expectPrettierChecksEverySource();
+  }, 30_000);
+
+  it("refuse une configuration de Prettier qui écarte des fichiers ou charge du code, une autre dans l'arborescence ou dans package.json, et un .gitignore qui écarte des sources (CODE-04)", async () => {
+    const [config, ignore, packageJson, gitignore] = await Promise.all([read(".prettierrc"), read(".prettierignore"), read("package.json"), read(".gitignore")]);
+    const listed: PrettierSettings = { config, ignore, files: [".prettierrc", "server/db.ts"], packageJsons: { "package.json": packageJson } };
+    expect(() => expectPrettierConfigAsListed(listed)).not.toThrow();
+    for (const [what, changes, refusal] of [
+      ["every file ignored", { ignore: `${ignore}**\n` }, /^\.prettierignore: /],
+      ["a plugin", { config: config.replace('"semi": true,', '"semi": true,\n  "plugins": ["./ci-plugin.mjs"],') }, /^\.prettierrc: /],
+      ["another configuration", { files: [".prettierrc", "server/.prettierrc.json"] }, /^prettier: other configuration files/],
+      ["a configuration in code", { files: [".prettierrc", "prettier.config.mjs"] }, /^prettier: other configuration files/],
+      ["package.json's prettier key", { packageJsons: { "package.json": JSON.stringify({ ...JSON.parse(packageJson), prettier: "./ci-prettier.cjs" }) } }, /^prettier: package\.json key/],
+    ] as const) {
+      expect(() => expectPrettierConfigAsListed({ ...listed, ...changes }), what).toThrow(refusal);
+    }
+
+    // The project's ignore files in a directory of their own, then a .gitignore that leaves out the server.
+    const directory = await mkdtemp(path.join(os.tmpdir(), "ci-prettier-ignore-"));
+    try {
+      await writeFile(path.join(directory, ".prettierignore"), ignore);
+      await writeFile(path.join(directory, ".gitignore"), gitignore);
+      await expect(expectPrettierChecksEverySource(directory)).resolves.toBeUndefined();
+      await writeFile(path.join(directory, ".gitignore"), `${gitignore}\nserver/\n`);
+      await expect(expectPrettierChecksEverySource(directory)).rejects.toThrow(/^prettier: files left out/);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 30_000);
 
   it("lance les scénarios de bout en bout dans un job à part, tel qu'il est listé, sans étape ni script qui passe quoi qu'il arrive (CODE-22)", async () => {
     const [workflow, packageJson] = await Promise.all([read(".github/workflows/ci.yml"), read("package.json")]);
