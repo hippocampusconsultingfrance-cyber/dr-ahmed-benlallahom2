@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { and, desc, eq, gt, isNull, lt, ne, sql } from "drizzle-orm";
-import { adminMfaChallenges, adminMfaSessions } from "../drizzle/schema";
+import { adminMfaBackupCodes, adminMfaChallenges, adminMfaSessions } from "../drizzle/schema";
 import { getDb } from "./db";
 import { mutationRowCount } from "./dbMutation";
 import { enforcePersistentRateLimit, logSecurityEvent, requestIpHash } from "./candidateSecurity";
@@ -10,6 +10,11 @@ export const ADMIN_MFA_COOKIE = "admin_mfa_session";
 const MFA_MAX_AGE_SECONDS = 8 * 60 * 60;
 const MFA_CHALLENGE_TTL_MS = 10 * 60 * 1000;
 export const ADMIN_MFA_MAX_ATTEMPTS_PER_CHALLENGE = 5;
+/** ADM-14: backup codes made at a time, each usable once. */
+export const ADMIN_MFA_BACKUP_CODE_COUNT = 10;
+// No 0/O, 1/I/L or U: a code copied on paper is typed back as written.
+const BACKUP_CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTVWXYZ";
+const BACKUP_CODE_LENGTH = 10;
 
 /**
  * Persistent limits, counted per administrator account + client IP. A code
@@ -134,11 +139,77 @@ export async function verifyAdminMfaChallenge(input: { openId: string; code: str
     .where(and(eq(adminMfaChallenges.id, challenge.id), lt(adminMfaChallenges.attempts, ADMIN_MFA_MAX_ATTEMPTS_PER_CHALLENGE), isNull(adminMfaChallenges.consumedAt)));
   // A concurrent request already used (or invalidated) this code.
   if (mutationRowCount(consumed) !== 1) return failed();
+  await openAdminMfaSession(db, input);
+  await logSecurityEvent({ actorKind: "admin", actorReference: input.openId, category: "admin_mfa_verify", outcome: "allowed", ipHash: requestIpHash(input.req.headers) });
+}
+
+/** The MFA proof of this browser, for 8 hours: its hash in the database, the token in the cookie. */
+async function openAdminMfaSession(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, input: { openId: string; req: { headers: Record<string, unknown> }; res: { cookie: Function } }) {
   const token = randomBytes(32).toString("base64url");
   const expiresAt = new Date(Date.now() + MFA_MAX_AGE_SECONDS * 1000);
   await db.insert(adminMfaSessions).values({ openId: input.openId, tokenHash: hashMfa(token, "session"), expiresAt });
   input.res.cookie(ADMIN_MFA_COOKIE, token, adminMfaCookieOptions(input.req));
-  await logSecurityEvent({ actorKind: "admin", actorReference: input.openId, category: "admin_mfa_verify", outcome: "allowed", ipHash: requestIpHash(input.req.headers) });
+}
+
+/** "K7QM2-XH9TD": a backup code as shown, in two groups of five. */
+function newBackupCode() {
+  const characters = Array.from({ length: BACKUP_CODE_LENGTH }, () => BACKUP_CODE_ALPHABET[randomInt(BACKUP_CODE_ALPHABET.length)]).join("");
+  return `${characters.slice(0, BACKUP_CODE_LENGTH / 2)}-${characters.slice(BACKUP_CODE_LENGTH / 2)}`;
+}
+
+/** A backup code as typed: neither case, spaces nor dashes count. */
+function backupCodeHash(code: string) {
+  return hashMfa(code.toUpperCase().replace(/[\s-]/g, ""), "backup");
+}
+
+/**
+ * ADM-14: ten new backup codes for an administrator whose mailbox is lost,
+ * returned once to be shown and never again: only their hash is kept, and
+ * the earlier codes stop working.
+ */
+export async function regenerateAdminMfaBackupCodes(input: { openId: string; req: { headers: Record<string, unknown> } }) {
+  const db = await getDb();
+  if (!db) throw new Error("admin_mfa_database_unavailable");
+  const codes = Array.from({ length: ADMIN_MFA_BACKUP_CODE_COUNT }, newBackupCode);
+  await db.batch([
+    db.delete(adminMfaBackupCodes).where(eq(adminMfaBackupCodes.openId, input.openId)),
+    db.insert(adminMfaBackupCodes).values(codes.map(code => ({ openId: input.openId, codeHash: backupCodeHash(code) }))),
+  ]);
+  await logSecurityEvent({ actorKind: "admin", actorReference: input.openId, category: "admin_mfa_backup_codes_regenerated", outcome: "allowed", severity: "warning", ipHash: requestIpHash(input.req.headers) });
+  return codes;
+}
+
+/** How many of the administrator's backup codes are left, and when they were made (null: never). */
+export async function adminMfaBackupCodesStatus(openId: string) {
+  const db = await getDb();
+  if (!db) throw new Error("admin_mfa_database_unavailable");
+  const codes = await db.select({ usedAt: adminMfaBackupCodes.usedAt, createdAt: adminMfaBackupCodes.createdAt }).from(adminMfaBackupCodes).where(eq(adminMfaBackupCodes.openId, openId));
+  return {
+    remaining: codes.filter(code => !code.usedAt).length,
+    generatedAt: codes.reduce<Date | null>((latest, code) => !latest || code.createdAt > latest ? code.createdAt : latest, null),
+  };
+}
+
+/**
+ * ADM-14: opens the administration with a backup code instead of the emailed
+ * one. A code works once; its attempts count with those of the emailed codes,
+ * and a wrong one raises the same alert to the owner.
+ */
+export async function verifyAdminMfaBackupCode(input: { openId: string; code: string; req: { headers: Record<string, unknown> }; res: { cookie: Function } }) {
+  const db = await getDb();
+  if (!db) throw new Error("admin_mfa_database_unavailable");
+  await enforceAdminMfaRateLimit("verify", input.openId, input.req.headers);
+  const used = await db.update(adminMfaBackupCodes)
+    .set({ usedAt: new Date() })
+    .where(and(eq(adminMfaBackupCodes.openId, input.openId), eq(adminMfaBackupCodes.codeHash, backupCodeHash(input.code)), isNull(adminMfaBackupCodes.usedAt)));
+  if (mutationRowCount(used) !== 1) {
+    await logSecurityEvent({ actorKind: "admin", actorReference: input.openId, category: "admin_mfa_backup_code", outcome: "failed", severity: "high", ipHash: requestIpHash(input.req.headers) });
+    throw new Error("admin_mfa_code_invalid");
+  }
+  await openAdminMfaSession(db, input);
+  const { remaining } = await adminMfaBackupCodesStatus(input.openId);
+  await logSecurityEvent({ actorKind: "admin", actorReference: input.openId, category: "admin_mfa_backup_code", outcome: "allowed", severity: "warning", ipHash: requestIpHash(input.req.headers), metadata: { remaining } });
+  return { remaining };
 }
 
 /**
@@ -171,7 +242,7 @@ export async function revokeCurrentAdminMfaSession(input: {
  * ADM-14: ends every MFA proof of this administrator but the one this browser
  * carries, with « Révoquer toutes les autres sessions »: a lost device signed
  * in again with the password still needs a new security code. Returns how
- * many were open.
+ * many were still valid; expired ones are left as they are.
  */
 export async function revokeOtherAdminMfaSessions(input: { openId: string; req: { headers: Record<string, unknown> } }) {
   const db = await getDb();
@@ -182,6 +253,7 @@ export async function revokeOtherAdminMfaSessions(input: { openId: string; req: 
     .where(and(
       eq(adminMfaSessions.openId, input.openId),
       isNull(adminMfaSessions.revokedAt),
+      gt(adminMfaSessions.expiresAt, new Date()),
       ...(token ? [ne(adminMfaSessions.tokenHash, hashMfa(token, "session"))] : []),
     ));
   return mutationRowCount(result);

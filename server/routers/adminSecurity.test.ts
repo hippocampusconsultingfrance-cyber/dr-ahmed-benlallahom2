@@ -1,13 +1,12 @@
-import { TRPCError } from "@trpc/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { securityEvents } from "../../drizzle/schema";
+import { adminMfaBackupCodes, adminMfaSessions, candidateSecurityRateLimits, securityEvents } from "../../drizzle/schema";
 import { createMemoryPg, type MemoryPg } from "../testing/memoryPgProxy";
 import type { TrpcContext } from "../_core/context";
 
 // ADM-15 — le journal de sécurité filtré et paginé sur la base ; ADM-14 — les
 // sessions Clerk de l’administrateur, lues et révoquées par des doubles locaux
 // de l’API Clerk (aucun appel réel), avec ses autres preuves de double
-// authentification.
+// authentification, et ses codes de secours.
 
 type ClerkSession = { id: string; lastActiveAt: number; latestActivity?: Record<string, unknown> };
 
@@ -20,6 +19,8 @@ const state = vi.hoisted(() => ({
   revoked: [] as string[],
   listed: [] as unknown[],
   otherMfaRevoked: [] as unknown[],
+  /** The order in which the security codes and Clerk were reached. */
+  calls: [] as string[],
 }));
 
 vi.mock("../db", () => ({ getDb: async () => state.memory?.db ?? null }));
@@ -30,6 +31,7 @@ vi.mock("@clerk/express", () => ({
     sessions: {
       getSessionList: vi.fn(async (params: unknown) => {
         state.listed.push(params);
+        state.calls.push("clerk.getSessionList");
         if (state.listFails) throw new Error("clerk_unavailable");
         return { data: state.sessions, totalCount: state.sessions.length };
       }),
@@ -43,7 +45,7 @@ vi.mock("@clerk/express", () => ({
 }));
 vi.mock("../adminMfa", async importOriginal => ({
   ...await importOriginal<typeof import("../adminMfa")>(),
-  revokeOtherAdminMfaSessions: vi.fn(async (input: unknown) => { state.otherMfaRevoked.push(input); return 2; }),
+  revokeOtherAdminMfaSessions: vi.fn(async (input: unknown) => { state.otherMfaRevoked.push(input); state.calls.push("revokeOtherAdminMfaSessions"); return 2; }),
 }));
 
 const { adminSecurityRouter } = await import("./adminSecurity");
@@ -51,12 +53,12 @@ const { adminSecurityRouter } = await import("./adminSecurity");
 const OWNER = "user_owner";
 let memory: MemoryPg;
 
-function caller(options: { role?: "admin" | "user"; mfaVerified?: boolean } = {}) {
+function caller(options: { role?: "admin" | "user"; mfaVerified?: boolean; cookie?: ReturnType<typeof vi.fn> } = {}) {
   return adminSecurityRouter.createCaller({
     user: { openId: OWNER, role: options.role ?? "admin" } as TrpcContext["user"],
     mfaVerified: options.mfaVerified ?? true,
     req: { protocol: "https", headers: { "x-forwarded-for": "198.51.100.7", cookie: "admin_mfa_session=this-browser" } } as unknown as TrpcContext["req"],
-    res: { cookie: vi.fn(), clearCookie: vi.fn() } as unknown as TrpcContext["res"],
+    res: { cookie: options.cookie ?? vi.fn(), clearCookie: vi.fn() } as unknown as TrpcContext["res"],
   });
 }
 
@@ -65,7 +67,8 @@ function seedEvents(rows: Array<{ actor: string; category: string; outcome: stri
 }
 
 beforeEach(() => {
-  memory = createMemoryPg([securityEvents]);
+  process.env.CANDIDATE_AUTH_PEPPER ||= "test-pepper-for-admin-security-router-0123456789";
+  memory = createMemoryPg([securityEvents, adminMfaBackupCodes, adminMfaSessions, candidateSecurityRateLimits]);
   state.memory = memory;
   state.currentSessionId = "sess_current";
   state.sessions = [];
@@ -74,6 +77,7 @@ beforeEach(() => {
   state.revoked = [];
   state.listed = [];
   state.otherMfaRevoked = [];
+  state.calls = [];
 });
 
 describe("ADM-15 — journal de sécurité", () => {
@@ -118,6 +122,17 @@ describe("ADM-15 — journal de sécurité", () => {
   it("reste réservé à l’administrateur doublement authentifié", async () => {
     await expect(caller({ mfaVerified: false }).events()).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(caller({ role: "user" }).events()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller({ mfaVerified: false }).recentHighEvents()).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("compte les événements élevés ou critiques des dernières 24 heures sur tout le journal", async () => {
+    memory.seed(securityEvents, [
+      { security_event_actor_kind: "candidate", category: "candidate_login", security_event_outcome: "failed", security_event_severity: "critical" },
+      // Older than a day: no longer counted.
+      { security_event_actor_kind: "admin", category: "admin_mfa_verify", security_event_outcome: "failed", security_event_severity: "high", created_at: new Date(Date.now() - 25 * 60 * 60 * 1000) },
+    ]);
+    // The high admin event seeded above, the critical candidate one; not the warnings.
+    await expect(caller().recentHighEvents()).resolves.toEqual({ count: 2 });
   });
 });
 
@@ -142,28 +157,38 @@ describe("ADM-14 — sessions administrateur", () => {
   });
 
   it("révoque toutes les autres sessions et leurs preuves de double authentification, garde celle-ci, et le trace", async () => {
-    await expect(caller().revokeOtherSessions()).resolves.toEqual({ revoked: 2, notRevoked: 0, securitySessions: 2 });
+    await expect(caller().revokeOtherSessions()).resolves.toEqual({ revoked: 2, notRevoked: 0, securitySessions: 2, clerkUnavailable: false });
     expect(state.revoked.sort()).toEqual(["sess_lost_phone", "sess_old_laptop"]);
+    // The security codes first, whatever Clerk answers next.
+    expect(state.calls).toEqual(["revokeOtherAdminMfaSessions", "clerk.getSessionList"]);
     expect(state.otherMfaRevoked).toEqual([expect.objectContaining({ openId: OWNER, req: expect.objectContaining({ headers: expect.objectContaining({ cookie: "admin_mfa_session=this-browser" }) }) })]);
     const [trace] = memory.rows(securityEvents);
     expect(trace).toMatchObject({ category: "admin_sessions_revoked_others", security_event_actor_kind: "admin", actor_reference: OWNER, security_event_outcome: "allowed", security_event_severity: "warning" });
-    expect(JSON.parse(String(trace!.metadata))).toEqual({ revoked: 2, notRevoked: 0, securitySessions: 2 });
+    expect(JSON.parse(String(trace!.metadata))).toEqual({ revoked: 2, notRevoked: 0, securitySessions: 2, clerkUnavailable: false });
   });
 
   it("compte la session que Clerk refuse de révoquer, sans s’arrêter aux autres", async () => {
     state.revokeFails = new Set(["sess_lost_phone"]);
-    await expect(caller().revokeOtherSessions()).resolves.toEqual({ revoked: 1, notRevoked: 1, securitySessions: 2 });
+    await expect(caller().revokeOtherSessions()).resolves.toEqual({ revoked: 1, notRevoked: 1, securitySessions: 2, clerkUnavailable: false });
     expect(state.revoked).toEqual(["sess_old_laptop"]);
   });
 
-  it("renvoie au tableau de bord Clerk quand Clerk ne répond pas, sans rien révoquer", async () => {
+  it("annule quand même les codes de sécurité des autres appareils quand Clerk ne répond pas, et le dit", async () => {
     state.listFails = true;
-    const refusal = await caller().revokeOtherSessions().catch(error => error);
-    expect(refusal).toBeInstanceOf(TRPCError);
-    expect(refusal).toMatchObject({ code: "INTERNAL_SERVER_ERROR", message: expect.stringContaining("tableau de bord Clerk (Users, puis Sessions)") });
+    await expect(caller().revokeOtherSessions()).resolves.toEqual({ revoked: 0, notRevoked: 0, securitySessions: 2, clerkUnavailable: true });
+    expect(state.otherMfaRevoked).toHaveLength(1);
     expect(state.revoked).toEqual([]);
-    expect(state.otherMfaRevoked).toEqual([]);
-    await expect(caller().sessions()).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
+    const [trace] = memory.rows(securityEvents);
+    expect(JSON.parse(String(trace!.metadata))).toEqual({ revoked: 0, notRevoked: 0, securitySessions: 2, clerkUnavailable: true });
+    // The list itself sends to Clerk's dashboard.
+    await expect(caller().sessions()).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR", message: expect.stringContaining("tableau de bord Clerk (Users, puis Sessions)") });
+  });
+
+  it("annule les codes de sécurité des autres appareils même quand Clerk ne liste plus que ce navigateur", async () => {
+    // The lost device's Clerk session was revoked in Clerk's dashboard, or expired: its code still counts until then.
+    state.sessions = [state.sessions[1]!];
+    await expect(caller().revokeOtherSessions()).resolves.toEqual({ revoked: 0, notRevoked: 0, securitySessions: 2, clerkUnavailable: false });
+    expect(state.otherMfaRevoked).toHaveLength(1);
   });
 
   it("ne révoque rien sans session Clerk identifiée pour ce navigateur, ni sans double authentification", async () => {
@@ -174,5 +199,43 @@ describe("ADM-14 — sessions administrateur", () => {
     await expect(caller({ mfaVerified: false }).sessions()).rejects.toMatchObject({ code: "FORBIDDEN" });
     expect(state.listed).toEqual([]);
     expect(state.revoked).toEqual([]);
+    expect(state.otherMfaRevoked).toEqual([]);
+  });
+});
+
+describe("ADM-14 — codes de secours", () => {
+  it("en génère dix, montrés une fois, dont le nombre restant se lit ensuite", async () => {
+    await expect(caller().backupCodes()).resolves.toEqual({ remaining: 0, generatedAt: null });
+    const { codes } = await caller().regenerateBackupCodes();
+    expect(codes).toHaveLength(10);
+    await expect(caller().backupCodes()).resolves.toEqual({ remaining: 10, generatedAt: expect.any(Date) });
+    expect(JSON.stringify(await caller().backupCodes())).not.toContain(codes[0]!);
+  });
+
+  it("ouvre l’administration avec un code de secours, avant la double authentification, une seule fois", async () => {
+    const { codes } = await caller().regenerateBackupCodes();
+    const cookie = vi.fn();
+    await expect(caller({ mfaVerified: false, cookie }).verifyBackupCode({ code: codes[3]! })).resolves.toEqual({ remaining: 9 });
+    expect(cookie).toHaveBeenCalledWith("admin_mfa_session", expect.any(String), expect.objectContaining({ httpOnly: true }));
+    expect(memory.rows(adminMfaSessions)).toHaveLength(1);
+    await expect(caller({ mfaVerified: false }).verifyBackupCode({ code: codes[3]! })).rejects.toMatchObject({ code: "BAD_REQUEST", message: "Le code de secours est invalide ou a déjà servi." });
+    expect(memory.rows(securityEvents).map(row => `${row.category}:${row.security_event_outcome}:${row.security_event_severity}`)).toEqual([
+      "admin_mfa_backup_codes_regenerated:allowed:warning",
+      "admin_mfa_backup_code:allowed:warning",
+      "admin_mfa_backup_code:failed:high",
+    ]);
+  });
+
+  it("ne fait pas passer une panne pour un code erroné", async () => {
+    memory.failNext(/update "admin_mfa_backup_codes"/i);
+    await expect(caller({ mfaVerified: false }).verifyBackupCode({ code: "AAAAA-AAAAA" })).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR", message: "Le code de secours n’a pas pu être vérifié. Réessayez dans quelques instants." });
+    expect(memory.rows(adminMfaSessions)).toEqual([]);
+  });
+
+  it("ne génère ni ne lit les codes sans double authentification, et refuse le compte non administrateur", async () => {
+    await expect(caller({ mfaVerified: false }).regenerateBackupCodes()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller({ mfaVerified: false }).backupCodes()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller({ role: "user", mfaVerified: false }).verifyBackupCode({ code: "AAAAA-AAAAA" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(memory.rows(adminMfaBackupCodes)).toEqual([]);
   });
 });

@@ -19,6 +19,7 @@ const server = vi.hoisted(() => ({
   statusReads: 0,
   begin: vi.fn(),
   verifyAttempts: [] as string[],
+  backupAttempts: [] as string[],
   toasts: [] as Array<[string, string]>,
 }));
 
@@ -38,8 +39,11 @@ vi.mock("@/lib/trpc", async () => {
   const adminSecurity = {
     // The security tab's journal and the admin's sessions, still loading.
     events: { useQuery: () => loading },
+    recentHighEvents: { useQuery: () => loading },
     sessions: { useQuery: () => loading },
     revokeOtherSessions: { useMutation: () => idle },
+    backupCodes: { useQuery: () => loading },
+    regenerateBackupCodes: { useMutation: () => idle },
     status: {
       useQuery: (_input: unknown, options: { enabled: boolean }) => useQuery({
         queryKey: ["adminSecurity.status"],
@@ -55,6 +59,18 @@ vi.mock("@/lib/trpc", async () => {
           if (code !== server.code) throw new Error("Code de sécurité invalide ou expiré.");
           server.verified = true;
           return { verified: true };
+        },
+        ...options,
+      }),
+    },
+    // ADM-14: the one backup code of these tests, typed in any case, with or without its dash.
+    verifyBackupCode: {
+      useMutation: (options: object) => useMutation({
+        mutationFn: async ({ code }: { code: string }) => {
+          server.backupAttempts.push(code);
+          if (code.toUpperCase().replace(/[\s-]/g, "") !== "K7QM2XH9TD") throw new Error("Le code de secours est invalide ou a déjà servi.");
+          server.verified = true;
+          return { remaining: 9 };
         },
         ...options,
       }),
@@ -89,6 +105,7 @@ beforeEach(() => {
   server.statusReads = 0;
   server.begin = vi.fn();
   server.verifyAttempts = [];
+  server.backupAttempts = [];
   server.toasts = [];
   // The dashboard reads its section from the address (ADM-09): each test starts on /admin.
   window.history.replaceState(null, "", "/admin");
@@ -121,6 +138,30 @@ describe("double authentification de l’administration (navigateur simulé)", (
     expect(server.verifyAttempts).toEqual(["654321", "123456"]);
     expect(screen.queryByRole("heading", { name: "Validation de sécurité" })).toBeNull();
     expect(screen.getByRole("heading", { name: "Administration" })).toBeTruthy();
+  });
+
+  it("ouvre l’administration avec un code de secours quand l’email n’arrive pas (ADM-14)", async () => {
+    mount();
+    expect(await screen.findByRole("heading", { name: "Validation de sécurité" })).toBeTruthy();
+    expect(document.getElementById("admin-mfa-backup-code")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Utiliser un code de secours" }));
+
+    const field = screen.getByLabelText("Code de secours") as HTMLInputElement;
+    const submit = screen.getByRole("button", { name: "Valider le code de secours" });
+    expect(submit).toHaveProperty("disabled", true);
+    fireEvent.change(field, { target: { value: "AAAAA-AAAAA" } });
+    fireEvent.click(submit);
+    await waitFor(() => expect(server.toasts).toContainEqual(["error", "Le code de secours est invalide ou a déjà servi."]));
+    expect(screen.queryByLabelText(NAVIGATION)).toBeNull();
+
+    // Entrée sends it as the button does.
+    fireEvent.change(field, { target: { value: "k7qm2 xh9td" } });
+    fireEvent.submit(field.closest("form")!);
+    expect(await screen.findByLabelText(NAVIGATION)).toBeTruthy();
+    expect(server.backupAttempts).toEqual(["AAAAA-AAAAA", "k7qm2 xh9td"]);
+    expect(server.toasts).toContainEqual(["success", "Code de secours accepté ; il ne servira plus. Codes restants : 9, à renouveler dans l’onglet « Sécurité »."]);
+    expect(server.begin).not.toHaveBeenCalled();
+    expect(server.verifyAttempts).toEqual([]);
   });
 
   it("ouvre après le code de sécurité la section que nommait l’adresse, sans la perdre (ADM-09)", async () => {

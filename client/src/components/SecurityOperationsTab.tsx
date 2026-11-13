@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MonitorSmartphone, ShieldAlert, ShieldCheck, TriangleAlert } from "lucide-react";
+import { KeyRound, MonitorSmartphone, ShieldAlert, ShieldCheck, TriangleAlert } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { Button } from "@/components/ui/button";
@@ -32,11 +32,18 @@ function AdminSessionsPanel({ copy, language }: { copy: SecurityOperationsCopy; 
   const [message, setMessage] = useState("");
   const revokeOthers = trpc.adminSecurity.revokeOtherSessions.useMutation({
     onSuccess: outcome => {
-      setMessage(`${copy.revoked}${copy.countSeparator}${outcome.revoked}${outcome.notRevoked ? `. ${copy.notRevoked}` : ""}`);
+      const done = [
+        ...(outcome.clerkUnavailable ? [] : [`${copy.revoked}${copy.countSeparator}${outcome.revoked}`]),
+        `${copy.securityCodesRevoked}${copy.countSeparator}${outcome.securitySessions}`,
+      ].join(" · ");
+      const advice = outcome.clerkUnavailable ? copy.clerkUnavailable : outcome.notRevoked ? copy.notRevoked : "";
+      setMessage(advice ? `${done}. ${advice}` : done);
       void sessions.refetch();
     },
     onError: () => setMessage(copy.revokeError),
   });
+  // The button stays offered when Clerk lists no other device, or cannot be
+  // read: it also cancels the security codes other devices still hold.
   const others = (sessions.data ?? []).filter(session => !session.current);
 
   return <section aria-labelledby="admin-sessions-title" className="rounded-2xl border border-border bg-card/70 p-5 sm:p-6">
@@ -45,7 +52,7 @@ function AdminSessionsPanel({ copy, language }: { copy: SecurityOperationsCopy; 
         <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-cyan-400/10 text-cyan-300"><MonitorSmartphone className="h-5 w-5" aria-hidden="true" /></span>
         <div><h3 id="admin-sessions-title" className="font-display text-lg font-bold">{copy.sessionsTitle}</h3><p className="mt-1 text-sm text-muted-foreground">{copy.sessionsSubtitle}</p></div>
       </div>
-      <Button variant="outline" size="sm" className="shrink-0" onClick={() => { setMessage(""); revokeOthers.mutate(); }} disabled={revokeOthers.isPending || others.length === 0}>{revokeOthers.isPending ? copy.revoking : copy.revokeOthers}</Button>
+      <Button variant="outline" size="sm" className="shrink-0" onClick={() => { setMessage(""); revokeOthers.mutate(); }} disabled={revokeOthers.isPending}>{revokeOthers.isPending ? copy.revoking : copy.revokeOthers}</Button>
     </div>
     <div className="mt-4 space-y-2">
       {sessions.isLoading && <PublicContentSkeleton cards={1} label={copy.sessionsLoading} />}
@@ -64,20 +71,64 @@ function AdminSessionsPanel({ copy, language }: { copy: SecurityOperationsCopy; 
   </section>;
 }
 
+/**
+ * ADM-14: the administrator's backup codes, for a lost mailbox: how many are
+ * left, and ten new ones shown this once, the earlier ones then void.
+ */
+function BackupCodesPanel({ copy, language }: { copy: SecurityOperationsCopy; language: SecurityEventLabelLanguage }) {
+  const status = trpc.adminSecurity.backupCodes.useQuery();
+  const [codes, setCodes] = useState<string[]>([]);
+  const [message, setMessage] = useState("");
+  const regenerate = trpc.adminSecurity.regenerateBackupCodes.useMutation({
+    onSuccess: result => { setCodes(result.codes); void status.refetch(); },
+    onError: () => setMessage(copy.backupGenerateError),
+  });
+  const hasCodes = Boolean(status.data?.generatedAt);
+  const generate = () => {
+    if (hasCodes && !window.confirm(copy.backupReplaceConfirm)) return;
+    setMessage("");
+    regenerate.mutate();
+  };
+
+  return <section aria-labelledby="admin-backup-codes-title" className="rounded-2xl border border-border bg-card/70 p-5 sm:p-6">
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex gap-3">
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-cyan-400/10 text-cyan-300"><KeyRound className="h-5 w-5" aria-hidden="true" /></span>
+        <div><h3 id="admin-backup-codes-title" className="font-display text-lg font-bold">{copy.backupTitle}</h3><p className="mt-1 text-sm text-muted-foreground">{copy.backupSubtitle}</p></div>
+      </div>
+      <Button variant="outline" size="sm" className="shrink-0" onClick={generate} disabled={regenerate.isPending || !status.data}>{regenerate.isPending ? copy.backupGenerating : hasCodes ? copy.backupRegenerate : copy.backupGenerate}</Button>
+    </div>
+    <div className="mt-4 space-y-3 text-sm">
+      {status.isLoading && <PublicContentSkeleton cards={1} label={copy.backupLoading} />}
+      {status.error && <p className="text-red-700 dark:text-red-200">{copy.backupError}</p>}
+      {status.data && <p className="text-muted-foreground">{status.data.generatedAt ? `${copy.backupRemaining}${copy.countSeparator}${status.data.remaining} / 10 · ${copy.backupGeneratedAt} ${formatAdminDateTime(status.data.generatedAt, language)}` : copy.backupNone}</p>}
+      {codes.length > 0 && <div className="rounded-lg border border-amber-400/40 bg-amber-400/5 p-4">
+        <p className="font-medium text-foreground">{copy.backupShownOnce}</p>
+        <ol aria-label={copy.backupCodesLabel} className="mt-3 grid grid-cols-1 gap-2 font-mono text-base tracking-wider sm:grid-cols-2">{codes.map(code => <li key={code} translate="no">{code}</li>)}</ol>
+        <Button variant="outline" size="sm" className="mt-3" onClick={() => setCodes([])}>{copy.backupHide}</Button>
+      </div>}
+    </div>
+    <p role="status" className={message ? "mt-3 text-sm text-red-700 dark:text-red-200" : "sr-only"}>{message}</p>
+  </section>;
+}
+
 export default function SecurityOperationsTab() {
   const { language } = useLanguage();
   const labelLanguage = (language in securityOperationsCopy ? language : "fr") as SecurityEventLabelLanguage;
   const copy = securityOperationsCopy[labelLanguage];
   const [filters, setFilters] = useState<SecurityLogFilters>({ adminOnly: false, warningsAndAbove: false, includeCandidateSignIns: false });
-  // The first event of each page shown before this one: the way back to the newer events.
+  // The cursor of each page after the first (the last event of the page before it), newest first: the way back to the newer events.
   const [pageStarts, setPageStarts] = useState<number[]>([]);
   const beforeId = pageStarts.at(-1);
   const events = trpc.adminSecurity.events.useQuery({ limit: SECURITY_LOG_PAGE_SIZE + 1, ...filters, ...(beforeId ? { beforeId } : {}) }, { refetchInterval: 30_000 });
+  // The header's count is the whole journal's, whatever the filters and the page below show.
+  const recentHigh = trpc.adminSecurity.recentHighEvents.useQuery(undefined, { refetchInterval: 30_000 });
+  const highCount = recentHigh.data?.count ?? 0;
 
   const rows = (events.data ?? []).slice(0, SECURITY_LOG_PAGE_SIZE);
   const hasOlder = (events.data?.length ?? 0) > SECURITY_LOG_PAGE_SIZE;
-  const highCount = rows.filter(event => event.severity === "high" || event.severity === "critical").length;
-  const filtered = FILTERS.some(key => key !== "includeCandidateSignIns" && filters[key]);
+  // Hiding the successful candidate sign-ins, as by default, narrows the journal too: an empty page is not an empty journal.
+  const filtered = filters.adminOnly || filters.warningsAndAbove || !filters.includeCandidateSignIns;
   const toggle = (key: (typeof FILTERS)[number]) => { setFilters(current => ({ ...current, [key]: !current[key] })); setPageStarts([]); };
 
   return <section className="space-y-6">
@@ -87,10 +138,11 @@ export default function SecurityOperationsTab() {
           <span className="grid h-11 w-11 place-items-center rounded-xl bg-cyan-400/10 text-cyan-300"><ShieldAlert className="h-5 w-5" /></span>
           <div><h2 className="font-display text-xl font-bold">{copy.title}</h2><p className="mt-1 text-sm text-muted-foreground">{copy.subtitle}</p></div>
         </div>
-        {events.data && <div className={`rounded-xl border px-3 py-2 text-sm font-semibold ${ADMIN_BADGE_TONES[highCount ? "alert" : "success"]}`}>{highCount ? `${highCount} ${copy.highEvents}` : copy.noHighEvents}</div>}
+        {recentHigh.data && <div className={`rounded-xl border px-3 py-2 text-sm font-semibold ${ADMIN_BADGE_TONES[highCount ? "alert" : "success"]}`}>{highCount ? `${highCount} ${copy.highEvents}` : copy.noHighEvents}</div>}
       </div>
     </div>
     <AdminSessionsPanel copy={copy} language={labelLanguage} />
+    <BackupCodesPanel copy={copy} language={labelLanguage} />
     {/* The filters stay on screen (and keep the focus) while the journal loads. */}
     <div role="group" aria-label={copy.filters} className="flex flex-wrap gap-2">
       {FILTERS.map(key => <button key={key} type="button" aria-pressed={filters[key]} onClick={() => toggle(key)} className={filterButtonClass(filters[key])}>{copy[key]}</button>)}

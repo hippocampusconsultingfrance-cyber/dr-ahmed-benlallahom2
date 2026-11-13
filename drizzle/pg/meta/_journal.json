@@ -36,6 +36,13 @@
       "when": 1793035571045,
       "tag": "0004_integrity_constraints",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794596810496,
+      "tag": "0005_admin_mfa_backup_codes",
+      "breakpoints": true
     }
   ]
 }

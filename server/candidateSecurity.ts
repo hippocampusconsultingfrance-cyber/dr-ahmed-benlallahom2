@@ -95,6 +95,7 @@ function consecutiveFailedLogins(input: SecurityAlertInput): number | null {
  */
 const SECURITY_ALERT_ADVICE: Record<string, string> = {
   admin_mfa_verify: "Ces codes ont été saisis après une connexion réussie à votre compte administrateur : si ce n’est pas vous, votre mot de passe est connu. Changez-le dans Clerk, puis, dans l’onglet « Sécurité », cliquez sur « Révoquer toutes les autres sessions ».",
+  admin_mfa_backup_code: "Ces codes de secours ont été saisis après une connexion réussie à votre compte administrateur : si ce n’est pas vous, votre mot de passe est connu. Changez-le dans Clerk, puis, dans l’onglet « Sécurité », cliquez sur « Révoquer toutes les autres sessions » et générez de nouveaux codes de secours.",
   candidate_login: "Quelqu’un essaie des mots de passe sur ce compte candidat ; le site freine ces essais de lui-même (blocage temporaire, puis vérification anti-robot). Rien à faire si cela cesse ; sinon, consultez le journal de sécurité.",
   candidate_login_challenge_enabled: "La vérification anti-robot est désormais demandée pour se connecter à ce compte candidat. Rien à faire si les essais cessent ; sinon, consultez le journal de sécurité.",
   resend_quota_exceeded: "Plus aucun email ne part, ni les codes de sécurité de l’administration ni les emails après paiement : vérifiez le quota dans Resend. Une fois rétabli : « Renvoyer » sur les rendez-vous signalés (onglet « Réservations »), « Relancer les échecs » sur une campagne (onglet « Mailing »).",

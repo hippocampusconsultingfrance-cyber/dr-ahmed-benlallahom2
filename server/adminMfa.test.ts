@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { adminMfaChallenges, adminMfaSessions } from "../drizzle/schema";
+import { adminMfaBackupCodes, adminMfaChallenges, adminMfaSessions } from "../drizzle/schema";
 import { createMemoryPg, type MemoryPg } from "./testing/memoryPgProxy";
 
 const state = vi.hoisted(() => ({
@@ -39,7 +39,7 @@ vi.mock("./_core/notifications", () => ({
   }),
 }));
 
-import { ADMIN_MFA_COOKIE, ADMIN_MFA_RATE_LIMITS, AdminMfaRateLimitError, isAdminMfaVerified, issueAdminMfaChallenge, revokeCurrentAdminMfaSession, revokeOtherAdminMfaSessions, verifyAdminMfaChallenge } from "./adminMfa";
+import { ADMIN_MFA_BACKUP_CODE_COUNT, ADMIN_MFA_COOKIE, ADMIN_MFA_RATE_LIMITS, AdminMfaRateLimitError, adminMfaBackupCodesStatus, isAdminMfaVerified, issueAdminMfaChallenge, regenerateAdminMfaBackupCodes, revokeCurrentAdminMfaSession, revokeOtherAdminMfaSessions, verifyAdminMfaBackupCode, verifyAdminMfaChallenge } from "./adminMfa";
 
 const OPEN_ID = "user_owner";
 let memory: MemoryPg;
@@ -78,7 +78,7 @@ function wrongCode(code: string) {
 describe("double authentification administrateur", () => {
   beforeEach(() => {
     process.env.CANDIDATE_AUTH_PEPPER ||= "test-pepper-for-admin-mfa-tests-0123456789";
-    memory = createMemoryPg([adminMfaChallenges, adminMfaSessions]);
+    memory = createMemoryPg([adminMfaChallenges, adminMfaSessions, adminMfaBackupCodes]);
     state.memory = memory;
     state.sentCodes = [];
     state.failNextEmail = false;
@@ -167,16 +167,83 @@ describe("double authentification administrateur", () => {
     const thisBrowser = await cookieOf(`198.51.100.${ipCounter}`);
     const lostPhone = await cookieOf(`203.0.113.${ipCounter}`);
     const oldLaptop = await cookieOf(`192.0.2.${ipCounter}`);
-    // Another administrator's proof is not this account's to close.
-    memory.seed(adminMfaSessions, [{ open_id: "user_other_admin", token_hash: "f".repeat(64), expires_at: new Date(Date.now() + 60_000) }]);
+    // Another administrator's proof is not this account's to close, and an expired one is not counted.
+    memory.seed(adminMfaSessions, [
+      { open_id: "user_other_admin", token_hash: "f".repeat(64), expires_at: new Date(Date.now() + 60_000) },
+      { open_id: OPEN_ID, token_hash: "e".repeat(64), expires_at: new Date(Date.now() - 60_000) },
+    ]);
 
     await expect(revokeOtherAdminMfaSessions({ openId: OPEN_ID, req: request("198.51.100.1", thisBrowser) })).resolves.toBe(2);
+    expect(memory.rows(adminMfaSessions).find(row => row.token_hash === "e".repeat(64))!.revoked_at).toBeNull();
     expect(await isAdminMfaVerified(request("198.51.100.1", thisBrowser), OPEN_ID)).toBe(true);
     expect(await isAdminMfaVerified(request("203.0.113.1", lostPhone), OPEN_ID)).toBe(false);
     expect(await isAdminMfaVerified(request("192.0.2.1", oldLaptop), OPEN_ID)).toBe(false);
     expect(memory.rows(adminMfaSessions).find(row => row.open_id === "user_other_admin")!.revoked_at).toBeNull();
     // Nothing more to close the second time.
     await expect(revokeOtherAdminMfaSessions({ openId: OPEN_ID, req: request("198.51.100.1", thisBrowser) })).resolves.toBe(0);
+  });
+
+  describe("codes de secours (ADM-14)", () => {
+    async function useBackupCode(code: string, ip: string, openId = OPEN_ID) {
+      const res = response();
+      const outcome = await verifyAdminMfaBackupCode({ openId, code, req: request(ip), res });
+      return { res, outcome };
+    }
+
+    it("en génère dix, lisibles et tous différents, dont seule l’empreinte est gardée", async () => {
+      await expect(adminMfaBackupCodesStatus(OPEN_ID)).resolves.toEqual({ remaining: 0, generatedAt: null });
+      const codes = await regenerateAdminMfaBackupCodes({ openId: OPEN_ID, req: request("198.51.100.1") });
+      expect(codes).toHaveLength(ADMIN_MFA_BACKUP_CODE_COUNT);
+      expect(new Set(codes).size).toBe(ADMIN_MFA_BACKUP_CODE_COUNT);
+      for (const code of codes) expect(code).toMatch(/^[2-9A-HJKMNP-TV-Z]{5}-[2-9A-HJKMNP-TV-Z]{5}$/);
+      const stored = JSON.stringify(memory.rows(adminMfaBackupCodes));
+      for (const code of codes) {
+        expect(stored).not.toContain(code);
+        expect(stored).not.toContain(code.replace("-", ""));
+      }
+      expect(await adminMfaBackupCodesStatus(OPEN_ID)).toEqual({ remaining: 10, generatedAt: expect.any(Date) });
+      expect(state.securityEvents).toContainEqual(expect.objectContaining({ category: "admin_mfa_backup_codes_regenerated", outcome: "allowed", severity: "warning", actorReference: OPEN_ID }));
+    });
+
+    it("un code de secours ouvre l’administration une seule fois, saisi en minuscules ou sans tiret", async () => {
+      const ip = `198.51.100.${ipCounter}`;
+      const [first, second] = await regenerateAdminMfaBackupCodes({ openId: OPEN_ID, req: request(ip) });
+      const { res, outcome } = await useBackupCode(` ${first!.toLowerCase().replace("-", " ")} `, ip);
+      expect(outcome).toEqual({ remaining: 9 });
+      const cookie = `${ADMIN_MFA_COOKIE}=${res.cookies.get(ADMIN_MFA_COOKIE)!.value}`;
+      expect(await isAdminMfaVerified(request(ip, cookie), OPEN_ID)).toBe(true);
+      expect(state.securityEvents).toContainEqual(expect.objectContaining({ category: "admin_mfa_backup_code", outcome: "allowed", severity: "warning", metadata: { remaining: 9 } }));
+
+      await expect(useBackupCode(first!, ip)).rejects.toThrow("admin_mfa_code_invalid");
+      expect(state.securityEvents.at(-1)).toMatchObject({ category: "admin_mfa_backup_code", outcome: "failed", severity: "high" });
+      await expect(useBackupCode(second!.replace("-", ""), ip)).resolves.toMatchObject({ outcome: { remaining: 8 } });
+      expect(memory.rows(adminMfaSessions)).toHaveLength(2);
+    });
+
+    it("de nouveaux codes remplacent les anciens, et ceux d’un autre compte ne servent pas", async () => {
+      const ip = `198.51.100.${ipCounter}`;
+      const [old] = await regenerateAdminMfaBackupCodes({ openId: OPEN_ID, req: request(ip) });
+      const [fresh] = await regenerateAdminMfaBackupCodes({ openId: OPEN_ID, req: request(ip) });
+      const [othersCode] = await regenerateAdminMfaBackupCodes({ openId: "user_other_admin", req: request(ip) });
+      expect(memory.rows(adminMfaBackupCodes).filter(row => row.open_id === OPEN_ID)).toHaveLength(10);
+
+      await expect(useBackupCode(old!, ip)).rejects.toThrow("admin_mfa_code_invalid");
+      await expect(useBackupCode(othersCode!, ip)).rejects.toThrow("admin_mfa_code_invalid");
+      await expect(useBackupCode(fresh!, ip)).resolves.toMatchObject({ outcome: { remaining: 9 } });
+      expect(await adminMfaBackupCodesStatus("user_other_admin")).toMatchObject({ remaining: 10 });
+    });
+
+    it("compte ses essais avec ceux du code envoyé par email", async () => {
+      const ip = `198.51.100.${ipCounter}`;
+      const [code] = await regenerateAdminMfaBackupCodes({ openId: OPEN_ID, req: request(ip) });
+      const emailed = await begin(ip);
+      for (let attempt = 0; attempt < ADMIN_MFA_RATE_LIMITS.verify.maxAttempts / 2; attempt += 1) {
+        await expect(verify(wrongCode(emailed), ip)).rejects.toThrow("admin_mfa_code_invalid");
+        await expect(useBackupCode("AAAAA-AAAAA", ip)).rejects.toThrow("admin_mfa_code_invalid");
+      }
+      await expect(useBackupCode(code!, ip)).rejects.toBeInstanceOf(AdminMfaRateLimitError);
+      expect(memory.rows(adminMfaBackupCodes).every(row => row.used_at === null)).toBe(true);
+    });
   });
 
   it("la déconnexion sans cookie efface quand même le cookie et ne touche pas la base", async () => {
