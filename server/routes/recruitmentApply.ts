@@ -17,6 +17,7 @@ import { emailText, multiLineText, refusesTextInputCharacters, singleLineText, T
 import { adminLink } from "../adminLinks";
 import { asciiFileName, displayFileName } from "../candidateDocumentValidation";
 import { countryCodeOf, countryLabel } from "../../client/src/lib/countrySubmission";
+import { recruitmentPathway, VVIP_PATHWAY_LABEL } from "../../shared/recruitmentPathway";
 import { PUBLIC_APP_ORIGIN, safeErrorName } from "./routeHelpers";
 
 function safeErrorMetadata(error: unknown) {
@@ -36,8 +37,6 @@ function safeErrorMetadata(error: unknown) {
 const RECRUITMENT_MAX_FILE_SIZE = RECRUITMENT_CV_MAX_BYTES;
 const RECRUITMENT_MAX_TARGET_COUNTRIES = 18;
 const RECRUITMENT_ALLOWED_MIME_TYPES = new Set<string>(RECRUITMENT_CV_ACCEPTED_MIME_TYPES);
-/** Start of the specialty of a VVIP / offshore application (buildVvipApplicationFormData), which marks its pathway. */
-const VVIP_SPECIALTY_PREFIX = "[VVIP / Offshore] ";
 
 const recruitmentUpload = multer({
   storage: multer.memoryStorage(),
@@ -330,13 +329,13 @@ export function registerRecruitmentApplyRoute(app: Express) {
         const candidateName = `${parsed.data.firstName} ${parsed.data.lastName}`;
         // REC-11: a VVIP application gives its pathway and its environments, not the prefix that marks it in
         // the specialty, nor its environments as target countries; the diploma country is named in French.
-        const vvip = parsed.data.specialty.startsWith(VVIP_SPECIALTY_PREFIX);
+        const pathway = recruitmentPathway(parsed.data.specialty);
         const ownerNotificationLines = [
           `**Référence:** ${trackingId}`,
           `**Email:** ${parsed.data.email}`,
-          ...(vvip ? ["**Parcours:** VVIP & Offshore"] : []),
-          `**Spécialité:** ${vvip ? parsed.data.specialty.slice(VVIP_SPECIALTY_PREFIX.length) : parsed.data.specialty}`,
-          ...(vvip && parsed.data.environments.length ? [`**Environnements:** ${parsed.data.environments.join(", ")}`] : []),
+          ...(pathway.vvip ? [`**Parcours:** ${VVIP_PATHWAY_LABEL}`] : []),
+          `**Spécialité:** ${pathway.specialty}`,
+          ...(pathway.vvip && parsed.data.environments.length ? [`**Environnements:** ${parsed.data.environments.join(", ")}`] : []),
           `**Pays du diplôme:** ${countryLabel(diplomaCountry, "fr")}`,
           `**Pays ciblés:** ${parsed.data.targetCountries.join(", ")}`,
           "**CV:** reçu et stocké de manière privée",

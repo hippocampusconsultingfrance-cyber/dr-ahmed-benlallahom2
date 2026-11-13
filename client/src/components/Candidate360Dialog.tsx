@@ -5,6 +5,7 @@ import type { UserLanguage } from "@/contexts/userPreferences";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { recruitmentApplicationStatusLabel } from "@shared/recruitmentApplicationStatuses";
+import { recruitmentPathway, VVIP_PATHWAY_LABEL } from "@shared/recruitmentPathway";
 import { formatAdminDateTime } from "./adminDateFormat";
 import { buildCandidateTimeline, type CandidateTimelineEvent } from "./candidate360Timeline";
 import CertificationReview from "./CertificationReview";
@@ -61,6 +62,8 @@ export default function Candidate360Dialog({ applicationId, onOpenChange, certif
     onError: updateError => toast.error(updateError.message),
   });
   const requestedDocuments = timeline.filter(event => event.detail?.startsWith("Pièces ou informations demandées :"));
+  // REC-11: the pathway named, not the prefix that marks it in the specialty.
+  const pathway = detail ? recruitmentPathway(detail.candidate.specialty) : null;
 
   return (
     <Dialog open={applicationId !== null} onOpenChange={onOpenChange}>
@@ -73,7 +76,7 @@ export default function Candidate360Dialog({ applicationId, onOpenChange, certif
           // EXPL-02: what the candidate typed, the notes and the requests made wrap inside the sheet.
           <div className="min-w-0 space-y-6 py-2 wrap-anywhere">
             <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"><div><h3 className="text-lg font-semibold text-foreground">{detail.candidate.firstName} {detail.candidate.lastName}</h3><p className="text-sm text-muted-foreground">{detail.candidate.specialty} · {detail.candidate.trackingId}</p></div><span className="rounded-full border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground">Statut : {recruitmentApplicationStatusLabel(detail.candidate.status)}</span></div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"><div><h3 className="text-lg font-semibold text-foreground">{detail.candidate.firstName} {detail.candidate.lastName}</h3><p className="text-sm text-muted-foreground">{pathway?.vvip ? <span className="mr-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">{VVIP_PATHWAY_LABEL}</span> : null}{pathway?.specialty} · {detail.candidate.trackingId}</p></div><span className="rounded-full border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground">Statut : {recruitmentApplicationStatusLabel(detail.candidate.status)}</span></div>
               <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3"><div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Candidature reçue</p><p className="mt-1 text-foreground">{formatDate(detail.candidate.createdAt)}</p></div><div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Dernière réponse candidat</p><p className="mt-1 text-foreground">{formatDate(detail.candidate.lastCandidateResponseAt)}</p><Button size="sm" variant="outline" className="mt-2" disabled={markResponse.isPending} onClick={() => markResponse.mutate({ id: detail.candidate.id })}><MessageSquareReply className="mr-2 h-4 w-4" /> Le candidat a répondu</Button></div><div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Prochain suivi</p><p className="mt-1 text-foreground">{upcomingFollowUp ? formatDate(upcomingFollowUp.dueAt) : "Aucun suivi programmé"}</p></div></div>
             </div>
 

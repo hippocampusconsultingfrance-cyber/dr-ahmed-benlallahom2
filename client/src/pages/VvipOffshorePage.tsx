@@ -1,5 +1,6 @@
 import { FormEvent, useMemo, useRef, useState } from "react";
 import { isAcceptedRecruitmentCvFile, RECRUITMENT_CV_ACCEPT_ATTRIBUTE } from "@shared/recruitmentCvLimits";
+import { VVIP_SPECIALTY_PREFIX } from "@shared/recruitmentPathway";
 import { cleanTextInput } from "@shared/textInputCleaning";
 import { CheckCircle2, Clock3, FileUp, Loader2, ShieldCheck, UserCheck, Award, Compass, Lock } from "lucide-react";
 import { Link } from "wouter";
@@ -473,7 +474,7 @@ export function buildVvipApplicationFormData({ form, cv, specialty, diplomaCount
   body.append("email", form.email);
   body.append("phone", form.phone);
   const environmentSummary = form.environments.join(", ");
-  body.append("specialty", `[VVIP / Offshore] ${specialty}`);
+  body.append("specialty", `${VVIP_SPECIALTY_PREFIX}${specialty}`);
   body.append("diplomaCountry", diplomaCountry);
   body.append("targetCountries", JSON.stringify(submittedTargetCountries(form.targetCountries, form.otherTargetCountry)));
   body.append("environments", JSON.stringify(form.environments));
