@@ -16,7 +16,9 @@ import { STATIC_ROUTE_METADATA } from "@shared/routeMetadata";
  * données vides, sans serveur ni base. Ne tourne que si un Chromium est disponible :
  *   CHROMIUM=/chemin/vers/chrome pnpm vitest run client/src/publicPages.browser.test.ts
  * sinon le Chromium installé par Playwright, puis celui du système (/usr/bin/chromium, ou
- * /usr/bin/google-chrome, présent sur les machines de la CI).
+ * /usr/bin/google-chrome, présent sur les machines de la CI). Sans Chromium, le fichier n'est
+ * sauté que pour un `pnpm test` sur un poste : en CI (CI) et pour `pnpm test:visual`
+ * (REQUIRE_CHROMIUM), il échoue plutôt que de passer sans avoir rien vérifié.
  */
 function findChromium() {
   if (process.env.CHROMIUM) return process.env.CHROMIUM;
@@ -30,6 +32,7 @@ function findChromium() {
 }
 
 const executablePath = findChromium();
+const chromiumRequired = Boolean(process.env.CI?.trim() || process.env.REQUIRE_CHROMIUM?.trim());
 const root = path.resolve(import.meta.dirname, "../..");
 
 type Theme = "light" | "dark";
@@ -45,6 +48,10 @@ const fakeTurnstileScript = (token: string | null) => `window.turnstile = {
   remove: () => {},
   reset: () => {},
 };`;
+
+it.runIf(chromiumRequired && !executablePath)("trouve un Chromium, sans lequel aucune page publique n'est vérifiée", () => {
+  expect.fail("Aucun Chromium trouvé : donnez son chemin par CHROMIUM, ou installez celui de Playwright (pnpm exec playwright install chromium).");
+});
 
 describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
   let server: ViteDevServer;
@@ -965,9 +972,12 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
    * A11Y-22 : axe-core sur les pages réellement affichées, critères WCAG 2.2 A et AA. Une
    * violation « serious » ou « critical » fait échouer le test ; les « moderate » et « minor »
    * relèvent de la recette manuelle (EXTERNAL_VALIDATION_REGISTER.md). Aucune règle n'est
-   * écartée : seul un élément nommé ci-dessous l'est, pour une règle, avec sa raison.
+   * écartée : seul un élément nommé ci-dessous l'est, pour une règle, avec sa raison. Les pages
+   * s'ouvrent avec un choix de cookies enregistré ; l'accueil l'est aussi sans, avec le bandeau
+   * cookies de la première visite.
    */
   const AXE_ROUTES = ["/", "/booking", "/questions-anesthesie", "/recruitment", "/recruitment/standard", "/employers", "/faq", "/gdpr", "/legal", "/candidate/access"];
+  const AXE_SCREENS = [...AXE_ROUTES.map((route) => ({ route, consent: true })), { route: "/", consent: false }];
   const AXE_EXCEPTIONS = [
     {
       rule: "label-content-name-mismatch",
@@ -981,8 +991,8 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
     const excepted = new Set<string>();
     for (const theme of ["light", "dark"] as const) {
       for (const [width, height, touch] of [[1366, 900, false], [390, 844, true]] as const) {
-        for (const route of AXE_ROUTES) {
-          const page = await open(route, { width, height, theme, touch, consent: true });
+        for (const { route, consent } of AXE_SCREENS) {
+          const page = await open(route, { width, height, theme, touch, consent });
           const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]).analyze();
           for (const violation of results.violations.filter((found) => found.impact === "serious" || found.impact === "critical")) {
             const nodes = violation.nodes.filter((node) => {
@@ -990,7 +1000,7 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
               if (exception) excepted.add(`${exception.rule} ${exception.target}`);
               return !exception;
             });
-            if (nodes.length) violations.push(`${route} (${theme}, ${width} px) ${violation.id} : ${nodes.slice(0, 3).map((node) => node.target.join(" ")).join(" | ")}`);
+            if (nodes.length) violations.push(`${route}${consent ? "" : " (bandeau cookies)"} (${theme}, ${width} px) ${violation.id} : ${nodes.slice(0, 3).map((node) => node.target.join(" ")).join(" | ")}`);
           }
           await page.context().close();
         }

@@ -27,17 +27,27 @@ export function contrastRatio(foreground: Oklch, background: Oklch): number {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
+/** A colour as the browser paints it: sRGB channels from 0 to 1. */
+export type Srgb = readonly [red: number, green: number, blue: number];
+
 const encodeSrgb = (channel: number) => (channel <= 0.0031308 ? 12.92 * channel : 1.055 * channel ** (1 / 2.4) - 0.055);
 const decodeSrgb = (channel: number) => (channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
 
+export const oklchToSrgb = (color: Oklch): Srgb => oklchToLinearRgb(color).map(encodeSrgb) as unknown as Srgb;
+
+/** `top` at opacity `alpha` (bg-cyan-950/15: 0.15) laid over `under`, blended as the browser does, in sRGB. */
+export const blendSrgb = (top: Srgb, alpha: number, under: Srgb): Srgb => top.map((channel, index) => channel * alpha + under[index]! * (1 - alpha)) as unknown as Srgb;
+
+const srgbLuminance = ([red, green, blue]: Srgb) => 0.2126 * decodeSrgb(red) + 0.7152 * decodeSrgb(green) + 0.0722 * decodeSrgb(blue);
+
+export function srgbContrastRatio(foreground: Srgb, background: Srgb): number {
+  const [lighter, darker] = [srgbLuminance(foreground), srgbLuminance(background)].sort((a, b) => b - a);
+  return (lighter! + 0.05) / (darker! + 0.05);
+}
+
 /** Contrast of a text on a tint of opacity `alpha` (bg-cyan-950/15: 0.15) laid over a surface, blended as the browser does, in sRGB. */
 export function contrastOnTint(text: Oklch, tint: Oklch, alpha: number, surface: Oklch): number {
-  const over = oklchToLinearRgb(tint).map(encodeSrgb);
-  const under = oklchToLinearRgb(surface).map(encodeSrgb);
-  const [red, green, blue] = over.map((channel, index) => decodeSrgb(channel * alpha + under[index]! * (1 - alpha)));
-  const background = 0.2126 * red! + 0.7152 * green! + 0.0722 * blue!;
-  const [lighter, darker] = [relativeLuminance(text), background].sort((a, b) => b - a);
-  return (lighter + 0.05) / (darker + 0.05);
+  return srgbContrastRatio(oklchToSrgb(text), blendSrgb(oklchToSrgb(tint), alpha, oklchToSrgb(surface)));
 }
 
 export const contrastTokens = {
