@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { adminMfaBackupCodes, adminMfaSessions, candidateSecurityRateLimits, securityEvents } from "../../drizzle/schema";
+import { securityEvents } from "../../drizzle/schema";
 import { createMemoryPg, type MemoryPg } from "../testing/memoryPgProxy";
 import type { TrpcContext } from "../_core/context";
 
 // ADM-15 — le journal de sécurité filtré et paginé sur la base ; ADM-14 — les
 // sessions Clerk de l’administrateur, lues et révoquées par des doubles locaux
 // de l’API Clerk (aucun appel réel), avec ses autres preuves de double
-// authentification, et ses codes de secours.
+// authentification.
 
 type ClerkSession = { id: string; lastActiveAt: number; latestActivity?: Record<string, unknown> };
 
@@ -53,12 +53,12 @@ const { adminSecurityRouter } = await import("./adminSecurity");
 const OWNER = "user_owner";
 let memory: MemoryPg;
 
-function caller(options: { role?: "admin" | "user"; mfaVerified?: boolean; cookie?: ReturnType<typeof vi.fn> } = {}) {
+function caller(options: { role?: "admin" | "user"; mfaVerified?: boolean } = {}) {
   return adminSecurityRouter.createCaller({
     user: { openId: OWNER, role: options.role ?? "admin" } as TrpcContext["user"],
     mfaVerified: options.mfaVerified ?? true,
     req: { protocol: "https", headers: { "x-forwarded-for": "198.51.100.7", cookie: "admin_mfa_session=this-browser" } } as unknown as TrpcContext["req"],
-    res: { cookie: options.cookie ?? vi.fn(), clearCookie: vi.fn() } as unknown as TrpcContext["res"],
+    res: { cookie: vi.fn(), clearCookie: vi.fn() } as unknown as TrpcContext["res"],
   });
 }
 
@@ -67,8 +67,7 @@ function seedEvents(rows: Array<{ actor: string; category: string; outcome: stri
 }
 
 beforeEach(() => {
-  process.env.CANDIDATE_AUTH_PEPPER ||= "test-pepper-for-admin-security-router-0123456789";
-  memory = createMemoryPg([securityEvents, adminMfaBackupCodes, adminMfaSessions, candidateSecurityRateLimits]);
+  memory = createMemoryPg([securityEvents]);
   state.memory = memory;
   state.currentSessionId = "sess_current";
   state.sessions = [];
@@ -200,42 +199,5 @@ describe("ADM-14 — sessions administrateur", () => {
     expect(state.listed).toEqual([]);
     expect(state.revoked).toEqual([]);
     expect(state.otherMfaRevoked).toEqual([]);
-  });
-});
-
-describe("ADM-14 — codes de secours", () => {
-  it("en génère dix, montrés une fois, dont le nombre restant se lit ensuite", async () => {
-    await expect(caller().backupCodes()).resolves.toEqual({ remaining: 0, generatedAt: null });
-    const { codes } = await caller().regenerateBackupCodes();
-    expect(codes).toHaveLength(10);
-    await expect(caller().backupCodes()).resolves.toEqual({ remaining: 10, generatedAt: expect.any(Date) });
-    expect(JSON.stringify(await caller().backupCodes())).not.toContain(codes[0]!);
-  });
-
-  it("ouvre l’administration avec un code de secours, avant la double authentification, une seule fois", async () => {
-    const { codes } = await caller().regenerateBackupCodes();
-    const cookie = vi.fn();
-    await expect(caller({ mfaVerified: false, cookie }).verifyBackupCode({ code: codes[3]! })).resolves.toEqual({ remaining: 9 });
-    expect(cookie).toHaveBeenCalledWith("admin_mfa_session", expect.any(String), expect.objectContaining({ httpOnly: true }));
-    expect(memory.rows(adminMfaSessions)).toHaveLength(1);
-    await expect(caller({ mfaVerified: false }).verifyBackupCode({ code: codes[3]! })).rejects.toMatchObject({ code: "BAD_REQUEST", message: "Le code de secours est invalide ou a déjà servi." });
-    expect(memory.rows(securityEvents).map(row => `${row.category}:${row.security_event_outcome}:${row.security_event_severity}`)).toEqual([
-      "admin_mfa_backup_codes_regenerated:allowed:warning",
-      "admin_mfa_backup_code:allowed:warning",
-      "admin_mfa_backup_code:failed:high",
-    ]);
-  });
-
-  it("ne fait pas passer une panne pour un code erroné", async () => {
-    memory.failNext(/update "admin_mfa_backup_codes"/i);
-    await expect(caller({ mfaVerified: false }).verifyBackupCode({ code: "AAAAA-AAAAA" })).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR", message: "Le code de secours n’a pas pu être vérifié. Réessayez dans quelques instants." });
-    expect(memory.rows(adminMfaSessions)).toEqual([]);
-  });
-
-  it("ne génère ni ne lit les codes sans double authentification, et refuse le compte non administrateur", async () => {
-    await expect(caller({ mfaVerified: false }).regenerateBackupCodes()).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(caller({ mfaVerified: false }).backupCodes()).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(caller({ role: "user", mfaVerified: false }).verifyBackupCode({ code: "AAAAA-AAAAA" })).rejects.toMatchObject({ code: "FORBIDDEN" });
-    expect(memory.rows(adminMfaBackupCodes)).toEqual([]);
   });
 });

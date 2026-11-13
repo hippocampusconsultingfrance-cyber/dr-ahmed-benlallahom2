@@ -880,18 +880,3 @@ export const adminMfaSessions = mysqlTable("admin_mfa_sessions", {
 }, table => ({
   openIdExpiryIdx: index("admin_mfa_session_openid_expiry_idx").on(table.openId, table.expiresAt),
 }));
-
-/**
- * Single-use backup codes of the administrator's second factor (ADM-14), for
- * a lost mailbox: only their hash is kept, and the ten of an account are
- * replaced together. Not purged: they last until replaced.
- */
-export const adminMfaBackupCodes = mysqlTable("admin_mfa_backup_codes", {
-  id: serial("id").primaryKey(),
-  openId: varchar("open_id", { length: 128 }).notNull(),
-  codeHash: varchar("code_hash", { length: 128 }).notNull().unique(),
-  usedAt: timestamp("used_at"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-}, table => ({
-  openIdIdx: index("admin_mfa_backup_code_openid_idx").on(table.openId),
-}));

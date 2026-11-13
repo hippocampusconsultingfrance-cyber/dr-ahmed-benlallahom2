@@ -20,8 +20,6 @@ export const SECURITY_EVENT_LABELS: Record<string, Labels> = {
   admin_mfa_verify_rate_limited: labels("Trop d’essais de code de sécurité admin — bloqué", "Too many admin security code attempts — blocked", "Zu viele Versuche mit dem Admin-Sicherheitscode — blockiert", "管理员安全码尝试次数过多——已拦截"),
   admin_mfa_session_revoked: labels("Déconnexion admin : session de sécurité fermée", "Admin sign-out: security session closed", "Admin-Abmeldung: Sicherheitssitzung beendet", "管理员退出登录：安全会话已关闭"),
   admin_sessions_revoked_others: labels("Autres sessions admin révoquées", "Other admin sessions revoked", "Andere Admin-Sitzungen widerrufen", "已撤销管理员的其他会话"),
-  admin_mfa_backup_code: labels("Code de secours admin", "Admin backup code", "Admin-Backup-Code", "管理员备用码"),
-  admin_mfa_backup_codes_regenerated: labels("Nouveaux codes de secours admin générés", "New admin backup codes generated", "Neue Admin-Backup-Codes erstellt", "已生成新的管理员备用码"),
   google_drive_connected: labels("Google Drive connecté à l’administration", "Google Drive connected to the admin", "Google Drive mit der Verwaltung verbunden", "Google Drive 已连接到管理后台"),
   google_drive_reconnected: labels("Google Drive reconnecté : compte remplacé", "Google Drive reconnected: account replaced", "Google Drive neu verbunden: Konto ersetzt", "Google Drive 已重新连接：账户已更换"),
   google_drive_oauth_mfa_required: labels("Connexion Google Drive refusée : code de sécurité admin non validé", "Google Drive connection refused: admin security code not confirmed", "Google-Drive-Verbindung abgelehnt: Admin-Sicherheitscode nicht bestätigt", "Google Drive 连接被拒绝：管理员安全码未验证"),
@@ -82,8 +80,6 @@ export const SECURITY_EVENT_LABELS: Record<string, Labels> = {
 export const SECURITY_EVENT_OUTCOME_LABELS: Record<string, Labels> = {
   "admin_mfa_verify:allowed": labels("Connexion admin validée par le code de sécurité", "Admin sign-in confirmed with the security code", "Admin-Anmeldung mit dem Sicherheitscode bestätigt", "管理员已通过安全码完成登录"),
   "admin_mfa_verify:failed": labels("Code de sécurité admin erroné ou expiré", "Wrong or expired admin security code", "Falscher oder abgelaufener Admin-Sicherheitscode", "管理员安全码错误或已过期"),
-  "admin_mfa_backup_code:allowed": labels("Connexion admin par un code de secours", "Admin sign-in with a backup code", "Admin-Anmeldung mit einem Backup-Code", "管理员已使用备用码登录"),
-  "admin_mfa_backup_code:failed": labels("Code de secours admin erroné ou déjà utilisé", "Wrong or already used admin backup code", "Falscher oder bereits verwendeter Admin-Backup-Code", "管理员备用码错误或已使用"),
   "candidate_login:allowed": labels("Connexion candidat réussie", "Candidate signed in", "Kandidat angemeldet", "候选人登录成功"),
   "candidate_login:failed": labels("Connexion candidat refusée : email ou mot de passe erroné", "Candidate sign-in refused: wrong email or password", "Kandidatenanmeldung abgelehnt: falsche E-Mail-Adresse oder falsches Passwort", "候选人登录被拒绝：邮箱或密码错误"),
   "candidate_verification_delivery:failed": labels("Email de vérification au candidat non envoyé", "Verification email to the candidate not sent", "Bestätigungs-E-Mail an den Kandidaten nicht gesendet", "发给候选人的验证邮件未发送"),

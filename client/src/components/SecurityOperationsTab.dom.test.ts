@@ -7,8 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // ADM-15 / ADM-14 — onglet Sécurité monté par React avec un faux tRPC : les
 // catégories en phrases traduites, les filtres « Admin seulement » et
 // « Avertissements et plus », les connexions candidats réussies masquées par
-// défaut, la pagination, puis les sessions administrateur, « Révoquer
-// toutes les autres sessions » et les codes de secours.
+// défaut, la pagination, puis les sessions administrateur et « Révoquer
+// toutes les autres sessions ».
 
 type EventsInput = { limit: number; adminOnly: boolean; warningsAndAbove: boolean; includeCandidateSignIns: boolean; beforeId?: number };
 type Session = { id: string; current: boolean; lastActiveAt: Date; browser: string | null; device: string | null; location: string | null };
@@ -24,9 +24,6 @@ const view = vi.hoisted(() => ({
   sessionsRead: 0,
   revoke: async (): Promise<Revocation> => ({ revoked: 0, notRevoked: 0, securitySessions: 0, clerkUnavailable: false }),
   revocations: 0,
-  backupStatus: { remaining: 0, generatedAt: null as Date | null },
-  regenerate: async (): Promise<{ codes: string[] }> => ({ codes: [] }),
-  regenerations: 0,
 }));
 
 vi.mock("@/contexts/LanguageContext", () => ({ useLanguage: () => ({ language: view.language }) }));
@@ -45,8 +42,6 @@ vi.mock("@/lib/trpc", async () => {
         recentHighEvents: { useQuery: () => ({ data: { count: view.recentHigh }, isLoading: false, error: null }) },
         sessions: { useQuery: () => ({ data: view.sessionsError ? undefined : view.sessions, isLoading: false, error: view.sessionsError, refetch: async () => { view.sessionsRead += 1; } }) },
         revokeOtherSessions: { useMutation: (options: object) => useMutation({ mutationFn: async () => { view.revocations += 1; return view.revoke(); }, ...options }) },
-        backupCodes: { useQuery: () => ({ data: view.backupStatus, isLoading: false, error: null, refetch: async () => undefined }) },
-        regenerateBackupCodes: { useMutation: (options: object) => useMutation({ mutationFn: async () => { view.regenerations += 1; return view.regenerate(); }, ...options }) },
       },
     },
   };
@@ -74,9 +69,6 @@ beforeEach(() => {
   view.sessionsRead = 0;
   view.revocations = 0;
   view.revoke = async () => ({ revoked: 0, notRevoked: 0, securitySessions: 0, clerkUnavailable: false });
-  view.backupStatus = { remaining: 0, generatedAt: null };
-  view.regenerate = async () => ({ codes: [] });
-  view.regenerations = 0;
 });
 afterEach(cleanup);
 
@@ -231,46 +223,5 @@ describe("ADM-14 — sessions administrateur", () => {
     mount();
     expect(screen.getByText("Impossible de lire les sessions auprès de Clerk : révoquez-les au besoin dans le tableau de bord Clerk (Users, puis Sessions).")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Révoquer toutes les autres sessions" }).hasAttribute("disabled")).toBe(false);
-  });
-});
-
-describe("ADM-14 — codes de secours", () => {
-  const codes = ["K7QM2-XH9TD", "3RZVB-PQ8NC", "MW4HA-2TKXE", "9DFJS-YV6RG", "BN5QT-ZC3HW", "XA7KM-4PRDV", "HT2WC-8NQZB", "6YGVE-KM3TS", "QP9RD-WB5AX", "ZV4NT-7HCMJ"];
-  const panel = () => within(screen.getByRole("region", { name: "Codes de secours" }));
-
-  it("génère les dix premiers codes, les montre une seule fois, puis les cache", async () => {
-    view.regenerate = async () => ({ codes });
-    mount();
-    expect(panel().getByText("Aucun code de secours n’a encore été généré.")).toBeTruthy();
-    fireEvent.click(panel().getByRole("button", { name: "Générer des codes de secours" }));
-    const list = await waitFor(() => panel().getByRole("list", { name: "Nouveaux codes de secours" }));
-    expect(within(list).getAllByRole("listitem").map(item => item.textContent)).toEqual(codes);
-    expect(panel().getByText("Notez ces codes maintenant : ils ne seront plus affichés. Chacun ne sert qu’une fois, et les anciens codes ne fonctionnent plus.")).toBeTruthy();
-    fireEvent.click(panel().getByRole("button", { name: "J’ai noté ces codes" }));
-    expect(panel().queryByRole("list")).toBeNull();
-    expect(document.body.textContent).not.toContain(codes[0]);
-  });
-
-  it("dit combien il en reste, et ne les remplace qu’après confirmation", async () => {
-    view.backupStatus = { remaining: 9, generatedAt: new Date("2026-11-10T18:05:00Z") };
-    view.regenerate = async () => ({ codes });
-    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
-    mount();
-    expect(panel().getByText("Codes de secours restants : 9 / 10 · générés le 10/11/2026 19:05 (heure de Paris)")).toBeTruthy();
-    const replace = panel().getByRole("button", { name: "Remplacer les codes de secours" });
-    fireEvent.click(replace);
-    expect(confirm).toHaveBeenLastCalledWith("Remplacer les codes de secours ? Les codes actuels cesseront de fonctionner.");
-    expect(view.regenerations).toBe(0);
-    fireEvent.click(replace);
-    await waitFor(() => expect(panel().getAllByRole("listitem")).toHaveLength(10));
-    expect(view.regenerations).toBe(1);
-    confirm.mockRestore();
-  });
-
-  it("dit quand les codes n’ont pas pu être générés", async () => {
-    view.regenerate = async () => { throw new Error("database down"); };
-    mount();
-    fireEvent.click(panel().getByRole("button", { name: "Générer des codes de secours" }));
-    await waitFor(() => expect(panel().getByText("Les codes de secours n’ont pas pu être générés : réessayez.").getAttribute("role")).toBe("status"));
   });
 });

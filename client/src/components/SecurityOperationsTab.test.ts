@@ -17,8 +17,6 @@ vi.mock("@/lib/trpc", () => ({
       recentHighEvents: { useQuery: () => ({ data: { count: view.recentHigh }, isLoading: false, error: null }) },
       sessions: { useQuery: () => ({ data: [], isLoading: false, error: null, refetch: vi.fn() }) },
       revokeOtherSessions: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
-      backupCodes: { useQuery: () => ({ data: { remaining: 0, generatedAt: null }, isLoading: false, error: null, refetch: vi.fn() }) },
-      regenerateBackupCodes: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
     },
   },
 }));

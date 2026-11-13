@@ -22,10 +22,9 @@ l’administration.
    d’attente (« Trop de tentatives de double authentification »).
 3. **Durée** : le code validé ouvre l’administration pour 8 heures dans ce
    navigateur. « Se déconnecter » ferme la session Clerk et cette preuve.
-4. **Codes de secours** : dix codes à usage unique, générés dans l’onglet
-   **Sécurité**, remplacent le code envoyé par email quand la boîte mail est
-   perdue ou que l’email n’arrive pas (section 6). La connexion Clerk reste
-   demandée avant eux.
+
+Il n’existe pas de codes de secours : les ajouter est une décision du
+propriétaire (section 6).
 
 ## 2. Appareil perdu ou volé
 
@@ -58,14 +57,7 @@ Dans les deux cas : changer le mot de passe du compte Clerk.
 
 ## 3. Boîte mail perdue ou inaccessible
 
-**Avec un code de secours** (section 6) : écran « Validation de sécurité »,
-**« Utiliser un code de secours »**, saisir l’un des codes notés, puis
-« Valider le code de secours ». L’administration s’ouvre pour 8 heures.
-Ensuite, changer l’adresse principale comme ci-dessous, et générer de
-nouveaux codes s’il en reste peu.
-
-**Sans code de secours**, ou pour que les codes reviennent par email : le
-code part toujours vers l’adresse principale vérifiée du compte Clerk. Pour
+Le code part toujours vers l’adresse principale vérifiée du compte Clerk. Pour
 le recevoir ailleurs, sans intervention dans la base de données : tableau de
 bord Clerk, **Users**, le compte administrateur, ajouter une adresse que vous
 contrôlez, la faire vérifier, puis en faire l’**adresse principale**. Le
@@ -83,8 +75,8 @@ mail perdue : le protéger par sa propre double authentification.
 - « Le code de sécurité n’a pas pu être envoyé » : Resend a refusé l’email
   (panne ou quota épuisé). Voir `docs/EXPLOITATION.md`, « Resend en panne ou
   quota épuisé » ; l’évènement « Code de sécurité admin non envoyé : l’email
-  n’est pas parti » est inscrit au journal. Sans Resend, aucun code ne part :
-  entrer alors avec un code de secours (section 6).
+  n’est pas parti » est inscrit au journal. Sans Resend, aucun code ne part
+  et l’administration reste fermée jusqu’à son retour.
 - « Trop de tentatives de double authentification » : attendre 15 minutes.
 
 ## 5. Changer de compte administrateur
@@ -94,40 +86,18 @@ copier l’identifiant `user_…` du nouveau compte dans le tableau de bord Cler
 le mettre dans cette variable sur Vercel, puis redéployer (une variable
 modifiée ne s’applique qu’au déploiement suivant).
 
-## 6. Codes de secours
+## 6. Codes de secours (décision du propriétaire)
 
-Onglet **Sécurité**, bloc « Codes de secours », bouton **« Générer des codes
-de secours »** : dix codes de la forme `K7QM2-XH9TD` s’affichent **une seule
-fois**. Les noter tout de suite hors de l’ordinateur (papier rangé,
-gestionnaire de mots de passe), puis « J’ai noté ces codes ». Le site n’en
-garde qu’une empreinte : il ne peut pas les réafficher.
-
-- **Utiliser un code** : écran « Validation de sécurité », « Utiliser un code
-  de secours », saisir un code (majuscules ou minuscules, avec ou sans tiret).
-  Il ouvre l’administration pour 8 heures, comme le code envoyé par email,
-  puis ne sert plus. Ses essais comptent avec ceux du code envoyé par email
-  (10 en 15 minutes). Le journal note « Connexion admin par un code de
-  secours » ; un code erroné ou déjà utilisé y est noté « Code de secours
-  admin erroné ou déjà utilisé » et vous envoie une alerte (section 7).
-- **Combien il en reste** : le bloc affiche « Codes de secours restants :
-  N / 10 » et la date où ils ont été générés.
-- **Les remplacer** : « Remplacer les codes de secours », après confirmation,
-  en génère dix nouveaux ; les anciens cessent aussitôt de fonctionner. Le
-  faire quand il en reste peu, ou si la feuille a pu être vue. Le journal note
-  « Nouveaux codes de secours admin générés ».
-- Ils ne remplacent que le code envoyé par email : la connexion Clerk (mot de
-  passe) reste demandée avant eux.
-- La purge automatique ne les efface pas : ils durent jusqu’à leur
-  remplacement.
-- Mise en service : la table `admin_mfa_backup_codes` (migration
-  `drizzle/pg/0005_admin_mfa_backup_codes.sql`) doit exister ; sans elle, le
-  bloc affiche « Impossible de lire les codes de secours » et rien d’autre
-  n’est touché.
+Le site n’a pas de codes de secours. Dix codes à usage unique, enregistrés
+hachés, affichés une seule fois et régénérables, permettraient d’entrer sans
+la boîte mail. Ils demandent une table dédiée dans la base (migration), que le
+propriétaire doit valider : aucune table existante ne convient, les codes de
+sécurité par email étant effacés une fois expirés et les compteurs de
+tentatives au bout de 48 heures. D’ici là, une boîte mail perdue se règle dans
+Clerk (section 3).
 
 ## 7. Alerte « Alerte sécurité — Code de sécurité admin erroné ou expiré »
 
 Ces codes ont été saisis après une connexion Clerk réussie au compte
 administrateur. Si ce n’est pas vous, votre mot de passe est connu : le
 changer dans Clerk, puis « Révoquer toutes les autres sessions » (section 2).
-Même chose pour « Alerte sécurité — Code de secours admin erroné ou déjà
-utilisé », puis remplacer les codes de secours (section 6).

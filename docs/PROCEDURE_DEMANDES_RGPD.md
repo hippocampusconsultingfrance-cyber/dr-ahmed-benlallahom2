@@ -152,9 +152,5 @@ budget de temps ; ce qui reste passe la nuit suivante :
 | Rendez-vous | réduits au minimum comptable 3 ans après la consultation |
 | Motif de la consultation (`request_details`) | vidé 90 jours après la consultation (durée à confirmer par le responsable) |
 
-Les codes de secours de l’administrateur (`admin_mfa_backup_codes`, leurs
-seules empreintes) ne sont pas purgés : ils durent jusqu’à leur remplacement
-depuis l’onglet « Sécurité » (`docs/PROCEDURE_ACCES_ADMIN_SECOURS.md`).
-
 Le recrutement a sa propre tâche (`recruitment-retention`) : 2 ans après la
 dernière activité du candidat.

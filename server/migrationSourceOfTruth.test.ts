@@ -122,19 +122,7 @@ describe("source de vérité des migrations Drizzle (M32)", () => {
     }
     expect(migration).not.toMatch(/DELETE FROM cv_applications/i);
     const journal = JSON.parse(read("drizzle/pg/meta/_journal.json")) as { entries: { idx: number; tag: string }[] };
-    expect(journal.entries.find(entry => entry.idx === 4)).toMatchObject({ idx: 4, tag: "0004_integrity_constraints" });
-  });
-
-  it("0005 crée la seule table des codes de secours de l’administrateur, de façon idempotente (ADM-14)", () => {
-    const migration = read("drizzle/pg/0005_admin_mfa_backup_codes.sql");
-    const statements = migration.replace(/--[^\n]*\n/g, "").split(";").map(statement => statement.trim()).filter(Boolean);
-    expect(statements).toHaveLength(2);
-    expect(statements[0]).toMatch(/^CREATE TABLE IF NOT EXISTS "admin_mfa_backup_codes" \(/);
-    expect(statements[0]).toContain('CONSTRAINT "admin_mfa_backup_codes_code_hash_unique" UNIQUE("code_hash")');
-    expect(statements[1]).toBe('CREATE INDEX IF NOT EXISTS "admin_mfa_backup_code_openid_idx" ON "admin_mfa_backup_codes" USING btree ("open_id")');
-    expect(migration).not.toMatch(/\b(ALTER|DROP|DELETE|INSERT|UPDATE|TRUNCATE)\b/i);
-    const journal = JSON.parse(read("drizzle/pg/meta/_journal.json")) as { entries: { idx: number; tag: string }[] };
-    expect(journal.entries.find(entry => entry.tag === "0005_admin_mfa_backup_codes")).toBeDefined();
+    expect(journal.entries.at(-1)).toMatchObject({ idx: 4, tag: "0004_integrity_constraints" });
   });
 
   it("la baseline crée les 36 tables du schéma", () => {

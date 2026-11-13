@@ -7,7 +7,7 @@ import { z } from "zod";
 import { getDb } from "../db";
 import { securityEvents } from "../../drizzle/schema";
 import { and, desc, eq, gte, inArray, lt, ne, or, sql, type SQL } from "drizzle-orm";
-import { AdminMfaRateLimitError, adminMfaBackupCodesStatus, issueAdminMfaChallenge, regenerateAdminMfaBackupCodes, revokeOtherAdminMfaSessions, verifyAdminMfaBackupCode, verifyAdminMfaChallenge } from "../adminMfa";
+import { AdminMfaRateLimitError, issueAdminMfaChallenge, revokeOtherAdminMfaSessions, verifyAdminMfaChallenge } from "../adminMfa";
 import { logSecurityEvent, requestIpHash } from "../candidateSecurity";
 
 const ADMIN_MFA_RATE_LIMITED_MESSAGE = "Trop de tentatives de double authentification. Patientez 15 minutes avant de réessayer.";
@@ -72,28 +72,6 @@ export const adminSecurityRouter = router({
       if (error instanceof AdminMfaRateLimitError) throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: ADMIN_MFA_RATE_LIMITED_MESSAGE });
       throw new TRPCError({ code: "BAD_REQUEST", message: "Le code de sécurité est invalide ou expiré." });
     }
-  }),
-  /** ADM-14: a backup code in place of the emailed one, when the mailbox is lost. */
-  verifyBackupCode: protectedProcedure.input(z.object({ code: z.string().trim().min(1).max(32) })).mutation(async ({ input, ctx }) => {
-    if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN", message: "Accès administrateur requis." });
-    try {
-      return await verifyAdminMfaBackupCode({ openId: ctx.user.openId, code: input.code, req: ctx.req, res: ctx.res });
-    } catch (error) {
-      if (error instanceof AdminMfaRateLimitError) throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: ADMIN_MFA_RATE_LIMITED_MESSAGE });
-      if (error instanceof Error && error.message === "admin_mfa_code_invalid") throw new TRPCError({ code: "BAD_REQUEST", message: "Le code de secours est invalide ou a déjà servi." });
-      logError("[AdminMfa] Unable to check a backup code", error);
-      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Le code de secours n’a pas pu être vérifié. Réessayez dans quelques instants." });
-    }
-  }),
-  /** ADM-14: how many backup codes are left, and since when. */
-  backupCodes: protectedProcedure.query(async ({ ctx }) => {
-    const user = requireVerifiedAdmin(ctx);
-    return adminMfaBackupCodesStatus(user.openId);
-  }),
-  /** ADM-14: ten new backup codes, shown this once; the earlier ones stop working. */
-  regenerateBackupCodes: protectedProcedure.mutation(async ({ ctx }) => {
-    const user = requireVerifiedAdmin(ctx);
-    return { codes: await regenerateAdminMfaBackupCodes({ openId: user.openId, req: ctx.req }) };
   }),
   events: protectedProcedure.input(eventsInput.optional()).query(async ({ input, ctx }) => {
     requireVerifiedAdmin(ctx);
