@@ -337,4 +337,21 @@ describe("alerte de paiement non confirmable", () => {
     ]);
     expect(alert.content).not.toMatch(/onglet Rendez-vous|pending|cancelled|100\.00/);
   });
+
+  it("dit d’un montant que Stripe n’a pas donné qu’il est inconnu, dans une phrase correcte (MAIL-04)", () => {
+    const alert = buildUnconfirmablePaymentAlert({
+      trackingId: "APT-9",
+      reason: "hold_released",
+      amountCents: null,
+      sessionId: "cs_9",
+      paymentIntentId: null,
+      paymentStatus: "pending",
+      appointmentStatus: "cancelled",
+      patient: { name: "Jeanne Martin", email: "jeanne@test.local", phone: "+33 6 12 34 56 78" },
+      receivedAt: new Date("2026-11-12T14:05:00Z"),
+    });
+    expect(alert.content.split("\n")[0]).toMatch(/^Le 12 novembre 2026 à 15:05 \(heure de Paris\), Stripe a signalé un paiement d’un montant inconnu pour le rendez-vous APT-9, qui n’a pas pu être confirmé automatiquement : /);
+    expect(alert.content).not.toContain("paiement de inconnu");
+    expect(alert.content).toContain("Paiement Stripe (PaymentIntent) : non communiqué");
+  });
 });

@@ -66,12 +66,26 @@ export async function logSecurityEvent(input: SecurityEvent) {
 /** At most one owner alert email per event category in this window (CAND-15). */
 export const SECURITY_ALERT_EMAIL_WINDOW_MS = 30 * 60 * 1000;
 
-/** Who caused the last event, in words: the administrator's Clerk identifier and the hashes stay out of it (MAIL-04). */
-function describeSecurityActor(input: { actorKind: string; actorReference?: string | null }): string {
-  if (input.actorKind === "admin") return "votre compte administrateur";
-  if (input.actorKind === "candidate") return input.actorReference ? `le compte candidat n° ${input.actorReference}` : "un compte candidat";
-  if (input.actorKind === "system") return "le site lui-même";
-  return "un visiteur non connecté";
+/**
+ * Who caused the last event, in words, or whose account it aimed at: the
+ * administrator's Clerk identifier and the hashes stay out of it (MAIL-04).
+ */
+function describeSecurityActor(input: { actorKind: string; actorReference?: string | null; category: string }): string {
+  if (input.actorKind === "admin") return "par votre compte administrateur";
+  // A refused candidate sign-in is someone trying that account's password, not its candidate.
+  if (input.actorKind === "candidate") return `${input.category === "candidate_login" ? "sur" : "par"} ${input.actorReference ? `le compte candidat n° ${input.actorReference}` : "un compte candidat"}`;
+  if (input.actorKind === "system") return "par le site lui-même";
+  return "par un visiteur non connecté";
+}
+
+/**
+ * The failures in a row of a candidate's sign-in, which the event that raises
+ * the alert carries: only every tenth is high, the others being warnings that
+ * the alert's count of high events would leave out (MAIL-04).
+ */
+function consecutiveFailedLogins(input: SecurityAlertInput): number | null {
+  const count = input.category === "candidate_login" ? input.metadata?.failedLoginCount : undefined;
+  return typeof count === "number" && count > 1 ? count : null;
 }
 
 /**
@@ -127,6 +141,7 @@ type SecurityAlertInput = {
   outcome: string;
   severity?: string;
   ipHash?: string | null;
+  metadata?: Record<string, unknown>;
 };
 
 /** One alert email per category and window, whether it leaves at once or from the queue. */
@@ -155,6 +170,8 @@ async function sendSecurityAlertEmail(input: SecurityAlertInput, options: { queu
   }, null) ?? new Date();
   // MAIL-04: what happens, when (Paris time) and what to do, then where to look; the codes last.
   const label = securityEventLabel(input.category, input.outcome, "fr");
+  const failedLogins = options.queued ? null : consecutiveFailedLogins(input);
+  const lastAtParis = `le dernier le ${PARIS_ALERT_TIME.format(lastAt)} (heure de Paris)`;
   const technical = [
     `code ${input.category}`,
     ...input.ipHash ? [`réseau ${input.ipHash.slice(0, 12)}…`] : [],
@@ -166,7 +183,9 @@ async function sendSecurityAlertEmail(input: SecurityAlertInput, options: { queu
     content: [
       ...options.queued ? ["Alerte reportée : levée pendant les envois qui suivent un paiement, elle ne pouvait pas partir avant leur réponse ; elle part au passage suivant, que l’incident dure encore ou non."] : [],
       // A queued alert no longer knows who caused its last event.
-      `${recent.length} évènement${recent.length > 1 ? "s" : ""} « ${label} » sur ${options.queued ? "les dernières 24 heures" : "la dernière heure"}, le dernier le ${PARIS_ALERT_TIME.format(lastAt)} (heure de Paris)${options.queued ? "" : `, par ${describeSecurityActor(input)}`}.`,
+      failedLogins
+        ? `${failedLogins} échecs de connexion consécutifs ${describeSecurityActor(input)} (« ${label} »), ${lastAtParis}.`
+        : `${recent.length} évènement${recent.length > 1 ? "s" : ""} « ${label} » sur ${options.queued ? "les dernières 24 heures" : "la dernière heure"}, ${lastAtParis}${options.queued ? "" : `, ${describeSecurityActor(input)}`}.`,
       SECURITY_ALERT_ADVICE[input.category] ?? "Consultez le journal de sécurité de l’administration.",
       `Journal de sécurité : ${adminLink("security")}`,
       `Les évènements suivants de ce type sont enregistrés sans nouvel email pendant au moins ${windowMinutes} minutes.`,

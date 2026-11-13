@@ -27,7 +27,9 @@ describe("CAND-15 — agrégation des alertes de sécurité envoyées au propri�
     const { title, content } = state.notifyOwner.mock.calls[0][0];
     expect(title).toBe("Alerte sécurité — Connexion candidat refusée : email ou mot de passe erroné — Hippocampus Consulting");
     expect(content).toMatch(/^\d+ évènements? « Connexion candidat refusée : email ou mot de passe erroné » sur la dernière heure, le dernier le /);
-    expect(content).toContain("par le compte candidat n° 42.");
+    // The account the passwords were tried on, not the one that tried them.
+    expect(content).toContain("sur le compte candidat n° 42.");
+    expect(content).not.toContain("par le compte candidat");
     expect(content).toContain(`au moins ${SECURITY_ALERT_EMAIL_WINDOW_MS / 60_000} minutes`);
     expect(content).not.toContain("a".repeat(64));
   });
@@ -52,6 +54,22 @@ describe("CAND-15 — agrégation des alertes de sécurité envoyées au propri�
     expect(lines.at(-1)).toBe(`Pour le journal : code admin_mfa_verify · réseau ${"b".repeat(12)}….`);
     // The administrator's Clerk identifier is not written.
     expect(content).not.toContain("user_2abcHarnessOwner");
+  });
+
+  it("compte les échecs de connexion consécutifs d’un compte candidat, dont seul le dixième est élevé (MAIL-04)", async () => {
+    vi.useFakeTimers({ now: new Date("2026-11-12T14:05:00Z"), toFake: ["Date"] });
+    try {
+      // As the sign-in route logs them: warnings, every tenth failure high.
+      for (let failedLoginCount = 1; failedLoginCount <= 10; failedLoginCount += 1) {
+        await logSecurityEvent({ actorKind: "candidate", actorReference: "42", category: "candidate_login", outcome: "failed", severity: failedLoginCount % 10 === 0 ? "high" : "warning", ipHash: "d".repeat(64), metadata: { failedLoginCount } });
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(state.notifyOwner).toHaveBeenCalledTimes(1);
+    const lines = state.notifyOwner.mock.calls[0][0].content.split("\n");
+    expect(lines[0]).toBe("10 échecs de connexion consécutifs sur le compte candidat n° 42 (« Connexion candidat refusée : email ou mot de passe erroné »), le dernier le 12 novembre 2026 à 15:05 (heure de Paris).");
+    expect(lines[1]).toContain("Quelqu’un essaie des mots de passe sur ce compte candidat");
   });
 
   it("dit d’un visiteur qu’il n’est pas connecté, son empreinte seulement avec les codes", async () => {

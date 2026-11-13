@@ -84,11 +84,12 @@ export function buildUnconfirmablePaymentAlert(input: {
   patient: { name: string; email: string; phone: string };
   receivedAt?: Date;
 }) {
-  const amount = formatAlertAmount(input.amountCents);
+  // Inside the sentence, an amount Stripe did not give reads as such, not « un paiement de inconnu ».
+  const payment = input.amountCents === null ? "un paiement d’un montant inconnu" : `un paiement de ${formatAlertAmount(input.amountCents)}`;
   return {
     title: `Paiement reçu pour un rendez-vous non confirmable (${input.trackingId})`,
     content: [
-      `Le ${formatAlertDate(input.receivedAt ?? new Date())} (heure de Paris), Stripe a signalé un paiement de ${amount} pour le rendez-vous ${input.trackingId}, qui n’a pas pu être confirmé automatiquement : ${UNCONFIRMABLE_REASON_LABELS[input.reason]}.`,
+      `Le ${formatAlertDate(input.receivedAt ?? new Date())} (heure de Paris), Stripe a signalé ${payment} pour le rendez-vous ${input.trackingId}, qui n’a pas pu être confirmé automatiquement : ${UNCONFIRMABLE_REASON_LABELS[input.reason]}.`,
       "Remboursement ou reprogrammation manuelle requis : contactez le patient, puis, s’il faut le rembourser, cliquez sur « Rembourser ce paiement » sur le rendez-vous (onglet « Réservations »), ou sur « Rembourser un paiement non confirmé » dans ce même onglet avec la session Stripe ci-dessous, ou remboursez-le depuis Stripe.",
       `Patient : ${input.patient.name} — ${input.patient.email} — ${input.patient.phone}.`,
       `Ouvrir le rendez-vous : ${adminLink("appointments", input.trackingId)}`,
