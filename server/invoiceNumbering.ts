@@ -1,5 +1,6 @@
 import { eq, inArray, sql } from "drizzle-orm";
 import { appointmentInvoices } from "../drizzle/schema";
+import { PARIS_TIME_ZONE } from "../shared/parisTime";
 import { getDb } from "./db";
 
 type Database = NonNullable<Awaited<ReturnType<typeof getDb>>>;
@@ -10,7 +11,6 @@ export type AppointmentInvoiceRecord = {
   paidAt: Date;
 };
 
-const PARIS_TIME_ZONE = "Europe/Paris";
 const INVOICE_NUMBER_PREFIX = "FAC";
 const INVOICE_SEQUENCE_DIGITS = 6;
 const MAX_ALLOCATION_ATTEMPTS = 5;

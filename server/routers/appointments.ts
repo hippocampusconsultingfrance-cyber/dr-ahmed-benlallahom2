@@ -16,9 +16,12 @@ import {
   BOOKING_REQUEST_SUBJECT_MAX_LENGTH,
   BOOKING_TOO_FAR_MESSAGE,
   BOOKING_TOO_SOON_MESSAGE,
+  CONSULTATION_DAY_RATE_CENTS,
+  consultationPriceCents,
   getBookingWindowIssue,
   hasVisibleNameCharacter,
   isBookingEmailAddress,
+  isNightRateForParis,
   isPlausiblePhoneNumber,
   normalizePhoneInput,
   toE164PhoneNumber,
@@ -27,7 +30,7 @@ import {
 import { cleanTextInput, emailText, multiLineText, singleLineText, TEXT_INPUT_INVALID_CHARACTERS } from "../../shared/textInput";
 import { getSafeCheckoutOrigin } from "./publicOrigin";
 import { enforcePublicFormRateLimit, givePublicFormAttemptBack, withinBookingGiveBackCap } from "./publicForms";
-import { PARIS_TIME_ZONE, parisDateKey, parseAppointmentDate, isNightRateForParis, isBookableAppointmentTime } from "./parisTime";
+import { PARIS_TIME_ZONE, parisDateKey, parseAppointmentDate, isBookableAppointmentTime } from "./parisTime";
 
 let stripeClient: Stripe | undefined;
 
@@ -131,6 +134,11 @@ export function consultationCheckoutProductData(trackingId: string, appointmentD
   return { name: CONSULTATION_CHECKOUT_PRODUCT_NAME, description: describe(trackingId, slot) };
 }
 
+/** Montant en centimes écrit comme les colonnes base_price et final_price (« 150.00 »). */
+function decimalAmount(cents: number): string {
+  return (cents / 100).toFixed(2);
+}
+
 const appointmentDateInput = z
   .string()
   .min(1, "La date de consultation est requise")
@@ -151,15 +159,13 @@ export const appointmentsRouter = router({
       })
     )
     .query(({ input }) => {
+      // Le prix que la page affiche, celui que create envoie à Stripe (CODE-09).
       const date = parseAppointmentDate(input.appointmentDate);
-      const basePrice = 100;
-      const isNightRate = isNightRateForParis(date);
-      const finalPrice = isNightRate ? basePrice * 1.5 : basePrice;
 
       return {
-        basePrice,
-        finalPrice,
-        isNightRate,
+        basePrice: CONSULTATION_DAY_RATE_CENTS / 100,
+        finalPrice: consultationPriceCents(date) / 100,
+        isNightRate: isNightRateForParis(date),
       };
     }),
 
@@ -226,9 +232,11 @@ export const appointmentsRouter = router({
         return refusal;
       };
 
-      const basePrice = "100.00";
+      // Tarif de shared/bookingPolicy.ts, celui que calculatePrice donne à la page (CODE-09).
+      const basePrice = decimalAmount(CONSULTATION_DAY_RATE_CENTS);
       const isNightRate = isNightRateForParis(date);
-      const finalPrice = isNightRate ? "150.00" : "100.00";
+      const finalPriceCents = consultationPriceCents(date);
+      const finalPrice = decimalAmount(finalPriceCents);
 
       const trackingId = `APT${randomUUID().replace(/-/g, "").slice(0, 12).toUpperCase()}`;
 
@@ -383,7 +391,7 @@ export const appointmentsRouter = router({
         try {
           session = await getStripeClient().checkout.sessions.create({
             payment_method_types: ["card"],
-            line_items: [{ price_data: { currency: "eur", product_data: consultationCheckoutProductData(trackingId, date, input.language), unit_amount: Math.round(Number(finalPrice) * 100) }, quantity: 1 }],
+            line_items: [{ price_data: { currency: "eur", product_data: consultationCheckoutProductData(trackingId, date, input.language), unit_amount: finalPriceCents }, quantity: 1 }],
             mode: "payment",
             customer_email: input.customerEmail,
             metadata: { trackingId, customerName: input.customerName },
@@ -403,7 +411,7 @@ export const appointmentsRouter = router({
         // La page de réservation garde la session et l’expiration du maintien
         // (sessionStorage) pour proposer « Reprendre le paiement » ou
         // « Annuler et choisir un autre créneau » après un retour arrière.
-        return { success: true, trackingId, finalPrice: parseFloat(finalPrice), checkoutUrl: session.url!, checkoutSessionId: session.id, holdExpiresAt: holdExpiresAt.toISOString() };
+        return { success: true, trackingId, finalPrice: finalPriceCents / 100, checkoutUrl: session.url!, checkoutSessionId: session.id, holdExpiresAt: holdExpiresAt.toISOString() };
       } catch (dbError) {
         if (dbError instanceof TRPCError) throw dbError;
         console.error("Appointment creation failed:", dbError instanceof Error ? dbError.name : "UnknownError");

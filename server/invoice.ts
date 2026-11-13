@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import bidiFactory from "bidi-js";
+import { NIGHT_RATE_END_HOUR, NIGHT_RATE_START_HOUR } from "../shared/bookingPolicy";
+import { PARIS_TIME_ZONE } from "../shared/parisTime";
 import { storageGetBuffer, storagePutOnce } from "./storage.js";
 import { resolveInvoiceSeller, type InvoiceSeller } from "./invoiceSeller";
 
@@ -17,8 +19,6 @@ export const INVOICE_BRAND = {
   ink: "#0f172a",
   muted: "#666666",
 };
-
-const PARIS_TIME_ZONE = "Europe/Paris";
 
 /**
  * Polices Unicode libres Noto (SIL Open Font License 1.1, licences à côté des
@@ -389,8 +389,10 @@ export function buildInvoiceContent(data: InvoiceData, seller: InvoiceSeller = r
     amount: formatInvoiceAmount(data.basePrice),
   }];
   if (data.isNightRate) {
+    // Plage de shared/bookingPolicy.ts, majoration lue dans les montants encaissés (CODE-09).
+    const surchargePercent = Math.round(((data.finalPrice - data.basePrice) / data.basePrice) * 100);
     rows.push({
-      description: "Majoration tarif de nuit (18h-8h) +50 %",
+      description: `Majoration tarif de nuit (${NIGHT_RATE_START_HOUR}h-${NIGHT_RATE_END_HOUR}h)${Number.isFinite(surchargePercent) ? ` +${surchargePercent} %` : ""}`,
       date: "",
       duration: "",
       amount: formatInvoiceAmount(data.finalPrice - data.basePrice),
