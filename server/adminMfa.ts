@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
-import { and, desc, eq, gt, isNull, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, lt, ne, sql } from "drizzle-orm";
 import { adminMfaChallenges, adminMfaSessions } from "../drizzle/schema";
 import { getDb } from "./db";
 import { mutationRowCount } from "./dbMutation";
@@ -165,4 +165,24 @@ export async function revokeCurrentAdminMfaSession(input: {
     await logSecurityEvent({ actorKind: "admin", actorReference: input.openId ?? null, category: "admin_mfa_session_revoked", outcome: "allowed", ipHash: requestIpHash(input.req.headers), metadata: { reason: "logout" } }).catch(() => undefined);
   }
   return { revoked };
+}
+
+/**
+ * ADM-14: ends every MFA proof of this administrator but the one this browser
+ * carries, with « Révoquer toutes les autres sessions »: a lost device signed
+ * in again with the password still needs a new security code. Returns how
+ * many were open.
+ */
+export async function revokeOtherAdminMfaSessions(input: { openId: string; req: { headers: Record<string, unknown> } }) {
+  const db = await getDb();
+  if (!db) throw new Error("admin_mfa_database_unavailable");
+  const token = cookieValue(typeof input.req.headers.cookie === "string" ? input.req.headers.cookie : undefined, ADMIN_MFA_COOKIE);
+  const result = await db.update(adminMfaSessions)
+    .set({ revokedAt: new Date() })
+    .where(and(
+      eq(adminMfaSessions.openId, input.openId),
+      isNull(adminMfaSessions.revokedAt),
+      ...(token ? [ne(adminMfaSessions.tokenHash, hashMfa(token, "session"))] : []),
+    ));
+  return mutationRowCount(result);
 }

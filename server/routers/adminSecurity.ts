@@ -1,13 +1,47 @@
 import { logError } from "../_core/logError";
+import type { TrpcContext } from "../_core/context";
 import { protectedProcedure, router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
+import { clerkClient, getAuth } from "@clerk/express";
 import { z } from "zod";
 import { getDb } from "../db";
 import { securityEvents } from "../../drizzle/schema";
-import { desc } from "drizzle-orm";
-import { AdminMfaRateLimitError, issueAdminMfaChallenge, verifyAdminMfaChallenge } from "../adminMfa";
+import { and, desc, eq, inArray, lt, ne, or, type SQL } from "drizzle-orm";
+import { AdminMfaRateLimitError, issueAdminMfaChallenge, revokeOtherAdminMfaSessions, verifyAdminMfaChallenge } from "../adminMfa";
+import { logSecurityEvent, requestIpHash } from "../candidateSecurity";
 
 const ADMIN_MFA_RATE_LIMITED_MESSAGE = "Trop de tentatives de double authentification. Patientez 15 minutes avant de réessayer.";
+
+/** At most this many of the administrator's Clerk sessions are read: far more devices than one account signs in from. */
+const ADMIN_SESSION_LIST_LIMIT = 100;
+
+const ADMIN_SESSIONS_UNAVAILABLE_MESSAGE = "Les sessions n’ont pas pu être lues auprès de Clerk. Réessayez, ou révoquez-les dans le tableau de bord Clerk (Users, puis Sessions).";
+
+function requireVerifiedAdmin(ctx: Pick<TrpcContext, "user" | "mfaVerified">) {
+  if (ctx.user?.role !== "admin") throw new TRPCError({ code: "FORBIDDEN", message: "Accès administrateur requis." });
+  if (!ctx.mfaVerified) throw new TRPCError({ code: "FORBIDDEN", message: "Double authentification administrateur requise." });
+  return ctx.user;
+}
+
+/** The administrator's active Clerk sessions (the first factor of the admin). */
+async function activeAdminSessions(openId: string) {
+  const { data } = await clerkClient.sessions.getSessionList({ userId: openId, status: "active", limit: ADMIN_SESSION_LIST_LIMIT });
+  return data;
+}
+
+/**
+ * ADM-15: the journal's filters. Successful candidate sign-ins, most of the
+ * journal, are left out unless asked for; the others narrow it to the
+ * administrator's own events and to warnings and above.
+ */
+const eventsInput = z.object({
+  limit: z.number().int().min(1).max(100).default(50),
+  adminOnly: z.boolean().default(false),
+  warningsAndAbove: z.boolean().default(false),
+  includeCandidateSignIns: z.boolean().default(false),
+  /** The page after this event: the older events, newest first. */
+  beforeId: z.number().int().positive().optional(),
+});
 
 export const adminSecurityRouter = router({
   status: protectedProcedure.query(async ({ ctx }) => {
@@ -36,11 +70,16 @@ export const adminSecurityRouter = router({
       throw new TRPCError({ code: "BAD_REQUEST", message: "Le code de sécurité est invalide ou expiré." });
     }
   }),
-  events: protectedProcedure.input(z.object({ limit: z.number().int().min(1).max(100).default(50) }).optional()).query(async ({ input, ctx }) => {
-    if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN", message: "Accès administrateur requis." });
-    if (!ctx.mfaVerified) throw new TRPCError({ code: "FORBIDDEN", message: "Double authentification administrateur requise." });
+  events: protectedProcedure.input(eventsInput.optional()).query(async ({ input, ctx }) => {
+    requireVerifiedAdmin(ctx);
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Base de données indisponible." });
+    const filters = eventsInput.parse(input ?? {});
+    const conditions: SQL[] = [];
+    if (filters.adminOnly) conditions.push(eq(securityEvents.actorKind, "admin"));
+    if (filters.warningsAndAbove) conditions.push(inArray(securityEvents.severity, ["warning", "high", "critical"]));
+    if (!filters.includeCandidateSignIns) conditions.push(or(ne(securityEvents.category, "candidate_login"), ne(securityEvents.outcome, "allowed"))!);
+    if (filters.beforeId) conditions.push(lt(securityEvents.id, filters.beforeId));
     const events = await db.select({
       id: securityEvents.id,
       actorKind: securityEvents.actorKind,
@@ -49,9 +88,67 @@ export const adminSecurityRouter = router({
       severity: securityEvents.severity,
       metadata: securityEvents.metadata,
       createdAt: securityEvents.createdAt,
-    }).from(securityEvents).orderBy(desc(securityEvents.createdAt)).limit(input?.limit ?? 50);
+    }).from(securityEvents).where(and(...conditions)).orderBy(desc(securityEvents.id)).limit(filters.limit);
     // RGPD-12: only the row counts of the traces of actions on a person's data leave the server.
     const { personalDataTraceCounts } = await import("../personalDataAdmin");
     return events.map(({ metadata, ...event }) => ({ ...event, counts: personalDataTraceCounts(event.category, metadata) }));
+  }),
+  /**
+   * ADM-14: the devices signed in to the administrator's account, this one
+   * first, then by last activity. Clerk places each one by its address; the
+   * address itself does not leave the server.
+   */
+  sessions: protectedProcedure.query(async ({ ctx }) => {
+    const user = requireVerifiedAdmin(ctx);
+    const currentSessionId = getAuth(ctx.req).sessionId ?? null;
+    let sessions;
+    try {
+      sessions = await activeAdminSessions(user.openId);
+    } catch (error) {
+      logError("[AdminSessions] Unable to list the Clerk sessions", error, { req: ctx.req });
+      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: ADMIN_SESSIONS_UNAVAILABLE_MESSAGE });
+    }
+    return sessions.map(session => {
+      const activity = session.latestActivity;
+      return {
+        id: session.id,
+        current: session.id === currentSessionId,
+        lastActiveAt: new Date(session.lastActiveAt),
+        browser: [activity?.browserName, activity?.browserVersion].filter(Boolean).join(" ") || null,
+        device: activity?.deviceType || null,
+        location: [activity?.city, activity?.country].filter(Boolean).join(", ") || null,
+      };
+    }).sort((first, second) => Number(second.current) - Number(first.current) || second.lastActiveAt.getTime() - first.lastActiveAt.getTime());
+  }),
+  /**
+   * ADM-14: « Révoquer toutes les autres sessions ». Clerk signs every other
+   * device out at its next request, and their security codes stop counting,
+   * so that a lost device signed in again with the password still needs a new
+   * one; this browser keeps both. A Clerk session that could not be revoked is
+   * counted, for the owner to revoke it in Clerk's dashboard.
+   */
+  revokeOtherSessions: protectedProcedure.mutation(async ({ ctx }) => {
+    const user = requireVerifiedAdmin(ctx);
+    const currentSessionId = getAuth(ctx.req).sessionId;
+    if (!currentSessionId) throw new TRPCError({ code: "BAD_REQUEST", message: "La session de ce navigateur est introuvable : reconnectez-vous, puis réessayez." });
+    let sessions;
+    try {
+      sessions = await activeAdminSessions(user.openId);
+    } catch (error) {
+      logError("[AdminSessions] Unable to list the Clerk sessions", error, { req: ctx.req });
+      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: ADMIN_SESSIONS_UNAVAILABLE_MESSAGE });
+    }
+    const securitySessions = await revokeOtherAdminMfaSessions({ openId: user.openId, req: ctx.req });
+    const results = await Promise.allSettled(sessions.filter(session => session.id !== currentSessionId).map(session => clerkClient.sessions.revokeSession(session.id)));
+    for (const result of results) {
+      if (result.status === "rejected") logError("[AdminSessions] Unable to revoke a Clerk session", result.reason, { req: ctx.req });
+    }
+    const outcome = {
+      revoked: results.filter(result => result.status === "fulfilled").length,
+      notRevoked: results.filter(result => result.status === "rejected").length,
+      securitySessions,
+    };
+    await logSecurityEvent({ actorKind: "admin", actorReference: user.openId, category: "admin_sessions_revoked_others", outcome: "allowed", severity: "warning", ipHash: requestIpHash(ctx.req.headers), metadata: outcome }).catch(() => undefined);
+    return outcome;
   }),
 });
