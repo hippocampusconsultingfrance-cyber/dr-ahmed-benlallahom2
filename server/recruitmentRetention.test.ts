@@ -179,14 +179,102 @@ describe("rétention des candidatures : effacement réel à l’échéance", () 
     expect(state.notifications[0]!.content).toContain("Dont espaces candidats sans candidature, inactifs depuis 2 ans : 1.");
   });
 
-  it("si le stockage échoue : rien n’est effacé en base et le bilan signale les dossiers à vérifier", async () => {
+  it("si le stockage échoue : rien n’est effacé en base, le bilan annonce un effacement partiel, repris au passage suivant (DATA-08)", async () => {
     const dossier = seedApplication(1, new Date(NOW.getTime() - DAY));
     storageDown = true;
-    const result = await runRecruitmentRetentionCleanup("vercel-cron", { now: NOW, dependencies });
-    expect(result).toMatchObject({ erased: 0, failed: 1 });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const result = await runRecruitmentRetentionCleanup("vercel-cron", { now: NOW, dependencies });
+      expect(result).toMatchObject({ erased: 0, partial: 1, failed: 0 });
+    } finally {
+      consoleError.mockRestore();
+    }
     expect(memory.rows(cvApplications).map(row => row.id)).toEqual([dossier.id]);
-    expect(state.notifications[0]!.title).toContain("1 à vérifier");
-    expect(state.notifications[0]!.content).toContain(dossier.trackingId);
+    expect(memory.rows(cvCandidateLanguages)).toHaveLength(1);
+    expect(state.notifications[0]!.title).toBe("Rétention recrutement : 0 dossier(s) effacé(s), 1 effacement(s) partiel(s)");
+    expect(state.notifications[0]!.content).toContain(`Effacement partiel, reprise automatique au prochain passage : ${dossier.trackingId} (fichiers stockés supprimés en partie ou pas du tout, rien n’a été effacé en base).`);
+    expect(state.notifications[0]!.content).not.toContain("À vérifier");
+
+    storageDown = false;
+    state.notifications = [];
+    await expect(runRecruitmentRetentionCleanup("vercel-cron", { now: NOW, dependencies })).resolves.toMatchObject({ erased: 1, resumed: 1, partial: 0 });
+    expect(memory.rows(cvApplications)).toHaveLength(0);
+    expect(memory.rows(cvCandidateLanguages)).toHaveLength(0);
+    expect(blobs.size).toBe(0);
+    // One proof, for the dossier's own reason; the entry that marked the interrupted erasure went with the dossier.
+    expect(memory.rows(recruitmentAuditLogs).map(row => [row.action, JSON.parse(String(row.metadata)).erasureMode, JSON.parse(String(row.metadata)).status])).toEqual([["erase", "retention_expired", undefined]]);
+    expect(state.notifications[0]!.content).toContain("Effacements interrompus repris et terminés (demande RGPD ou dossier échu) : 1.");
+  });
+
+  it("reprend chaque effacement interrompu une fois : un dossier qui échoue à chaque passage ne cache pas les autres, et celui qui vient de commencer attend (DATA-08)", async () => {
+    const limit = 2;
+    const stuck = seedApplication(1, null);
+    const waiting = seedApplication(2, null);
+    const running = seedApplication(3, null);
+    const started = (applicationId: number, adminOpenId: string, erasureMode: string, createdAt = NOW) => ({ application_id: applicationId, admin_open_id: adminOpenId, action: "erase", metadata: JSON.stringify({ erasureMode, status: "started" }), created_at: createdAt });
+    // One entry per failed attempt, all written before the other dossier's.
+    memory.seed(recruitmentAuditLogs, Array.from({ length: 2 * limit }, () => started(stuck.id, "vercel-cron", "retention_expired")));
+    memory.seed(recruitmentAuditLogs, [started(waiting.id, "user_owner", "admin_gdpr_request")]);
+    // Started a moment ago by the admin: the request may still be running.
+    memory.seed(recruitmentAuditLogs, [started(running.id, "user_owner", "admin_gdpr_request", new Date())]);
+    const stuckKey = `recruitment/cv/${stuck.trackingId}-cv_00000000.pdf`;
+    const stuckStorage: CandidateErasureDependencies = {
+      ...dependencies,
+      storageDelete: async keys => {
+        if (keys.includes(stuckKey)) throw new Error("BlobServiceNotAvailable");
+        return dependencies.storageDelete(keys);
+      },
+    };
+
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      await expect(runRecruitmentRetentionCleanup("vercel-cron", { now: NOW, limit, dependencies: stuckStorage })).resolves.toMatchObject({ erased: 1, resumed: 1, partial: 1 });
+    } finally {
+      consoleError.mockRestore();
+    }
+    expect(memory.rows(cvApplications).map(row => row.id)).toEqual([stuck.id, running.id]);
+    // Erased for the GDPR request, in the name of the administrator who asked.
+    const proofs = memory.rows(recruitmentAuditLogs).filter(row => row.application_id === waiting.id);
+    expect(proofs).toHaveLength(1);
+    expect(proofs[0]).toMatchObject({ action: "erase", admin_open_id: "user_owner" });
+    expect(JSON.parse(String(proofs[0]!.metadata))).toMatchObject({ erasureMode: "admin_gdpr_request" });
+    expect(memory.rows(recruitmentAuditLogs).filter(row => row.application_id === stuck.id)).toHaveLength(2 * limit + 1);
+    expect(memory.rows(recruitmentAuditLogs).filter(row => row.application_id === running.id)).toHaveLength(1);
+    expect(state.notifications[0]!.content).toContain(`Effacement partiel, reprise automatique au prochain passage : ${stuck.trackingId} (fichiers stockés supprimés en partie ou pas du tout, rien n’a été effacé en base).`);
+  });
+
+  it("ne commence plus de dossier une fois le budget de temps du passage dépensé : le reste attend le passage suivant (DATA-08)", async () => {
+    const first = seedApplication(1, new Date(NOW.getTime() - 3 * DAY));
+    const second = seedApplication(2, new Date(NOW.getTime() - 2 * DAY));
+    // Each Drive deletion takes twice the whole budget, a margin wide enough for a loaded machine before the first dossier.
+    const slowDrive: CandidateErasureDependencies = { ...dependencies, deleteDriveCopies: async () => { await new Promise(resolve => setTimeout(resolve, 400)); return { status: "none", deleted: 0, error: null }; } };
+
+    const result = await runRecruitmentRetentionCleanup("vercel-cron", { now: NOW, budgetMs: 200, dependencies: slowDrive });
+    expect(result).toMatchObject({ expiredFound: 2, erased: 1, moreRemaining: true });
+    expect(memory.rows(cvApplications).map(row => row.id)).toEqual([second.id]);
+    expect(memory.rows(cvApplications).map(row => row.id)).not.toContain(first.id);
+    expect(state.notifications[0]!.content).toContain("D’autres dossiers échus restent à effacer : ils le seront aux prochains passages (10 par jour au maximum, dans la durée limite d’un passage).");
+
+    await expect(runRecruitmentRetentionCleanup("vercel-cron", { now: NOW, dependencies })).resolves.toMatchObject({ erased: 1, moreRemaining: false });
+    expect(memory.rows(cvApplications)).toHaveLength(0);
+  });
+
+  it("une connexion échouée ou une demande de réinitialisation ne prolonge pas la conservation : seules les colonnes d’activité comptent (DATA-09)", async () => {
+    const longAgo = new Date(NOW.getTime() - 3 * 365 * DAY);
+    const yesterday = new Date(NOW.getTime() - DAY);
+    const dossier = seedApplication(1, new Date(NOW.getTime() - DAY));
+    // updated_at moved by a failed sign-in and a reset request, nothing else.
+    memory.seed(candidateAccounts, [{ email: "candidat1@test.local", password_hash: "x", linked_application_id: dossier.id, created_at: longAgo, terms_accepted_at: longAgo, email_verified_at: longAgo, last_login_at: longAgo, updated_at: yesterday, failed_login_count: 2, password_reset_token_hash: "reset" }]);
+    // Same for an account without application.
+    const [dormant] = memory.seed(candidateAccounts, [{ email: "dormant@test.local", password_hash: "x", created_at: longAgo, terms_accepted_at: longAgo, updated_at: yesterday, failed_login_count: 5 }]);
+    // An account activated within two years is kept.
+    const [activated] = memory.seed(candidateAccounts, [{ email: "active@test.local", password_hash: "x", created_at: longAgo, terms_accepted_at: longAgo, email_verified_at: new Date(NOW.getTime() - 100 * DAY), updated_at: longAgo }]);
+
+    const result = await runRecruitmentRetentionCleanup("vercel-cron", { now: NOW, dependencies });
+    expect(result).toMatchObject({ erased: 1, extendedForActivity: 0, inactiveCandidateAccountsErased: 1 });
+    expect(memory.rows(cvApplications)).toHaveLength(0);
+    expect(memory.rows(candidateAccounts).map(row => row.id)).toEqual([activated!.id]);
+    expect(memory.rows(candidateAccounts).map(row => row.id)).not.toContain(dormant!.id);
   });
 
   it("journalise un effacement refusé par la base sous la référence du bilan, sans l’adresse que la requête cherchait (EXPL-11)", async () => {

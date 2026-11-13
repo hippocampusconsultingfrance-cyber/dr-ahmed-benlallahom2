@@ -57,6 +57,7 @@ export async function renderEmailPreviews(): Promise<PreviewEmail[]> {
   const { sendMedicalQuestionAcknowledgementEmail, sendMedicalQuestionResponseEmail, buildMedicalQuestionOwnerNotification } = await import("../server/medicalQuestionEmails");
   const { sendPublicFormAcknowledgement } = await import("../server/publicFormAcknowledgements");
   const { buildClientBriefOwnerNotification } = await import("../server/clientBriefNotification");
+  const { buildGdprRequestOwnerNotification } = await import("../server/gdprRequestNotification");
 
   const emails: PreviewEmail[] = [];
   const add = (name: string, language: Language, email: ResendMessage) => emails.push({ name, language, subject: email.subject, html: email.html, text: email.text });
@@ -94,12 +95,14 @@ export async function renderEmailPreviews(): Promise<PreviewEmail[]> {
     await addSent("question-sante-reponse", language, () => sendMedicalQuestionResponseEmail({ email: "camille@example.test", firstName: "Camille", trackingId: "QMED-2026-000123", response: language === "en" ? "Example answer, validated by the doctor." : "Exemple de réponse, validée par le médecin.", language }));
     await addSent("contact-accuse", language, () => sendPublicFormAcknowledgement({ kind: "contact", email: "camille@example.test", reference: "C-2026-000123", language }));
     await addSent("brief-employeur-accuse", language, () => sendPublicFormAcknowledgement({ kind: "clientBrief", email: "rh@example.test", reference: "BRIEF-2026-000123", language }));
+    await addSent("rgpd-accuse", language, () => sendPublicFormAcknowledgement({ kind: "gdprRequest", email: "camille@example.test", reference: "G7K2M9Q4R8T1V", language, confirmationUrl: `${ORIGIN}/gdpr?confirm=exemple${language === "en" ? "&lang=en" : ""}` }));
   }
 
   // French only: the administrator's code and the owner's notifications.
   await addSent("admin-code-de-securite", "fr", () => notifications.sendAdminMfaCodeEmail("admin@example.test", "123456"));
   await addSent("proprietaire-reservation-payee", "fr", () => notifications.sendOwnerNotificationEmail("Camille Martin", "camille@example.test", "+33 6 00 00 00 00", "APT-2026-000123", APPOINTMENT_DATE, 100));
   add("proprietaire-question-sante", "fr", buildOwnerNotificationEmail(buildMedicalQuestionOwnerNotification({ trackingId: "QMED-2026-000123", language: "fr", publicationConsent: false, receivedAt: RECEIVED_AT })));
+  add("proprietaire-demande-rgpd", "fr", buildOwnerNotificationEmail(buildGdprRequestOwnerNotification({ trackingId: "G7K2M9Q4R8T1V", requestType: "deletion", name: "Camille Martin", email: "camille@example.test", hasDescription: true, acknowledged: true })));
   add("proprietaire-brief-employeur", "fr", buildOwnerNotificationEmail(buildClientBriefOwnerNotification({ briefId: "BRIEF-2026-000123", organizationName: "Clinique Exemple", contactName: "Service RH", email: "rh@example.test", targetEnvironment: "Bloc opératoire", specialtyNeeded: "Anesthésie", country: "Suisse", receivedAt: RECEIVED_AT })));
   return emails;
 }

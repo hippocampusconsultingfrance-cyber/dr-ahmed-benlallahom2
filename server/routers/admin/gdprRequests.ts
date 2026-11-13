@@ -2,8 +2,9 @@ import { adminProcedure, router } from "../../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getDb } from "../../db";
-import { gdprRequests } from "../../../drizzle/schema";
-import { eq, sql, desc } from "drizzle-orm";
+import { gdprRequests, securityEvents } from "../../../drizzle/schema";
+import { GDPR_REQUEST_EMAIL_CONFIRMED } from "../gdpr";
+import { and, eq, inArray, sql, desc } from "drizzle-orm";
 
 // List all GDPR requests
 export const adminGdprRequestsRouter = router({
@@ -29,7 +30,14 @@ export const adminGdprRequestsRouter = router({
         .select({ count: sql<number>`COUNT(*)` })
         .from(gdprRequests);
 
-      return { items, total: Number(countResult[0]?.count ?? 0) };
+      // RGPD-13: when the person confirmed the address by the emailed link (kept 90 days in the security journal).
+      const confirmations = items.length ? await db
+        .select({ reference: securityEvents.actorReference, confirmedAt: securityEvents.createdAt })
+        .from(securityEvents)
+        .where(and(eq(securityEvents.category, GDPR_REQUEST_EMAIL_CONFIRMED), inArray(securityEvents.actorReference, items.map(item => item.trackingId)))) : [];
+      const confirmedAt = new Map(confirmations.map(row => [row.reference, row.confirmedAt]));
+
+      return { items: items.map(item => ({ ...item, emailConfirmedAt: confirmedAt.get(item.trackingId) ?? null })), total: Number(countResult[0]?.count ?? 0) };
     }),
 
   updateStatus: adminProcedure

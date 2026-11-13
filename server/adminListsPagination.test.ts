@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { appointmentFulfillmentJobs, appointmentInvoices, appointments, contactMessages, gdprRequests, medicalQuestionAuditLogs, medicalQuestions } from "../drizzle/schema";
+import { appointmentFulfillmentJobs, appointmentInvoices, appointments, contactMessages, gdprRequests, medicalQuestionAuditLogs, medicalQuestions, securityEvents } from "../drizzle/schema";
 import { createMemoryPg, pgTimestamp, type MemoryPg } from "./testing/memoryPgProxy";
 import type { TrpcContext } from "./_core/context";
 
@@ -42,7 +42,8 @@ function seedQuestion(index: number, status: string, extra: Record<string, unkno
 }
 
 beforeEach(() => {
-  memory = createMemoryPg([medicalQuestions, medicalQuestionAuditLogs, contactMessages, gdprRequests, appointments, appointmentFulfillmentJobs, appointmentInvoices]);
+  // security_events: the address confirmations the GDPR list reads (RGPD-13).
+  memory = createMemoryPg([medicalQuestions, medicalQuestionAuditLogs, contactMessages, gdprRequests, securityEvents, appointments, appointmentFulfillmentJobs, appointmentInvoices]);
   state.memory = memory;
 });
 

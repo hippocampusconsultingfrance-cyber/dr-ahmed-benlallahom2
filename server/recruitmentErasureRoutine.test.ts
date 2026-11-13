@@ -25,7 +25,7 @@ vi.mock("./db", () => ({ getDb: async () => state.memory?.db ?? null }));
 vi.mock("./_core/notification", () => ({ notifyOwner: vi.fn(async () => true) }));
 
 import { hashSecurityValue } from "./candidateSecurity";
-import { CandidateErasureBusyError, CandidateErasureStorageError, ERASURE_PENDING_DRIVE_PREFIX, eraseCandidateApplication, retryPendingGoogleDriveErasures, type CandidateErasureDependencies } from "./recruitmentErasure";
+import { CandidateErasureBusyError, CandidateErasureInterruptedError, ERASURE_PENDING_DRIVE_PREFIX, eraseCandidateApplication, retryPendingGoogleDriveErasures, type CandidateErasureDependencies } from "./recruitmentErasure";
 
 const TABLES = [candidateAccounts, candidateDocumentAuditLogs, candidateDocumentProcessingJobs, candidateDocuments, candidateSessions, clientBriefCandidates, cvApplications, cvCandidateCertifications, cvCandidateExperiences, cvCandidateLanguages, cvGoogleDriveExportJobs, cvProcessingJobs, recruitmentAuditLogs, recruitmentCampaignRecipients, recruitmentEmailEvents, recruitmentFollowUpTasks, securityEvents];
 const TRACKING = "CV75VJN6FWRS9B8SFK";
@@ -195,7 +195,7 @@ describe("effacement RGPD complet d’un dossier candidat", () => {
     const { id } = seedDossier();
     const deps = dependencies();
     deps.storageDelete = async () => { throw new Error("BlobServiceNotAvailable"); };
-    await expect(eraseCandidateApplication({ applicationId: id, actorOpenId: "user_owner", reason: "admin_gdpr_request" }, deps)).rejects.toBeInstanceOf(CandidateErasureStorageError);
+    await expect(eraseCandidateApplication({ applicationId: id, actorOpenId: "user_owner", reason: "admin_gdpr_request" }, deps)).rejects.toMatchObject({ constructor: CandidateErasureInterruptedError, stage: "storage" });
     expect(rowsFor(cvApplications, "id", id)).toHaveLength(1);
     expect(memory.rows(candidateAccounts)).toHaveLength(1);
     expect(driveFiles.size).toBe(3);
@@ -243,7 +243,8 @@ describe("effacement RGPD complet d’un dossier candidat", () => {
             const refusal = Object.assign(new Error("Failed query: delete from \"candidate_accounts\" …"), {
               cause: Object.assign(new Error('update or delete on table "candidate_accounts" violates foreign key constraint "candidate_documents_candidate_id_fk" on table "candidate_documents"'), { code: "23503", constraint: "candidate_documents_candidate_id_fk" }),
             });
-            return { where: () => Promise.reject(refusal) };
+            // Refused when the batch runs it, like a statement of the transaction.
+            return { where: () => ({ then: (_resolve: unknown, reject: (error: unknown) => void) => reject(refusal) }) };
           };
         },
       }),
@@ -258,6 +259,49 @@ describe("effacement RGPD complet d’un dossier candidat", () => {
     expect(memory.rows(candidateAccounts)).toHaveLength(0);
     expect(rowsFor(cvApplications, "id", id)).toHaveLength(0);
     expect(report).toMatchObject({ candidateDocumentsDeleted: 4, candidateAccountsErased: 1 });
+  });
+
+  it("efface tout ou rien en base : une suppression refusée laisse le dossier entier, repris au passage suivant de la rétention (DATA-08)", async () => {
+    const { id, accountId } = seedDossier();
+    // A trigger refuses the deletion of the security events, as in the audit's replay.
+    memory.failNext(/^delete from "security_events"/);
+    const error = await eraseCandidateApplication({ applicationId: id, actorOpenId: "user_owner", reason: "admin_gdpr_request" }, dependencies()).catch(caught => caught);
+    expect(error).toBeInstanceOf(CandidateErasureInterruptedError);
+    expect(error.stage).toBe("database");
+
+    // Files are gone, but nothing was deleted in the database: no « ghost » dossier half erased.
+    expect(Array.from(blobs)).toEqual([`recruitment/quarantine/${OTHER_TRACKING}-cv_ffff0000.pdf`]);
+    expect(rowsFor(cvApplications, "id", id)).toHaveLength(1);
+    expect(rowsFor(cvCandidateLanguages, "application_id", id)).toHaveLength(2);
+    expect(memory.rows(candidateAccounts)).toHaveLength(1);
+    expect(memory.rows(candidateSessions)).toHaveLength(2);
+    expect(memory.rows(candidateDocuments)).toHaveLength(3);
+    expect(memory.rows(securityEvents)).toHaveLength(5);
+    expect(memory.rows(recruitmentAuditLogs).map(row => row.action)).toEqual(["email", "erase"]);
+
+    // A retention run within two minutes leaves it alone: the attempt may still be running.
+    const { runRecruitmentRetentionCleanup } = await import("./recruitmentRetention");
+    await expect(runRecruitmentRetentionCleanup("vercel-cron", { dependencies: dependencies() })).resolves.toMatchObject({ erased: 0, resumed: 0 });
+    expect(rowsFor(cvApplications, "id", id)).toHaveLength(1);
+
+    // The next day's run finishes it, for the GDPR request and in the name of the administrator who asked.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(Date.now() + 24 * 60 * 60 * 1000);
+      await expect(runRecruitmentRetentionCleanup("vercel-cron", { dependencies: dependencies() })).resolves.toMatchObject({ erased: 1, resumed: 1, partial: 0, failed: 0 });
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(rowsFor(cvApplications, "id", id)).toHaveLength(0);
+    expect(memory.rows(candidateAccounts)).toHaveLength(0);
+    expect(memory.rows(candidateDocuments)).toHaveLength(0);
+    // The account's own traces did not outlive it.
+    expect(memory.rows(securityEvents).filter(row => row.actor_reference === String(accountId) && row.security_event_actor_kind === "candidate")).toHaveLength(0);
+    expect(memory.rows(securityEvents).map(row => row.category)).toEqual(["admin_mfa_verify", "admin_numeric_reference"]);
+    const audit = memory.rows(recruitmentAuditLogs);
+    expect(audit).toHaveLength(1);
+    expect(audit[0]).toMatchObject({ action: "erase", admin_open_id: "user_owner" });
+    expect(JSON.parse(String(audit[0]!.metadata))).toMatchObject({ erasureMode: "admin_gdpr_request", candidateAccountsErased: 1, candidateDocumentsDeleted: 3 });
   });
 
   it("refuse l’effacement pendant une analyse en cours", async () => {

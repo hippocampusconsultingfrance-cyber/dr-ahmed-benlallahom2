@@ -7,31 +7,35 @@ import { DEFAULT_TRANSACTIONAL_FROM, resolveConsultationContact } from "./consul
 import { emailLanguageFor, type EmailLanguage } from "./emailLanguage";
 
 /**
- * Acknowledgements of the contact form (PUB-09) and of the employer brief
- * (REC-12): the reference of the request and what happens next, in French for
- * a French page, in English otherwise. Sent once the request is stored, to an
- * address nobody has verified yet: they never copy a text the visitor typed
- * (name, organisation, message, notes), only the reference (MAIL-01). The
- * contact's sender and Reply-To are those of the patient emails
- * (CONSULTATION_FROM_EMAIL, CONSULTATION_REPLY_TO), as for the health
- * question acknowledgement; the brief's replies go to the public contact
- * address the Employers page gives. A send that fails is logged and never
- * fails the request; the idempotency key ack-<reference> keeps a retried
- * request from sending a second one.
+ * Acknowledgements of the contact form (PUB-09), of the employer brief
+ * (REC-12) and of a GDPR request (RGPD-13): the reference of the request and
+ * what happens next, in French for a French page, in English otherwise. Sent
+ * once the request is stored, to an address nobody has verified yet: they
+ * never copy a text the visitor typed (name, organisation, message, notes,
+ * description), only the reference (MAIL-01). The GDPR request's adds the link
+ * that confirms the address. The contact's sender and Reply-To are those of
+ * the patient emails (CONSULTATION_FROM_EMAIL, CONSULTATION_REPLY_TO), as for
+ * the health question acknowledgement; the brief's and the GDPR request's
+ * replies go to the public contact address the Employers page and the privacy
+ * policy give. A send that fails is logged and never fails the request; the
+ * idempotency key ack-<reference> keeps a retried request from sending a
+ * second one.
  *
  * Texts to have the owner read before production (lot 6 decision).
  */
-export type PublicFormAcknowledgementKind = "contact" | "clientBrief";
+export type PublicFormAcknowledgementKind = "contact" | "clientBrief" | "gdprRequest";
 
 /**
  * Indicative answer delay of each acknowledgement, e.g. « sous 2 jours
  * ouvrés » / "within 2 working days". The brief's is the first contact the
  * Employers page promises (REC-12). The contact's stays empty until the owner
- * sets it: the email then says « dans les meilleurs délais ».
+ * sets it: the email then says « dans les meilleurs délais ». The GDPR
+ * request's is the one month after receipt of docs/PROCEDURE_DEMANDES_RGPD.md.
  */
 const RESPONSE_DELAY: Record<PublicFormAcknowledgementKind, Record<EmailLanguage, string>> = {
   contact: { fr: "", en: "" },
   clientBrief: { fr: "sous 24 h ouvrées", en: "within 24 business hours" },
+  gdprRequest: { fr: "dans un délai d’un mois après sa réception", en: "within one month of its receipt" },
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -44,10 +48,27 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  */
 const CLIENT_BRIEF_ACKNOWLEDGEMENT_DAILY_LIMIT = { action: "public_client_brief_acknowledgement_daily", subject: "global", maxAttempts: 50, windowMs: DAY_MS, blockMs: DAY_MS };
 
-type AcknowledgementText = { subject: string; title: string; lines: string[]; footer: string[] };
+type AcknowledgementText = { subject: string; title: string; lines: string[]; footer: string[]; confirmation?: { line: string; button: string } };
 
 function acknowledgementText(kind: PublicFormAcknowledgementKind, language: EmailLanguage, reference: string): AcknowledgementText {
   const delay = RESPONSE_DELAY[kind][language];
+  if (kind === "gdprRequest") {
+    return language === "fr"
+      ? {
+        subject: `Votre demande RGPD a bien été reçue — ${reference}`,
+        title: "Votre demande RGPD a bien été reçue",
+        lines: ["Bonjour,", "Nous avons bien reçu la demande d’exercice de vos droits envoyée depuis le formulaire RGPD de drahmedbenlallahom.com.", `Nous vous répondrons ${delay}.`],
+        confirmation: { line: "Pour confirmer que cette adresse email est bien la vôtre, ouvrez le lien ci-dessous, puis cliquez sur « Confirmer mon adresse ». Ce lien ne sert qu’une fois.", button: "Confirmer mon adresse" },
+        footer: ["Pour compléter votre demande, répondez à cet email en indiquant votre référence.", "Si vous n’êtes pas à l’origine de cette demande, n’ouvrez pas le lien et ignorez cet email."],
+      }
+      : {
+        subject: `Your GDPR request has been received — ${reference}`,
+        title: "Your GDPR request has been received",
+        lines: ["Hello,", "We have received the request to exercise your rights sent from the GDPR form of drahmedbenlallahom.com.", `We will answer ${delay}.`],
+        confirmation: { line: "To confirm that this email address is yours, open the link below, then click “Confirm my address”. This link can be used once.", button: "Confirm my address" },
+        footer: ["To add to your request, reply to this email quoting your reference.", "If you did not make this request, do not open the link and ignore this email."],
+      };
+  }
   if (kind === "contact") {
     return language === "fr"
       ? {
@@ -95,13 +116,17 @@ function escapeHtml(value: string): string {
     .replaceAll("'", "&#039;");
 }
 
-function buildAcknowledgementEmail(input: { kind: PublicFormAcknowledgementKind; email: string; reference: string; language: EmailLanguage }) {
+function buildAcknowledgementEmail(input: { kind: PublicFormAcknowledgementKind; email: string; reference: string; language: EmailLanguage; confirmationUrl?: string }) {
   const text = acknowledgementText(input.kind, input.language, input.reference);
   const referenceLine = input.language === "fr" ? `Référence : ${input.reference}` : `Reference: ${input.reference}`;
+  // The GDPR request's link that confirms the address (RGPD-13), the only link of these emails.
+  const confirmation = text.confirmation && input.confirmationUrl ? { ...text.confirmation, url: input.confirmationUrl } : null;
   const html = buildHippocampusEmailShell(`
     <h2 style="color:#0891b2">${escapeHtml(text.title)}</h2>
     ${text.lines.map(line => `<p>${escapeHtml(line)}</p>`).join("\n    ")}
     <p style="margin:20px 0;padding:14px;border-radius:10px;background:#f1f5f9;font-family:monospace;font-size:16px;font-weight:700;color:#0f172a;">${escapeHtml(referenceLine)}</p>
+    ${confirmation ? `<p>${escapeHtml(confirmation.line)}</p>
+    <p style="margin:20px 0;"><a href="${escapeHtml(confirmation.url)}" style="display:inline-block;padding:12px 20px;border-radius:8px;background:#0891b2;color:#ffffff;font-weight:700;text-decoration:none;">${escapeHtml(confirmation.button)}</a></p>` : ""}
     ${text.footer.map(line => `<p style="font-size:12px;color:#64748b;">${escapeHtml(line)}</p>`).join("\n    ")}
   `, input.language);
   const { from, replyTo } = input.kind === "contact" ? resolveConsultationContact() : { from: DEFAULT_TRANSACTIONAL_FROM, replyTo: siteConfig.email };
@@ -111,7 +136,7 @@ function buildAcknowledgementEmail(input: { kind: PublicFormAcknowledgementKind;
     replyTo,
     subject: text.subject,
     html,
-    text: [...text.lines, referenceLine, ...text.footer].join("\n\n"),
+    text: [...text.lines, referenceLine, ...(confirmation ? [confirmation.line, confirmation.url] : []), ...text.footer].join("\n\n"),
   };
 }
 
@@ -120,7 +145,7 @@ function buildAcknowledgementEmail(input: { kind: PublicFormAcknowledgementKind;
  * it. Never throws: without Resend, on a refusal or a network error, the
  * request stays recorded and the failure is logged (without the address).
  */
-export async function sendPublicFormAcknowledgement(input: { kind: PublicFormAcknowledgementKind; email: string; reference: string; language?: string | null }): Promise<boolean> {
+export async function sendPublicFormAcknowledgement(input: { kind: PublicFormAcknowledgementKind; email: string; reference: string; language?: string | null; confirmationUrl?: string }): Promise<boolean> {
   try {
     const resend = getResendClient();
     if (!resend) {

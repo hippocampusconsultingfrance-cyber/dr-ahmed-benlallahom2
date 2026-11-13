@@ -200,8 +200,9 @@ describe("envoi des rappels", () => {
   it("un rappel parti dont l’enregistrement échoue reste réservé : un passage rapproché ne le renvoie pas, le travail d’après-paiement le reprend dans les 24 h (DATA-02)", async () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     seedAppointment(1);
-    // Marking the reminder sent is refused after Resend accepted it.
-    memory.failNext(/^update "appointments" set "reminder_sent" = \$1 where/);
+    // Marking the reminder sent is refused after Resend accepted it (the
+    // reservation before it writes the same columns: updatedAt follows every change).
+    notifications.sendReminderEmail.mockImplementationOnce(async () => { memory.failNext(/^update "appointments" set "reminder_sent" = \$1/); });
     expect(await sendDueAppointmentReminders(DAILY_REMINDER_WINDOW, NOW)).toEqual({ reminded: 1, sent: 1, failed: 0 });
     expect(memory.rows(appointments)[0]).toMatchObject({ reminder_sent: 2, updatedAt: "2026-10-07 16:45:00.000" });
 

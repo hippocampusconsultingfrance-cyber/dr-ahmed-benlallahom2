@@ -14,8 +14,9 @@ const BOTH_LANGUAGES = [
   "recrutement-campagne", "recrutement-demander-un-complement", "recrutement-proposer-un-echange",
   "rendez-vous-annulation-praticien", "rendez-vous-confirmation", "rendez-vous-facture", "rendez-vous-paiement-a-regulariser",
   "rendez-vous-paiement-non-confirme-rembourse", "rendez-vous-rappel", "rendez-vous-remboursement",
+  "rgpd-accuse",
 ];
-const FRENCH_ONLY = ["admin-code-de-securite", "proprietaire-brief-employeur", "proprietaire-question-sante", "proprietaire-reservation-payee"];
+const FRENCH_ONLY = ["admin-code-de-securite", "proprietaire-brief-employeur", "proprietaire-demande-rgpd", "proprietaire-question-sante", "proprietaire-reservation-payee"];
 
 let outDir = "";
 const realFetch = globalThis.fetch;
@@ -47,6 +48,10 @@ describe("pnpm emails:preview (MAIL-13)", () => {
     expect(await readFile(path.join(outDir, "fr", "recrutement-campagne.txt"), "utf8")).toContain("Ne plus recevoir d’opportunités de recrutement : https://drahmedbenlallahom.com/recruitment/unsubscribe?token=exemple");
     // An email that has no builder of its own is caught from its real send.
     expect(await readFile(path.join(outDir, "fr", "candidature-recue.html"), "utf8")).toContain("<title>Candidature reçue - CV-2026-000123</title>");
+    // RGPD-13: the requester's acknowledgement with its confirmation link, the owner's email without the description.
+    expect(await readFile(path.join(outDir, "en", "rgpd-accuse.txt"), "utf8")).toContain("https://drahmedbenlallahom.com/gdpr?confirm=exemple&lang=en");
+    expect(await readFile(path.join(outDir, "fr", "rgpd-accuse.html"), "utf8")).toContain(">Confirmer mon adresse</a>");
+    expect(await readFile(path.join(outDir, "fr", "proprietaire-demande-rgpd.html"), "utf8")).toContain("à lire dans l’administration");
     const index = await readFile(path.join(outDir, "index.html"), "utf8");
     expect(index).toContain(`Aperçu des emails (${BOTH_LANGUAGES.length * 2 + FRENCH_ONLY.length})`);
     expect(index).toContain("en · rendez-vous-confirmation</a> (<a href=\"en/rendez-vous-confirmation.txt\">texte</a>) — Booking confirmation - APT-2026-000123");
