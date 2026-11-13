@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, like, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, like, lt, ne, or, sql } from "drizzle-orm";
+import type { BatchItem } from "drizzle-orm/batch";
 import {
   candidateAccounts,
   candidateDocumentAuditLogs,
@@ -49,9 +50,15 @@ export class CandidateErasureBusyError extends Error {
   constructor() { super("candidate_erasure_processing_in_progress"); }
 }
 
-/** Stored files could not be deleted: nothing was removed from the database. */
-export class CandidateErasureStorageError extends Error {
-  constructor(cause: unknown) { super("candidate_erasure_storage_failed", { cause }); }
+/**
+ * The erasure stopped once begun (DATA-08): stored files may already be
+ * deleted (all of them at the "database" stage), but nothing was removed from
+ * the database, its deletions being one batch. The dossier keeps the journal
+ * entry that marks it, and the next retention run resumes it
+ * (findInterruptedErasures).
+ */
+export class CandidateErasureInterruptedError extends Error {
+  constructor(readonly stage: "storage" | "database", cause: unknown) { super(`candidate_erasure_interrupted_${stage}`, { cause }); }
 }
 
 export type CandidateErasureDependencies = {
@@ -88,24 +95,34 @@ function safeTrackingId(trackingId: string) {
   return /^[A-Z0-9][A-Z0-9-]{5,19}$/.test(trackingId) ? trackingId : null;
 }
 
-async function deleteRows(label: string, counts: Record<string, number>, operation: Promise<unknown>) {
-  counts[label] = (counts[label] ?? 0) + mutationRowCount(await operation);
+/** neon-http's batch (one transaction) takes a non-empty list. */
+function nonEmpty(statements: BatchItem<"pg">[]) {
+  if (!statements.length) throw new Error("empty_batch");
+  return statements as [BatchItem<"pg">, ...BatchItem<"pg">[]];
 }
+
+/** Journal entry written before anything is deleted, removed with the dossier: while the dossier exists, it marks an interrupted erasure. */
+const ERASURE_STARTED = "started";
 
 /**
  * Complete, verifiable erasure of one recruitment dossier (GDPR art. 17 and
  * end of the retention period):
- * 1. every stored object — the CV in quarantine and its promoted copies, the
- *    encrypted vault documents of the linked candidate account — is deleted
- *    first; on failure nothing is removed from the database and the call can
- *    simply be retried;
- * 2. the Google Drive copies are deleted; a failure is recorded for retry;
- * 3. derived rows (AI extractions, jobs, shortlists, campaign recipients,
- *    provider events, follow-ups, audit entries holding free text, security
- *    events naming the person) and the linked candidate account with its
- *    sessions and documents are deleted (a document uploaded meanwhile is
- *    found again, file included, before the account), the application row last;
- * 4. a minimal proof is logged: hashes of the email and tracking id, counts.
+ * 1. an "erase" journal entry marks the dossier as being erased: should the
+ *    erasure stop before its end, the next retention run resumes it
+ *    (findInterruptedErasures);
+ * 2. every stored object — the CV in quarantine and its promoted copies, the
+ *    encrypted vault documents of the linked candidate account — is deleted;
+ * 3. the Google Drive copies are deleted; a failure is recorded for retry;
+ * 4. one batch, one transaction (DATA-08), deletes the derived rows (AI
+ *    extractions, jobs, shortlists, campaign recipients, provider events,
+ *    follow-ups, audit entries holding free text), the linked candidate
+ *    account with its sessions and documents, the security events naming the
+ *    person or the account (before the account), the application row, and
+ *    writes a minimal proof (hashes of the email and tracking id, counts):
+ *    all or nothing. A document uploaded meanwhile is found again just before
+ *    it, file deleted; one stored after that makes the database refuse to
+ *    delete its account (foreign key of drizzle/pg/0004), and the batch is
+ *    run again once that document is found too.
  */
 export async function eraseCandidateApplication(
   input: { applicationId: number; actorOpenId: string; reason: CandidateErasureReason },
@@ -137,15 +154,32 @@ export async function eraseCandidateApplication(
   const accounts = await db.select({ id: candidateAccounts.id }).from(candidateAccounts)
     .where(or(eq(candidateAccounts.linkedApplicationId, application.id), eq(candidateAccounts.email, normalizedEmail)));
   const accountIds = accounts.map(account => account.id);
-  const documents = await db.select({ id: candidateDocuments.id, storageKey: candidateDocuments.storageKey }).from(candidateDocuments)
+  const documentsOfDossier = () => db.select({ id: candidateDocuments.id, storageKey: candidateDocuments.storageKey }).from(candidateDocuments)
     .where(accountIds.length
       ? or(inArray(candidateDocuments.candidateId, accountIds), eq(candidateDocuments.applicationId, application.id))
       : eq(candidateDocuments.applicationId, application.id));
-  const documentIds = documents.map(document => document.id);
+  const documents = await documentsOfDossier();
+  const otherApplicationsWithSameEmail = (await db.select({ id: cvApplications.id }).from(cvApplications)
+    .where(and(sql`lower(${cvApplications.email}) = ${normalizedEmail}`, ne(cvApplications.id, application.id))).limit(100)).length;
 
-  // 1. Stored objects.
-  const trackingId = safeTrackingId(application.trackingId);
+  // 1. From here on, an interruption leaves this entry with the dossier.
+  await db.insert(recruitmentAuditLogs).values({
+    applicationId: application.id,
+    adminOpenId: input.actorOpenId,
+    action: "erase",
+    metadata: JSON.stringify({ erasureMode: input.reason, status: ERASURE_STARTED, startedAt: new Date().toISOString() }),
+  });
+
+  // 2. Stored objects.
+  const deletedKeys = new Set<string>();
   let storageObjectsDeleted = 0;
+  const deleteStoredObjects = async (keys: Iterable<string>) => {
+    const pending = Array.from(new Set(keys)).filter(key => !deletedKeys.has(key));
+    if (!pending.length) return;
+    storageObjectsDeleted += await dependencies.storageDelete(pending);
+    pending.forEach(key => deletedKeys.add(key));
+  };
+  const trackingId = safeTrackingId(application.trackingId);
   try {
     const keys = new Set<string>([application.cvFileKey, ...documents.map(document => document.storageKey)]);
     if (trackingId) {
@@ -156,142 +190,159 @@ export async function eraseCandidateApplication(
     for (const accountId of accountIds) {
       for (const key of await dependencies.storageListKeys(`candidate-documents/quarantine/${accountId}/`)) keys.add(key);
     }
-    storageObjectsDeleted = await dependencies.storageDelete(Array.from(keys));
+    await deleteStoredObjects(keys);
   } catch (error) {
-    throw new CandidateErasureStorageError(error);
+    throw new CandidateErasureInterruptedError("storage", error);
   }
 
-  // 2. Google Drive copies.
-  const [exportJob] = await db.select({ id: cvGoogleDriveExportJobs.id, driveFileId: cvGoogleDriveExportJobs.driveFileId }).from(cvGoogleDriveExportJobs)
-    .where(eq(cvGoogleDriveExportJobs.applicationId, application.id)).limit(1);
-  const knownFileIds = exportJob?.driveFileId ? [exportJob.driveFileId] : [];
-  const drive = await dependencies.deleteDriveCopies({ trackingId: application.trackingId, knownFileIds });
-  const drivePending = drive.status === "failed" || drive.status === "not_connected";
-
-  // 3. Database rows, the application last so an interrupted run can resume.
-  const rowsDeleted: Record<string, number> = {};
-  await deleteRows("cv_candidate_certifications", rowsDeleted, db.delete(cvCandidateCertifications).where(eq(cvCandidateCertifications.applicationId, application.id)));
-  await deleteRows("cv_candidate_languages", rowsDeleted, db.delete(cvCandidateLanguages).where(eq(cvCandidateLanguages.applicationId, application.id)));
-  await deleteRows("cv_candidate_experiences", rowsDeleted, db.delete(cvCandidateExperiences).where(eq(cvCandidateExperiences.applicationId, application.id)));
-  await deleteRows("cv_processing_jobs", rowsDeleted, db.delete(cvProcessingJobs).where(eq(cvProcessingJobs.applicationId, application.id)));
-  if (drivePending) {
-    const pendingFields = {
+  try {
+    // 3. Google Drive copies.
+    const [exportJob] = await db.select({ id: cvGoogleDriveExportJobs.id, driveFileId: cvGoogleDriveExportJobs.driveFileId }).from(cvGoogleDriveExportJobs)
+      .where(eq(cvGoogleDriveExportJobs.applicationId, application.id)).limit(1);
+    const knownFileIds = exportJob?.driveFileId ? [exportJob.driveFileId] : [];
+    const drive = await dependencies.deleteDriveCopies({ trackingId: application.trackingId, knownFileIds });
+    const drivePending = drive.status === "failed" || drive.status === "not_connected";
+    const googleDrive: CandidateErasureReport["googleDrive"] = { status: drivePending ? "pending_retry" : drive.status === "deleted" ? "deleted" : "none", deleted: drive.deleted, error: drive.error };
+    const pendingDriveFields = {
       status: "failed" as const,
       driveFileId: knownFileIds[0] ?? null,
       driveFileUrl: null,
       lastError: `${ERASURE_PENDING_DRIVE_PREFIX}${application.trackingId}`,
       startedAt: null,
       finishedAt: new Date(),
-      updatedAt: new Date(),
     };
-    if (exportJob) await db.update(cvGoogleDriveExportJobs).set(pendingFields).where(eq(cvGoogleDriveExportJobs.id, exportJob.id));
-    else await db.insert(cvGoogleDriveExportJobs).values({ applicationId: application.id, attempts: 0, maxAttempts: 0, scheduledFor: new Date(), ...pendingFields }).onConflictDoNothing();
-  } else {
-    await deleteRows("cv_google_drive_export_jobs", rowsDeleted, db.delete(cvGoogleDriveExportJobs).where(eq(cvGoogleDriveExportJobs.applicationId, application.id)));
-  }
-  await deleteRows("client_brief_candidates", rowsDeleted, db.delete(clientBriefCandidates).where(eq(clientBriefCandidates.applicationId, application.id)));
-  await deleteRows("recruitment_follow_up_tasks", rowsDeleted, db.delete(recruitmentFollowUpTasks).where(eq(recruitmentFollowUpTasks.applicationId, application.id)));
-  const recipients = await db.select({ id: recruitmentCampaignRecipients.id }).from(recruitmentCampaignRecipients)
-    .where(eq(recruitmentCampaignRecipients.applicationId, application.id));
-  const recipientIds = recipients.map(recipient => recipient.id);
-  const emailEventConditions = [
-    eq(recruitmentEmailEvents.applicationId, application.id),
-    and(isNull(recruitmentEmailEvents.applicationId), sql`lower(${recruitmentEmailEvents.recipientEmail}) = ${normalizedEmail}`),
-    ...(recipientIds.length ? [inArray(recruitmentEmailEvents.campaignRecipientId, recipientIds)] : []),
-  ];
-  await deleteRows("recruitment_email_events", rowsDeleted, db.delete(recruitmentEmailEvents).where(or(...emailEventConditions)));
-  await deleteRows("recruitment_campaign_recipients", rowsDeleted, db.delete(recruitmentCampaignRecipients).where(eq(recruitmentCampaignRecipients.applicationId, application.id)));
 
-  // Vault documents with their processing jobs and audit entries; their stored files are deleted before.
-  const deleteDocumentRows = async (ids: number[]) => {
-    if (ids.length) {
-      await deleteRows("candidate_document_processing_jobs", rowsDeleted, db.delete(candidateDocumentProcessingJobs).where(inArray(candidateDocumentProcessingJobs.documentId, ids)));
-    }
-    const documentAuditConditions = [
-      ...(ids.length ? [inArray(candidateDocumentAuditLogs.documentId, ids)] : []),
-      ...(accountIds.length ? [inArray(candidateDocumentAuditLogs.candidateId, accountIds)] : []),
-    ];
-    if (documentAuditConditions.length) {
-      await deleteRows("candidate_document_audit_logs", rowsDeleted, db.delete(candidateDocumentAuditLogs).where(or(...documentAuditConditions)));
-    }
-    if (ids.length) {
-      await deleteRows("candidate_documents", rowsDeleted, db.delete(candidateDocuments).where(inArray(candidateDocuments.id, ids)));
-    }
-  };
-  await deleteDocumentRows(documentIds);
-  let candidateSessionsDeleted = 0;
-  let candidateAccountsErased = 0;
-  if (accountIds.length) {
-    // Sessions first: no upload can start any more.
-    candidateSessionsDeleted = mutationRowCount(await db.delete(candidateSessions).where(inArray(candidateSessions.candidateId, accountIds)));
-    rowsDeleted.candidate_sessions = candidateSessionsDeleted;
-    // A document uploaded while the erasure ran (sent before the sessions
-    // were deleted) is found again and erased with its stored file: it would
-    // otherwise survive its account, its analysis still queued (DATA-01). One
-    // stored between this check and the account deletion makes that deletion
-    // fail on the foreign key of drizzle/pg/0004: checked again.
+    // 4. Database rows: one batch.
     for (let attempt = 1; ; attempt += 1) {
-      const lateDocuments = await db.select({ id: candidateDocuments.id, storageKey: candidateDocuments.storageKey }).from(candidateDocuments)
-        .where(or(inArray(candidateDocuments.candidateId, accountIds), eq(candidateDocuments.applicationId, application.id)));
-      if (lateDocuments.length) {
-        // On a storage failure the application row is still there: the erasure can simply be run again.
-        storageObjectsDeleted += await dependencies.storageDelete(lateDocuments.map(document => document.storageKey));
-        await deleteDocumentRows(lateDocuments.map(document => document.id));
-      }
+      // A document uploaded while the erasure ran is found again, its stored
+      // file deleted: it would otherwise survive its account, its analysis
+      // still queued (DATA-01).
+      const current = await documentsOfDossier();
       try {
-        candidateAccountsErased = mutationRowCount(await db.delete(candidateAccounts).where(inArray(candidateAccounts.id, accountIds)));
-        break;
+        await deleteStoredObjects(current.map(document => document.storageKey));
       } catch (error) {
-        if (attempt >= 3 || !isForeignKeyViolation(error, CANDIDATE_DOCUMENT_ACCOUNT_FOREIGN_KEY)) throw error;
+        throw new CandidateErasureInterruptedError("storage", error);
       }
+      const documentIds = current.map(document => document.id);
+      const performedAt = new Date().toISOString();
+      const statements: Array<[label: string | null, statement: BatchItem<"pg">]> = [
+        ["cv_candidate_certifications", db.delete(cvCandidateCertifications).where(eq(cvCandidateCertifications.applicationId, application.id))],
+        ["cv_candidate_languages", db.delete(cvCandidateLanguages).where(eq(cvCandidateLanguages.applicationId, application.id))],
+        ["cv_candidate_experiences", db.delete(cvCandidateExperiences).where(eq(cvCandidateExperiences.applicationId, application.id))],
+        ["cv_processing_jobs", db.delete(cvProcessingJobs).where(eq(cvProcessingJobs.applicationId, application.id))],
+        drivePending
+          ? [null, exportJob
+            ? db.update(cvGoogleDriveExportJobs).set(pendingDriveFields).where(eq(cvGoogleDriveExportJobs.id, exportJob.id))
+            : db.insert(cvGoogleDriveExportJobs).values({ applicationId: application.id, attempts: 0, maxAttempts: 0, scheduledFor: new Date(), ...pendingDriveFields }).onConflictDoNothing()]
+          : ["cv_google_drive_export_jobs", db.delete(cvGoogleDriveExportJobs).where(eq(cvGoogleDriveExportJobs.applicationId, application.id))],
+        ["client_brief_candidates", db.delete(clientBriefCandidates).where(eq(clientBriefCandidates.applicationId, application.id))],
+        ["recruitment_follow_up_tasks", db.delete(recruitmentFollowUpTasks).where(eq(recruitmentFollowUpTasks.applicationId, application.id))],
+        ["recruitment_email_events", db.delete(recruitmentEmailEvents).where(or(
+          eq(recruitmentEmailEvents.applicationId, application.id),
+          and(isNull(recruitmentEmailEvents.applicationId), sql`lower(${recruitmentEmailEvents.recipientEmail}) = ${normalizedEmail}`),
+          inArray(recruitmentEmailEvents.campaignRecipientId, db.select({ id: recruitmentCampaignRecipients.id }).from(recruitmentCampaignRecipients).where(eq(recruitmentCampaignRecipients.applicationId, application.id))),
+        ))],
+        ["recruitment_campaign_recipients", db.delete(recruitmentCampaignRecipients).where(eq(recruitmentCampaignRecipients.applicationId, application.id))],
+      ];
+      // Vault documents with their processing jobs and audit entries, then the account's sessions.
+      if (documentIds.length) statements.push(["candidate_document_processing_jobs", db.delete(candidateDocumentProcessingJobs).where(inArray(candidateDocumentProcessingJobs.documentId, documentIds))]);
+      const documentAuditConditions = [
+        ...(documentIds.length ? [inArray(candidateDocumentAuditLogs.documentId, documentIds)] : []),
+        ...(accountIds.length ? [inArray(candidateDocumentAuditLogs.candidateId, accountIds)] : []),
+      ];
+      if (documentAuditConditions.length) statements.push(["candidate_document_audit_logs", db.delete(candidateDocumentAuditLogs).where(or(...documentAuditConditions))]);
+      if (documentIds.length) statements.push(["candidate_documents", db.delete(candidateDocuments).where(inArray(candidateDocuments.id, documentIds))]);
+      if (accountIds.length) statements.push(["candidate_sessions", db.delete(candidateSessions).where(inArray(candidateSessions.candidateId, accountIds))]);
+      // The account's security events before the account itself: none can outlive it.
+      statements.push(["security_events", db.delete(securityEvents).where(or(
+        inArray(securityEvents.actorReference, [...emailVariants, hashSecurityValue(application.email)]),
+        ...(accountIds.length ? [and(eq(securityEvents.actorKind, "candidate"), inArray(securityEvents.actorReference, accountIds.map(String)))] : []),
+      ))]);
+      if (accountIds.length) statements.push(["candidate_accounts", db.delete(candidateAccounts).where(inArray(candidateAccounts.id, accountIds))]);
+      // Earlier audit entries can hold free text sent to the candidate; the entry of step 1 goes with them.
+      statements.push(["recruitment_audit_logs", db.delete(recruitmentAuditLogs).where(eq(recruitmentAuditLogs.applicationId, application.id))]);
+      statements.push(["cv_applications", db.delete(cvApplications).where(eq(cvApplications.id, application.id))]);
+      // Minimal proof: no name, email, file name or storage key.
+      statements.push([null, db.insert(recruitmentAuditLogs).values({
+        applicationId: application.id,
+        adminOpenId: input.actorOpenId,
+        action: "erase",
+        metadata: JSON.stringify({
+          erasureMode: input.reason,
+          trackingIdHash: sha256(application.trackingId),
+          emailHash: hashSecurityValue(application.email),
+          storageObjectsDeleted,
+          googleDrive: googleDrive.status,
+          googleDriveFilesDeleted: drive.deleted,
+          candidateAccountsErased: accountIds.length,
+          candidateDocumentsDeleted: documentIds.length,
+          performedAt,
+        }),
+      })]);
+
+      let results: unknown[];
+      try {
+        results = await db.batch(nonEmpty(statements.map(([, statement]) => statement)));
+      } catch (error) {
+        // A document stored since the check above: the database refused to delete its account, and nothing was deleted.
+        if (attempt < 3 && isForeignKeyViolation(error, CANDIDATE_DOCUMENT_ACCOUNT_FOREIGN_KEY)) continue;
+        throw error;
+      }
+      const rowsDeleted: Record<string, number> = {};
+      statements.forEach(([label], index) => { if (label) rowsDeleted[label] = mutationRowCount(results[index]); });
+      return {
+        applicationId: application.id,
+        reason: input.reason,
+        storageObjectsDeleted,
+        googleDrive,
+        candidateAccountsErased: rowsDeleted.candidate_accounts ?? 0,
+        candidateSessionsDeleted: rowsDeleted.candidate_sessions ?? 0,
+        candidateDocumentsDeleted: rowsDeleted.candidate_documents ?? 0,
+        rowsDeleted,
+        otherApplicationsWithSameEmail,
+        performedAt,
+      };
     }
-    rowsDeleted.candidate_accounts = candidateAccountsErased;
+  } catch (error) {
+    if (error instanceof CandidateErasureInterruptedError) throw error;
+    throw new CandidateErasureInterruptedError("database", error);
   }
-  const securityConditions = [
-    inArray(securityEvents.actorReference, [...emailVariants, hashSecurityValue(application.email)]),
-    ...(accountIds.length ? [and(eq(securityEvents.actorKind, "candidate"), inArray(securityEvents.actorReference, accountIds.map(String)))] : []),
-  ];
-  await deleteRows("security_events", rowsDeleted, db.delete(securityEvents).where(or(...securityConditions)));
-  // Earlier audit entries can hold free text sent to the candidate.
-  await deleteRows("recruitment_audit_logs", rowsDeleted, db.delete(recruitmentAuditLogs).where(eq(recruitmentAuditLogs.applicationId, application.id)));
-  await deleteRows("cv_applications", rowsDeleted, db.delete(cvApplications).where(eq(cvApplications.id, application.id)));
+}
 
-  const otherApplicationsWithSameEmail = (await db.select({ id: cvApplications.id }).from(cvApplications)
-    .where(sql`lower(${cvApplications.email}) = ${normalizedEmail}`).limit(100)).length;
-
-  const performedAt = new Date().toISOString();
-  const report: CandidateErasureReport = {
-    applicationId: application.id,
-    reason: input.reason,
-    storageObjectsDeleted,
-    googleDrive: { status: drivePending ? "pending_retry" : drive.status === "deleted" ? "deleted" : "none", deleted: drive.deleted, error: drive.error },
-    candidateAccountsErased,
-    candidateSessionsDeleted,
-    candidateDocumentsDeleted: rowsDeleted.candidate_documents ?? 0,
-    rowsDeleted,
-    otherApplicationsWithSameEmail,
-    performedAt,
-  };
-
-  // 4. Minimal proof: no name, email, file name or storage key.
-  await db.insert(recruitmentAuditLogs).values({
-    applicationId: application.id,
-    adminOpenId: input.actorOpenId,
-    action: "erase",
-    metadata: JSON.stringify({
-      erasureMode: input.reason,
-      trackingIdHash: sha256(application.trackingId),
-      emailHash: hashSecurityValue(application.email),
-      storageObjectsDeleted,
-      googleDrive: report.googleDrive.status,
-      googleDriveFilesDeleted: drive.deleted,
-      candidateAccountsErased,
-      candidateDocumentsDeleted: report.candidateDocumentsDeleted,
-      rowsDeleted,
-      performedAt,
-    }),
-  });
-  return report;
+/**
+ * Erasures that stopped before their end (CandidateErasureInterruptedError,
+ * or a function stopped at its time limit): the dossier still has the
+ * "erase" entry written when it began, oldest first, with the reason and the
+ * administrator of the first attempt. The retention run resumes them.
+ */
+export async function findInterruptedErasures(limit: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const entries = await db.select({ applicationId: recruitmentAuditLogs.applicationId, adminOpenId: recruitmentAuditLogs.adminOpenId, metadata: recruitmentAuditLogs.metadata })
+    .from(recruitmentAuditLogs)
+    .where(and(
+      eq(recruitmentAuditLogs.action, "erase"),
+      inArray(recruitmentAuditLogs.applicationId, db.select({ id: cvApplications.id }).from(cvApplications)),
+    ))
+    .orderBy(asc(recruitmentAuditLogs.id))
+    .limit(Math.min(Math.max(limit, 1), 50) * 2);
+  const interrupted = new Map<number, { applicationId: number; trackingId: string; actorOpenId: string; reason: CandidateErasureReason }>();
+  for (const entry of entries) {
+    if (entry.applicationId === null || interrupted.has(entry.applicationId)) continue;
+    let reason: CandidateErasureReason = "admin_gdpr_request";
+    try {
+      if ((JSON.parse(entry.metadata ?? "{}") as { erasureMode?: unknown }).erasureMode === "retention_expired") reason = "retention_expired";
+    } catch {
+      // An unreadable entry is resumed as a GDPR request: the dossier is erased either way.
+    }
+    interrupted.set(entry.applicationId, { applicationId: entry.applicationId, trackingId: "", actorOpenId: entry.adminOpenId, reason });
+  }
+  const resumable = Array.from(interrupted.values()).slice(0, limit);
+  if (!resumable.length) return resumable;
+  const references = await db.select({ id: cvApplications.id, trackingId: cvApplications.trackingId }).from(cvApplications)
+    .where(inArray(cvApplications.id, resumable.map(erasure => erasure.applicationId)));
+  for (const row of references) interrupted.get(row.id)!.trackingId = row.trackingId;
+  return resumable.filter(erasure => erasure.trackingId);
 }
 
 /**
@@ -370,8 +421,10 @@ export async function eraseExpiredCandidateDocuments(input: { now?: Date; limit?
  * unlinked account whose address matches an application is attached to it
  * instead and then follows that dossier's retention. Stored objects first; on
  * a storage failure nothing is removed from the database for that account.
+ * `hasTime`: no account is started once it answers false; the rest waits for
+ * the next run.
  */
-export async function eraseInactiveCandidateAccounts(input: { now?: Date; limit?: number; dependencies?: CandidateErasureDependencies } = {}) {
+export async function eraseInactiveCandidateAccounts(input: { now?: Date; limit?: number; dependencies?: CandidateErasureDependencies; hasTime?: () => boolean } = {}) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
   const dependencies = input.dependencies ?? defaultDependencies;
@@ -394,6 +447,7 @@ export async function eraseInactiveCandidateAccounts(input: { now?: Date; limit?
   let documentsDeleted = 0;
   let storageObjectsDeleted = 0;
   for (const account of accounts) {
+    if (input.hasTime && !input.hasTime()) break;
     const [application] = await db.select({ id: cvApplications.id }).from(cvApplications)
       .where(sql`lower(${cvApplications.email}) = ${account.email}`)
       .orderBy(desc(cvApplications.id))

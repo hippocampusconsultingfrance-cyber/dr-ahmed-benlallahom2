@@ -179,14 +179,47 @@ describe("rétention des candidatures : effacement réel à l’échéance", () 
     expect(state.notifications[0]!.content).toContain("Dont espaces candidats sans candidature, inactifs depuis 2 ans : 1.");
   });
 
-  it("si le stockage échoue : rien n’est effacé en base et le bilan signale les dossiers à vérifier", async () => {
+  it("si le stockage échoue : rien n’est effacé en base, le bilan annonce un effacement partiel, repris au passage suivant (DATA-08)", async () => {
     const dossier = seedApplication(1, new Date(NOW.getTime() - DAY));
     storageDown = true;
-    const result = await runRecruitmentRetentionCleanup("vercel-cron", { now: NOW, dependencies });
-    expect(result).toMatchObject({ erased: 0, failed: 1 });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const result = await runRecruitmentRetentionCleanup("vercel-cron", { now: NOW, dependencies });
+      expect(result).toMatchObject({ erased: 0, partial: 1, failed: 0 });
+    } finally {
+      consoleError.mockRestore();
+    }
     expect(memory.rows(cvApplications).map(row => row.id)).toEqual([dossier.id]);
-    expect(state.notifications[0]!.title).toContain("1 à vérifier");
-    expect(state.notifications[0]!.content).toContain(dossier.trackingId);
+    expect(memory.rows(cvCandidateLanguages)).toHaveLength(1);
+    expect(state.notifications[0]!.title).toBe("Rétention recrutement : 0 dossier(s) effacé(s), 1 effacement(s) partiel(s)");
+    expect(state.notifications[0]!.content).toContain(`Effacement partiel, reprise automatique au prochain passage : ${dossier.trackingId} (fichiers stockés supprimés en tout ou partie, rien n’a été effacé en base).`);
+    expect(state.notifications[0]!.content).not.toContain("À vérifier");
+
+    storageDown = false;
+    state.notifications = [];
+    await expect(runRecruitmentRetentionCleanup("vercel-cron", { now: NOW, dependencies })).resolves.toMatchObject({ erased: 1, resumed: 1, partial: 0 });
+    expect(memory.rows(cvApplications)).toHaveLength(0);
+    expect(memory.rows(cvCandidateLanguages)).toHaveLength(0);
+    expect(blobs.size).toBe(0);
+    // One proof, for the dossier's own reason; the entry that marked the interrupted erasure went with the dossier.
+    expect(memory.rows(recruitmentAuditLogs).map(row => [row.action, JSON.parse(String(row.metadata)).erasureMode, JSON.parse(String(row.metadata)).status])).toEqual([["erase", "retention_expired", undefined]]);
+    expect(state.notifications[0]!.content).toContain("Effacements interrompus repris et terminés (demande RGPD ou dossier échu) : 1.");
+  });
+
+  it("ne commence plus de dossier une fois le budget de temps du passage dépensé : le reste attend le passage suivant (DATA-08)", async () => {
+    const first = seedApplication(1, new Date(NOW.getTime() - 3 * DAY));
+    const second = seedApplication(2, new Date(NOW.getTime() - 2 * DAY));
+    // Each Drive deletion takes longer than the whole budget.
+    const slowDrive: CandidateErasureDependencies = { ...dependencies, deleteDriveCopies: async () => { await new Promise(resolve => setTimeout(resolve, 60)); return { status: "none", deleted: 0, error: null }; } };
+
+    const result = await runRecruitmentRetentionCleanup("vercel-cron", { now: NOW, budgetMs: 30, dependencies: slowDrive });
+    expect(result).toMatchObject({ expiredFound: 2, erased: 1, moreRemaining: true });
+    expect(memory.rows(cvApplications).map(row => row.id)).toEqual([second.id]);
+    expect(memory.rows(cvApplications).map(row => row.id)).not.toContain(first.id);
+    expect(state.notifications[0]!.content).toContain("D’autres dossiers échus restent à effacer : ils le seront aux prochains passages (10 par jour au maximum, dans la durée limite d’un passage).");
+
+    await expect(runRecruitmentRetentionCleanup("vercel-cron", { now: NOW, dependencies })).resolves.toMatchObject({ erased: 1, moreRemaining: false });
+    expect(memory.rows(cvApplications)).toHaveLength(0);
   });
 
   it("une connexion échouée ou une demande de réinitialisation ne prolonge pas la conservation : seules les colonnes d’activité comptent (DATA-09)", async () => {

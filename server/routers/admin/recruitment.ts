@@ -15,6 +15,7 @@ import {
   recruitmentFollowUpTasks,
 } from "../../../drizzle/schema";
 import { storageGetSignedUrl } from "../../storage";
+import { logError } from "../../_core/logError";
 import { canAdminDownloadCv, CV_DOWNLOAD_UNAVAILABLE_MESSAGE } from "../../recruitmentDownloadPolicy";
 import { eq, and, or, sql, desc, inArray, isNull, ne } from "drizzle-orm";
 import { buildRecruitmentTemplateEmail, sendRecruitmentTemplateEmail, type RecruitmentEmailLanguage, type RecruitmentEmailTemplate } from "../../_core/notifications";
@@ -917,14 +918,23 @@ export const adminRecruitmentRouter = router({
   erase: adminProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input, ctx }) => {
-      const { eraseCandidateApplication, CandidateErasureBusyError, CandidateErasureNotFoundError, CandidateErasureStorageError } = await import("../../recruitmentErasure");
+      const { eraseCandidateApplication, CandidateErasureBusyError, CandidateErasureInterruptedError, CandidateErasureNotFoundError } = await import("../../recruitmentErasure");
       try {
         const report = await eraseCandidateApplication({ applicationId: input.id, actorOpenId: ctx.user.openId, reason: "admin_gdpr_request" });
         return { success: true as const, ...report };
       } catch (error) {
         if (error instanceof CandidateErasureNotFoundError) throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable" });
         if (error instanceof CandidateErasureBusyError) throw new TRPCError({ code: "CONFLICT", message: "Une analyse ou une copie Google Drive de ce dossier est en cours. Réessayez l’effacement dans quelques minutes." });
-        if (error instanceof CandidateErasureStorageError) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Les fichiers stockés n’ont pas pu être supprimés : aucune donnée n’a été effacée en base. Réessayez dans quelques instants." });
+        // DATA-08: the files may be gone while the dossier is still listed; the retention run finishes it.
+        if (error instanceof CandidateErasureInterruptedError) {
+          logError("[Recruitment] erasure interrupted", error);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: error.stage === "storage"
+              ? "Effacement partiel, reprise automatique au prochain passage : les fichiers stockés n’ont pas tous pu être supprimés et rien n’a été effacé en base. Le dossier reste listé jusqu’à la fin de l’effacement par la tâche de conservation."
+              : "Effacement partiel, reprise automatique au prochain passage : les fichiers stockés du dossier sont supprimés, mais rien n’a été effacé en base. Le dossier reste listé, sans CV, jusqu’à la fin de l’effacement par la tâche de conservation.",
+          });
+        }
         throw error;
       }
     }),

@@ -115,6 +115,19 @@ describe("effacement RGPD d’une candidature", () => {
     await expect(admin().admin.recruitment.erase({ id: 42 })).resolves.toEqual({ success: true, erased: true });
     expect(eraseCandidateApplication).toHaveBeenCalledWith({ applicationId: 42, actorOpenId: "user_owner", reason: "admin_gdpr_request" });
   });
+
+  it("dit à l’administrateur qu’un effacement interrompu est partiel et repris automatiquement, et non une erreur interne (DATA-08)", async () => {
+    const { CandidateErasureInterruptedError } = await import("./recruitmentErasure");
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      vi.mocked(eraseCandidateApplication).mockRejectedValueOnce(new CandidateErasureInterruptedError("database", new Error("Failed query: delete from \"security_events\"")));
+      await expect(admin().admin.recruitment.erase({ id: 42 })).rejects.toThrow(/^Effacement partiel, reprise automatique au prochain passage : les fichiers stockés du dossier sont supprimés, mais rien n’a été effacé en base\./);
+      vi.mocked(eraseCandidateApplication).mockRejectedValueOnce(new CandidateErasureInterruptedError("storage", new Error("BlobServiceNotAvailable")));
+      await expect(admin().admin.recruitment.erase({ id: 42 })).rejects.toThrow(/^Effacement partiel, reprise automatique au prochain passage : les fichiers stockés n’ont pas tous pu être supprimés et rien n’a été effacé en base\./);
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
 });
 
 describe("relance immédiate des analyses CV", () => {
