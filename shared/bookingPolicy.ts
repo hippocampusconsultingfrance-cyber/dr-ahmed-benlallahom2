@@ -3,10 +3,66 @@
  * change it everywhere (client checks, server checks, emails).
  */
 
+import { getParisParts } from "./parisTime";
 import { INVALID_CHARACTERS_REASON } from "./publicFormRefusalReasons";
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
+
+/**
+ * Consultation fees in euro cents (CODE-09): the price sent to Stripe and
+ * stored with the appointment (then printed on its invoice), and the rates
+ * the booking page and the FAQ show.
+ */
+export const CONSULTATION_DAY_RATE_CENTS = 10_000;
+export const CONSULTATION_NIGHT_RATE_CENTS = 15_000;
+
+/** Night rate for a consultation starting from 18:00 until 08:00 the next morning, in Paris time. */
+export const NIGHT_RATE_START_HOUR = 18;
+export const NIGHT_RATE_END_HOUR = 8;
+
+export function isNightRateForParis(date: Date): boolean {
+  const { hour } = getParisParts(date);
+  return hour >= NIGHT_RATE_START_HOUR || hour < NIGHT_RATE_END_HOUR;
+}
+
+/** Price in cents of a consultation starting at `date`: the night rate from 18:00 to 08:00 in Paris. */
+export function consultationPriceCents(date: Date): number {
+  return isNightRateForParis(date) ? CONSULTATION_NIGHT_RATE_CENTS : CONSULTATION_DAY_RATE_CENTS;
+}
+
+const rateAmountFormats = new Map<string, Intl.NumberFormat>();
+
+/**
+ * A rate as the pages write it, without cents when whole: 10000 → "100", 12050 → "120,50" in French.
+ * One formatter per locale, created once: the booking page writes its rates again at each render.
+ */
+export function formatRateAmount(cents: number, locale: string): string {
+  const fractionDigits = cents % 100 === 0 ? 0 : 2;
+  const key = `${locale}|${fractionDigits}`;
+  let format = rateAmountFormats.get(key);
+  if (!format) {
+    format = new Intl.NumberFormat(locale, { minimumFractionDigits: fractionDigits, maximumFractionDigits: 2 });
+    rateAmountFormats.set(key, format);
+  }
+  return format.format(cents / 100);
+}
+
+/** An hour of the rate ranges on the 12-hour clock of the English pages: 8 → "8am", 18 → "6pm" ("6 pm" with a space). */
+export function englishRateHour(hour: number, space = ""): string {
+  return `${hour % 12 || 12}${space}${hour < 12 ? "am" : "pm"}`;
+}
+
+/**
+ * Locale of the dates and amounts of a booking, by language of the booking
+ * page: the page, its confirmation and the Stripe payment page (RES-14).
+ */
+export const BOOKING_LOCALES: Record<string, string> = { fr: "fr-FR", en: "en-GB", de: "de-DE", zh: "zh-CN" };
+
+/** The locale of a booking language; English (en-GB) for a language the site does not offer. */
+export function getBookingLocale(language: string): string {
+  return BOOKING_LOCALES[language] ?? "en-GB";
+}
 
 /** Minimum time between the booking and the start of the consultation. */
 export const BOOKING_MIN_LEAD_TIME_HOURS = 2;

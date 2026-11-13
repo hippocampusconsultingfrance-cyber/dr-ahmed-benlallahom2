@@ -4,6 +4,7 @@ import { reportResendQuotaError, sendWithRateLimitRetry } from "./_core/resendDe
 import { DEFAULT_TRANSACTIONAL_FROM, resolveConsultationContact } from "./consultationContact";
 import { adminLink } from "./adminLinks";
 import { emailLanguageFor } from "./emailLanguage";
+import { PARIS_TIME_ZONE } from "../shared/parisTime";
 
 /**
  * Emails of the free medical-question service.
@@ -167,7 +168,7 @@ export async function sendMedicalQuestionAcknowledgementEmail(input: { email: st
  * in the subject (INTL-11), and a link to the question in the admin (ADM-09).
  */
 export function buildMedicalQuestionOwnerNotification(input: { trackingId: string; language: string; publicationConsent: boolean; receivedAt?: Date; adminUrl?: string }) {
-  const receivedAt = (input.receivedAt ?? new Date()).toLocaleString("fr-FR", { timeZone: "Europe/Paris", dateStyle: "long", timeStyle: "short" });
+  const receivedAt = (input.receivedAt ?? new Date()).toLocaleString("fr-FR", { timeZone: PARIS_TIME_ZONE, dateStyle: "long", timeStyle: "short" });
   return {
     reference: input.trackingId,
     title: "Nouvelle question santé à traiter",

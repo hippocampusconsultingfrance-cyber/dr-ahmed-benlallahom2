@@ -9,6 +9,7 @@ import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { getRecruitmentCampaignTemplate, RECRUITMENT_CAMPAIGN_TEMPLATES, type RecruitmentCampaignTemplateId } from "./recruitmentCampaignTemplates";
 import { deliveryRateLabel } from "./campaignDeliveryMetrics";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { PARIS_TIME_ZONE } from "@shared/parisTime";
 
 type MailingTabProps = {
   initialSelectedIds: number[];
@@ -222,7 +223,7 @@ export default function MailingTab({ initialSelectedIds }: MailingTabProps) {
               const total = Number(delivery.total || campaign.recipientCount || 0);
               return <article key={campaign.id} className="flex flex-col gap-4 rounded-xl border border-border p-4 wrap-anywhere">
                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                  <div><h4 className="font-semibold text-foreground">{campaign.title}</h4><p className="mt-1 text-sm text-muted-foreground">{campaign.subject} · {campaign.language.toUpperCase()} · {campaign.recipientCount} {copy.recipients}</p><p className="mt-1 text-xs text-muted-foreground">{copy.createdOn} {new Date(campaign.createdAt).toLocaleString(interfaceLanguage === "zh" ? "zh-CN" : interfaceLanguage === "de" ? "de-DE" : interfaceLanguage === "en" ? "en-GB" : "fr-FR", { timeZone: "Europe/Paris" })}</p></div>
+                  <div><h4 className="font-semibold text-foreground">{campaign.title}</h4><p className="mt-1 text-sm text-muted-foreground">{campaign.subject} · {campaign.language.toUpperCase()} · {campaign.recipientCount} {copy.recipients}</p><p className="mt-1 text-xs text-muted-foreground">{copy.createdOn} {new Date(campaign.createdAt).toLocaleString(interfaceLanguage === "zh" ? "zh-CN" : interfaceLanguage === "de" ? "de-DE" : interfaceLanguage === "en" ? "en-GB" : "fr-FR", { timeZone: PARIS_TIME_ZONE })}</p></div>
                   <span className={`w-fit rounded-full border px-2.5 py-1 text-xs font-medium ${campaignStatusTone(campaign.status)}`}>{campaignStatusLabel(campaign.status, copy.statuses)}</span>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4" aria-label={`Suivi de la campagne ${campaign.title}`}>

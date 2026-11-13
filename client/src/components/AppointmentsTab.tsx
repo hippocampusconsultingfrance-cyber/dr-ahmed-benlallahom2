@@ -18,6 +18,7 @@ import { formatAdminAmount } from "@/components/adminAmount";
 import { PAYMENT_STATUS_LABELS } from "@/components/appointmentStatusLabels";
 import AdminStatusBadge, { AdminBadge } from "@/components/AdminStatusBadge";
 import { formatAdminDateTime } from "@/components/adminDateFormat";
+import { PARIS_TIME_ZONE } from "@shared/parisTime";
 
 /**
  * The list's filters (ADM-18): by default without the bookings that never
@@ -34,7 +35,7 @@ function listFilterInput(filter: AppointmentListFilter) {
 }
 
 /** « 12 octobre 2026 », a Paris calendar day (YYYY-MM-DD). */
-const parisLongDay = (day: string) => new Date(`${day}T12:00:00.000Z`).toLocaleDateString("fr-FR", { timeZone: "Europe/Paris", day: "numeric", month: "long", year: "numeric" });
+const parisLongDay = (day: string) => new Date(`${day}T12:00:00.000Z`).toLocaleDateString("fr-FR", { timeZone: PARIS_TIME_ZONE, day: "numeric", month: "long", year: "numeric" });
 
 const AGENDA_RANGES: Array<{ id: AgendaRange; label: string }> = [
   { id: "today", label: "Aujourd’hui" },

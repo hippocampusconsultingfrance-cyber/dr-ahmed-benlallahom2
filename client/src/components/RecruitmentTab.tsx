@@ -19,6 +19,7 @@ import { certificationFactLabel, recruitmentFactNameContains } from "@shared/rec
 import { RECRUITMENT_APPLICATION_STATUS_OPTIONS, type RecruitmentApplicationStatus } from "@shared/recruitmentApplicationStatuses";
 import { RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "@shared/recruitmentAiAnalysis";
 import { candidateInvitationForcedResendAt } from "@shared/candidatePortalInvitationResend";
+import { PARIS_TIME_ZONE } from "@shared/parisTime";
 import { AI_ANALYSIS_UNAVAILABLE_LABEL, isAiAnalysisUnavailable, SCORE_UNAVAILABLE_EXPLANATION, SCORE_UNAVAILABLE_HEADING, scoredApplicationsFirst } from "./recruitmentScoreGroups";
 import { contradictionEvidenceLabel, CV_READING_LABELS, CV_REVIEW_REMINDER, cvReadingTextForDisplay, extractionWarningLabel, fieldEvidenceStatusLabel, fieldEvidenceStatusTone } from "./recruitmentEvidenceLabels";
 import {
@@ -641,8 +642,8 @@ export default function RecruitmentTab({ initialSearch = "" }: { initialSearch?:
                     <div className="min-w-0 space-y-1 wrap-anywhere text-muted-foreground">
                       <p><strong className="text-foreground">Fichier :</strong> {application.cvOriginalName} ({formatBytes(application.cvSizeBytes)})</p>
                       <p><strong className="text-foreground">Contrôle du fichier :</strong> {application.fileValidationStatus === "accepted" ? "validé" : application.fileValidationStatus || "en attente"}{application.fileSecurityScanVersion ? ` · ${application.fileSecurityScanVersion}` : ""}</p>
-                      <p><strong className="text-foreground">Reçu le :</strong> {new Date(application.createdAt).toLocaleString("fr-FR", { timeZone: "Europe/Paris" })}</p>
-                      <p><strong className="text-foreground">Conservation jusqu’au :</strong> {application.retentionUntil ? new Date(application.retentionUntil).toLocaleDateString("fr-FR", { timeZone: "Europe/Paris" }) : "—"}</p>
+                      <p><strong className="text-foreground">Reçu le :</strong> {new Date(application.createdAt).toLocaleString("fr-FR", { timeZone: PARIS_TIME_ZONE })}</p>
+                      <p><strong className="text-foreground">Conservation jusqu’au :</strong> {application.retentionUntil ? new Date(application.retentionUntil).toLocaleDateString("fr-FR", { timeZone: PARIS_TIME_ZONE }) : "—"}</p>
                       <p><strong className="text-foreground">Pipeline :</strong> {analysisStatusLabel(application.analysisStatus)} · tentative {application.analysisAttempts ?? 0}</p>
                       {application.analysisModel && <p><strong className="text-foreground">Analyse :</strong> {application.analysisModel} · {application.analysisPromptVersion || "version non renseignée"}</p>}
                       {application.extractionMethod && <p><strong className="text-foreground">Extraction :</strong> {application.extractionMethod}{application.extractionTotalPages ? ` · ${application.extractionTotalPages} page${application.extractionTotalPages > 1 ? "s" : ""}` : ""}</p>}
@@ -715,7 +716,7 @@ export default function RecruitmentTab({ initialSearch = "" }: { initialSearch?:
                               <RefreshCw className={`mr-2 h-3.5 w-3.5 ${sendPortalInvitation.isPending ? "animate-spin" : ""}`} />
                               Renvoyer quand même
                             </Button>
-                          ) : <p className="mt-1 text-xs opacity-90">« Renvoyer quand même » possible à {invitationResendAt.toLocaleTimeString("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit" })}, une fois le suivi vérifié.</p>) : null}
+                          ) : <p className="mt-1 text-xs opacity-90">« Renvoyer quand même » possible à {invitationResendAt.toLocaleTimeString("fr-FR", { timeZone: PARIS_TIME_ZONE, hour: "2-digit", minute: "2-digit" })}, une fois le suivi vérifié.</p>) : null}
                         </div>
                       </div>
                     </div>
@@ -833,7 +834,7 @@ export default function RecruitmentTab({ initialSearch = "" }: { initialSearch?:
                           </div>
                           {analysis.aiMatchReasoning && <p className="border-t border-primary/10 pt-3 text-xs leading-5 text-muted-foreground"><strong className="text-foreground">{verifiedScore === null ? "Conclusion de l’analyse :" : "Justification du score :"}</strong> {cvReadingTextForDisplay(analysis.aiMatchReasoning)}</p>}
                           {extractionWarnings.length > 0 && <p className="border-t border-primary/10 pt-3 text-xs leading-5 text-amber-700 dark:text-amber-300"><strong>Qualité d’extraction :</strong> {extractionWarnings.map(extractionWarningLabel).join(" · ")}</p>}
-                          {application.aiAnalyzedAt && <p className="text-[11px] text-muted-foreground">Analysé le {new Date(application.aiAnalyzedAt).toLocaleString("fr-FR", { timeZone: "Europe/Paris" })}</p>}
+                          {application.aiAnalyzedAt && <p className="text-[11px] text-muted-foreground">Analysé le {new Date(application.aiAnalyzedAt).toLocaleString("fr-FR", { timeZone: PARIS_TIME_ZONE })}</p>}
                         </div>
                       ) : (
                         <p className="mt-4 text-sm text-muted-foreground">L’analyse sera disponible après extraction du texte. Les formats DOC historiques nécessitent une vérification manuelle.</p>

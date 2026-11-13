@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { AdminErrorState } from "@/components/AdminStatePanel";
 import { nonNegativeCount, percentageLabel } from "./recruitmentDashboardMetrics";
 import PublicContentSkeleton from "./PublicContentSkeleton";
+import { PARIS_TIME_ZONE } from "@shared/parisTime";
 
 type MetricCardProps = {
   icon: typeof UserRound;
@@ -87,7 +88,7 @@ function RecruitmentFollowUpsList({ pending, due }: { pending: number; due: numb
                     <span className="min-w-0 wrap-anywhere">
                       <span className="font-medium text-foreground">{task.firstName} {task.lastName}</span>
                       <span className="text-muted-foreground"> · {task.specialty}</span>
-                      <span className="block text-xs text-muted-foreground">{task.kind === "follow_up_7" ? "Relance J+7" : "Relance J+14"} · échéance {new Date(task.dueAt).toLocaleString("fr-FR", { timeZone: "Europe/Paris" })}{overdue ? <strong className="ml-1 font-medium text-amber-700 dark:text-amber-300">· échue</strong> : null}</span>
+                      <span className="block text-xs text-muted-foreground">{task.kind === "follow_up_7" ? "Relance J+7" : "Relance J+14"} · échéance {new Date(task.dueAt).toLocaleString("fr-FR", { timeZone: PARIS_TIME_ZONE })}{overdue ? <strong className="ml-1 font-medium text-amber-700 dark:text-amber-300">· échue</strong> : null}</span>
                     </span>
                   </label>
                 </li>

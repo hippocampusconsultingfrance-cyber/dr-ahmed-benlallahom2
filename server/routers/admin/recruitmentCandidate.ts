@@ -24,7 +24,7 @@ import { buildCandidatePortalInvitationEmailEvent, canForceCandidatePortalInvita
 import { CANDIDATE_INVITATION_FORCED_RESEND_DELAY_MS, candidateInvitationForcedResendAt } from "../../../shared/candidatePortalInvitationResend";
 import { MANUAL_REVIEW_FALLBACK_MODEL, RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "../../recruitmentAnalysis";
 import { getSafeCheckoutOrigin } from "../publicOrigin";
-import { parseAdminDate, parisDateKey } from "../parisTime";
+import { PARIS_TIME_ZONE, parseAdminDate, parisDateKey } from "../parisTime";
 import { missionRefusal, certificationFactsByApplication } from "./recruitmentShared";
 
 export const adminRecruitmentCandidateRouter = router({
@@ -58,7 +58,7 @@ export const adminRecruitmentCandidateRouter = router({
       throw new TRPCError({ code: "CONFLICT", message: `La livraison de l’invitation précédente est incertaine. Vérifiez son suivi avant tout nouvel envoi pour éviter un doublon ; « Renvoyer quand même » est proposé ${CANDIDATE_INVITATION_FORCED_RESEND_DELAY_MS / 60_000} minutes après cette tentative.` });
     }
     if (uncertain && !canForceCandidatePortalInvitation(invitationDelivery)) {
-      const resendAt = candidateInvitationForcedResendAt(invitationDelivery.occurredAt!).toLocaleTimeString("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit" });
+      const resendAt = candidateInvitationForcedResendAt(invitationDelivery.occurredAt!).toLocaleTimeString("fr-FR", { timeZone: PARIS_TIME_ZONE, hour: "2-digit", minute: "2-digit" });
       throw new TRPCError({ code: "CONFLICT", message: `La tentative d’invitation incertaine date de moins de ${CANDIDATE_INVITATION_FORCED_RESEND_DELAY_MS / 60_000} minutes : elle peut encore aboutir. « Renvoyer quand même » sera possible à ${resendAt}.` });
     }
     const invitationAttempt = invitationDelivery.attempts + 1;

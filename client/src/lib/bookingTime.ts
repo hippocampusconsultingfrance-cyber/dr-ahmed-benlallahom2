@@ -2,11 +2,10 @@
  * Times of the booking pages: consultations are scheduled in Paris time, and
  * the visitor's own time is added when it differs (RES-04).
  */
-const BOOKING_LOCALES: Record<string, string> = { fr: "fr-FR", en: "en-GB", de: "de-DE", zh: "zh-CN" };
+import { PARIS_TIME_ZONE } from "@shared/parisTime";
 
-export function getBookingLocale(language: string): string {
-  return BOOKING_LOCALES[language] ?? "en-GB";
-}
+// Also the locale of the Stripe payment page description (RES-14).
+export { getBookingLocale } from "@shared/bookingPolicy";
 
 const bookingDateTimeFormats = new Map<string, Intl.DateTimeFormat>();
 
@@ -38,7 +37,7 @@ function calendarDayIn(date: Date, timeZone?: string): string {
  */
 export function formatVisitorTime(date: Date, locale: string, timeZone?: string): string | null {
   const format = (options: Intl.DateTimeFormatOptions, zone?: string) => getBookingDateTimeFormat(locale, { ...options, hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: zone }).format(date);
-  if (calendarDayIn(date, timeZone) !== calendarDayIn(date, "Europe/Paris")) return format({ weekday: "short" }, timeZone);
+  if (calendarDayIn(date, timeZone) !== calendarDayIn(date, PARIS_TIME_ZONE)) return format({ weekday: "short" }, timeZone);
   const localTime = format({}, timeZone);
-  return localTime === format({}, "Europe/Paris") ? null : localTime;
+  return localTime === format({}, PARIS_TIME_ZONE) ? null : localTime;
 }

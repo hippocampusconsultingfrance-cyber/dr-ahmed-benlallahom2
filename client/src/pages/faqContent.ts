@@ -1,4 +1,17 @@
+import {
+  CONSULTATION_DAY_RATE_CENTS,
+  CONSULTATION_NIGHT_RATE_CENTS,
+  NIGHT_RATE_END_HOUR,
+  NIGHT_RATE_START_HOUR,
+  englishRateHour,
+  formatRateAmount,
+} from "@shared/bookingPolicy";
+
 export type FaqLocale = "fr" | "en" | "de" | "zh";
+
+// Tarifs et plage de nuit de shared/bookingPolicy.ts, ceux de la réservation et de Stripe (CODE-09).
+const dayFee = (locale: string) => formatRateAmount(CONSULTATION_DAY_RATE_CENTS, locale);
+const nightFee = (locale: string) => formatRateAmount(CONSULTATION_NIGHT_RATE_CENTS, locale);
 
 export type FaqEntry = { question: string; answer: string };
 /** humanReview: the line under the notice, in the page's language like the rest (EN-07). */
@@ -15,7 +28,7 @@ const faq: Record<FaqLocale, FaqContent> = {
     apply: "Je suis soignant : postuler",
     entries: [
       { question: "À quoi sert la consultation en santé ?", answer: "La consultation permet d’échanger sur votre demande dans un cadre professionnel. Elle ne constitue pas un service d’urgence et ne remplace pas une prise en charge immédiate : en cas d’urgence, appelez le 15 (SAMU) ou 112." },
-      { question: "Quelle est la durée et le tarif d’une consultation ?", answer: "La durée habituelle est de 30 minutes. Le tarif de base est de 100 € ; entre 18 h et 8 h, le tarif majoré est de 150 €." },
+      { question: "Quelle est la durée et le tarif d’une consultation ?", answer: `La durée habituelle est de 30 minutes. Le tarif de base est de ${dayFee("fr-FR")} € ; entre ${NIGHT_RATE_START_HOUR} h et ${NIGHT_RATE_END_HOUR} h, le tarif majoré est de ${nightFee("fr-FR")} €.` },
       { question: "Comment réserver et payer ?", answer: "Choisissez un créneau, renseignez vos coordonnées et le motif de votre demande, puis effectuez le paiement sécurisé en ligne. Une confirmation est envoyée après validation du paiement." },
       { question: "Puis-je annuler mon rendez-vous ?", answer: "L’annulation est remboursée intégralement lorsqu’elle intervient plus de 24 heures avant le créneau réservé. Passé ce délai, la consultation n’est pas remboursable." },
       { question: "Que faire en cas d’urgence ?", answer: "En cas de danger immédiat ou d’urgence médicale, contactez le 15 (SAMU) ou 112, ou les services d’urgence locaux. N’attendez pas une consultation programmée." },
@@ -32,7 +45,7 @@ const faq: Record<FaqLocale, FaqContent> = {
     apply: "I'm a healthcare professional: apply",
     entries: [
       { question: "What is the purpose of a health consultation?", answer: "A consultation provides a professional setting to discuss your request. It is not an emergency service and does not replace immediate care: in an emergency, call 15 (SAMU) or 112." },
-      { question: "How long is a consultation and what does it cost?", answer: "A standard consultation lasts 30 minutes. The base fee is €100; between 6 pm and 8 am, the enhanced fee is €150." },
+      { question: "How long is a consultation and what does it cost?", answer: `A standard consultation lasts 30 minutes. The base fee is €${dayFee("en-GB")}; between ${englishRateHour(NIGHT_RATE_START_HOUR, " ")} and ${englishRateHour(NIGHT_RATE_END_HOUR, " ")}, the enhanced fee is €${nightFee("en-GB")}.` },
       { question: "How do I book and pay?", answer: "Select a time slot, provide your contact details and request, then complete secure online payment. A confirmation is sent once payment is validated." },
       { question: "Can I cancel my appointment?", answer: "Cancellations made more than 24 hours before the booked time are fully refunded. After that deadline, the consultation is non-refundable." },
       { question: "What should I do in an emergency?", answer: "In an immediate danger or medical emergency, call 15 (SAMU) or 112, or your local emergency services. Do not wait for a scheduled consultation." },
@@ -49,7 +62,7 @@ const faq: Record<FaqLocale, FaqContent> = {
     apply: "Ich bin Gesundheitsfachkraft: bewerben",
     entries: [
       { question: "Wozu dient die Gesundheitsberatung?", answer: "Die Beratung bietet einen professionellen Rahmen, um Ihr Anliegen zu besprechen. Sie ist kein Notdienst und ersetzt keine sofortige Versorgung: Rufen Sie im Notfall 15 (SAMU) oder 112 an." },
-      { question: "Wie lange dauert eine Beratung und was kostet sie?", answer: "Eine Standardberatung dauert 30 Minuten. Der Grundpreis beträgt 100 €; zwischen 18 und 8 Uhr beträgt der erhöhte Preis 150 €." },
+      { question: "Wie lange dauert eine Beratung und was kostet sie?", answer: `Eine Standardberatung dauert 30 Minuten. Der Grundpreis beträgt ${dayFee("de-DE")} €; zwischen ${NIGHT_RATE_START_HOUR} und ${NIGHT_RATE_END_HOUR} Uhr beträgt der erhöhte Preis ${nightFee("de-DE")} €.` },
       { question: "Wie buche und bezahle ich?", answer: "Wählen Sie einen Termin, geben Sie Ihre Kontaktdaten und Ihr Anliegen an und schließen Sie die sichere Online-Zahlung ab. Nach Zahlungsbestätigung erhalten Sie eine Bestätigung." },
       { question: "Kann ich meinen Termin stornieren?", answer: "Bei einer Stornierung mehr als 24 Stunden vor dem Termin wird der Betrag vollständig erstattet. Danach ist die Beratung nicht erstattungsfähig." },
       { question: "Was soll ich im Notfall tun?", answer: "Bei unmittelbarer Gefahr oder einem medizinischen Notfall rufen Sie 15 (SAMU) oder 112 an oder wenden Sie sich an den örtlichen Notdienst. Warten Sie nicht auf einen geplanten Termin." },
@@ -66,7 +79,7 @@ const faq: Record<FaqLocale, FaqContent> = {
     apply: "我是医护人员：申请职位",
     entries: [
       { question: "健康咨询的用途是什么？", answer: "咨询为讨论您的需求提供专业环境。它不是紧急服务，也不能替代即时医疗照护。如遇紧急情况，请拨打 15（SAMU）或 112。" },
-      { question: "咨询时长和费用是多少？", answer: "标准咨询时长为 30 分钟。基础费用为 100 欧元；18 时至 8 时的加价费用为 150 欧元。" },
+      { question: "咨询时长和费用是多少？", answer: `标准咨询时长为 30 分钟。基础费用为 ${dayFee("zh-CN")} 欧元；${NIGHT_RATE_START_HOUR} 时至 ${NIGHT_RATE_END_HOUR} 时的加价费用为 ${nightFee("zh-CN")} 欧元。` },
       { question: "如何预约和付款？", answer: "选择时段、填写联系方式与需求，然后完成安全在线付款。付款确认后将发送确认信息。" },
       { question: "我可以取消预约吗？", answer: "在预约时间 24 小时之前取消可获得全额退款。超过该期限，咨询费用不予退还。" },
       { question: "遇到紧急情况该怎么办？", answer: "如遇即时危险或医疗紧急情况，请联系 15（SAMU）或 112，或当地急救服务。请勿等待已预约的咨询。" },

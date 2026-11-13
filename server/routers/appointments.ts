@@ -7,18 +7,22 @@ import { appointments, availabilitySlots, blockedDates } from "../../drizzle/sch
 import { eq, and, or, sql, inArray } from "drizzle-orm";
 import Stripe from "stripe";
 import { hashSecurityValue, logSecurityEvent, requestIpHash } from "../candidateSecurity";
-import { SITE_LANGUAGES } from "../emailLanguage";
+import { SITE_LANGUAGES, type SiteLanguage } from "../emailLanguage";
 import { verifyCandidateTurnstile } from "../candidateTurnstile";
 import { postgresErrorCode } from "../languageColumns";
 import {
   BOOKING_INVALID_NAME_MESSAGE,
   BOOKING_INVALID_PHONE_MESSAGE,
+  BOOKING_LOCALES,
   BOOKING_REQUEST_SUBJECT_MAX_LENGTH,
   BOOKING_TOO_FAR_MESSAGE,
   BOOKING_TOO_SOON_MESSAGE,
+  CONSULTATION_DAY_RATE_CENTS,
+  consultationPriceCents,
   getBookingWindowIssue,
   hasVisibleNameCharacter,
   isBookingEmailAddress,
+  isNightRateForParis,
   isPlausiblePhoneNumber,
   normalizePhoneInput,
   toE164PhoneNumber,
@@ -27,7 +31,7 @@ import {
 import { cleanTextInput, emailText, multiLineText, singleLineText, TEXT_INPUT_INVALID_CHARACTERS } from "../../shared/textInput";
 import { getSafeCheckoutOrigin } from "./publicOrigin";
 import { enforcePublicFormRateLimit, givePublicFormAttemptBack, withinBookingGiveBackCap } from "./publicForms";
-import { parisDateKey, parseAppointmentDate, isNightRateForParis, isBookableAppointmentTime } from "./parisTime";
+import { PARIS_TIME_ZONE, parisDateKey, parseAppointmentDate, isBookableAppointmentTime } from "./parisTime";
 
 let stripeClient: Stripe | undefined;
 
@@ -108,9 +112,33 @@ export const bookingCustomerEmail = emailText(z.string().max(320).refine(isBooki
  */
 const PHONE_CONTROL_CHARACTERS = new RegExp("[\\u0000-\\u001F\\u007F-\\u009F\\u2028\\u2029]");
 
-/** Libellé de la ligne Stripe Checkout, visible sur la page de paiement et le reçu. */
-export function consultationCheckoutProductData(trackingId: string) {
-  return { name: CONSULTATION_CHECKOUT_PRODUCT_NAME, description: `Rendez-vous : ${trackingId}` };
+/**
+ * Description de la ligne Stripe dans la langue de la page de réservation
+ * (RES-14) : la référence, puis la date et l’heure de Paris du rendez-vous,
+ * que le patient vérifie avant de payer, écrites dans la locale de la page
+ * (BOOKING_LOCALES).
+ */
+const CHECKOUT_APPOINTMENT_DESCRIPTIONS: Record<SiteLanguage, (trackingId: string, slot: string) => string> = {
+  fr: (trackingId, slot) => `Rendez-vous : ${trackingId} – ${slot}, heure de Paris`,
+  en: (trackingId, slot) => `Appointment: ${trackingId} – ${slot}, Paris time`,
+  de: (trackingId, slot) => `Termin: ${trackingId} – ${slot}, Pariser Zeit`,
+  zh: (trackingId, slot) => `预约：${trackingId} – ${slot}，巴黎时间`,
+};
+
+/**
+ * Libellé de la ligne Stripe Checkout, visible sur la page de paiement et le
+ * reçu : « Rendez-vous : APT… – jeu. 29 oct. 2026, 19:00, heure de Paris ».
+ * Une langue que le site ne propose pas reste en français.
+ */
+export function consultationCheckoutProductData(trackingId: string, appointmentDate: Date, language: string) {
+  const bookingLanguage = (SITE_LANGUAGES as readonly string[]).includes(language) ? language as SiteLanguage : "fr";
+  const slot = new Intl.DateTimeFormat(BOOKING_LOCALES[bookingLanguage], { timeZone: PARIS_TIME_ZONE, weekday: "short", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(appointmentDate);
+  return { name: CONSULTATION_CHECKOUT_PRODUCT_NAME, description: CHECKOUT_APPOINTMENT_DESCRIPTIONS[bookingLanguage](trackingId, slot) };
+}
+
+/** Montant en centimes écrit comme les colonnes base_price et final_price (« 150.00 »). */
+function decimalAmount(cents: number): string {
+  return (cents / 100).toFixed(2);
 }
 
 const appointmentDateInput = z
@@ -133,15 +161,13 @@ export const appointmentsRouter = router({
       })
     )
     .query(({ input }) => {
+      // Le prix que la page affiche, celui que create envoie à Stripe (CODE-09).
       const date = parseAppointmentDate(input.appointmentDate);
-      const basePrice = 100;
-      const isNightRate = isNightRateForParis(date);
-      const finalPrice = isNightRate ? basePrice * 1.5 : basePrice;
 
       return {
-        basePrice,
-        finalPrice,
-        isNightRate,
+        basePrice: CONSULTATION_DAY_RATE_CENTS / 100,
+        finalPrice: consultationPriceCents(date) / 100,
+        isNightRate: isNightRateForParis(date),
       };
     }),
 
@@ -208,9 +234,11 @@ export const appointmentsRouter = router({
         return refusal;
       };
 
-      const basePrice = "100.00";
+      // Tarif de shared/bookingPolicy.ts, celui que calculatePrice donne à la page (CODE-09).
+      const basePrice = decimalAmount(CONSULTATION_DAY_RATE_CENTS);
       const isNightRate = isNightRateForParis(date);
-      const finalPrice = isNightRate ? "150.00" : "100.00";
+      const finalPriceCents = consultationPriceCents(date);
+      const finalPrice = decimalAmount(finalPriceCents);
 
       const trackingId = `APT${randomUUID().replace(/-/g, "").slice(0, 12).toUpperCase()}`;
 
@@ -365,7 +393,7 @@ export const appointmentsRouter = router({
         try {
           session = await getStripeClient().checkout.sessions.create({
             payment_method_types: ["card"],
-            line_items: [{ price_data: { currency: "eur", product_data: consultationCheckoutProductData(trackingId), unit_amount: Math.round(Number(finalPrice) * 100) }, quantity: 1 }],
+            line_items: [{ price_data: { currency: "eur", product_data: consultationCheckoutProductData(trackingId, date, input.language), unit_amount: finalPriceCents }, quantity: 1 }],
             mode: "payment",
             customer_email: input.customerEmail,
             metadata: { trackingId, customerName: input.customerName },
@@ -385,7 +413,7 @@ export const appointmentsRouter = router({
         // La page de réservation garde la session et l’expiration du maintien
         // (sessionStorage) pour proposer « Reprendre le paiement » ou
         // « Annuler et choisir un autre créneau » après un retour arrière.
-        return { success: true, trackingId, finalPrice: parseFloat(finalPrice), checkoutUrl: session.url!, checkoutSessionId: session.id, holdExpiresAt: holdExpiresAt.toISOString() };
+        return { success: true, trackingId, finalPrice: finalPriceCents / 100, checkoutUrl: session.url!, checkoutSessionId: session.id, holdExpiresAt: holdExpiresAt.toISOString() };
       } catch (dbError) {
         if (dbError instanceof TRPCError) throw dbError;
         console.error("Appointment creation failed:", dbError instanceof Error ? dbError.name : "UnknownError");
@@ -420,6 +448,8 @@ export const appointmentsRouter = router({
             customerEmail: appointments.customerEmail,
             customerName: appointments.customerName,
             finalPrice: appointments.finalPrice,
+            appointmentDate: appointments.appointmentDate,
+            language: appointments.language,
             paymentStatus: appointments.paymentStatus,
             appointmentStatus: appointments.appointmentStatus,
             stripeSessionId: appointments.stripeSessionId,
@@ -468,7 +498,7 @@ export const appointmentsRouter = router({
             {
               price_data: {
                 currency: "eur",
-                product_data: consultationCheckoutProductData(input.trackingId),
+                product_data: consultationCheckoutProductData(input.trackingId, appointment.appointmentDate, appointment.language),
                 unit_amount: amountInCents,
               },
               quantity: 1,

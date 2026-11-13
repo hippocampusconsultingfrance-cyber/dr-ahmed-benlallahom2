@@ -22,6 +22,7 @@ import { deadlineCutShort, ProcessingDeadlineError, runWithProcessingDeadline, s
 import { hasErasedPatientData } from "./personalDataRetention";
 import type { ResendAppointmentEmail } from "./resendWebhookCorrelation";
 import { adminLink } from "./adminLinks";
+import { PARIS_TIME_ZONE } from "../shared/parisTime";
 
 const MAX_BATCH = 5;
 /** Well above the 60 s function limit: a job still "running" after this was interrupted. */
@@ -693,7 +694,7 @@ function failureAlertOf(jobType: PatientJobType, appointment: Appointment, failu
  * one key per wording and address.
  */
 function bounceAlertOf(appointment: Appointment) {
-  const consultation = appointment.appointmentDate.toLocaleString("fr-FR", { timeZone: "Europe/Paris", dateStyle: "full", timeStyle: "short" });
+  const consultation = appointment.appointmentDate.toLocaleString("fr-FR", { timeZone: PARIS_TIME_ZONE, dateStyle: "full", timeStyle: "short" });
   const refunded = appointment.paymentStatus === "refunded";
   return {
     payload: {

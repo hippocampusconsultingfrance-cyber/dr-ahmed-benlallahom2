@@ -29,6 +29,12 @@ import {
   BOOKING_MIN_LEAD_TIME_HOURS,
   BOOKING_REQUEST_SUBJECT_MAX_LENGTH,
   BOOKING_HORIZON_MS,
+  CONSULTATION_DAY_RATE_CENTS,
+  CONSULTATION_NIGHT_RATE_CENTS,
+  NIGHT_RATE_END_HOUR,
+  NIGHT_RATE_START_HOUR,
+  englishRateHour,
+  formatRateAmount,
   getBookingWindowIssue,
   isBookingEmailAddress,
   isBookingRefusalReason,
@@ -36,6 +42,7 @@ import {
   normalizePhoneInput,
   type BookingRefusalReason,
 } from "@shared/bookingPolicy";
+import { PARIS_TIME_ZONE, isBookableAppointmentTime, parisDateKey, parisWallClockTime, timeToMinutes, type AvailabilitySlot } from "@shared/parisTime";
 import { cleanTextInput, EMAIL_INVISIBLE_CHARACTER } from "@shared/textInputCleaning";
 
 // Délai minimal et horizon : même texte pour la vérification de la page et pour
@@ -125,8 +132,8 @@ export const bookingContent = {
     },
     pricing: {
       title: "Tarification",
-      dayRate: "Tarif jour (8h-18h)",
-      nightRate: "Tarif nuit (18h-8h)",
+      dayRate: `Tarif jour (${NIGHT_RATE_END_HOUR}h-${NIGHT_RATE_START_HOUR}h)`,
+      nightRate: `Tarif nuit (${NIGHT_RATE_START_HOUR}h-${NIGHT_RATE_END_HOUR}h)`,
       eur: "€",
       total: "Total",
     },
@@ -230,8 +237,8 @@ export const bookingContent = {
     },
     pricing: {
       title: "Pricing",
-      dayRate: "Day Rate (8am-6pm)",
-      nightRate: "Night Rate (6pm-8am)",
+      dayRate: `Day Rate (${englishRateHour(NIGHT_RATE_END_HOUR)}-${englishRateHour(NIGHT_RATE_START_HOUR)})`,
+      nightRate: `Night Rate (${englishRateHour(NIGHT_RATE_START_HOUR)}-${englishRateHour(NIGHT_RATE_END_HOUR)})`,
       eur: "€",
       total: "Total",
     },
@@ -334,8 +341,8 @@ export const bookingContent = {
     },
     pricing: {
       title: "Preisgestaltung",
-      dayRate: "Tagessatz (8:00-18:00)",
-      nightRate: "Nachtsatz (18:00-8:00)",
+      dayRate: `Tagessatz (${NIGHT_RATE_END_HOUR}:00-${NIGHT_RATE_START_HOUR}:00)`,
+      nightRate: `Nachtsatz (${NIGHT_RATE_START_HOUR}:00-${NIGHT_RATE_END_HOUR}:00)`,
       eur: "€",
       total: "Gesamt",
     },
@@ -438,8 +445,8 @@ export const bookingContent = {
     },
     pricing: {
       title: "价格",
-      dayRate: "日间费率 (8:00-18:00)",
-      nightRate: "夜间费率 (18:00-8:00)",
+      dayRate: `日间费率 (${NIGHT_RATE_END_HOUR}:00-${NIGHT_RATE_START_HOUR}:00)`,
+      nightRate: `夜间费率 (${NIGHT_RATE_START_HOUR}:00-${NIGHT_RATE_END_HOUR}:00)`,
       eur: "€",
       total: "总计",
     },
@@ -480,68 +487,13 @@ export const bookingContent = {
   },
 };
 
-export type BookingAvailabilitySlot = { dayOfWeek: number; startTime: string; endTime: string };
+export type BookingAvailabilitySlot = AvailabilitySlot;
 
 /** A 30-minute start offered in the grid: exact instant, Paris calendar day and Paris time. */
 export type BookingSlotOption = { start: Date; dayKey: string; time: string };
 
-const PARIS_BOOKING_DAY_INDEX: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
-
-// Un seul formateur, lu une fois par heure UTC (getParisOffsetMs) pour les créneaux des 90 jours.
-const PARIS_BOOKING_PARTS = new Intl.DateTimeFormat("en-US", {
-  timeZone: "Europe/Paris",
-  weekday: "short",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-});
-
-type ParisBookingParts = { year: number; month: number; day: number; hour: number; minute: number; weekday: string };
-
-const BOOKING_HOUR_MS = 60 * 60 * 1000;
-const BOOKING_WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-// Décalage de Paris par heure UTC : il ne change qu'à 01:00 UTC (passage à l'heure d'été ou
-// d'hiver), donc un seul formatage par heure sert à tous les créneaux des 90 jours de la grille.
-const parisOffsetByUtcHour = new Map<number, number>();
-const PARIS_OFFSET_CACHE_LIMIT = 20_000;
-
-function getParisOffsetMs(time: number): number {
-  const utcHour = Math.floor(time / BOOKING_HOUR_MS);
-  const cached = parisOffsetByUtcHour.get(utcHour);
-  if (cached !== undefined) return cached;
-  const hourStart = utcHour * BOOKING_HOUR_MS;
-  const values = Object.fromEntries(PARIS_BOOKING_PARTS.formatToParts(new Date(hourStart)).filter(part => part.type !== "literal").map(part => [part.type, Number(part.value)]));
-  const offset = Date.UTC(values.year, values.month - 1, values.day, values.hour, values.minute) - hourStart;
-  if (parisOffsetByUtcHour.size >= PARIS_OFFSET_CACHE_LIMIT) parisOffsetByUtcHour.clear();
-  parisOffsetByUtcHour.set(utcHour, offset);
-  return offset;
-}
-
-function getParisBookingParts(date: Date): ParisBookingParts {
-  const time = date.getTime();
-  const paris = new Date(time + getParisOffsetMs(time));
-  return {
-    year: paris.getUTCFullYear(), month: paris.getUTCMonth() + 1, day: paris.getUTCDate(),
-    hour: paris.getUTCHours(), minute: paris.getUTCMinutes(), weekday: BOOKING_WEEKDAYS[paris.getUTCDay()],
-  };
-}
-
-export function toParisBookingDateKey(date: Date): string {
-  const parts = getParisBookingParts(date);
-  return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
-}
-
-function bookingTimeToMinutes(value: string): number {
-  const match = /^(\d{2}):(\d{2})$/.exec(value);
-  if (!match) return Number.NaN;
-  const hour = Number(match[1]);
-  const minute = Number(match[2]);
-  return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59 ? hour * 60 + minute : Number.NaN;
-}
+/** Paris calendar day of an instant ("2026-11-05"), read as the server reads it (shared/parisTime.ts). */
+export const toParisBookingDateKey = parisDateKey;
 
 function minutesToBookingTime(minutes: number): string {
   return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
@@ -564,21 +516,7 @@ export function parisBookingSlotStart(dayKey: string, time: string): Date | null
   if (!dayMatch || !timeMatch) return null;
   const [year, month, day] = dayMatch.slice(1).map(Number);
   const [hour, minute] = timeMatch.slice(1).map(Number);
-  const wallClockMs = Date.UTC(year, month - 1, day, hour, minute, 0);
-  let utcMs = wallClockMs;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const parts = getParisBookingParts(new Date(utcMs));
-    const representedWallClockMs = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, 0);
-    const offsetErrorMs = representedWallClockMs - wallClockMs;
-    if (offsetErrorMs === 0) break;
-    utcMs -= offsetErrorMs;
-  }
-
-  const parsed = new Date(utcMs);
-  const verified = getParisBookingParts(parsed);
-  return verified.year === year && verified.month === month && verified.day === day && verified.hour === hour && verified.minute === minute
-    ? parsed
-    : null;
+  return parisWallClockTime(year, month, day, hour, minute);
 }
 
 /**
@@ -601,8 +539,8 @@ export function listBookableSlots(
     const dayOfWeek = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
     for (const slot of slots) {
       if (slot.dayOfWeek !== dayOfWeek) continue;
-      const slotStart = bookingTimeToMinutes(slot.startTime);
-      const rawSlotEnd = bookingTimeToMinutes(slot.endTime);
+      const slotStart = timeToMinutes(slot.startTime);
+      const rawSlotEnd = timeToMinutes(slot.endTime);
       if (!Number.isFinite(slotStart) || !Number.isFinite(rawSlotEnd)) continue;
       const slotEnd = rawSlotEnd <= slotStart ? rawSlotEnd + 24 * 60 : rawSlotEnd;
       for (let minutes = slotStart; minutes + 30 <= slotEnd; minutes += 30) {
@@ -611,7 +549,7 @@ export function listBookableSlots(
         const start = parisBookingSlotStart(optionDayKey, time);
         if (!start || options.has(start.getTime()) || blocked.has(optionDayKey) || getBookingWindowIssue(start, now)) continue;
         // Même contrôle que le serveur (isBookableAppointmentTime) avant de proposer l’horaire.
-        if (!isWithinBookingAvailability(start, slots, 30)) continue;
+        if (!isBookableAppointmentTime(start, slots, 30)) continue;
         options.set(start.getTime(), { start, dayKey: optionDayKey, time });
       }
     }
@@ -720,38 +658,6 @@ export function getBookingClockSignature(
   const parts: Array<string | number | null> = [Math.floor(time / BOOKING_SLOT_LIST_REFRESH_MS), ...bookableSlotRange(openSlots, time), selectedDate ? getBookingWindowIssue(selectedDate, time) : null];
   if (holdExpiresAt) parts.push(getHoldRemainingMinutes(holdExpiresAt, time), new Date(holdExpiresAt).getTime() <= time ? "expired" : "held");
   return parts.join("|");
-}
-
-export function isWithinBookingAvailability(
-  date: Date,
-  slots: BookingAvailabilitySlot[],
-  durationMinutes = 30
-): boolean {
-  if (slots.length === 0) return false;
-  const parts = getParisBookingParts(date);
-  const dayOfWeek = PARIS_BOOKING_DAY_INDEX[parts.weekday];
-  const previousDayOfWeek = (dayOfWeek + 6) % 7;
-  const candidateStart = parts.hour * 60 + parts.minute;
-
-  return slots.some(slot => {
-    const slotStart = bookingTimeToMinutes(slot.startTime);
-    const rawSlotEnd = bookingTimeToMinutes(slot.endTime);
-    if (!Number.isFinite(slotStart) || !Number.isFinite(rawSlotEnd)) return false;
-    const crossesMidnight = rawSlotEnd <= slotStart;
-    const slotEnd = crossesMidnight ? rawSlotEnd + 24 * 60 : rawSlotEnd;
-    let normalizedCandidateStart = candidateStart;
-    if (!crossesMidnight) {
-      if (slot.dayOfWeek !== dayOfWeek) return false;
-    } else if (slot.dayOfWeek === dayOfWeek && candidateStart >= slotStart) {
-      normalizedCandidateStart = candidateStart;
-    } else if (slot.dayOfWeek === previousDayOfWeek && candidateStart < rawSlotEnd) {
-      normalizedCandidateStart = candidateStart + 24 * 60;
-    } else {
-      return false;
-    }
-    const offsetFromStart = normalizedCandidateStart - slotStart;
-    return offsetFromStart >= 0 && normalizedCandidateStart + durationMinutes <= slotEnd && offsetFromStart % durationMinutes === 0;
-  });
 }
 
 export type BookingAvailabilityState = "select" | "checking" | "unavailable" | "available";
@@ -871,7 +777,9 @@ export default function BookingPage() {
   const [slotsRetryDay, setSlotsRetryDay] = useState<string | null>(null);
   const slotsRetryFocusRef = useRef<string | null>(null);
   const locale = getBookingLocale(language);
-  const parisDateTimeFormat = useMemo(() => new Intl.DateTimeFormat(locale, { dateStyle: "full", timeStyle: "short", timeZone: "Europe/Paris" }), [locale]);
+  // Tarifs et total depuis les centimes de shared/bookingPolicy.ts, ceux que l’API encaisse (CODE-09).
+  const formatPrice = (cents: number) => `${formatRateAmount(cents, locale)} ${content.pricing.eur}`;
+  const parisDateTimeFormat = useMemo(() => new Intl.DateTimeFormat(locale, { dateStyle: "full", timeStyle: "short", timeZone: PARIS_TIME_ZONE }), [locale]);
   const localizedDate = selectedDate ? `${parisDateTimeFormat.format(selectedDate)} (${content.form.parisTime})` : null;
   const selectedLocalTime = selectedDate ? formatVisitorTime(selectedDate, locale) : null;
   const pendingLocalTime = pendingBooking ? formatVisitorTime(new Date(pendingBooking.appointmentDate), locale) : null;
@@ -923,7 +831,7 @@ export default function BookingPage() {
   const configuredSlots = availabilitySlots.data ?? [];
   const hasConfiguredSlots = configuredSlots.length > 0;
   const isOutsideConfiguredAvailability = Boolean(
-    selectedDate && availabilitySlots.data && !isWithinBookingAvailability(selectedDate, configuredSlots, 30)
+    selectedDate && availabilitySlots.data && !isBookableAppointmentTime(selectedDate, configuredSlots, 30)
   );
   // Grille (RES-02) : jours ouverts des 90 prochains jours, moins les dates
   // bloquées et le délai de 2 h, puis horaires libres du jour choisi. La liste
@@ -1481,11 +1389,11 @@ export default function BookingPage() {
             <div className="mt-6 pt-5 border-t border-border/50 text-sm text-muted-foreground">
               <div className="flex items-center justify-between gap-3">
                 <span>{content.pricing.dayRate}</span>
-                <strong className="text-foreground">100 {content.pricing.eur}</strong>
+                <strong className="text-foreground">{formatPrice(CONSULTATION_DAY_RATE_CENTS)}</strong>
               </div>
               <div className="flex items-center justify-between gap-3 mt-2">
                 <span>{content.pricing.nightRate}</span>
-                <strong className="text-foreground">150 {content.pricing.eur}</strong>
+                <strong className="text-foreground">{formatPrice(CONSULTATION_NIGHT_RATE_CENTS)}</strong>
               </div>
             </div>
           </aside>
@@ -1709,15 +1617,15 @@ export default function BookingPage() {
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span>{content.pricing.dayRate}:</span>
-                    <span>100 {content.pricing.eur}</span>
+                    <span>{formatPrice(CONSULTATION_DAY_RATE_CENTS)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>{content.pricing.nightRate}:</span>
-                    <span>150 {content.pricing.eur}</span>
+                    <span>{formatPrice(CONSULTATION_NIGHT_RATE_CENTS)}</span>
                   </div>
                   <div className="border-t border-border pt-2 mt-2 flex justify-between font-bold">
                     <span>{content.pricing.total}:</span>
-                    <span>{calculatePrice.data.finalPrice} {content.pricing.eur}</span>
+                    <span>{formatPrice(Math.round(calculatePrice.data.finalPrice * 100))}</span>
                   </div>
                 </div>
               </Card>

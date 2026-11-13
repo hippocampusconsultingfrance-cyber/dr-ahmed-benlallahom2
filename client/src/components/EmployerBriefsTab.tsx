@@ -7,6 +7,7 @@ import { RECRUITMENT_EXPORT_MAX_CANDIDATES } from "@shared/recruitmentExportLimi
 import { certificationExpiryDate, recruitmentFactLabelWith, type CertificationExpiryDate, type RecruitmentFact } from "@shared/recruitmentFactOrigins";
 import { isMissionAssociationRefusalReason, isMissionConsentRefusalReason } from "@shared/recruitmentMissionRefusalReasons";
 import { isDatabaseRefusalReason } from "@shared/databaseRefusalReasons";
+import { PARIS_TIME_ZONE } from "@shared/parisTime";
 import Candidate360Dialog from "./Candidate360Dialog";
 import { getPositiveMatchBreakdown } from "./matchBreakdown";
 import PublicContentSkeleton from "./PublicContentSkeleton";
@@ -170,7 +171,7 @@ export default function EmployerBriefsTab({ reference = "" }: { reference?: stri
   // (a candidate left the filtered list). Previous / Next start from it.
   const shownPage = matches.data?.pagination.page ?? 0;
   const selectedBrief = missionGone ? null : briefs?.find(brief => brief.id === selectedBriefId) ?? null;
-  const formatDate = (value: Date | string | null | undefined) => value ? new Date(value).toLocaleString(locale, { timeZone: "Europe/Paris", dateStyle: "medium", timeStyle: "short" }) : null;
+  const formatDate = (value: Date | string | null | undefined) => value ? new Date(value).toLocaleString(locale, { timeZone: PARIS_TIME_ZONE, dateStyle: "medium", timeStyle: "short" }) : null;
   const closeBrief = (id: number) => { if (window.confirm(copy.closeConfirm)) updateStatus.mutate({ id, status: "closed" }); };
 
   if (isLoading) return <PublicContentSkeleton label={copy.loading} />;
@@ -255,7 +256,7 @@ export default function EmployerBriefsTab({ reference = "" }: { reference?: stri
                   <Button size="sm" variant="outline" aria-label={copy.profile360Of(`${candidate.firstName} ${candidate.lastName}`)} onClick={() => setCandidate360Id(candidate.id)}><ClipboardList className="mr-1.5 h-3.5 w-3.5" />{copy.profile360}</Button>
                 </div>
                 {candidate.association?.status === "shortlisted" && (candidate.association.candidateConsentAt
-                  ? <div className="mt-3 flex flex-col gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-800 dark:text-emerald-200 sm:flex-row sm:items-center sm:justify-between"><p>{copy.consentReceived(new Date(candidate.association.candidateConsentAt).toLocaleDateString(locale, { timeZone: "Europe/Paris" }))}</p><Button size="sm" variant="outline" disabled={setCandidateConsent.isPending} aria-label={`${copy.withdrawConsent} — ${candidate.firstName} ${candidate.lastName}`} onClick={() => setCandidateConsent.mutate({ briefId: activeBrief.id, applicationId: candidate.id, consentDate: null })}>{copy.withdrawConsent}</Button></div>
+                  ? <div className="mt-3 flex flex-col gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-800 dark:text-emerald-200 sm:flex-row sm:items-center sm:justify-between"><p>{copy.consentReceived(new Date(candidate.association.candidateConsentAt).toLocaleDateString(locale, { timeZone: PARIS_TIME_ZONE }))}</p><Button size="sm" variant="outline" disabled={setCandidateConsent.isPending} aria-label={`${copy.withdrawConsent} — ${candidate.firstName} ${candidate.lastName}`} onClick={() => setCandidateConsent.mutate({ briefId: activeBrief.id, applicationId: candidate.id, consentDate: null })}>{copy.withdrawConsent}</Button></div>
                   : <div className="mt-3 flex flex-col gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200 sm:flex-row sm:items-end sm:justify-between"><p>{copy.consentMissing}</p><div className="flex flex-wrap items-end gap-2"><label className="space-y-1"><span className="block">{copy.consentDate}</span><input type="date" aria-label={`${copy.consentDate} — ${candidate.firstName} ${candidate.lastName}`} value={consentDates[candidate.id] ?? todayInParis()} min={earliestConsentDay(activeBrief.createdAt, candidate.createdAt)} max={todayInParis()} onChange={event => setConsentDates(current => ({ ...current, [candidate.id]: event.target.value }))} className="h-9 rounded-md border border-border bg-background px-2 text-sm text-foreground" /></label><Button size="sm" disabled={setCandidateConsent.isPending || !(consentDates[candidate.id] ?? todayInParis())} aria-label={`${copy.recordConsent} — ${candidate.firstName} ${candidate.lastName}`} onClick={() => setCandidateConsent.mutate({ briefId: activeBrief.id, applicationId: candidate.id, consentDate: consentDates[candidate.id] ?? todayInParis() })}>{copy.recordConsent}</Button></div></div>)}
               </article>
             ))}

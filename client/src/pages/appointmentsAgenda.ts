@@ -1,4 +1,5 @@
 import { parisDay } from "@/lib/parisDay";
+import { PARIS_TIME_ZONE } from "@shared/parisTime";
 
 export type AppointmentAgendaSource = {
   id: number;
@@ -39,13 +40,13 @@ export function buildAppointmentsAgenda(items: AppointmentAgendaSource[]): Appoi
     const key = parisDay(date);
     const day = days.get(key) ?? {
       key,
-      label: date.toLocaleDateString("fr-FR", { timeZone: "Europe/Paris", weekday: "long", day: "numeric", month: "long" }),
+      label: date.toLocaleDateString("fr-FR", { timeZone: PARIS_TIME_ZONE, weekday: "long", day: "numeric", month: "long" }),
       items: [],
     };
 
     day.items.push({
       ...item,
-      time: date.toLocaleTimeString("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit" }),
+      time: date.toLocaleTimeString("fr-FR", { timeZone: PARIS_TIME_ZONE, hour: "2-digit", minute: "2-digit" }),
     });
     days.set(key, day);
   });
