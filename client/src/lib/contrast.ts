@@ -49,6 +49,8 @@ export const contrastTokens = {
     primaryForeground: [0.04, 0.01, 250],
     accent: [0.72, 0.1, 75],
     accentForeground: [0.12, 0.02, 250],
+    card: [0.15, 0.025, 250],
+    destructive: [0.66, 0.2, 25],
   },
   light: {
     background: [0.98, 0.005, 250],
@@ -58,5 +60,7 @@ export const contrastTokens = {
     primaryForeground: [0.12, 0.02, 250],
     accent: [0.65, 0.12, 75],
     accentForeground: [0.15, 0.02, 250],
+    card: [1, 0, 0],
+    destructive: [0.52, 0.22, 27],
   },
 } as const satisfies Record<string, Record<string, Oklch>>;
