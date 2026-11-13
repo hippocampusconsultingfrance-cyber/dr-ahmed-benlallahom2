@@ -134,7 +134,8 @@ export async function runRecruitmentRetentionCleanup(
   let stoppedForTime = false;
   const deferred: string[] = [];
   const failed: string[] = [];
-  const partial: string[] = [];
+  // By the stage at which the erasure stopped: the files are then all deleted, or perhaps not all.
+  const partial: Record<CandidateErasureInterruptedError["stage"], string[]> = { storage: [], database: [] };
   const work = [
     ...interrupted.map(erasure => ({ trackingId: erasure.trackingId, resume: erasure, expired: null })),
     ...batch.map(application => ({ trackingId: application.trackingId, resume: null, expired: application })),
@@ -167,20 +168,21 @@ export async function runRecruitmentRetentionCleanup(
       if (error instanceof CandidateErasureNotFoundError) continue;
       if (error instanceof CandidateErasureBusyError) deferred.push(trackingId);
       else {
-        (error instanceof CandidateErasureInterruptedError ? partial : failed).push(trackingId);
+        (error instanceof CandidateErasureInterruptedError ? partial[error.stage] : failed).push(trackingId);
         // Under the reference the owner's report lists; Drizzle's message would hold the candidate's address.
         logError("[RecruitmentRetention] erasure failed", error, { ref: trackingId });
       }
     }
   }
 
+  const partialCount = partial.storage.length + partial.database.length;
   const documents = await eraseExpiredCandidateDocuments({ now, limit: options.documentLimit ?? CANDIDATE_DOCUMENT_RETENTION_BATCH_LIMIT, dependencies: options.dependencies });
   const inactiveAccounts = await eraseInactiveCandidateAccounts({ now, limit: CANDIDATE_ACCOUNT_RETENTION_BATCH_LIMIT, dependencies: options.dependencies, hasTime });
   const moreRemaining = expired.length > limit || stoppedForTime;
   const accountsErased = candidateAccountsErased + inactiveAccounts.erased;
   const documentsErased = candidateDocumentsDeleted + documents.deleted + inactiveAccounts.documentsDeleted;
 
-  if (erased > 0 || documents.deleted > 0 || inactiveAccounts.erased > 0 || failed.length > 0 || partial.length > 0 || deferred.length > 0 || inactiveAccounts.failed > 0) {
+  if (erased > 0 || documents.deleted > 0 || inactiveAccounts.erased > 0 || failed.length > 0 || partialCount > 0 || deferred.length > 0 || inactiveAccounts.failed > 0) {
     const lines = [
       `Durée de conservation des candidatures (2 ans après la dernière activité du candidat) : ${erased - resumed} dossier(s) échu(s) effacé(s) définitivement (CV et copies, analyses, historique, espace candidat).`,
       ...(resumed ? [`Effacements interrompus repris et terminés (demande RGPD ou dossier échu) : ${resumed}.`] : []),
@@ -189,14 +191,15 @@ export async function runRecruitmentRetentionCleanup(
       ...(extendedForActivity ? [`Conservation prolongée (activité récente du candidat) : ${extendedForActivity} dossier(s).`] : []),
       ...(driveDeletionsPending ? [`Copies Google Drive en attente de suppression : ${driveDeletionsPending} (nouvel essai automatique ; reconnectez Google Drive si l’erreur persiste).`] : []),
       ...(deferred.length ? [`Reportés au prochain passage (traitement en cours) : ${deferred.join(", ")}.`] : []),
-      ...(partial.length ? [`Effacement partiel, reprise automatique au prochain passage : ${partial.join(", ")} (fichiers stockés supprimés en tout ou partie, rien n’a été effacé en base).`] : []),
+      ...(partial.storage.length ? [`Effacement partiel, reprise automatique au prochain passage : ${partial.storage.join(", ")} (fichiers stockés supprimés en partie ou pas du tout, rien n’a été effacé en base).`] : []),
+      ...(partial.database.length ? [`Effacement partiel, reprise automatique au prochain passage : ${partial.database.join(", ")} (fichiers stockés supprimés, rien n’a été effacé en base).`] : []),
       ...(failed.length ? [`À vérifier (effacement impossible, rien n’a été supprimé pour ces dossiers ; nouvel essai au prochain passage) : ${failed.join(", ")}.`] : []),
       ...(inactiveAccounts.failed ? [`Espaces candidats inactifs non effacés (stockage indisponible, nouvel essai au prochain passage) : ${inactiveAccounts.failed}.`] : []),
       ...(moreRemaining ? [`D’autres dossiers échus restent à effacer : ils le seront aux prochains passages (${limit} par jour au maximum${stoppedForTime ? ", dans la durée limite d’un passage" : ""}).`] : []),
       "Une preuve d’effacement anonymisée (empreintes, nombres) est conservée dans le journal de recrutement.",
     ];
     const titleIssues = [
-      ...(partial.length ? [`${partial.length} effacement(s) partiel(s)`] : []),
+      ...(partialCount ? [`${partialCount} effacement(s) partiel(s)`] : []),
       ...(failed.length ? [`${failed.length} à vérifier`] : []),
     ];
     await notifyOwner({
@@ -212,7 +215,7 @@ export async function runRecruitmentRetentionCleanup(
     extendedForActivity,
     deferred: deferred.length,
     failed: failed.length,
-    partial: partial.length,
+    partial: partialCount,
     moreRemaining,
     storageObjectsDeleted: storageObjectsDeleted + inactiveAccounts.storageObjectsDeleted,
     candidateAccountsErased: accountsErased,

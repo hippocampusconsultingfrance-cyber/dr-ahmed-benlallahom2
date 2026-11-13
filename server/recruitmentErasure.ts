@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, like, lt, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, like, lt, ne, notInArray, or, sql } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import {
   candidateAccounts,
@@ -310,22 +310,44 @@ export async function eraseCandidateApplication(
 }
 
 /**
+ * An erasure started within this delay may still be running (the function's
+ * 60 s, with margin): the retention run does not resume it in parallel.
+ */
+const ERASURE_IN_PROGRESS_WINDOW_MS = 2 * 60_000;
+
+/**
  * Erasures that stopped before their end (CandidateErasureInterruptedError,
  * or a function stopped at its time limit): the dossier still has the
- * "erase" entry written when it began, oldest first, with the reason and the
- * administrator of the first attempt. The retention run resumes them.
+ * "erase" entries written when each attempt began. One per dossier, oldest
+ * dossier first, whatever the number of attempts it carries, with the reason
+ * and the administrator of the first attempt; none started within the last
+ * two minutes. The retention run resumes them.
  */
 export async function findInterruptedErasures(limit: number) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  const entries = await db.select({ applicationId: recruitmentAuditLogs.applicationId, adminOpenId: recruitmentAuditLogs.adminOpenId, metadata: recruitmentAuditLogs.metadata })
+  const startedRecently = db.select({ id: recruitmentAuditLogs.applicationId }).from(recruitmentAuditLogs)
+    .where(and(
+      eq(recruitmentAuditLogs.action, "erase"),
+      isNotNull(recruitmentAuditLogs.applicationId),
+      gt(recruitmentAuditLogs.createdAt, new Date(Date.now() - ERASURE_IN_PROGRESS_WINDOW_MS)),
+    ));
+  // A dossier that always fails gains an entry per attempt: one row each, so it never hides the others.
+  const dossiers = await db.selectDistinct({ applicationId: recruitmentAuditLogs.applicationId })
     .from(recruitmentAuditLogs)
     .where(and(
       eq(recruitmentAuditLogs.action, "erase"),
       inArray(recruitmentAuditLogs.applicationId, db.select({ id: cvApplications.id }).from(cvApplications)),
+      notInArray(recruitmentAuditLogs.applicationId, startedRecently),
     ))
-    .orderBy(asc(recruitmentAuditLogs.id))
-    .limit(Math.min(Math.max(limit, 1), 50) * 2);
+    .orderBy(asc(recruitmentAuditLogs.applicationId))
+    .limit(Math.min(Math.max(limit, 1), 50));
+  const applicationIds = dossiers.map(dossier => dossier.applicationId).filter((id): id is number => id !== null);
+  if (!applicationIds.length) return [];
+  const entries = await db.select({ applicationId: recruitmentAuditLogs.applicationId, adminOpenId: recruitmentAuditLogs.adminOpenId, metadata: recruitmentAuditLogs.metadata })
+    .from(recruitmentAuditLogs)
+    .where(and(eq(recruitmentAuditLogs.action, "erase"), inArray(recruitmentAuditLogs.applicationId, applicationIds)))
+    .orderBy(asc(recruitmentAuditLogs.id));
   const interrupted = new Map<number, { applicationId: number; trackingId: string; actorOpenId: string; reason: CandidateErasureReason }>();
   for (const entry of entries) {
     if (entry.applicationId === null || interrupted.has(entry.applicationId)) continue;
@@ -337,12 +359,13 @@ export async function findInterruptedErasures(limit: number) {
     }
     interrupted.set(entry.applicationId, { applicationId: entry.applicationId, trackingId: "", actorOpenId: entry.adminOpenId, reason });
   }
-  const resumable = Array.from(interrupted.values()).slice(0, limit);
-  if (!resumable.length) return resumable;
   const references = await db.select({ id: cvApplications.id, trackingId: cvApplications.trackingId }).from(cvApplications)
-    .where(inArray(cvApplications.id, resumable.map(erasure => erasure.applicationId)));
-  for (const row of references) interrupted.get(row.id)!.trackingId = row.trackingId;
-  return resumable.filter(erasure => erasure.trackingId);
+    .where(inArray(cvApplications.id, applicationIds));
+  for (const row of references) {
+    const erasure = interrupted.get(row.id);
+    if (erasure) erasure.trackingId = row.trackingId;
+  }
+  return applicationIds.map(id => interrupted.get(id)).filter((erasure): erasure is NonNullable<typeof erasure> => Boolean(erasure?.trackingId));
 }
 
 /**

@@ -279,9 +279,19 @@ describe("effacement RGPD complet d’un dossier candidat", () => {
     expect(memory.rows(securityEvents)).toHaveLength(5);
     expect(memory.rows(recruitmentAuditLogs).map(row => row.action)).toEqual(["email", "erase"]);
 
-    // The next retention run finishes it, for the GDPR request and in the name of the administrator who asked.
+    // A retention run within two minutes leaves it alone: the attempt may still be running.
     const { runRecruitmentRetentionCleanup } = await import("./recruitmentRetention");
-    await expect(runRecruitmentRetentionCleanup("vercel-cron", { dependencies: dependencies() })).resolves.toMatchObject({ erased: 1, resumed: 1, partial: 0, failed: 0 });
+    await expect(runRecruitmentRetentionCleanup("vercel-cron", { dependencies: dependencies() })).resolves.toMatchObject({ erased: 0, resumed: 0 });
+    expect(rowsFor(cvApplications, "id", id)).toHaveLength(1);
+
+    // The next day's run finishes it, for the GDPR request and in the name of the administrator who asked.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(Date.now() + 24 * 60 * 60 * 1000);
+      await expect(runRecruitmentRetentionCleanup("vercel-cron", { dependencies: dependencies() })).resolves.toMatchObject({ erased: 1, resumed: 1, partial: 0, failed: 0 });
+    } finally {
+      vi.useRealTimers();
+    }
     expect(rowsFor(cvApplications, "id", id)).toHaveLength(0);
     expect(memory.rows(candidateAccounts)).toHaveLength(0);
     expect(memory.rows(candidateDocuments)).toHaveLength(0);
