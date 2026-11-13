@@ -2,8 +2,13 @@ export const USER_LANGUAGES = ["fr", "en", "de", "zh"] as const;
 export type UserLanguage = (typeof USER_LANGUAGES)[number];
 export type UserTheme = "light" | "dark";
 
-export function readLanguagePreference(value: string | null, fallback: UserLanguage): UserLanguage {
-  return USER_LANGUAGES.includes(value as UserLanguage) ? (value as UserLanguage) : fallback;
+export function readLanguagePreference(
+  value: string | null,
+  fallback: UserLanguage
+): UserLanguage {
+  return USER_LANGUAGES.includes(value as UserLanguage)
+    ? (value as UserLanguage)
+    : fallback;
 }
 
 /**
@@ -13,7 +18,9 @@ export function readLanguagePreference(value: string | null, fallback: UserLangu
  */
 export function readLanguageParameter(search: string): UserLanguage | null {
   const value = new URLSearchParams(search).get("lang")?.trim().toLowerCase();
-  return USER_LANGUAGES.includes(value as UserLanguage) ? (value as UserLanguage) : null;
+  return USER_LANGUAGES.includes(value as UserLanguage)
+    ? (value as UserLanguage)
+    : null;
 }
 
 /**
@@ -32,10 +39,17 @@ export function removeLanguageParameter(href: string): string | null {
  * Language a page opens in, and whether the visitor chose it: a ?lang= link or a remembered choice
  * is one, the site's default is not (and is not remembered, so that shouldSuggestEnglish still applies).
  */
-export function readInitialLanguage(search: string, stored: string | null, fallback: UserLanguage): { language: UserLanguage; chosen: boolean } {
+export function readInitialLanguage(
+  search: string,
+  stored: string | null,
+  fallback: UserLanguage
+): { language: UserLanguage; chosen: boolean } {
   const linked = readLanguageParameter(search);
   if (linked) return { language: linked, chosen: true };
-  return { language: readLanguagePreference(stored, fallback), chosen: USER_LANGUAGES.includes(stored as UserLanguage) };
+  return {
+    language: readLanguagePreference(stored, fallback),
+    chosen: USER_LANGUAGES.includes(stored as UserLanguage),
+  };
 }
 
 /**
@@ -43,11 +57,19 @@ export function readInitialLanguage(search: string, stored: string | null, fallb
  * declares no French (EN-08): a switch made by the page itself would show Google, which crawls with
  * an English browser, English text under the French addresses (readLanguageParameter).
  */
-export function shouldSuggestEnglish(language: UserLanguage, chosen: boolean, browserLanguages: readonly string[]): boolean {
-  if (chosen || language !== "fr" || browserLanguages.length === 0) return false;
+export function shouldSuggestEnglish(
+  language: UserLanguage,
+  chosen: boolean,
+  browserLanguages: readonly string[]
+): boolean {
+  if (chosen || language !== "fr" || browserLanguages.length === 0)
+    return false;
   return !browserLanguages.some(tag => /^fr(?:-|$)/i.test(tag.trim()));
 }
 
-export function readThemePreference(value: string | null, fallback: UserTheme): UserTheme {
+export function readThemePreference(
+  value: string | null,
+  fallback: UserTheme
+): UserTheme {
   return value === "light" || value === "dark" ? value : fallback;
 }

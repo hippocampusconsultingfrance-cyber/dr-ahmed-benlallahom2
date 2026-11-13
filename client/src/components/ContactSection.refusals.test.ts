@@ -21,7 +21,12 @@ vi.mock("@/contexts/LanguageContext", async () => {
     de: (await import("@/data/content-de")).contentDe,
     zh: (await import("@/data/content-zh")).contentZh,
   };
-  return { useLanguage: () => ({ language: view.language, content: contents[view.language] }) };
+  return {
+    useLanguage: () => ({
+      language: view.language,
+      content: contents[view.language],
+    }),
+  };
 });
 vi.mock("@/lib/trpc", () => ({
   trpc: {
@@ -29,7 +34,11 @@ vi.mock("@/lib/trpc", () => ({
       submit: {
         useMutation: (options: { onError: (error: unknown) => void }) => {
           view.onError = options.onError;
-          return { isPending: false, error: view.error, mutate: () => undefined };
+          return {
+            isPending: false,
+            error: view.error,
+            mutate: () => undefined,
+          };
         },
       },
     },
@@ -38,7 +47,9 @@ vi.mock("@/lib/trpc", () => ({
 vi.mock("./TurnstileWidget", () => ({ TurnstileWidget: () => null }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: toastError } }));
 
-const { default: ContactSection, contactCopy } = await import("./ContactSection");
+const { default: ContactSection, contactCopy } = await import(
+  "./ContactSection"
+);
 
 const SERVER_MESSAGE = "Texte français écrit par le serveur.";
 /** Alert of a field refused for its characters, as the pages show it in each language. */
@@ -49,7 +60,10 @@ const INVALID_CHARACTERS = {
   zh: "某个字段包含此处不允许的换行符或不可见字符，通常由复制粘贴带入：请用键盘重新输入该内容，然后重新提交表单。",
 } as const;
 /** Error of a refused tRPC call as the client receives it: French message, code and stable reason in `data`. */
-const refusal = (code: string, reason?: string) => ({ message: SERVER_MESSAGE, data: { code, ...(reason ? { reason } : {}) } });
+const refusal = (code: string, reason?: string) => ({
+  message: SERVER_MESSAGE,
+  data: { code, ...(reason ? { reason } : {}) },
+});
 
 function renderAlert(language: Language, error: unknown) {
   view.language = language;
@@ -64,38 +78,77 @@ beforeEach(() => {
   view.onError = null;
   vi.spyOn(console, "error").mockImplementation(() => undefined);
 });
-afterEach(() => { vi.restoreAllMocks(); });
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("ContactSection — refus traduits (ABUS-01)", () => {
   it("dit que la limite par connexion est atteinte et quand réessayer, dans la langue de la page", () => {
-    expect(renderAlert("fr", refusal("TOO_MANY_REQUESTS", "rate_limited"))).toBe("Trop d’envois depuis cette connexion. Réessayez dans une heure.");
-    expect(renderAlert("en", refusal("TOO_MANY_REQUESTS", "rate_limited"))).toBe("Too many submissions from this connection. Please try again in an hour.");
-    expect(renderAlert("de", refusal("TOO_MANY_REQUESTS", "rate_limited"))).toBe("Zu viele Anfragen über diese Verbindung. Bitte versuchen Sie es in einer Stunde erneut.");
-    expect(renderAlert("zh", refusal("TOO_MANY_REQUESTS", "rate_limited"))).toBe("此网络连接的提交次数过多。请一小时后再试。");
+    expect(
+      renderAlert("fr", refusal("TOO_MANY_REQUESTS", "rate_limited"))
+    ).toBe("Trop d’envois depuis cette connexion. Réessayez dans une heure.");
+    expect(
+      renderAlert("en", refusal("TOO_MANY_REQUESTS", "rate_limited"))
+    ).toBe(
+      "Too many submissions from this connection. Please try again in an hour."
+    );
+    expect(
+      renderAlert("de", refusal("TOO_MANY_REQUESTS", "rate_limited"))
+    ).toBe(
+      "Zu viele Anfragen über diese Verbindung. Bitte versuchen Sie es in einer Stunde erneut."
+    );
+    expect(
+      renderAlert("zh", refusal("TOO_MANY_REQUESTS", "rate_limited"))
+    ).toBe("此网络连接的提交次数过多。请一小时后再试。");
   });
 
   it("demande de valider la nouvelle vérification, sans recharger la page, après un anti-robot refusé (PUB-09)", () => {
-    expect(renderAlert("fr", refusal("BAD_REQUEST", "security_check_failed"))).toBe("La vérification anti-robot a échoué. Validez la nouvelle vérification ci-dessous, puis renvoyez votre message.");
-    expect(renderAlert("en", refusal("BAD_REQUEST", "security_check_failed"))).toBe("The anti-bot check failed. Complete the new check below, then send your message again.");
+    expect(
+      renderAlert("fr", refusal("BAD_REQUEST", "security_check_failed"))
+    ).toBe(
+      "La vérification anti-robot a échoué. Validez la nouvelle vérification ci-dessous, puis renvoyez votre message."
+    );
+    expect(
+      renderAlert("en", refusal("BAD_REQUEST", "security_check_failed"))
+    ).toBe(
+      "The anti-bot check failed. Complete the new check below, then send your message again."
+    );
     for (const language of ["de", "zh"] as const) {
-      expect(renderAlert(language, refusal("BAD_REQUEST", "security_check_failed")), language).toBe(contactCopy[language].refusals.security_check_failed);
+      expect(
+        renderAlert(language, refusal("BAD_REQUEST", "security_check_failed")),
+        language
+      ).toBe(contactCopy[language].refusals.security_check_failed);
     }
   });
 
   it("dit de réessayer plus tard, sans recharger la page, quand Cloudflare ne peut pas vérifier l'envoi", () => {
-    const unavailable = refusal("SERVICE_UNAVAILABLE", "security_check_unavailable");
-    expect(renderAlert("fr", unavailable)).toBe("La vérification anti-robot est momentanément indisponible. Votre message n’a pas été envoyé : réessayez dans quelques minutes.");
-    expect(renderAlert("en", unavailable)).toBe("The anti-bot check is temporarily unavailable. Your message has not been sent: please try again in a few minutes.");
+    const unavailable = refusal(
+      "SERVICE_UNAVAILABLE",
+      "security_check_unavailable"
+    );
+    expect(renderAlert("fr", unavailable)).toBe(
+      "La vérification anti-robot est momentanément indisponible. Votre message n’a pas été envoyé : réessayez dans quelques minutes."
+    );
+    expect(renderAlert("en", unavailable)).toBe(
+      "The anti-bot check is temporarily unavailable. Your message has not been sent: please try again in a few minutes."
+    );
     for (const language of ["de", "zh"] as const) {
       const alert = renderAlert(language, unavailable);
-      expect(alert, language).toBe(contactCopy[language].refusals.security_check_unavailable);
-      expect(alert, language).not.toBe(contactCopy[language].refusals.security_check_failed);
+      expect(alert, language).toBe(
+        contactCopy[language].refusals.security_check_unavailable
+      );
+      expect(alert, language).not.toBe(
+        contactCopy[language].refusals.security_check_failed
+      );
     }
   });
 
   it("dit de retaper le texte d'un champ refusé pour ses caractères (INTL-05), dans la langue de la page", () => {
     for (const language of ["fr", "en", "de", "zh"] as const) {
-      const alert = renderAlert(language, refusal("BAD_REQUEST", "invalid_characters"));
+      const alert = renderAlert(
+        language,
+        refusal("BAD_REQUEST", "invalid_characters")
+      );
       expect(alert, language).toBe(INVALID_CHARACTERS[language]);
       expect(alert, language).not.toBe(contactCopy[language].sendError);
     }
@@ -104,9 +157,15 @@ describe("ContactSection — refus traduits (ABUS-01)", () => {
   });
 
   it("garde l'échec générique sans motif connu, et n'affiche jamais le texte français du serveur", () => {
-    expect(renderAlert("en", refusal("INTERNAL_SERVER_ERROR"))).toBe(contactCopy.en.sendError);
-    expect(renderAlert("en", refusal("TOO_MANY_REQUESTS", "something_else"))).toBe(contactCopy.en.sendError);
-    expect(renderAlert("fr", new Error("Failed to fetch"))).toBe(contactCopy.fr.sendError);
+    expect(renderAlert("en", refusal("INTERNAL_SERVER_ERROR"))).toBe(
+      contactCopy.en.sendError
+    );
+    expect(
+      renderAlert("en", refusal("TOO_MANY_REQUESTS", "something_else"))
+    ).toBe(contactCopy.en.sendError);
+    expect(renderAlert("fr", new Error("Failed to fetch"))).toBe(
+      contactCopy.fr.sendError
+    );
     expect(renderAlert("fr", null)).toBeNull();
   });
 
@@ -114,7 +173,9 @@ describe("ContactSection — refus traduits (ABUS-01)", () => {
     renderAlert("de", null);
     view.onError?.(refusal("TOO_MANY_REQUESTS", "rate_limited"));
     view.onError?.(refusal("BAD_REQUEST", "security_check_failed"));
-    view.onError?.(refusal("SERVICE_UNAVAILABLE", "security_check_unavailable"));
+    view.onError?.(
+      refusal("SERVICE_UNAVAILABLE", "security_check_unavailable")
+    );
     view.onError?.(refusal("INTERNAL_SERVER_ERROR"));
 
     expect(toastError.mock.calls.map(([message]) => message)).toEqual([

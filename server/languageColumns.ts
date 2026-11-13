@@ -8,11 +8,21 @@ type NeonClient = NeonQueryFunction<false, false>;
  * Tables qui portent la colonne « language » (fr, en, de, zh ; 'fr' par défaut) :
  * la réservation (EN-01), la candidature et le compte candidat (EN-02).
  */
-export const LANGUAGE_COLUMN_TABLES = ["appointments", "candidate_accounts", "cv_applications"] as const;
+export const LANGUAGE_COLUMN_TABLES = [
+  "appointments",
+  "candidate_accounts",
+  "cv_applications",
+] as const;
 
 type RuntimeColumn = { table: string; column: string; definition: string };
 
-const LANGUAGE_COLUMNS: readonly RuntimeColumn[] = LANGUAGE_COLUMN_TABLES.map(table => ({ table, column: "language", definition: "varchar(10) DEFAULT 'fr' NOT NULL" }));
+const LANGUAGE_COLUMNS: readonly RuntimeColumn[] = LANGUAGE_COLUMN_TABLES.map(
+  table => ({
+    table,
+    column: "language",
+    definition: "varchar(10) DEFAULT 'fr' NOT NULL",
+  })
+);
 
 /**
  * Colonnes des missions employeurs (0003) : la date à laquelle l’admin a
@@ -20,8 +30,16 @@ const LANGUAGE_COLUMNS: readonly RuntimeColumn[] = LANGUAGE_COLUMN_TABLES.map(ta
  * mission (RGPD-03). Ajoutées par le même mécanisme que « language ».
  */
 export const MISSION_COLUMNS: readonly RuntimeColumn[] = [
-  { table: "cv_candidate_certifications", column: "confirmed_at", definition: "timestamp" },
-  { table: "client_brief_candidates", column: "candidate_consent_at", definition: "timestamp" },
+  {
+    table: "cv_candidate_certifications",
+    column: "confirmed_at",
+    definition: "timestamp",
+  },
+  {
+    table: "client_brief_candidates",
+    column: "candidate_consent_at",
+    definition: "timestamp",
+  },
 ];
 
 /**
@@ -29,7 +47,10 @@ export const MISSION_COLUMNS: readonly RuntimeColumn[] = [
  * pas appliquée. Une seule par table : la vérification renvoie les tables
  * dont la colonne manque.
  */
-export const RUNTIME_COLUMNS: readonly RuntimeColumn[] = [...LANGUAGE_COLUMNS, ...MISSION_COLUMNS];
+export const RUNTIME_COLUMNS: readonly RuntimeColumn[] = [
+  ...LANGUAGE_COLUMNS,
+  ...MISSION_COLUMNS,
+];
 
 const addColumn = ({ table, column, definition }: RuntimeColumn) =>
   sql`ALTER TABLE ${sql.identifier(table)} ADD COLUMN IF NOT EXISTS ${sql.identifier(column)} ${sql.raw(definition)}`;
@@ -79,7 +100,11 @@ const CONCURRENT_CREATION_CODES = new Set(["42701", "23505"]);
 export const LOCK_NOT_AVAILABLE = "55P03";
 
 export function postgresErrorCode(error: unknown): string | null {
-  for (let current: unknown = error, depth = 0; current && typeof current === "object" && depth < 4; depth += 1) {
+  for (
+    let current: unknown = error, depth = 0;
+    current && typeof current === "object" && depth < 4;
+    depth += 1
+  ) {
     const code = (current as { code?: unknown }).code;
     if (typeof code === "string") return code;
     current = (current as { cause?: unknown }).cause;
@@ -93,9 +118,17 @@ export function postgresErrorCode(error: unknown): string | null {
  * pas la table, donc la vérification répond même quand un ALTER attend son verrou.
  */
 async function tablesMissingLanguageColumn(db: Executor): Promise<Set<string>> {
-  const names = sql.join(RUNTIME_COLUMNS.map(({ table }) => sql`${table}`), sql`, `);
-  const columns = sql.join(RUNTIME_COLUMNS.map(({ column }) => sql`${column}`), sql`, `);
-  const result = await db.execute(sql`SELECT name FROM unnest(ARRAY[${names}]::text[], ARRAY[${columns}]::text[]) AS expected(name, attribute) WHERE to_regclass(name) IS NOT NULL AND NOT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = to_regclass(name) AND attname = attribute AND NOT attisdropped)`);
+  const names = sql.join(
+    RUNTIME_COLUMNS.map(({ table }) => sql`${table}`),
+    sql`, `
+  );
+  const columns = sql.join(
+    RUNTIME_COLUMNS.map(({ column }) => sql`${column}`),
+    sql`, `
+  );
+  const result = await db.execute(
+    sql`SELECT name FROM unnest(ARRAY[${names}]::text[], ARRAY[${columns}]::text[]) AS expected(name, attribute) WHERE to_regclass(name) IS NOT NULL AND NOT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = to_regclass(name) AND attname = attribute AND NOT attisdropped)`
+  );
   const rows = (result as { rows?: Array<{ name?: unknown }> }).rows ?? [];
   return new Set(rows.map(row => String(row.name)));
 }
@@ -125,12 +158,18 @@ export function ensureLanguageColumns(db: Executor): Promise<void> {
       try {
         await db.execute(withLockTimeout(RUNTIME_COLUMN_DDL[index]!));
       } catch (error) {
-        const addedConcurrently = CONCURRENT_CREATION_CODES.has(postgresErrorCode(error) ?? "")
-          && !(await tablesMissingLanguageColumn(db)).has(table);
+        const addedConcurrently =
+          CONCURRENT_CREATION_CODES.has(postgresErrorCode(error) ?? "") &&
+          !(await tablesMissingLanguageColumn(db)).has(table);
         if (!addedConcurrently) failures.push(error);
       }
     }
-    if (failures.length > 0) throw failures.find(error => postgresErrorCode(error) === LOCK_NOT_AVAILABLE) ?? failures[0];
+    if (failures.length > 0)
+      throw (
+        failures.find(
+          error => postgresErrorCode(error) === LOCK_NOT_AVAILABLE
+        ) ?? failures[0]
+      );
   })().catch(error => {
     languageColumnsReady = null;
     throw error;
@@ -149,8 +188,14 @@ export function resetLanguageColumnsMemo() {
  * insert complet, et les INSERT bruts du code nomment language. Les créneaux
  * réservés (appointment_date seule) ou une suppression n’en dépendent pas.
  */
-const RUNTIME_COLUMN_PATTERNS = RUNTIME_COLUMNS.map(({ table, column }) => [new RegExp(`\\b${table}\\b`), new RegExp(`\\b${column}\\b`)] as const);
-const namesRuntimeColumn = (text: string) => RUNTIME_COLUMN_PATTERNS.some(([table, column]) => table.test(text) && column.test(text));
+const RUNTIME_COLUMN_PATTERNS = RUNTIME_COLUMNS.map(
+  ({ table, column }) =>
+    [new RegExp(`\\b${table}\\b`), new RegExp(`\\b${column}\\b`)] as const
+);
+const namesRuntimeColumn = (text: string) =>
+  RUNTIME_COLUMN_PATTERNS.some(
+    ([table, column]) => table.test(text) && column.test(text)
+  );
 
 /**
  * Client Neon pour Drizzle : une requête qui nomme l’une de ces colonnes et sa
@@ -162,27 +207,46 @@ const namesRuntimeColumn = (text: string) => RUNTIME_COLUMN_PATTERNS.some(([tabl
  * `client.transaction`, avec les requêtes déjà construites, pas encore
  * envoyées : un NeonQueryPromise ne part qu’à son premier `then`.
  */
-export function waitForLanguageColumns(client: NeonClient, beforeLanguageQuery: () => Promise<void>): NeonClient {
+export function waitForLanguageColumns(
+  client: NeonClient,
+  beforeLanguageQuery: () => Promise<void>
+): NeonClient {
   // Requête mise en attente -> requête Neon d’origine, que `transaction` envoie.
   const deferred = new WeakMap<object, object>();
-  const query = ((text: string, params?: unknown[], options?: Parameters<NeonClient["query"]>[2]) => {
+  const query = ((
+    text: string,
+    params?: unknown[],
+    options?: Parameters<NeonClient["query"]>[2]
+  ) => {
     const pending = client.query(text, params, options);
     if (!namesRuntimeColumn(text)) return pending;
     const run = () => beforeLanguageQuery().then(() => pending);
     const waiting = {
-      then: (onFulfilled?: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) => run().then(onFulfilled, onRejected),
-      catch: (onRejected?: (reason: unknown) => unknown) => run().catch(onRejected),
+      then: (
+        onFulfilled?: (value: unknown) => unknown,
+        onRejected?: (reason: unknown) => unknown
+      ) => run().then(onFulfilled, onRejected),
+      catch: (onRejected?: (reason: unknown) => unknown) =>
+        run().catch(onRejected),
       finally: (onFinally?: () => void) => run().finally(onFinally),
     };
     deferred.set(waiting, pending);
     return waiting;
   }) as NeonClient["query"];
-  const transaction = (async (queries: Parameters<NeonClient["transaction"]>[0], options?: Parameters<NeonClient["transaction"]>[1]) => {
+  const transaction = (async (
+    queries: Parameters<NeonClient["transaction"]>[0],
+    options?: Parameters<NeonClient["transaction"]>[1]
+  ) => {
     if (Array.isArray(queries) && queries.some(item => deferred.has(item))) {
       await beforeLanguageQuery();
-      queries = queries.map(item => deferred.get(item) ?? item) as typeof queries;
+      queries = queries.map(
+        item => deferred.get(item) ?? item
+      ) as typeof queries;
     }
     return client.transaction(queries, options);
   }) as NeonClient["transaction"];
-  return Object.assign(Object.create(client) as NeonClient, { query, transaction });
+  return Object.assign(Object.create(client) as NeonClient, {
+    query,
+    transaction,
+  });
 }

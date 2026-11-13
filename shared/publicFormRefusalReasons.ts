@@ -15,10 +15,21 @@ export const INVALID_CHARACTERS_REASON = "invalid_characters";
  * Cloudflare could not judge it (reloading does not help: try again later), or
  * a field holds a character refused (to type again).
  */
-export const PUBLIC_FORM_REFUSAL_REASONS = ["rate_limited", "security_check_failed", "security_check_unavailable", INVALID_CHARACTERS_REASON] as const;
+export const PUBLIC_FORM_REFUSAL_REASONS = [
+  "rate_limited",
+  "security_check_failed",
+  "security_check_unavailable",
+  INVALID_CHARACTERS_REASON,
+] as const;
 
-export type PublicFormRefusalReason = (typeof PUBLIC_FORM_REFUSAL_REASONS)[number];
+export type PublicFormRefusalReason =
+  (typeof PUBLIC_FORM_REFUSAL_REASONS)[number];
 
-export function isPublicFormRefusalReason(value: unknown): value is PublicFormRefusalReason {
-  return typeof value === "string" && (PUBLIC_FORM_REFUSAL_REASONS as readonly string[]).includes(value);
+export function isPublicFormRefusalReason(
+  value: unknown
+): value is PublicFormRefusalReason {
+  return (
+    typeof value === "string" &&
+    (PUBLIC_FORM_REFUSAL_REASONS as readonly string[]).includes(value)
+  );
 }

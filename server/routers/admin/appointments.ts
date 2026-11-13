@@ -4,7 +4,18 @@ import { z } from "zod";
 import { getDb } from "../../db";
 import { appointments } from "../../../drizzle/schema";
 import { isLastingStorageError } from "../../storage";
-import { eq, and, sql, desc, gte, inArray, isNotNull, lt, ne, or } from "drizzle-orm";
+import {
+  eq,
+  and,
+  sql,
+  desc,
+  gte,
+  inArray,
+  isNotNull,
+  lt,
+  ne,
+  or,
+} from "drizzle-orm";
 import { adminSearchCondition, adminSearchInput } from "../../adminSearch";
 import { getStripeClient, bookingCustomerEmail } from "../appointments";
 import { calendarDateInput, getParisDateRange } from "../parisTime";
@@ -23,7 +34,10 @@ const AGENDA_MAX_ROWS = 500;
 const notAbandoned = and(
   ne(appointments.appointmentStatus, "held"),
   ne(appointments.paymentStatus, "failed"),
-  or(ne(appointments.paymentStatus, "pending"), isNotNull(appointments.stripePaymentIntentId)),
+  or(
+    ne(appointments.paymentStatus, "pending"),
+    isNotNull(appointments.stripePaymentIntentId)
+  )
 );
 
 // List all appointments with pagination
@@ -33,7 +47,9 @@ export const adminAppointmentsRouter = router({
       z.object({
         limit: z.number().min(1).max(100).optional().default(50),
         offset: z.number().min(0).optional().default(0),
-        status: z.enum(["pending", "completed", "failed", "refunded"]).optional(),
+        status: z
+          .enum(["pending", "completed", "failed", "refunded"])
+          .optional(),
         /** The list's default view (ADM-18): without the bookings that never became one. */
         excludeAbandoned: z.boolean().optional(),
         /** Patient name, email or booking reference (ADM-02). */
@@ -49,10 +65,19 @@ export const adminAppointmentsRouter = router({
         conditions.push(eq(appointments.paymentStatus, input.status));
       }
       if (input.excludeAbandoned) conditions.push(notAbandoned);
-      const search = adminSearchCondition(input.search, [appointments.customerName, appointments.customerEmail, appointments.trackingId], { fullName: appointments.customerName });
+      const search = adminSearchCondition(
+        input.search,
+        [
+          appointments.customerName,
+          appointments.customerEmail,
+          appointments.trackingId,
+        ],
+        { fullName: appointments.customerName }
+      );
       if (search) conditions.push(search);
 
-      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+      const whereClause =
+        conditions.length > 0 ? and(...conditions) : undefined;
 
       const rows = await db
         .select()
@@ -68,14 +93,23 @@ export const adminAppointmentsRouter = router({
         .where(whereClause);
 
       // Post-payment emails and the issued invoice of each appointment (EXPL-02).
-      const { getAppointmentDeliveries } = await import("../../appointmentFulfillment");
-      const { findAppointmentInvoices } = await import("../../invoiceNumbering");
+      const { getAppointmentDeliveries } = await import(
+        "../../appointmentFulfillment"
+      );
+      const { findAppointmentInvoices } = await import(
+        "../../invoiceNumbering"
+      );
       const appointmentIds = rows.map(row => row.id);
       const deliveries = await getAppointmentDeliveries(appointmentIds);
-      const invoices = await findAppointmentInvoices(appointmentIds).catch(error => {
-        console.error("[Admin] Issued invoices could not be read", error instanceof Error ? error.name : "UnknownError");
-        return new Map<number, { invoiceNumber: string }>();
-      });
+      const invoices = await findAppointmentInvoices(appointmentIds).catch(
+        error => {
+          console.error(
+            "[Admin] Issued invoices could not be read",
+            error instanceof Error ? error.name : "UnknownError"
+          );
+          return new Map<number, { invoiceNumber: string }>();
+        }
+      );
       const items = rows.map(row => ({
         ...row,
         deliveries: deliveries.get(row.id) ?? [],
@@ -94,10 +128,22 @@ export const adminAppointmentsRouter = router({
    */
   agenda: adminProcedure
     .input(
-      z.object({ from: calendarDateInput, to: calendarDateInput })
-        .refine(({ from, to }) => from <= to, { message: "La date de fin doit suivre la date de début.", path: ["to"] })
+      z
+        .object({ from: calendarDateInput, to: calendarDateInput })
+        .refine(({ from, to }) => from <= to, {
+          message: "La date de fin doit suivre la date de début.",
+          path: ["to"],
+        })
         // Calendar days, whatever the clock change in between.
-        .refine(({ from, to }) => Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`) < AGENDA_MAX_DAYS * 86_400_000, { message: `L’agenda couvre au plus ${AGENDA_MAX_DAYS} jours.`, path: ["to"] })
+        .refine(
+          ({ from, to }) =>
+            Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`) <
+            AGENDA_MAX_DAYS * 86_400_000,
+          {
+            message: `L’agenda couvre au plus ${AGENDA_MAX_DAYS} jours.`,
+            path: ["to"],
+          }
+        )
     )
     .query(async ({ input }) => {
       const db = await getDb();
@@ -114,26 +160,54 @@ export const adminAppointmentsRouter = router({
           language: appointments.language,
         })
         .from(appointments)
-        .where(and(
-          eq(appointments.paymentStatus, "completed"),
-          inArray(appointments.appointmentStatus, ["confirmed", "completed", "no_show"]),
-          gte(appointments.appointmentDate, getParisDateRange(input.from).start),
-          lt(appointments.appointmentDate, getParisDateRange(input.to).end),
-        ))
+        .where(
+          and(
+            eq(appointments.paymentStatus, "completed"),
+            inArray(appointments.appointmentStatus, [
+              "confirmed",
+              "completed",
+              "no_show",
+            ]),
+            gte(
+              appointments.appointmentDate,
+              getParisDateRange(input.from).start
+            ),
+            lt(appointments.appointmentDate, getParisDateRange(input.to).end)
+          )
+        )
         .orderBy(appointments.appointmentDate, appointments.id)
         .limit(AGENDA_MAX_ROWS + 1);
-      return { items: rows.slice(0, AGENDA_MAX_ROWS), truncated: rows.length > AGENDA_MAX_ROWS, limit: AGENDA_MAX_ROWS };
+      return {
+        items: rows.slice(0, AGENDA_MAX_ROWS),
+        truncated: rows.length > AGENDA_MAX_ROWS,
+        limit: AGENDA_MAX_ROWS,
+      };
     }),
 
   /** « Renvoyer » : relance tout de suite les envois après paiement qui n’ont pas abouti (EXPL-02). */
   retryFulfillment: adminProcedure
     .input(z.object({ trackingId: z.string().min(1).max(20) }))
     .mutation(async ({ input }) => {
-      const { retryAppointmentFulfillment } = await import("../../appointmentFulfillment");
+      const { retryAppointmentFulfillment } = await import(
+        "../../appointmentFulfillment"
+      );
       const result = await retryAppointmentFulfillment(input.trackingId);
-      if (result.outcome === "not_found") throw new TRPCError({ code: "NOT_FOUND", message: "Rendez-vous introuvable." });
-      if (result.outcome === "not_paid") throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Ce rendez-vous n’est pas payé : aucun envoi après paiement à relancer." });
-      return { requeued: result.requeued, requeuedJobTypes: result.requeuedJobTypes, deliveries: result.deliveries };
+      if (result.outcome === "not_found")
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Rendez-vous introuvable.",
+        });
+      if (result.outcome === "not_paid")
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message:
+            "Ce rendez-vous n’est pas payé : aucun envoi après paiement à relancer.",
+        });
+      return {
+        requeued: result.requeued,
+        requeuedJobTypes: result.requeuedJobTypes,
+        deliveries: result.deliveries,
+      };
     }),
 
   /**
@@ -146,24 +220,41 @@ export const adminAppointmentsRouter = router({
   updateCustomerEmail: adminProcedure
     // No length limit here: an address too long gets the same clear message
     // as any other invalid one, not Zod's raw report (bounded by the JSON body limit).
-    .input(z.object({ trackingId: z.string().min(1).max(20), customerEmail: z.string() }))
+    .input(
+      z.object({
+        trackingId: z.string().min(1).max(20),
+        customerEmail: z.string(),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       // Stored as the booking stores it: without what a paste leaves at either end (INTL-05).
       const parsedEmail = bookingCustomerEmail.safeParse(input.customerEmail);
       if (!parsedEmail.success) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Adresse email invalide : saisissez une adresse complète, par exemple prenom.nom@exemple.fr." });
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "Adresse email invalide : saisissez une adresse complète, par exemple prenom.nom@exemple.fr.",
+        });
       }
       const customerEmail = parsedEmail.data;
-      const { updateAppointmentCustomerEmailByAdmin } = await import("../../appointmentAdminActions");
+      const { updateAppointmentCustomerEmailByAdmin } = await import(
+        "../../appointmentAdminActions"
+      );
       // The correction is traced with it, both or neither (DATA-01).
-      return updateAppointmentCustomerEmailByAdmin({ trackingId: input.trackingId, customerEmail, actorOpenId: ctx.user.openId });
+      return updateAppointmentCustomerEmailByAdmin({
+        trackingId: input.trackingId,
+        customerEmail,
+        actorOpenId: ctx.user.openId,
+      });
     }),
 
   /** Facture déjà émise : la copie archivée à son émission, celle envoyée au patient ; n’attribue jamais de numéro (EXPL-02). */
   invoicePdf: adminProcedure
     .input(z.object({ trackingId: z.string().min(1).max(20) }))
     .mutation(async ({ input }) => {
-      const { regenerateAppointmentInvoice } = await import("../../appointmentFulfillment");
+      const { regenerateAppointmentInvoice } = await import(
+        "../../appointmentFulfillment"
+      );
       let invoice: Awaited<ReturnType<typeof regenerateAppointmentInvoice>>;
       try {
         invoice = await regenerateAppointmentInvoice(input.trackingId);
@@ -174,27 +265,51 @@ export const adminAppointmentsRouter = router({
         const message = error instanceof Error ? error.message : "";
         const code = (error as { code?: unknown } | null)?.code;
         const storageFailure = message.startsWith("storage_");
-        console.error("[AppointmentFulfillment] Invoice download failed", storageFailure ? { message, code } : error instanceof Error ? error.name : "UnknownError");
+        console.error(
+          "[AppointmentFulfillment] Invoice download failed",
+          storageFailure
+            ? { message, code }
+            : error instanceof Error
+              ? error.name
+              : "UnknownError"
+        );
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
-          message: !storageFailure ? "La facture n’a pas pu être préparée pour l’instant : réessayez dans un instant."
-            : isLastingStorageError(code) ? "La facture archivée est inaccessible : le stockage des factures (Vercel Blob) refuse l’accès (store suspendu ou introuvable, jeton BLOB_READ_WRITE_TOKEN absent ou invalide). Vérifiez-le dans Vercel, puis réessayez."
+          message: !storageFailure
+            ? "La facture n’a pas pu être préparée pour l’instant : réessayez dans un instant."
+            : isLastingStorageError(code)
+              ? "La facture archivée est inaccessible : le stockage des factures (Vercel Blob) refuse l’accès (store suspendu ou introuvable, jeton BLOB_READ_WRITE_TOKEN absent ou invalide). Vérifiez-le dans Vercel, puis réessayez."
               : "La facture archivée n’a pas pu être lue : le stockage des factures (Vercel Blob) ne répond pas pour l’instant ; réessayez dans un instant.",
         });
       }
-      if (!invoice) throw new TRPCError({ code: "NOT_FOUND", message: "Aucune facture n’a encore été émise pour ce rendez-vous." });
-      return { invoiceNumber: invoice.invoiceNumber, filename: `Facture-${invoice.invoiceNumber}.pdf`, contentBase64: invoice.buffer.toString("base64") };
+      if (!invoice)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Aucune facture n’a encore été émise pour ce rendez-vous.",
+        });
+      return {
+        invoiceNumber: invoice.invoiceNumber,
+        filename: `Facture-${invoice.invoiceNumber}.pdf`,
+        contentBase64: invoice.buffer.toString("base64"),
+      };
     }),
 
   updateStatus: adminProcedure
     .input(
       z.object({
         trackingId: z.string().min(1).max(20),
-        appointmentStatus: z.enum(["confirmed", "cancelled", "completed", "no_show"]),
+        appointmentStatus: z.enum([
+          "confirmed",
+          "cancelled",
+          "completed",
+          "no_show",
+        ]),
       })
     )
     .mutation(async ({ input }) => {
-      const { updateAppointmentStatusByAdmin } = await import("../../appointmentAdminActions");
+      const { updateAppointmentStatusByAdmin } = await import(
+        "../../appointmentAdminActions"
+      );
       return updateAppointmentStatusByAdmin(input);
     }),
 
@@ -207,20 +322,38 @@ export const adminAppointmentsRouter = router({
     .input(
       z.object({
         trackingId: z.string().min(1).max(20),
-        reason: z.string().trim().min(3, "Indiquez le motif du remboursement.").max(500),
+        reason: z
+          .string()
+          .trim()
+          .min(3, "Indiquez le motif du remboursement.")
+          .max(500),
         initiator: z.enum(["patient", "practitioner"]).default("patient"),
       })
     )
     .mutation(async ({ input }) => {
-      const { refundAppointmentPayment } = await import("../../appointmentAdminActions");
+      const { refundAppointmentPayment } = await import(
+        "../../appointmentAdminActions"
+      );
       return refundAppointmentPayment(getStripeClient(), input);
     }),
 
   /** Paiement Stripe reçu mais non rattachable au rendez-vous (session indiquée dans l’alerte). */
   refundUnconfirmedSession: adminProcedure
-    .input(z.object({ sessionId: z.string().trim().regex(/^cs_[A-Za-z0-9_]{6,250}$/, "Identifiant de session Stripe invalide (cs_…)") }))
+    .input(
+      z.object({
+        sessionId: z
+          .string()
+          .trim()
+          .regex(
+            /^cs_[A-Za-z0-9_]{6,250}$/,
+            "Identifiant de session Stripe invalide (cs_…)"
+          ),
+      })
+    )
     .mutation(async ({ input }) => {
-      const { refundUnconfirmedCheckoutSession } = await import("../../appointmentAdminActions");
+      const { refundUnconfirmedCheckoutSession } = await import(
+        "../../appointmentAdminActions"
+      );
       return refundUnconfirmedCheckoutSession(getStripeClient(), input);
     }),
 });

@@ -22,12 +22,39 @@ import { createMemoryPg, type MemoryPg } from "./testing/memoryPgProxy";
 
 const state = vi.hoisted(() => ({ memory: null as null | { db: unknown } }));
 vi.mock("./db", () => ({ getDb: async () => state.memory?.db ?? null }));
-vi.mock("./_core/notification", () => ({ notifyOwner: vi.fn(async () => true) }));
+vi.mock("./_core/notification", () => ({
+  notifyOwner: vi.fn(async () => true),
+}));
 
 import { hashSecurityValue } from "./candidateSecurity";
-import { CandidateErasureBusyError, CandidateErasureInterruptedError, ERASURE_PENDING_DRIVE_PREFIX, eraseCandidateApplication, retryPendingGoogleDriveErasures, type CandidateErasureDependencies } from "./recruitmentErasure";
+import {
+  CandidateErasureBusyError,
+  CandidateErasureInterruptedError,
+  ERASURE_PENDING_DRIVE_PREFIX,
+  eraseCandidateApplication,
+  retryPendingGoogleDriveErasures,
+  type CandidateErasureDependencies,
+} from "./recruitmentErasure";
 
-const TABLES = [candidateAccounts, candidateDocumentAuditLogs, candidateDocumentProcessingJobs, candidateDocuments, candidateSessions, clientBriefCandidates, cvApplications, cvCandidateCertifications, cvCandidateExperiences, cvCandidateLanguages, cvGoogleDriveExportJobs, cvProcessingJobs, recruitmentAuditLogs, recruitmentCampaignRecipients, recruitmentEmailEvents, recruitmentFollowUpTasks, securityEvents];
+const TABLES = [
+  candidateAccounts,
+  candidateDocumentAuditLogs,
+  candidateDocumentProcessingJobs,
+  candidateDocuments,
+  candidateSessions,
+  clientBriefCandidates,
+  cvApplications,
+  cvCandidateCertifications,
+  cvCandidateExperiences,
+  cvCandidateLanguages,
+  cvGoogleDriveExportJobs,
+  cvProcessingJobs,
+  recruitmentAuditLogs,
+  recruitmentCampaignRecipients,
+  recruitmentEmailEvents,
+  recruitmentFollowUpTasks,
+  securityEvents,
+];
 const TRACKING = "CV75VJN6FWRS9B8SFK";
 const OTHER_TRACKING = "CVOTHERDOSSIER0001";
 
@@ -38,30 +65,58 @@ let driveMode: "ok" | "down";
 
 function dependencies(): CandidateErasureDependencies {
   return {
-    storageListKeys: async prefix => Array.from(blobs).filter(key => key.startsWith(prefix)),
+    storageListKeys: async prefix =>
+      Array.from(blobs).filter(key => key.startsWith(prefix)),
     storageDelete: async keys => {
       keys.forEach(key => blobs.delete(key));
       return keys.length;
     },
     deleteDriveCopies: async ({ trackingId, knownFileIds }) => {
-      if (driveMode === "down") return { status: "failed", deleted: 0, error: "google_drive_token_invalid_grant" };
+      if (driveMode === "down")
+        return {
+          status: "failed",
+          deleted: 0,
+          error: "google_drive_token_invalid_grant",
+        };
       let deleted = 0;
       for (const id of knownFileIds) if (driveFiles.delete(id)) deleted += 1;
-      for (const [id, tracking] of Array.from(driveFiles)) if (tracking === trackingId && driveFiles.delete(id)) deleted += 1;
+      for (const [id, tracking] of Array.from(driveFiles))
+        if (tracking === trackingId && driveFiles.delete(id)) deleted += 1;
       return { status: deleted ? "deleted" : "none", deleted, error: null };
     },
   };
 }
 
 function seedDossier() {
-  const [application] = memory.seed(cvApplications, [{
-    tracking_id: TRACKING, first_name: "Claire", last_name: "Martin", email: "Claire.Martin@test.local", specialty: "Anesthésie", target_countries: "[\"France\"]",
-    cv_file_key: `recruitment/cv/${TRACKING}-cv_ab12cd34.pdf`, cv_original_name: "cv.pdf", cv_mime_type: "application/pdf", cv_size_bytes: 1000, admin_notes: "Très bon profil",
-  }]);
-  const [other] = memory.seed(cvApplications, [{
-    tracking_id: OTHER_TRACKING, first_name: "Paul", last_name: "Durand", email: "paul@test.local", specialty: "Urgences", target_countries: "[]",
-    cv_file_key: `recruitment/quarantine/${OTHER_TRACKING}-cv_ffff0000.pdf`, cv_original_name: "cv.pdf", cv_mime_type: "application/pdf", cv_size_bytes: 1000,
-  }]);
+  const [application] = memory.seed(cvApplications, [
+    {
+      tracking_id: TRACKING,
+      first_name: "Claire",
+      last_name: "Martin",
+      email: "Claire.Martin@test.local",
+      specialty: "Anesthésie",
+      target_countries: '["France"]',
+      cv_file_key: `recruitment/cv/${TRACKING}-cv_ab12cd34.pdf`,
+      cv_original_name: "cv.pdf",
+      cv_mime_type: "application/pdf",
+      cv_size_bytes: 1000,
+      admin_notes: "Très bon profil",
+    },
+  ]);
+  const [other] = memory.seed(cvApplications, [
+    {
+      tracking_id: OTHER_TRACKING,
+      first_name: "Paul",
+      last_name: "Durand",
+      email: "paul@test.local",
+      specialty: "Urgences",
+      target_countries: "[]",
+      cv_file_key: `recruitment/quarantine/${OTHER_TRACKING}-cv_ffff0000.pdf`,
+      cv_original_name: "cv.pdf",
+      cv_mime_type: "application/pdf",
+      cv_size_bytes: 1000,
+    },
+  ]);
   const id = application!.id as number;
   const otherId = other!.id as number;
   blobs = new Set([
@@ -69,60 +124,213 @@ function seedDossier() {
     `recruitment/cv/${TRACKING}-cv_ab12cd34.pdf`,
     `recruitment/quarantine/${OTHER_TRACKING}-cv_ffff0000.pdf`,
   ]);
-  driveFiles = new Map([["drive-claire", TRACKING], ["drive-claire-orphan", TRACKING], ["drive-paul", OTHER_TRACKING]]);
-  memory.seed(cvCandidateCertifications, [{ application_id: id, name: "DESAR", evidence: "extrait du CV" }, { application_id: otherId, name: "AFGSU" }]);
-  memory.seed(cvCandidateLanguages, [{ application_id: id, language: "Français" }, { application_id: id, language: "Anglais" }]);
-  memory.seed(cvCandidateExperiences, [{ application_id: id, role: "Interne", organization: "CHU Lyon", specialty: "Anesthésie", evidence: "CHU Lyon 2019-2023" }]);
-  memory.seed(cvProcessingJobs, [{ application_id: id, job_status: "completed" }, { application_id: otherId, job_status: "queued" }]);
-  memory.seed(cvGoogleDriveExportJobs, [{ application_id: id, status: "completed", drive_file_id: "drive-claire", drive_file_url: "https://drive.google.com/file/d/drive-claire/view" }]);
-  memory.seed(clientBriefCandidates, [{ brief_id: 1, application_id: id, association_status: "shortlisted" }, { brief_id: 1, application_id: otherId }]);
-  memory.seed(recruitmentFollowUpTasks, [{ application_id: id, kind: "follow_up_7", due_at: new Date() }]);
-  const [recipient] = memory.seed(recruitmentCampaignRecipients, [{ campaign_id: 1, application_id: id, recipient_email: "Claire.Martin@test.local", delivery_status: "sent" }]);
+  driveFiles = new Map([
+    ["drive-claire", TRACKING],
+    ["drive-claire-orphan", TRACKING],
+    ["drive-paul", OTHER_TRACKING],
+  ]);
+  memory.seed(cvCandidateCertifications, [
+    { application_id: id, name: "DESAR", evidence: "extrait du CV" },
+    { application_id: otherId, name: "AFGSU" },
+  ]);
+  memory.seed(cvCandidateLanguages, [
+    { application_id: id, language: "Français" },
+    { application_id: id, language: "Anglais" },
+  ]);
+  memory.seed(cvCandidateExperiences, [
+    {
+      application_id: id,
+      role: "Interne",
+      organization: "CHU Lyon",
+      specialty: "Anesthésie",
+      evidence: "CHU Lyon 2019-2023",
+    },
+  ]);
+  memory.seed(cvProcessingJobs, [
+    { application_id: id, job_status: "completed" },
+    { application_id: otherId, job_status: "queued" },
+  ]);
+  memory.seed(cvGoogleDriveExportJobs, [
+    {
+      application_id: id,
+      status: "completed",
+      drive_file_id: "drive-claire",
+      drive_file_url: "https://drive.google.com/file/d/drive-claire/view",
+    },
+  ]);
+  memory.seed(clientBriefCandidates, [
+    { brief_id: 1, application_id: id, association_status: "shortlisted" },
+    { brief_id: 1, application_id: otherId },
+  ]);
+  memory.seed(recruitmentFollowUpTasks, [
+    { application_id: id, kind: "follow_up_7", due_at: new Date() },
+  ]);
+  const [recipient] = memory.seed(recruitmentCampaignRecipients, [
+    {
+      campaign_id: 1,
+      application_id: id,
+      recipient_email: "Claire.Martin@test.local",
+      delivery_status: "sent",
+    },
+  ]);
   memory.seed(recruitmentEmailEvents, [
-    { provider_event_id: "evt-1", campaign_recipient_id: recipient!.id, event_type: "email.delivered", recipient_email: "Claire.Martin@test.local", occurred_at: new Date() },
-    { provider_event_id: "evt-2", application_id: id, event_type: "email.sent", recipient_email: "Claire.Martin@test.local", occurred_at: new Date() },
-    { provider_event_id: "evt-3", application_id: otherId, event_type: "email.sent", recipient_email: "paul@test.local", occurred_at: new Date() },
+    {
+      provider_event_id: "evt-1",
+      campaign_recipient_id: recipient!.id,
+      event_type: "email.delivered",
+      recipient_email: "Claire.Martin@test.local",
+      occurred_at: new Date(),
+    },
+    {
+      provider_event_id: "evt-2",
+      application_id: id,
+      event_type: "email.sent",
+      recipient_email: "Claire.Martin@test.local",
+      occurred_at: new Date(),
+    },
+    {
+      provider_event_id: "evt-3",
+      application_id: otherId,
+      event_type: "email.sent",
+      recipient_email: "paul@test.local",
+      occurred_at: new Date(),
+    },
   ]);
-  const [account] = memory.seed(candidateAccounts, [{ email: "claire.martin@test.local", password_hash: "x", linked_application_id: id, email_verified_at: new Date() }]);
+  const [account] = memory.seed(candidateAccounts, [
+    {
+      email: "claire.martin@test.local",
+      password_hash: "x",
+      linked_application_id: id,
+      email_verified_at: new Date(),
+    },
+  ]);
   const accountId = account!.id as number;
-  memory.seed(candidateSessions, [{ candidate_id: accountId, token_hash: "s1", expires_at: new Date(Date.now() + 3600_000) }, { candidate_id: accountId, token_hash: "s2", expires_at: new Date(Date.now() + 3600_000) }]);
-  const documents = memory.seed(candidateDocuments, [1, 2, 3].map(index => ({
-    candidate_id: accountId, category: "diploma", original_name: `diplome-${index}.pdf`, storage_key: `candidate-documents/quarantine/${accountId}/17000000${index}-diplome-${index}.pdf.enc`, mime_type: "application/pdf", size_bytes: 10, checksum: "c",
-  })));
-  documents.forEach(document => blobs.add(String(document.storage_key)));
-  blobs.add(`candidate-documents/quarantine/${accountId}/orphan-upload.pdf.enc`);
-  memory.seed(candidateDocumentProcessingJobs, documents.map(document => ({ document_id: document.id })));
-  memory.seed(candidateDocumentAuditLogs, [{ document_id: documents[0]!.id, candidate_id: accountId, actor_type: "candidate", action: "upload", metadata: "{\"name\":\"diplome-1.pdf\"}" }]);
-  memory.seed(securityEvents, [
-    { security_event_actor_kind: "anonymous", actor_reference: "Claire.Martin@test.local", category: "public_recruitment_apply_duplicate_file", security_event_outcome: "allowed" },
-    { security_event_actor_kind: "candidate", actor_reference: String(accountId), category: "candidate_login", security_event_outcome: "allowed" },
-    { security_event_actor_kind: "anonymous", actor_reference: hashSecurityValue("claire.martin@test.local"), category: "candidate_login", security_event_outcome: "failed" },
-    { security_event_actor_kind: "admin", actor_reference: "user_owner", category: "admin_mfa_verify", security_event_outcome: "allowed" },
-    { security_event_actor_kind: "admin", actor_reference: String(accountId), category: "admin_numeric_reference", security_event_outcome: "allowed" },
+  memory.seed(candidateSessions, [
+    {
+      candidate_id: accountId,
+      token_hash: "s1",
+      expires_at: new Date(Date.now() + 3600_000),
+    },
+    {
+      candidate_id: accountId,
+      token_hash: "s2",
+      expires_at: new Date(Date.now() + 3600_000),
+    },
   ]);
-  memory.seed(recruitmentAuditLogs, [{ application_id: id, admin_open_id: "user_owner", action: "email", metadata: "{\"customRequest\":\"Merci d’envoyer votre diplôme\"}" }]);
+  const documents = memory.seed(
+    candidateDocuments,
+    [1, 2, 3].map(index => ({
+      candidate_id: accountId,
+      category: "diploma",
+      original_name: `diplome-${index}.pdf`,
+      storage_key: `candidate-documents/quarantine/${accountId}/17000000${index}-diplome-${index}.pdf.enc`,
+      mime_type: "application/pdf",
+      size_bytes: 10,
+      checksum: "c",
+    }))
+  );
+  documents.forEach(document => blobs.add(String(document.storage_key)));
+  blobs.add(
+    `candidate-documents/quarantine/${accountId}/orphan-upload.pdf.enc`
+  );
+  memory.seed(
+    candidateDocumentProcessingJobs,
+    documents.map(document => ({ document_id: document.id }))
+  );
+  memory.seed(candidateDocumentAuditLogs, [
+    {
+      document_id: documents[0]!.id,
+      candidate_id: accountId,
+      actor_type: "candidate",
+      action: "upload",
+      metadata: '{"name":"diplome-1.pdf"}',
+    },
+  ]);
+  memory.seed(securityEvents, [
+    {
+      security_event_actor_kind: "anonymous",
+      actor_reference: "Claire.Martin@test.local",
+      category: "public_recruitment_apply_duplicate_file",
+      security_event_outcome: "allowed",
+    },
+    {
+      security_event_actor_kind: "candidate",
+      actor_reference: String(accountId),
+      category: "candidate_login",
+      security_event_outcome: "allowed",
+    },
+    {
+      security_event_actor_kind: "anonymous",
+      actor_reference: hashSecurityValue("claire.martin@test.local"),
+      category: "candidate_login",
+      security_event_outcome: "failed",
+    },
+    {
+      security_event_actor_kind: "admin",
+      actor_reference: "user_owner",
+      category: "admin_mfa_verify",
+      security_event_outcome: "allowed",
+    },
+    {
+      security_event_actor_kind: "admin",
+      actor_reference: String(accountId),
+      category: "admin_numeric_reference",
+      security_event_outcome: "allowed",
+    },
+  ]);
+  memory.seed(recruitmentAuditLogs, [
+    {
+      application_id: id,
+      admin_open_id: "user_owner",
+      action: "email",
+      metadata: '{"customRequest":"Merci d’envoyer votre diplôme"}',
+    },
+  ]);
   return { id, otherId, accountId };
 }
 
-function rowsFor(table: Parameters<MemoryPg["rows"]>[0], column: string, value: unknown) {
+function rowsFor(
+  table: Parameters<MemoryPg["rows"]>[0],
+  column: string,
+  value: unknown
+) {
   return memory.rows(table).filter(row => row[column] === value);
 }
 
 /** A diploma uploaded by the candidate while the erasure runs: row, queued analysis, upload trace and encrypted file. */
 function uploadDuringErasure(accountId: number, applicationId: number) {
   const storageKey = `candidate-documents/quarantine/${accountId}/1800000000-diplome-tardif.pdf.enc`;
-  const [document] = memory.seed(candidateDocuments, [{
-    candidate_id: accountId, application_id: applicationId, category: "diploma", original_name: "diplome-tardif.pdf", storage_key: storageKey, mime_type: "application/pdf", size_bytes: 10, checksum: "late",
-  }]);
-  memory.seed(candidateDocumentProcessingJobs, [{ document_id: document!.id, status: "queued" }]);
-  memory.seed(candidateDocumentAuditLogs, [{ document_id: document!.id, candidate_id: accountId, actor_type: "candidate", action: "upload" }]);
+  const [document] = memory.seed(candidateDocuments, [
+    {
+      candidate_id: accountId,
+      application_id: applicationId,
+      category: "diploma",
+      original_name: "diplome-tardif.pdf",
+      storage_key: storageKey,
+      mime_type: "application/pdf",
+      size_bytes: 10,
+      checksum: "late",
+    },
+  ]);
+  memory.seed(candidateDocumentProcessingJobs, [
+    { document_id: document!.id, status: "queued" },
+  ]);
+  memory.seed(candidateDocumentAuditLogs, [
+    {
+      document_id: document!.id,
+      candidate_id: accountId,
+      actor_type: "candidate",
+      action: "upload",
+    },
+  ]);
   blobs.add(storageKey);
   return storageKey;
 }
 
 describe("effacement RGPD complet d’un dossier candidat", () => {
   beforeEach(() => {
-    process.env.CANDIDATE_AUTH_PEPPER ||= "test-pepper-for-erasure-tests-0123456789";
+    process.env.CANDIDATE_AUTH_PEPPER ||=
+      "test-pepper-for-erasure-tests-0123456789";
     memory = createMemoryPg(TABLES);
     state.memory = memory;
     driveMode = "ok";
@@ -130,77 +338,181 @@ describe("effacement RGPD complet d’un dossier candidat", () => {
 
   it("supprime fichiers, copies Drive, données dérivées, espace candidat et documents, et ne garde qu’une preuve hachée", async () => {
     const { id, otherId, accountId } = seedDossier();
-    const report = await eraseCandidateApplication({ applicationId: id, actorOpenId: "user_owner", reason: "admin_gdpr_request" }, dependencies());
+    const report = await eraseCandidateApplication(
+      {
+        applicationId: id,
+        actorOpenId: "user_owner",
+        reason: "admin_gdpr_request",
+      },
+      dependencies()
+    );
 
     // Stored objects: CV in quarantine, promoted copy, 3 vault documents and an orphan upload.
     expect(report.storageObjectsDeleted).toBe(6);
-    expect(Array.from(blobs)).toEqual([`recruitment/quarantine/${OTHER_TRACKING}-cv_ffff0000.pdf`]);
-    expect(report.googleDrive).toEqual({ status: "deleted", deleted: 2, error: null });
+    expect(Array.from(blobs)).toEqual([
+      `recruitment/quarantine/${OTHER_TRACKING}-cv_ffff0000.pdf`,
+    ]);
+    expect(report.googleDrive).toEqual({
+      status: "deleted",
+      deleted: 2,
+      error: null,
+    });
     expect(Array.from(driveFiles.keys())).toEqual(["drive-paul"]);
 
-    for (const table of [cvApplications]) expect(rowsFor(table, "id", id)).toHaveLength(0);
-    for (const table of [cvCandidateCertifications, cvCandidateLanguages, cvCandidateExperiences, cvProcessingJobs, cvGoogleDriveExportJobs, clientBriefCandidates, recruitmentFollowUpTasks, recruitmentCampaignRecipients]) {
+    for (const table of [cvApplications])
+      expect(rowsFor(table, "id", id)).toHaveLength(0);
+    for (const table of [
+      cvCandidateCertifications,
+      cvCandidateLanguages,
+      cvCandidateExperiences,
+      cvProcessingJobs,
+      cvGoogleDriveExportJobs,
+      clientBriefCandidates,
+      recruitmentFollowUpTasks,
+      recruitmentCampaignRecipients,
+    ]) {
       expect(rowsFor(table, "application_id", id)).toHaveLength(0);
     }
-    expect(memory.rows(recruitmentEmailEvents).map(row => row.provider_event_id)).toEqual(["evt-3"]);
+    expect(
+      memory.rows(recruitmentEmailEvents).map(row => row.provider_event_id)
+    ).toEqual(["evt-3"]);
     expect(memory.rows(candidateAccounts)).toHaveLength(0);
     expect(memory.rows(candidateSessions)).toHaveLength(0);
     expect(memory.rows(candidateDocuments)).toHaveLength(0);
     expect(memory.rows(candidateDocumentProcessingJobs)).toHaveLength(0);
     expect(memory.rows(candidateDocumentAuditLogs)).toHaveLength(0);
-    expect(memory.rows(securityEvents).map(row => row.category)).toEqual(["admin_mfa_verify", "admin_numeric_reference"]);
+    expect(memory.rows(securityEvents).map(row => row.category)).toEqual([
+      "admin_mfa_verify",
+      "admin_numeric_reference",
+    ]);
     expect(report.candidateAccountsErased).toBe(1);
     expect(report.candidateSessionsDeleted).toBe(2);
     expect(report.candidateDocumentsDeleted).toBe(3);
 
     // The other dossier is untouched.
     expect(rowsFor(cvApplications, "id", otherId)).toHaveLength(1);
-    expect(rowsFor(cvCandidateCertifications, "application_id", otherId)).toHaveLength(1);
-    expect(rowsFor(cvProcessingJobs, "application_id", otherId)).toHaveLength(1);
-    expect(rowsFor(clientBriefCandidates, "application_id", otherId)).toHaveLength(1);
+    expect(
+      rowsFor(cvCandidateCertifications, "application_id", otherId)
+    ).toHaveLength(1);
+    expect(rowsFor(cvProcessingJobs, "application_id", otherId)).toHaveLength(
+      1
+    );
+    expect(
+      rowsFor(clientBriefCandidates, "application_id", otherId)
+    ).toHaveLength(1);
 
     // Only the minimal proof remains: no name, email, file name or storage key.
     const audit = memory.rows(recruitmentAuditLogs);
     expect(audit).toHaveLength(1);
     expect(audit[0]!.action).toBe("erase");
     const proof = String(audit[0]!.metadata);
-    for (const forbidden of ["Claire", "Martin", "test.local", TRACKING, "diplome", "recruitment/", "candidate-documents/", "Merci"]) expect(proof).not.toContain(forbidden);
-    expect(JSON.parse(proof)).toMatchObject({ erasureMode: "admin_gdpr_request", emailHash: hashSecurityValue("claire.martin@test.local"), storageObjectsDeleted: 6, googleDrive: "deleted" });
+    for (const forbidden of [
+      "Claire",
+      "Martin",
+      "test.local",
+      TRACKING,
+      "diplome",
+      "recruitment/",
+      "candidate-documents/",
+      "Merci",
+    ])
+      expect(proof).not.toContain(forbidden);
+    expect(JSON.parse(proof)).toMatchObject({
+      erasureMode: "admin_gdpr_request",
+      emailHash: hashSecurityValue("claire.martin@test.local"),
+      storageObjectsDeleted: 6,
+      googleDrive: "deleted",
+    });
     expect(accountId).toBeGreaterThan(0);
   });
 
   it("efface aussi l’espace candidat ouvert avec la même adresse mais non rattaché (majuscules, inscription avant candidature)", async () => {
     const { id, accountId } = seedDossier();
     // Account created on /candidate/access: lower-case address, no link to the dossier.
-    for (const row of memory.rows(candidateAccounts)) if (row.id === accountId) row.linked_application_id = null;
-    for (const row of memory.rows(candidateDocuments)) Object.assign(row, { application_id: null, category: "identity_document" });
-    const [unrelated] = memory.seed(candidateAccounts, [{ email: "paul@test.local", password_hash: "x", email_verified_at: new Date() }]);
-    memory.seed(cvApplications, [{
-      tracking_id: "CVSAMEPERSON000001", first_name: "Claire", last_name: "Martin", email: "CLAIRE.MARTIN@test.local", specialty: "Anesthésie", target_countries: "[]",
-      cv_file_key: "recruitment/quarantine/CVSAMEPERSON000001-cv.pdf", cv_original_name: "cv.pdf", cv_mime_type: "application/pdf", cv_size_bytes: 1000,
-    }]);
+    for (const row of memory.rows(candidateAccounts))
+      if (row.id === accountId) row.linked_application_id = null;
+    for (const row of memory.rows(candidateDocuments))
+      Object.assign(row, {
+        application_id: null,
+        category: "identity_document",
+      });
+    const [unrelated] = memory.seed(candidateAccounts, [
+      {
+        email: "paul@test.local",
+        password_hash: "x",
+        email_verified_at: new Date(),
+      },
+    ]);
+    memory.seed(cvApplications, [
+      {
+        tracking_id: "CVSAMEPERSON000001",
+        first_name: "Claire",
+        last_name: "Martin",
+        email: "CLAIRE.MARTIN@test.local",
+        specialty: "Anesthésie",
+        target_countries: "[]",
+        cv_file_key: "recruitment/quarantine/CVSAMEPERSON000001-cv.pdf",
+        cv_original_name: "cv.pdf",
+        cv_mime_type: "application/pdf",
+        cv_size_bytes: 1000,
+      },
+    ]);
 
-    const report = await eraseCandidateApplication({ applicationId: id, actorOpenId: "user_owner", reason: "admin_gdpr_request" }, dependencies());
+    const report = await eraseCandidateApplication(
+      {
+        applicationId: id,
+        actorOpenId: "user_owner",
+        reason: "admin_gdpr_request",
+      },
+      dependencies()
+    );
     expect(report.candidateAccountsErased).toBe(1);
     expect(report.candidateSessionsDeleted).toBe(2);
     expect(report.candidateDocumentsDeleted).toBe(3);
     expect(report.otherApplicationsWithSameEmail).toBe(1);
-    expect(memory.rows(candidateAccounts).map(row => row.id)).toEqual([unrelated!.id]);
+    expect(memory.rows(candidateAccounts).map(row => row.id)).toEqual([
+      unrelated!.id,
+    ]);
     expect(memory.rows(candidateSessions)).toHaveLength(0);
     expect(memory.rows(candidateDocuments)).toHaveLength(0);
-    expect(Array.from(blobs).some(key => key.startsWith(`candidate-documents/quarantine/${accountId}/`))).toBe(false);
+    expect(
+      Array.from(blobs).some(key =>
+        key.startsWith(`candidate-documents/quarantine/${accountId}/`)
+      )
+    ).toBe(false);
   });
 
   it("n’efface rien en base si le stockage refuse la suppression (nouvel essai possible)", async () => {
     const { id } = seedDossier();
     const deps = dependencies();
-    deps.storageDelete = async () => { throw new Error("BlobServiceNotAvailable"); };
-    await expect(eraseCandidateApplication({ applicationId: id, actorOpenId: "user_owner", reason: "admin_gdpr_request" }, deps)).rejects.toMatchObject({ constructor: CandidateErasureInterruptedError, stage: "storage" });
+    deps.storageDelete = async () => {
+      throw new Error("BlobServiceNotAvailable");
+    };
+    await expect(
+      eraseCandidateApplication(
+        {
+          applicationId: id,
+          actorOpenId: "user_owner",
+          reason: "admin_gdpr_request",
+        },
+        deps
+      )
+    ).rejects.toMatchObject({
+      constructor: CandidateErasureInterruptedError,
+      stage: "storage",
+    });
     expect(rowsFor(cvApplications, "id", id)).toHaveLength(1);
     expect(memory.rows(candidateAccounts)).toHaveLength(1);
     expect(driveFiles.size).toBe(3);
 
-    const report = await eraseCandidateApplication({ applicationId: id, actorOpenId: "user_owner", reason: "admin_gdpr_request" }, dependencies());
+    const report = await eraseCandidateApplication(
+      {
+        applicationId: id,
+        actorOpenId: "user_owner",
+        reason: "admin_gdpr_request",
+      },
+      dependencies()
+    );
     expect(report.storageObjectsDeleted).toBe(6);
     expect(rowsFor(cvApplications, "id", id)).toHaveLength(0);
   });
@@ -216,7 +528,14 @@ describe("effacement RGPD complet d’un dossier candidat", () => {
       return deleteDriveCopies(input);
     };
 
-    const report = await eraseCandidateApplication({ applicationId: id, actorOpenId: "user_owner", reason: "admin_gdpr_request" }, deps);
+    const report = await eraseCandidateApplication(
+      {
+        applicationId: id,
+        actorOpenId: "user_owner",
+        reason: "admin_gdpr_request",
+      },
+      deps
+    );
 
     expect(blobs.has(lateKey)).toBe(false);
     expect(memory.rows(candidateDocuments)).toHaveLength(0);
@@ -224,33 +543,66 @@ describe("effacement RGPD complet d’un dossier candidat", () => {
     expect(memory.rows(candidateDocumentProcessingJobs)).toHaveLength(0);
     expect(memory.rows(candidateDocumentAuditLogs)).toHaveLength(0);
     expect(memory.rows(candidateAccounts)).toHaveLength(0);
-    expect(report).toMatchObject({ candidateDocumentsDeleted: 4, storageObjectsDeleted: 7, candidateAccountsErased: 1 });
-    expect(JSON.parse(String(memory.rows(recruitmentAuditLogs)[0]!.metadata))).toMatchObject({ candidateDocumentsDeleted: 4, storageObjectsDeleted: 7 });
+    expect(report).toMatchObject({
+      candidateDocumentsDeleted: 4,
+      storageObjectsDeleted: 7,
+      candidateAccountsErased: 1,
+    });
+    expect(
+      JSON.parse(String(memory.rows(recruitmentAuditLogs)[0]!.metadata))
+    ).toMatchObject({ candidateDocumentsDeleted: 4, storageObjectsDeleted: 7 });
   });
 
   it("vérifie de nouveau quand la clé étrangère refuse de supprimer un compte qui vient de recevoir un document (DATA-01)", async () => {
     const { id, accountId } = seedDossier();
-    const database = memory.db as unknown as { delete: (table: unknown) => unknown };
+    const database = memory.db as unknown as {
+      delete: (table: unknown) => unknown;
+    };
     let lateKey = "";
     // The database refuses the first deletion of the account: a document was stored just before it.
     state.memory = {
       db: new Proxy(database, {
         get(target, property, receiver) {
-          if (property !== "delete") return Reflect.get(target, property, receiver);
+          if (property !== "delete")
+            return Reflect.get(target, property, receiver);
           return (table: unknown) => {
-            if (table !== candidateAccounts || lateKey) return target.delete(table);
+            if (table !== candidateAccounts || lateKey)
+              return target.delete(table);
             lateKey = uploadDuringErasure(accountId, id);
-            const refusal = Object.assign(new Error("Failed query: delete from \"candidate_accounts\" …"), {
-              cause: Object.assign(new Error('update or delete on table "candidate_accounts" violates foreign key constraint "candidate_documents_candidate_id_fk" on table "candidate_documents"'), { code: "23503", constraint: "candidate_documents_candidate_id_fk" }),
-            });
+            const refusal = Object.assign(
+              new Error('Failed query: delete from "candidate_accounts" …'),
+              {
+                cause: Object.assign(
+                  new Error(
+                    'update or delete on table "candidate_accounts" violates foreign key constraint "candidate_documents_candidate_id_fk" on table "candidate_documents"'
+                  ),
+                  {
+                    code: "23503",
+                    constraint: "candidate_documents_candidate_id_fk",
+                  }
+                ),
+              }
+            );
             // Refused when the batch runs it, like a statement of the transaction.
-            return { where: () => ({ then: (_resolve: unknown, reject: (error: unknown) => void) => reject(refusal) }) };
+            return {
+              where: () => ({
+                then: (_resolve: unknown, reject: (error: unknown) => void) =>
+                  reject(refusal),
+              }),
+            };
           };
         },
       }),
     };
 
-    const report = await eraseCandidateApplication({ applicationId: id, actorOpenId: "user_owner", reason: "admin_gdpr_request" }, dependencies());
+    const report = await eraseCandidateApplication(
+      {
+        applicationId: id,
+        actorOpenId: "user_owner",
+        reason: "admin_gdpr_request",
+      },
+      dependencies()
+    );
 
     expect(lateKey).not.toBe("");
     expect(blobs.has(lateKey)).toBe(false);
@@ -258,37 +610,67 @@ describe("effacement RGPD complet d’un dossier candidat", () => {
     expect(memory.rows(candidateDocumentProcessingJobs)).toHaveLength(0);
     expect(memory.rows(candidateAccounts)).toHaveLength(0);
     expect(rowsFor(cvApplications, "id", id)).toHaveLength(0);
-    expect(report).toMatchObject({ candidateDocumentsDeleted: 4, candidateAccountsErased: 1 });
+    expect(report).toMatchObject({
+      candidateDocumentsDeleted: 4,
+      candidateAccountsErased: 1,
+    });
   });
 
   it("efface tout ou rien en base : une suppression refusée laisse le dossier entier, repris au passage suivant de la rétention (DATA-08)", async () => {
     const { id, accountId } = seedDossier();
     // A trigger refuses the deletion of the security events, as in the audit's replay.
     memory.failNext(/^delete from "security_events"/);
-    const error = await eraseCandidateApplication({ applicationId: id, actorOpenId: "user_owner", reason: "admin_gdpr_request" }, dependencies()).catch(caught => caught);
+    const error = await eraseCandidateApplication(
+      {
+        applicationId: id,
+        actorOpenId: "user_owner",
+        reason: "admin_gdpr_request",
+      },
+      dependencies()
+    ).catch(caught => caught);
     expect(error).toBeInstanceOf(CandidateErasureInterruptedError);
     expect(error.stage).toBe("database");
 
     // Files are gone, but nothing was deleted in the database: no « ghost » dossier half erased.
-    expect(Array.from(blobs)).toEqual([`recruitment/quarantine/${OTHER_TRACKING}-cv_ffff0000.pdf`]);
+    expect(Array.from(blobs)).toEqual([
+      `recruitment/quarantine/${OTHER_TRACKING}-cv_ffff0000.pdf`,
+    ]);
     expect(rowsFor(cvApplications, "id", id)).toHaveLength(1);
     expect(rowsFor(cvCandidateLanguages, "application_id", id)).toHaveLength(2);
     expect(memory.rows(candidateAccounts)).toHaveLength(1);
     expect(memory.rows(candidateSessions)).toHaveLength(2);
     expect(memory.rows(candidateDocuments)).toHaveLength(3);
     expect(memory.rows(securityEvents)).toHaveLength(5);
-    expect(memory.rows(recruitmentAuditLogs).map(row => row.action)).toEqual(["email", "erase"]);
+    expect(memory.rows(recruitmentAuditLogs).map(row => row.action)).toEqual([
+      "email",
+      "erase",
+    ]);
 
     // A retention run within two minutes leaves it alone: the attempt may still be running.
-    const { runRecruitmentRetentionCleanup } = await import("./recruitmentRetention");
-    await expect(runRecruitmentRetentionCleanup("vercel-cron", { dependencies: dependencies() })).resolves.toMatchObject({ erased: 0, resumed: 0 });
+    const { runRecruitmentRetentionCleanup } = await import(
+      "./recruitmentRetention"
+    );
+    await expect(
+      runRecruitmentRetentionCleanup("vercel-cron", {
+        dependencies: dependencies(),
+      })
+    ).resolves.toMatchObject({ erased: 0, resumed: 0 });
     expect(rowsFor(cvApplications, "id", id)).toHaveLength(1);
 
     // The next day's run finishes it, for the GDPR request and in the name of the administrator who asked.
     vi.useFakeTimers({ toFake: ["Date"] });
     try {
       vi.setSystemTime(Date.now() + 24 * 60 * 60 * 1000);
-      await expect(runRecruitmentRetentionCleanup("vercel-cron", { dependencies: dependencies() })).resolves.toMatchObject({ erased: 1, resumed: 1, partial: 0, failed: 0 });
+      await expect(
+        runRecruitmentRetentionCleanup("vercel-cron", {
+          dependencies: dependencies(),
+        })
+      ).resolves.toMatchObject({
+        erased: 1,
+        resumed: 1,
+        partial: 0,
+        failed: 0,
+      });
     } finally {
       vi.useRealTimers();
     }
@@ -296,18 +678,47 @@ describe("effacement RGPD complet d’un dossier candidat", () => {
     expect(memory.rows(candidateAccounts)).toHaveLength(0);
     expect(memory.rows(candidateDocuments)).toHaveLength(0);
     // The account's own traces did not outlive it.
-    expect(memory.rows(securityEvents).filter(row => row.actor_reference === String(accountId) && row.security_event_actor_kind === "candidate")).toHaveLength(0);
-    expect(memory.rows(securityEvents).map(row => row.category)).toEqual(["admin_mfa_verify", "admin_numeric_reference"]);
+    expect(
+      memory
+        .rows(securityEvents)
+        .filter(
+          row =>
+            row.actor_reference === String(accountId) &&
+            row.security_event_actor_kind === "candidate"
+        )
+    ).toHaveLength(0);
+    expect(memory.rows(securityEvents).map(row => row.category)).toEqual([
+      "admin_mfa_verify",
+      "admin_numeric_reference",
+    ]);
     const audit = memory.rows(recruitmentAuditLogs);
     expect(audit).toHaveLength(1);
-    expect(audit[0]).toMatchObject({ action: "erase", admin_open_id: "user_owner" });
-    expect(JSON.parse(String(audit[0]!.metadata))).toMatchObject({ erasureMode: "admin_gdpr_request", candidateAccountsErased: 1, candidateDocumentsDeleted: 3 });
+    expect(audit[0]).toMatchObject({
+      action: "erase",
+      admin_open_id: "user_owner",
+    });
+    expect(JSON.parse(String(audit[0]!.metadata))).toMatchObject({
+      erasureMode: "admin_gdpr_request",
+      candidateAccountsErased: 1,
+      candidateDocumentsDeleted: 3,
+    });
   });
 
   it("refuse l’effacement pendant une analyse en cours", async () => {
     const { id } = seedDossier();
-    memory.seed(cvProcessingJobs, [{ application_id: id, job_status: "running", started_at: new Date() }]);
-    await expect(eraseCandidateApplication({ applicationId: id, actorOpenId: "user_owner", reason: "admin_gdpr_request" }, dependencies())).rejects.toBeInstanceOf(CandidateErasureBusyError);
+    memory.seed(cvProcessingJobs, [
+      { application_id: id, job_status: "running", started_at: new Date() },
+    ]);
+    await expect(
+      eraseCandidateApplication(
+        {
+          applicationId: id,
+          actorOpenId: "user_owner",
+          reason: "admin_gdpr_request",
+        },
+        dependencies()
+      )
+    ).rejects.toBeInstanceOf(CandidateErasureBusyError);
     expect(rowsFor(cvApplications, "id", id)).toHaveLength(1);
     expect(blobs.size).toBe(7);
   });
@@ -315,16 +726,34 @@ describe("effacement RGPD complet d’un dossier candidat", () => {
   it("enregistre la copie Drive non supprimée et la supprime au passage suivant du cron", async () => {
     const { id } = seedDossier();
     driveMode = "down";
-    const report = await eraseCandidateApplication({ applicationId: id, actorOpenId: "user_owner", reason: "admin_gdpr_request" }, dependencies());
+    const report = await eraseCandidateApplication(
+      {
+        applicationId: id,
+        actorOpenId: "user_owner",
+        reason: "admin_gdpr_request",
+      },
+      dependencies()
+    );
     expect(report.googleDrive.status).toBe("pending_retry");
     expect(rowsFor(cvApplications, "id", id)).toHaveLength(0);
     const [pending] = rowsFor(cvGoogleDriveExportJobs, "application_id", id);
-    expect(pending).toMatchObject({ status: "failed", drive_file_id: "drive-claire", drive_file_url: null, last_error: `${ERASURE_PENDING_DRIVE_PREFIX}${TRACKING}` });
+    expect(pending).toMatchObject({
+      status: "failed",
+      drive_file_id: "drive-claire",
+      drive_file_url: null,
+      last_error: `${ERASURE_PENDING_DRIVE_PREFIX}${TRACKING}`,
+    });
 
-    await expect(retryPendingGoogleDriveErasures(10, dependencies().deleteDriveCopies)).resolves.toEqual({ processed: 1, completed: 0, pending: 1 });
+    await expect(
+      retryPendingGoogleDriveErasures(10, dependencies().deleteDriveCopies)
+    ).resolves.toEqual({ processed: 1, completed: 0, pending: 1 });
     driveMode = "ok";
-    await expect(retryPendingGoogleDriveErasures(10, dependencies().deleteDriveCopies)).resolves.toEqual({ processed: 1, completed: 1, pending: 0 });
-    expect(rowsFor(cvGoogleDriveExportJobs, "application_id", id)).toHaveLength(0);
+    await expect(
+      retryPendingGoogleDriveErasures(10, dependencies().deleteDriveCopies)
+    ).resolves.toEqual({ processed: 1, completed: 1, pending: 0 });
+    expect(rowsFor(cvGoogleDriveExportJobs, "application_id", id)).toHaveLength(
+      0
+    );
     expect(Array.from(driveFiles.keys())).toEqual(["drive-paul"]);
   });
 });

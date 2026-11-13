@@ -21,25 +21,51 @@ import ServicesSection from "./ServicesSection";
 
 /** Premier rendu d'une page publique dans la langue mémorisée du visiteur. */
 function render(element: ReactElement, { language = "fr", path = "/" } = {}) {
-  vi.stubGlobal("localStorage", { getItem: (key: string) => (key === "language" ? language : null), setItem: () => {}, removeItem: () => {} });
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => (key === "language" ? language : null),
+    setItem: () => {},
+    removeItem: () => {},
+  });
   vi.stubGlobal("window", { location: { pathname: path }, innerWidth: 1280 });
   const queryClient = new QueryClient();
-  const trpcClient = trpc.createClient({ links: [httpBatchLink({ url: "http://localhost/api/trpc", transformer: superjson })] });
+  const trpcClient = trpc.createClient({
+    links: [
+      httpBatchLink({
+        url: "http://localhost/api/trpc",
+        transformer: superjson,
+      }),
+    ],
+  });
   return renderToStaticMarkup(
-    createElement(trpc.Provider, { client: trpcClient, queryClient, children:
-      createElement(QueryClientProvider, { client: queryClient },
-        createElement(Router, { ssrPath: path, children:
-          createElement(ThemeProvider, { defaultTheme: "dark", switchable: true, children:
-            createElement(LanguageProvider, null, element) }) })) }),
+    createElement(trpc.Provider, {
+      client: trpcClient,
+      queryClient,
+      children: createElement(
+        QueryClientProvider,
+        { client: queryClient },
+        createElement(Router, {
+          ssrPath: path,
+          children: createElement(ThemeProvider, {
+            defaultTheme: "dark",
+            switchable: true,
+            children: createElement(LanguageProvider, null, element),
+          }),
+        })
+      ),
+    })
   );
 }
 
 /** Textes des vrais liens <a href="/booking"> d'un fragment HTML. */
 function bookingLinks(html: string) {
-  return Array.from(html.matchAll(/<a\b[^>]*\bhref="\/booking"[^>]*>([\s\S]*?)<\/a>/g), (match) => match[1].replace(/<[^>]+>/g, "").trim());
+  return Array.from(
+    html.matchAll(/<a\b[^>]*\bhref="\/booking"[^>]*>([\s\S]*?)<\/a>/g),
+    match => match[1].replace(/<[^>]+>/g, "").trim()
+  );
 }
 
-const section = (html: string, pattern: RegExp) => html.match(pattern)?.[0] ?? "";
+const section = (html: string, pattern: RegExp) =>
+  html.match(pattern)?.[0] ?? "";
 const main = (html: string) => section(html, /<main\b[\s\S]*<\/main>/);
 
 afterEach(() => {
@@ -50,44 +76,81 @@ describe("liens de réservation (PUB-02)", () => {
   it("place la réservation dans l'en-tête à la place du bouton « Me contacter »", () => {
     // « Consultation » de la navigation dès 1024 px, puis aussi le bouton dès 1280 px (PUB-08).
     const fr = render(createElement(Navigation));
-    expect(bookingLinks(fr)).toEqual([contentFr.nav.consultation, contentFr.hero.bookConsultation]);
+    expect(bookingLinks(fr)).toEqual([
+      contentFr.nav.consultation,
+      contentFr.hero.bookConsultation,
+    ]);
     expect(fr).not.toContain(contentFr.nav.getInTouch);
 
-    expect(bookingLinks(render(createElement(Navigation), { language: "en" }))).toEqual([contentEn.nav.consultation, contentEn.hero.bookConsultation]);
+    expect(
+      bookingLinks(render(createElement(Navigation), { language: "en" }))
+    ).toEqual([contentEn.nav.consultation, contentEn.hero.bookConsultation]);
   });
 
   it("ajoute la réservation à la colonne Navigation du pied de page", () => {
-    for (const [language, content] of [["fr", contentFr], ["en", contentEn]] as const) {
+    for (const [language, content] of [
+      ["fr", contentFr],
+      ["en", contentEn],
+    ] as const) {
       const html = render(createElement(Footer), { language });
-      const navigationColumn = section(html, new RegExp(`<nav[^>]*aria-label="${footerLandmarkCopy.sections[language]}"[\\s\\S]*?</nav>`));
-      expect(bookingLinks(navigationColumn), language).toEqual([content.hero.bookConsultation]);
+      const navigationColumn = section(
+        html,
+        new RegExp(
+          `<nav[^>]*aria-label="${footerLandmarkCopy.sections[language]}"[\\s\\S]*?</nav>`
+        )
+      );
+      expect(bookingLinks(navigationColumn), language).toEqual([
+        content.hero.bookConsultation,
+      ]);
     }
   });
 
   it("fait du bouton du héros un vrai lien", () => {
     const html = render(createElement(HeroSection));
     expect(bookingLinks(html)).toEqual([contentFr.hero.bookConsultation]);
-    expect(html).not.toMatch(new RegExp(`<button[^>]*>${contentFr.hero.bookConsultation}`));
+    expect(html).not.toMatch(
+      new RegExp(`<button[^>]*>${contentFr.hero.bookConsultation}`)
+    );
   });
 
   it("termine la section Services par un lien de réservation", () => {
-    expect(bookingLinks(render(createElement(ServicesSection), { language: "en" }))).toEqual([contentEn.hero.bookConsultation]);
+    expect(
+      bookingLinks(render(createElement(ServicesSection), { language: "en" }))
+    ).toEqual([contentEn.hero.bookConsultation]);
   });
 
   it("fait du bouton de la FAQ un vrai lien", () => {
     const html = main(render(createElement(FAQPage), { path: "/faq" }));
     expect(bookingLinks(html)).toEqual([getFaqContent("fr").booking]);
-    expect(html).not.toMatch(new RegExp(`<button[^>]*>${getFaqContent("fr").booking}`));
+    expect(html).not.toMatch(
+      new RegExp(`<button[^>]*>${getFaqContent("fr").booking}`)
+    );
   });
 
   it("propose la réservation sur la page Pratique clinique uniquement", () => {
-    const venture = (slug: string) => main(render(createElement(Route, { path: "/venture/:slug", component: VenturePage }), { path: `/venture/${slug}` }));
-    expect(bookingLinks(venture("pratique-clinique"))).toEqual([contentFr.hero.bookConsultation]);
+    const venture = (slug: string) =>
+      main(
+        render(
+          createElement(Route, {
+            path: "/venture/:slug",
+            component: VenturePage,
+          }),
+          { path: `/venture/${slug}` }
+        )
+      );
+    expect(bookingLinks(venture("pratique-clinique"))).toEqual([
+      contentFr.hero.bookConsultation,
+    ]);
     expect(bookingLinks(venture("laska-corporate"))).toEqual([]);
   });
 
   it("propose la réservation sur /questions-anesthesie", () => {
-    const html = main(render(createElement(MedicalQuestionsPage), { language: "en", path: "/questions-anesthesie" }));
+    const html = main(
+      render(createElement(MedicalQuestionsPage), {
+        language: "en",
+        path: "/questions-anesthesie",
+      })
+    );
     expect(bookingLinks(html)).toEqual([contentEn.hero.bookConsultation]);
   });
 });

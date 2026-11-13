@@ -1,8 +1,22 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { FileLock2, KeyRound, Loader2, LogIn, MailCheck, ShieldCheck, UserPlus } from "lucide-react";
+import {
+  FileLock2,
+  KeyRound,
+  Loader2,
+  LogIn,
+  MailCheck,
+  ShieldCheck,
+  UserPlus,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,9 +24,14 @@ import { trpc } from "@/lib/trpc";
 import { TurnstileWidget } from "@/components/TurnstileWidget";
 import { SEOHead } from "@/components/SEOHead";
 import { useLanguage } from "@/contexts/LanguageContext";
-import CandidateLegalFooter, { candidateLegalLinks } from "@/components/CandidateLegalFooter";
+import CandidateLegalFooter, {
+  candidateLegalLinks,
+} from "@/components/CandidateLegalFooter";
 import LanguageMenu from "@/components/LanguageMenu";
-import { isCandidateAccessReason, type CandidateAccessReason } from "@shared/candidateAccessReasons";
+import {
+  isCandidateAccessReason,
+  type CandidateAccessReason,
+} from "@shared/candidateAccessReasons";
 import { INVALID_CHARACTERS_REASON } from "@shared/publicFormRefusalReasons";
 import { publicFormCopy } from "@/lib/publicFormCopy";
 
@@ -27,27 +46,45 @@ export const candidateAccessCopy = {
     metaTitle: "Espace candidat sécurisé | Hippocampus Consulting",
     metaDescription: "Créez ou accédez à votre espace candidat sécurisé.",
     brandTitle: "Votre espace candidat sécurisé",
-    brandDescription: "Déposez vos pièces administratives dans un coffre documentaire privé. Vos documents professionnels bénéficient d’une synthèse IA qui aide notre équipe à préparer la revue ; vos pièces d’identité sont vérifiées uniquement par une personne. Aucune décision n’est prise automatiquement.",
-    safeguards: ["Accès personnel par email et mot de passe", "Documents privés et téléchargements autorisés", "Analyse assistée suivie d’une revue humaine"],
+    brandDescription:
+      "Déposez vos pièces administratives dans un coffre documentaire privé. Vos documents professionnels bénéficient d’une synthèse IA qui aide notre équipe à préparer la revue ; vos pièces d’identité sont vérifiées uniquement par une personne. Aucune décision n’est prise automatiquement.",
+    safeguards: [
+      "Accès personnel par email et mot de passe",
+      "Documents privés et téléchargements autorisés",
+      "Analyse assistée suivie d’une revue humaine",
+    ],
     loginTitle: "Accéder à mon espace",
     registerTitle: "Créer mon espace candidat",
     forgotTitle: "Réinitialiser mon accès",
     activationTitle: "Renvoyer l’e-mail d’activation",
-    loginDescription: "Consultez et déposez vos documents administratifs en toute confidentialité.",
-    registerDescription: "Indiquez votre identité. Vous choisirez votre mot de passe depuis le lien d’activation envoyé par email, une fois votre adresse confirmée.",
-    forgotDescription: "Nous vous enverrons un lien sécurisé si un compte correspond à cet email.",
-    activationDescription: "Demandez un nouveau lien si votre compte a été créé mais n’est pas encore activé.",
+    loginDescription:
+      "Consultez et déposez vos documents administratifs en toute confidentialité.",
+    registerDescription:
+      "Indiquez votre identité. Vous choisirez votre mot de passe depuis le lien d’activation envoyé par email, une fois votre adresse confirmée.",
+    forgotDescription:
+      "Nous vous enverrons un lien sécurisé si un compte correspond à cet email.",
+    activationDescription:
+      "Demandez un nouveau lien si votre compte a été créé mais n’est pas encore activé.",
     firstName: "Prénom",
     lastName: "Nom",
     email: "Email",
     password: "Mot de passe",
-    passwordHint: "Minimum 15 caractères. Choisissez un mot de passe long et unique.",
+    passwordHint:
+      "Minimum 15 caractères. Choisissez un mot de passe long et unique.",
     confirmPassword: "Confirmer le mot de passe",
-    termsParts: ["J’accepte les ", "conditions d’utilisation", " et la ", "politique de confidentialité", "."],
-    legalNotice: "Responsable du traitement : Hippocampus Consulting. Vos droits et les destinataires de vos données sont décrits dans la politique de confidentialité.",
+    termsParts: [
+      "J’accepte les ",
+      "conditions d’utilisation",
+      " et la ",
+      "politique de confidentialité",
+      ".",
+    ],
+    legalNotice:
+      "Responsable du traitement : Hippocampus Consulting. Vos droits et les destinataires de vos données sont décrits dans la politique de confidentialité.",
     legalLinks: { legal: "Mentions légales", privacy: "Confidentialité" },
     newTab: "(nouvel onglet)",
-    documentConsent: "Je consens au traitement confidentiel de mes documents administratifs et à une analyse IA de mes documents professionnels (diplômes, licences, certificats) en aide à la revue humaine. Les pièces d’identité ne sont jamais analysées par l’IA.",
+    documentConsent:
+      "Je consens au traitement confidentiel de mes documents administratifs et à une analyse IA de mes documents professionnels (diplômes, licences, certificats) en aide à la revue humaine. Les pièces d’identité ne sont jamais analysées par l’IA.",
     login: "Se connecter",
     register: "Créer mon accès",
     reset: "Recevoir un lien sécurisé",
@@ -57,54 +94,90 @@ export const candidateAccessCopy = {
     navigationForgot: "Mot de passe oublié",
     navigationActivation: "E-mail d’activation non reçu",
     passwordMismatch: "Les deux mots de passe doivent être identiques.",
-    termsMissing: "Veuillez accepter les conditions d’utilisation et la politique de confidentialité pour continuer.",
-    documentConsentMissing: "Veuillez consentir au traitement confidentiel de vos documents pour continuer.",
-    bothConsentMissing: "Veuillez accepter les conditions d’utilisation et consentir au traitement confidentiel de vos documents avant de créer votre accès.",
-    turnstileRegisterMissing: "Veuillez effectuer la vérification anti-bot avant de créer votre accès.",
-    turnstileResetMissing: "Veuillez effectuer la vérification anti-bot avant de demander un lien.",
-    turnstileActivationMissing: "Veuillez effectuer la vérification anti-bot avant de renvoyer le lien d’activation.",
-    turnstileLoginMissing: "Veuillez effectuer la vérification anti-bot avant de vous connecter.",
-    loginChallenge: "Pour votre sécurité, plusieurs tentatives ayant échoué sur cette adresse, effectuez la vérification anti-bot puis reconnectez-vous.",
-    tooManyAttempts: "Trop de tentatives de connexion depuis cet appareil. Patientez 15 minutes ou utilisez « Mot de passe oublié ».",
+    termsMissing:
+      "Veuillez accepter les conditions d’utilisation et la politique de confidentialité pour continuer.",
+    documentConsentMissing:
+      "Veuillez consentir au traitement confidentiel de vos documents pour continuer.",
+    bothConsentMissing:
+      "Veuillez accepter les conditions d’utilisation et consentir au traitement confidentiel de vos documents avant de créer votre accès.",
+    turnstileRegisterMissing:
+      "Veuillez effectuer la vérification anti-bot avant de créer votre accès.",
+    turnstileResetMissing:
+      "Veuillez effectuer la vérification anti-bot avant de demander un lien.",
+    turnstileActivationMissing:
+      "Veuillez effectuer la vérification anti-bot avant de renvoyer le lien d’activation.",
+    turnstileLoginMissing:
+      "Veuillez effectuer la vérification anti-bot avant de vous connecter.",
+    loginChallenge:
+      "Pour votre sécurité, plusieurs tentatives ayant échoué sur cette adresse, effectuez la vérification anti-bot puis reconnectez-vous.",
+    tooManyAttempts:
+      "Trop de tentatives de connexion depuis cet appareil. Patientez 15 minutes ou utilisez « Mot de passe oublié ».",
     tooManyRequests: "Trop de tentatives. Veuillez réessayer plus tard.",
-    turnstileError: "La vérification anti-bot n’a pas abouti. Réessayez le contrôle avant de soumettre le formulaire.",
-    genericError: "Cette action n’a pas pu être finalisée. Vérifiez vos informations et réessayez.",
-    registerSuccess: "Votre demande d’accès a été enregistrée. Ouvrez le lien reçu par email (vérifiez aussi vos courriers indésirables) pour confirmer votre adresse et choisir votre mot de passe.",
-    resetSuccess: "Si un compte correspond à cet email, un lien sécurisé de réinitialisation vous sera envoyé.",
-    activationSuccess: "Si un compte non activé correspond à cet email, un nouveau lien d’activation vous sera envoyé. Vérifiez aussi vos courriers indésirables.",
-    invitationWelcome: "Votre invitation a été vérifiée. Confirmez vos informations : vous choisirez ensuite votre mot de passe depuis le lien d’activation envoyé par email.",
-    invitationInvalid: "Ce lien d’invitation n’est pas valide. Vous pouvez tout de même créer votre espace ci-dessous avec l’adresse email utilisée pour votre candidature.",
-    invitationExpired: "Votre lien d’invitation a expiré, mais vous pouvez créer votre espace ci-dessous : votre adresse email est préremplie et votre candidature sera rattachée automatiquement.",
-    invitationMismatch: "Cette invitation ne correspond pas à cette adresse email. Utilisez l’adresse de votre candidature.",
+    turnstileError:
+      "La vérification anti-bot n’a pas abouti. Réessayez le contrôle avant de soumettre le formulaire.",
+    genericError:
+      "Cette action n’a pas pu être finalisée. Vérifiez vos informations et réessayez.",
+    registerSuccess:
+      "Votre demande d’accès a été enregistrée. Ouvrez le lien reçu par email (vérifiez aussi vos courriers indésirables) pour confirmer votre adresse et choisir votre mot de passe.",
+    resetSuccess:
+      "Si un compte correspond à cet email, un lien sécurisé de réinitialisation vous sera envoyé.",
+    activationSuccess:
+      "Si un compte non activé correspond à cet email, un nouveau lien d’activation vous sera envoyé. Vérifiez aussi vos courriers indésirables.",
+    invitationWelcome:
+      "Votre invitation a été vérifiée. Confirmez vos informations : vous choisirez ensuite votre mot de passe depuis le lien d’activation envoyé par email.",
+    invitationInvalid:
+      "Ce lien d’invitation n’est pas valide. Vous pouvez tout de même créer votre espace ci-dessous avec l’adresse email utilisée pour votre candidature.",
+    invitationExpired:
+      "Votre lien d’invitation a expiré, mais vous pouvez créer votre espace ci-dessous : votre adresse email est préremplie et votre candidature sera rattachée automatiquement.",
+    invitationMismatch:
+      "Cette invitation ne correspond pas à cette adresse email. Utilisez l’adresse de votre candidature.",
     invalidCredentials: "Email ou mot de passe incorrect.",
-    serviceUnavailable: "Le service candidat est temporairement indisponible. Veuillez réessayer dans quelques instants.",
+    serviceUnavailable:
+      "Le service candidat est temporairement indisponible. Veuillez réessayer dans quelques instants.",
     invalidCharacters: publicFormCopy.invalidCharacters.fr,
   },
   en: {
     metaTitle: "Secure candidate portal | Hippocampus Consulting",
     metaDescription: "Create or access your secure candidate portal.",
     brandTitle: "Your secure candidate portal",
-    brandDescription: "Upload your administrative documents to a private vault. Your professional documents receive an AI summary that helps our team prepare its review; identity documents are checked by a person only. No decision is made automatically.",
-    safeguards: ["Personal access by email and password", "Private documents and authorised downloads", "Assisted analysis followed by human review"],
+    brandDescription:
+      "Upload your administrative documents to a private vault. Your professional documents receive an AI summary that helps our team prepare its review; identity documents are checked by a person only. No decision is made automatically.",
+    safeguards: [
+      "Personal access by email and password",
+      "Private documents and authorised downloads",
+      "Assisted analysis followed by human review",
+    ],
     loginTitle: "Access my portal",
     registerTitle: "Create my candidate portal",
     forgotTitle: "Reset my access",
     activationTitle: "Resend the activation email",
-    loginDescription: "View and upload your administrative documents confidentially.",
-    registerDescription: "Enter your details. You will choose your password from the activation link sent by email, once your address is confirmed.",
-    forgotDescription: "We will send you a secure link if an account matches this email.",
-    activationDescription: "Request a new link if your account was created but has not yet been activated.",
+    loginDescription:
+      "View and upload your administrative documents confidentially.",
+    registerDescription:
+      "Enter your details. You will choose your password from the activation link sent by email, once your address is confirmed.",
+    forgotDescription:
+      "We will send you a secure link if an account matches this email.",
+    activationDescription:
+      "Request a new link if your account was created but has not yet been activated.",
     firstName: "First name",
     lastName: "Last name",
     email: "Professional email",
     password: "Password",
     passwordHint: "At least 15 characters. Choose a long, unique password.",
     confirmPassword: "Confirm password",
-    termsParts: ["I accept the ", "terms of use", " and the ", "privacy policy", "."],
-    legalNotice: "Controller: Hippocampus Consulting. Your rights and the recipients of your data are described in the privacy policy.",
+    termsParts: [
+      "I accept the ",
+      "terms of use",
+      " and the ",
+      "privacy policy",
+      ".",
+    ],
+    legalNotice:
+      "Controller: Hippocampus Consulting. Your rights and the recipients of your data are described in the privacy policy.",
     legalLinks: { legal: "Legal notice", privacy: "Privacy" },
     newTab: "(new tab)",
-    documentConsent: "I consent to the confidential processing of my administrative documents and to AI analysis of my professional documents (diplomas, licences, certificates) supporting human review. Identity documents are never analysed by AI.",
+    documentConsent:
+      "I consent to the confidential processing of my administrative documents and to AI analysis of my professional documents (diplomas, licences, certificates) supporting human review. Identity documents are never analysed by AI.",
     login: "Sign in",
     register: "Create my access",
     reset: "Receive a secure link",
@@ -114,54 +187,92 @@ export const candidateAccessCopy = {
     navigationForgot: "Forgot password",
     navigationActivation: "Activation email not received",
     passwordMismatch: "Both passwords must match.",
-    termsMissing: "Please accept the terms of use and privacy policy to continue.",
-    documentConsentMissing: "Please consent to the confidential processing of your documents to continue.",
-    bothConsentMissing: "Please accept the terms of use and consent to the confidential processing of your documents before creating your access.",
-    turnstileRegisterMissing: "Please complete the anti-bot verification before creating your access.",
-    turnstileResetMissing: "Please complete the anti-bot verification before requesting a link.",
-    turnstileActivationMissing: "Please complete the anti-bot verification before resending the activation link.",
-    turnstileLoginMissing: "Please complete the anti-bot verification before signing in.",
-    loginChallenge: "For your security, after several failed attempts on this address, please complete the anti-bot verification and sign in again.",
-    tooManyAttempts: "Too many sign-in attempts from this device. Wait 15 minutes or use “Forgot password”.",
+    termsMissing:
+      "Please accept the terms of use and privacy policy to continue.",
+    documentConsentMissing:
+      "Please consent to the confidential processing of your documents to continue.",
+    bothConsentMissing:
+      "Please accept the terms of use and consent to the confidential processing of your documents before creating your access.",
+    turnstileRegisterMissing:
+      "Please complete the anti-bot verification before creating your access.",
+    turnstileResetMissing:
+      "Please complete the anti-bot verification before requesting a link.",
+    turnstileActivationMissing:
+      "Please complete the anti-bot verification before resending the activation link.",
+    turnstileLoginMissing:
+      "Please complete the anti-bot verification before signing in.",
+    loginChallenge:
+      "For your security, after several failed attempts on this address, please complete the anti-bot verification and sign in again.",
+    tooManyAttempts:
+      "Too many sign-in attempts from this device. Wait 15 minutes or use “Forgot password”.",
     tooManyRequests: "Too many attempts. Please try again later.",
-    turnstileError: "Anti-bot verification did not complete. Please try the check again before submitting the form.",
-    genericError: "This action could not be completed. Check your information and try again.",
-    registerSuccess: "Your access request has been registered. Open the link sent by email (also check your spam folder) to confirm your address and choose your password.",
-    resetSuccess: "If an account matches this email, a secure reset link will be sent to you.",
-    activationSuccess: "If an unverified account matches this email, a new activation link will be sent. Please also check your spam folder.",
-    invitationWelcome: "Your invitation has been verified. Confirm your details: you will then choose your password from the activation link sent by email.",
-    invitationInvalid: "This invitation link is not valid. You can still create your portal below with the email address used for your application.",
-    invitationExpired: "Your invitation link has expired, but you can create your portal below: your email address is prefilled and your application will be linked automatically.",
-    invitationMismatch: "This invitation does not match this email address. Use the address of your application.",
+    turnstileError:
+      "Anti-bot verification did not complete. Please try the check again before submitting the form.",
+    genericError:
+      "This action could not be completed. Check your information and try again.",
+    registerSuccess:
+      "Your access request has been registered. Open the link sent by email (also check your spam folder) to confirm your address and choose your password.",
+    resetSuccess:
+      "If an account matches this email, a secure reset link will be sent to you.",
+    activationSuccess:
+      "If an unverified account matches this email, a new activation link will be sent. Please also check your spam folder.",
+    invitationWelcome:
+      "Your invitation has been verified. Confirm your details: you will then choose your password from the activation link sent by email.",
+    invitationInvalid:
+      "This invitation link is not valid. You can still create your portal below with the email address used for your application.",
+    invitationExpired:
+      "Your invitation link has expired, but you can create your portal below: your email address is prefilled and your application will be linked automatically.",
+    invitationMismatch:
+      "This invitation does not match this email address. Use the address of your application.",
     invalidCredentials: "Incorrect email or password.",
-    serviceUnavailable: "The candidate service is temporarily unavailable. Please try again in a few moments.",
+    serviceUnavailable:
+      "The candidate service is temporarily unavailable. Please try again in a few moments.",
     invalidCharacters: publicFormCopy.invalidCharacters.en,
   },
   de: {
     metaTitle: "Sicheres Kandidatenportal | Hippocampus Consulting",
-    metaDescription: "Erstellen Sie Ihren sicheren Kandidatenzugang oder melden Sie sich an.",
+    metaDescription:
+      "Erstellen Sie Ihren sicheren Kandidatenzugang oder melden Sie sich an.",
     brandTitle: "Ihr sicheres Kandidatenportal",
-    brandDescription: "Laden Sie Ihre Verwaltungsdokumente in einen privaten Dokumententresor hoch. Ihre beruflichen Dokumente erhalten eine KI-Zusammenfassung, die unser Team bei der Prüfung unterstützt; Ausweisdokumente werden ausschließlich von einer Person geprüft. Es wird keine Entscheidung automatisch getroffen.",
-    safeguards: ["Persönlicher Zugang per E-Mail und Passwort", "Private Dokumente und autorisierte Downloads", "Unterstützte Analyse mit anschließender menschlicher Prüfung"],
+    brandDescription:
+      "Laden Sie Ihre Verwaltungsdokumente in einen privaten Dokumententresor hoch. Ihre beruflichen Dokumente erhalten eine KI-Zusammenfassung, die unser Team bei der Prüfung unterstützt; Ausweisdokumente werden ausschließlich von einer Person geprüft. Es wird keine Entscheidung automatisch getroffen.",
+    safeguards: [
+      "Persönlicher Zugang per E-Mail und Passwort",
+      "Private Dokumente und autorisierte Downloads",
+      "Unterstützte Analyse mit anschließender menschlicher Prüfung",
+    ],
     loginTitle: "Mein Portal öffnen",
     registerTitle: "Mein Kandidatenportal erstellen",
     forgotTitle: "Zugang zurücksetzen",
     activationTitle: "Aktivierungs-E-Mail erneut senden",
-    loginDescription: "Sehen Sie Ihre Verwaltungsdokumente ein und laden Sie sie vertraulich hoch.",
-    registerDescription: "Geben Sie Ihre Daten ein. Ihr Passwort wählen Sie über den per E-Mail gesendeten Aktivierungslink, sobald Ihre Adresse bestätigt ist.",
-    forgotDescription: "Wir senden Ihnen einen sicheren Link, wenn ein Konto zu dieser E-Mail passt.",
-    activationDescription: "Fordern Sie einen neuen Link an, wenn Ihr Konto erstellt, aber noch nicht aktiviert wurde.",
+    loginDescription:
+      "Sehen Sie Ihre Verwaltungsdokumente ein und laden Sie sie vertraulich hoch.",
+    registerDescription:
+      "Geben Sie Ihre Daten ein. Ihr Passwort wählen Sie über den per E-Mail gesendeten Aktivierungslink, sobald Ihre Adresse bestätigt ist.",
+    forgotDescription:
+      "Wir senden Ihnen einen sicheren Link, wenn ein Konto zu dieser E-Mail passt.",
+    activationDescription:
+      "Fordern Sie einen neuen Link an, wenn Ihr Konto erstellt, aber noch nicht aktiviert wurde.",
     firstName: "Vorname",
     lastName: "Nachname",
     email: "Berufliche E-Mail",
     password: "Passwort",
-    passwordHint: "Mindestens 15 Zeichen. Wählen Sie ein langes, eindeutiges Passwort.",
+    passwordHint:
+      "Mindestens 15 Zeichen. Wählen Sie ein langes, eindeutiges Passwort.",
     confirmPassword: "Passwort bestätigen",
-    termsParts: ["Ich akzeptiere die ", "Nutzungsbedingungen", " und die ", "Datenschutzrichtlinie", "."],
-    legalNotice: "Verantwortlicher: Hippocampus Consulting. Ihre Rechte und die Empfänger Ihrer Daten sind in der Datenschutzerklärung beschrieben.",
+    termsParts: [
+      "Ich akzeptiere die ",
+      "Nutzungsbedingungen",
+      " und die ",
+      "Datenschutzrichtlinie",
+      ".",
+    ],
+    legalNotice:
+      "Verantwortlicher: Hippocampus Consulting. Ihre Rechte und die Empfänger Ihrer Daten sind in der Datenschutzerklärung beschrieben.",
     legalLinks: { legal: "Impressum", privacy: "Datenschutz" },
     newTab: "(neuer Tab)",
-    documentConsent: "Ich stimme der vertraulichen Verarbeitung meiner Verwaltungsdokumente und einer KI-Analyse meiner beruflichen Dokumente (Diplome, Zulassungen, Zertifikate) zur Unterstützung der menschlichen Prüfung zu. Ausweisdokumente werden nie von der KI analysiert.",
+    documentConsent:
+      "Ich stimme der vertraulichen Verarbeitung meiner Verwaltungsdokumente und einer KI-Analyse meiner beruflichen Dokumente (Diplome, Zulassungen, Zertifikate) zur Unterstützung der menschlichen Prüfung zu. Ausweisdokumente werden nie von der KI analysiert.",
     login: "Anmelden",
     register: "Zugang erstellen",
     reset: "Sicheren Link erhalten",
@@ -171,41 +282,66 @@ export const candidateAccessCopy = {
     navigationForgot: "Passwort vergessen",
     navigationActivation: "Aktivierungs-E-Mail nicht erhalten",
     passwordMismatch: "Die beiden Passwörter müssen übereinstimmen.",
-    termsMissing: "Bitte akzeptieren Sie die Nutzungsbedingungen und Datenschutzrichtlinie, um fortzufahren.",
-    documentConsentMissing: "Bitte stimmen Sie der vertraulichen Verarbeitung Ihrer Dokumente zu, um fortzufahren.",
-    bothConsentMissing: "Bitte akzeptieren Sie die Nutzungsbedingungen und stimmen Sie der vertraulichen Verarbeitung Ihrer Dokumente zu, bevor Sie Ihren Zugang erstellen.",
-    turnstileRegisterMissing: "Bitte schließen Sie die Bot-Prüfung ab, bevor Sie Ihren Zugang erstellen.",
-    turnstileResetMissing: "Bitte schließen Sie die Bot-Prüfung ab, bevor Sie einen Link anfordern.",
-    turnstileActivationMissing: "Bitte schließen Sie die Bot-Prüfung ab, bevor Sie den Aktivierungslink erneut anfordern.",
-    turnstileLoginMissing: "Bitte schließen Sie die Bot-Prüfung ab, bevor Sie sich anmelden.",
-    loginChallenge: "Zu Ihrer Sicherheit: Nach mehreren fehlgeschlagenen Versuchen für diese Adresse schließen Sie bitte die Bot-Prüfung ab und melden Sie sich erneut an.",
-    tooManyAttempts: "Zu viele Anmeldeversuche von diesem Gerät. Warten Sie 15 Minuten oder nutzen Sie „Passwort vergessen“.",
+    termsMissing:
+      "Bitte akzeptieren Sie die Nutzungsbedingungen und Datenschutzrichtlinie, um fortzufahren.",
+    documentConsentMissing:
+      "Bitte stimmen Sie der vertraulichen Verarbeitung Ihrer Dokumente zu, um fortzufahren.",
+    bothConsentMissing:
+      "Bitte akzeptieren Sie die Nutzungsbedingungen und stimmen Sie der vertraulichen Verarbeitung Ihrer Dokumente zu, bevor Sie Ihren Zugang erstellen.",
+    turnstileRegisterMissing:
+      "Bitte schließen Sie die Bot-Prüfung ab, bevor Sie Ihren Zugang erstellen.",
+    turnstileResetMissing:
+      "Bitte schließen Sie die Bot-Prüfung ab, bevor Sie einen Link anfordern.",
+    turnstileActivationMissing:
+      "Bitte schließen Sie die Bot-Prüfung ab, bevor Sie den Aktivierungslink erneut anfordern.",
+    turnstileLoginMissing:
+      "Bitte schließen Sie die Bot-Prüfung ab, bevor Sie sich anmelden.",
+    loginChallenge:
+      "Zu Ihrer Sicherheit: Nach mehreren fehlgeschlagenen Versuchen für diese Adresse schließen Sie bitte die Bot-Prüfung ab und melden Sie sich erneut an.",
+    tooManyAttempts:
+      "Zu viele Anmeldeversuche von diesem Gerät. Warten Sie 15 Minuten oder nutzen Sie „Passwort vergessen“.",
     tooManyRequests: "Zu viele Versuche. Bitte versuchen Sie es später erneut.",
-    turnstileError: "Die Bot-Prüfung wurde nicht abgeschlossen. Bitte versuchen Sie die Prüfung erneut, bevor Sie das Formular senden.",
-    genericError: "Diese Aktion konnte nicht abgeschlossen werden. Prüfen Sie Ihre Angaben und versuchen Sie es erneut.",
-    registerSuccess: "Ihre Zugangsanfrage wurde registriert. Öffnen Sie den per E-Mail erhaltenen Link (prüfen Sie auch den Spam-Ordner), um Ihre Adresse zu bestätigen und Ihr Passwort zu wählen.",
-    resetSuccess: "Wenn ein Konto zu dieser E-Mail passt, erhalten Sie einen sicheren Link zum Zurücksetzen.",
-    activationSuccess: "Wenn ein nicht aktiviertes Konto zu dieser E-Mail passt, wird ein neuer Aktivierungslink gesendet. Prüfen Sie bitte auch Ihren Spam-Ordner.",
-    invitationWelcome: "Ihre Einladung wurde geprüft. Bestätigen Sie Ihre Angaben: Ihr Passwort wählen Sie anschließend über den per E-Mail gesendeten Aktivierungslink.",
-    invitationInvalid: "Dieser Einladungslink ist ungültig. Sie können Ihr Portal trotzdem unten mit der E-Mail-Adresse Ihrer Bewerbung erstellen.",
-    invitationExpired: "Ihr Einladungslink ist abgelaufen, Sie können Ihr Portal aber unten erstellen: Ihre E-Mail-Adresse ist vorausgefüllt und Ihre Bewerbung wird automatisch verknüpft.",
-    invitationMismatch: "Diese Einladung passt nicht zu dieser E-Mail-Adresse. Verwenden Sie die Adresse Ihrer Bewerbung.",
+    turnstileError:
+      "Die Bot-Prüfung wurde nicht abgeschlossen. Bitte versuchen Sie die Prüfung erneut, bevor Sie das Formular senden.",
+    genericError:
+      "Diese Aktion konnte nicht abgeschlossen werden. Prüfen Sie Ihre Angaben und versuchen Sie es erneut.",
+    registerSuccess:
+      "Ihre Zugangsanfrage wurde registriert. Öffnen Sie den per E-Mail erhaltenen Link (prüfen Sie auch den Spam-Ordner), um Ihre Adresse zu bestätigen und Ihr Passwort zu wählen.",
+    resetSuccess:
+      "Wenn ein Konto zu dieser E-Mail passt, erhalten Sie einen sicheren Link zum Zurücksetzen.",
+    activationSuccess:
+      "Wenn ein nicht aktiviertes Konto zu dieser E-Mail passt, wird ein neuer Aktivierungslink gesendet. Prüfen Sie bitte auch Ihren Spam-Ordner.",
+    invitationWelcome:
+      "Ihre Einladung wurde geprüft. Bestätigen Sie Ihre Angaben: Ihr Passwort wählen Sie anschließend über den per E-Mail gesendeten Aktivierungslink.",
+    invitationInvalid:
+      "Dieser Einladungslink ist ungültig. Sie können Ihr Portal trotzdem unten mit der E-Mail-Adresse Ihrer Bewerbung erstellen.",
+    invitationExpired:
+      "Ihr Einladungslink ist abgelaufen, Sie können Ihr Portal aber unten erstellen: Ihre E-Mail-Adresse ist vorausgefüllt und Ihre Bewerbung wird automatisch verknüpft.",
+    invitationMismatch:
+      "Diese Einladung passt nicht zu dieser E-Mail-Adresse. Verwenden Sie die Adresse Ihrer Bewerbung.",
     invalidCredentials: "E-Mail oder Passwort ist falsch.",
-    serviceUnavailable: "Der Kandidatendienst ist vorübergehend nicht verfügbar. Bitte versuchen Sie es in wenigen Augenblicken erneut.",
+    serviceUnavailable:
+      "Der Kandidatendienst ist vorübergehend nicht verfügbar. Bitte versuchen Sie es in wenigen Augenblicken erneut.",
     invalidCharacters: publicFormCopy.invalidCharacters.de,
   },
   zh: {
     metaTitle: "安全候选人门户 | Hippocampus Consulting",
     metaDescription: "创建或访问您的安全候选人门户。",
     brandTitle: "您的安全候选人门户",
-    brandDescription: "请将您的行政文件上传至私密文档库。您的职业文件会生成 AI 摘要，协助团队准备审核；身份证明文件仅由人工核验。系统不会自动做出任何决定。",
-    safeguards: ["通过电子邮件和密码进行个人访问", "私密文件和经授权的下载", "辅助分析后进行人工审核"],
+    brandDescription:
+      "请将您的行政文件上传至私密文档库。您的职业文件会生成 AI 摘要，协助团队准备审核；身份证明文件仅由人工核验。系统不会自动做出任何决定。",
+    safeguards: [
+      "通过电子邮件和密码进行个人访问",
+      "私密文件和经授权的下载",
+      "辅助分析后进行人工审核",
+    ],
     loginTitle: "访问我的门户",
     registerTitle: "创建我的候选人门户",
     forgotTitle: "重置我的访问权限",
     activationTitle: "重新发送激活邮件",
     loginDescription: "以保密方式查看和上传您的行政文件。",
-    registerDescription: "请填写您的身份信息。确认电子邮件地址后，您将通过邮件中的激活链接设置密码。",
+    registerDescription:
+      "请填写您的身份信息。确认电子邮件地址后，您将通过邮件中的激活链接设置密码。",
     forgotDescription: "如果此电子邮件对应账户，我们将向您发送安全链接。",
     activationDescription: "如果账户已经创建但尚未激活，请申请新的激活链接。",
     firstName: "名字",
@@ -215,10 +351,12 @@ export const candidateAccessCopy = {
     passwordHint: "至少 15 个字符。请选择一个长且唯一的密码。",
     confirmPassword: "确认密码",
     termsParts: ["我接受", "使用条款", "和", "隐私政策", "。"],
-    legalNotice: "数据控制者：Hippocampus Consulting。您的权利和数据接收方载于隐私政策。",
+    legalNotice:
+      "数据控制者：Hippocampus Consulting。您的权利和数据接收方载于隐私政策。",
     legalLinks: { legal: "法律声明", privacy: "隐私" },
     newTab: "（新标签页）",
-    documentConsent: "我同意对我的行政文件进行保密处理，并同意对我的职业文件（学历证书、执照、证书）进行用于支持人工审核的 AI 分析。身份证明文件绝不会由 AI 分析。",
+    documentConsent:
+      "我同意对我的行政文件进行保密处理，并同意对我的职业文件（学历证书、执照、证书）进行用于支持人工审核的 AI 分析。身份证明文件绝不会由 AI 分析。",
     login: "登录",
     register: "创建访问权限",
     reset: "接收安全链接",
@@ -230,23 +368,31 @@ export const candidateAccessCopy = {
     passwordMismatch: "两次输入的密码必须一致。",
     termsMissing: "请接受使用条款和隐私政策以继续。",
     documentConsentMissing: "请同意对您的文件进行保密处理以继续。",
-    bothConsentMissing: "创建访问权限前，请接受使用条款并同意对您的文件进行保密处理。",
+    bothConsentMissing:
+      "创建访问权限前，请接受使用条款并同意对您的文件进行保密处理。",
     turnstileRegisterMissing: "创建访问权限前，请完成反机器人验证。",
     turnstileResetMissing: "请求链接前，请完成反机器人验证。",
     turnstileActivationMissing: "重新发送激活链接前，请完成反机器人验证。",
     turnstileLoginMissing: "登录前，请完成反机器人验证。",
-    loginChallenge: "为了您的安全，此地址已有多次登录失败，请完成反机器人验证后重新登录。",
+    loginChallenge:
+      "为了您的安全，此地址已有多次登录失败，请完成反机器人验证后重新登录。",
     tooManyAttempts: "此设备登录尝试次数过多。请等待 15 分钟或使用“忘记密码”。",
     tooManyRequests: "尝试次数过多，请稍后重试。",
     turnstileError: "反机器人验证未完成。提交表单前请重新验证。",
     genericError: "无法完成此操作。请检查您的信息后重试。",
-    registerSuccess: "您的访问请求已登记。请打开邮件中的链接（也请检查垃圾邮件文件夹），确认您的地址并设置密码。",
+    registerSuccess:
+      "您的访问请求已登记。请打开邮件中的链接（也请检查垃圾邮件文件夹），确认您的地址并设置密码。",
     resetSuccess: "如果此电子邮件对应账户，我们将向您发送安全的重置链接。",
-    activationSuccess: "如果此电子邮件对应尚未激活的账户，我们将发送新的激活链接。也请检查垃圾邮件文件夹。",
-    invitationWelcome: "您的邀请已验证。请确认您的信息：随后您将通过邮件中的激活链接设置密码。",
-    invitationInvalid: "此邀请链接无效。您仍可在下方使用申请时填写的电子邮件地址创建门户。",
-    invitationExpired: "您的邀请链接已过期，但您仍可在下方创建门户：电子邮件地址已预填，您的申请将自动关联。",
-    invitationMismatch: "此邀请与该电子邮件地址不匹配。请使用您申请时填写的地址。",
+    activationSuccess:
+      "如果此电子邮件对应尚未激活的账户，我们将发送新的激活链接。也请检查垃圾邮件文件夹。",
+    invitationWelcome:
+      "您的邀请已验证。请确认您的信息：随后您将通过邮件中的激活链接设置密码。",
+    invitationInvalid:
+      "此邀请链接无效。您仍可在下方使用申请时填写的电子邮件地址创建门户。",
+    invitationExpired:
+      "您的邀请链接已过期，但您仍可在下方创建门户：电子邮件地址已预填，您的申请将自动关联。",
+    invitationMismatch:
+      "此邀请与该电子邮件地址不匹配。请使用您申请时填写的地址。",
     invalidCredentials: "电子邮件或密码不正确。",
     serviceUnavailable: "候选人服务暂时不可用。请稍后重试。",
     invalidCharacters: publicFormCopy.invalidCharacters.zh,
@@ -261,7 +407,12 @@ type CandidateCopy = (typeof candidateAccessCopy)[CandidateLanguage];
  * (EN-06), a name refused for its characters (INTL-05) included; the tRPC code
  * and the input-validation fields cover the rest.
  */
-export function candidateNotice(message: string, copy: CandidateCopy, code?: string, reason?: string) {
+export function candidateNotice(
+  message: string,
+  copy: CandidateCopy,
+  code?: string,
+  reason?: string
+) {
   if (reason === INVALID_CHARACTERS_REASON) return copy.invalidCharacters;
   if (isCandidateAccessReason(reason)) {
     const byReason: Partial<Record<CandidateAccessReason, string>> = {
@@ -277,11 +428,17 @@ export function candidateNotice(message: string, copy: CandidateCopy, code?: str
     if (byReason[reason]) return byReason[reason];
   }
   if (code === "TOO_MANY_REQUESTS") return copy.tooManyRequests;
-  if (message.includes("termsAccepted") && message.includes("documentConsent")) return copy.bothConsentMissing;
+  if (message.includes("termsAccepted") && message.includes("documentConsent"))
+    return copy.bothConsentMissing;
   if (message.includes("termsAccepted")) return copy.termsMissing;
   if (message.includes("documentConsent")) return copy.documentConsentMissing;
-  if (message.includes("candidate_turnstile") || message.includes("vérification anti-bot")) return copy.turnstileError;
-  if (message.toLowerCase().includes("invitation")) return copy.invitationInvalid;
+  if (
+    message.includes("candidate_turnstile") ||
+    message.includes("vérification anti-bot")
+  )
+    return copy.turnstileError;
+  if (message.toLowerCase().includes("invitation"))
+    return copy.invitationInvalid;
   return copy.genericError;
 }
 
@@ -295,13 +452,14 @@ export type CandidateInvitationEntry = {
  * to candidates. The legacy email is only used to prefill registration; account
  * activation and all authorization still happen server-side.
  */
-export function getCandidateInvitationEntry(search: string): CandidateInvitationEntry {
+export function getCandidateInvitationEntry(
+  search: string
+): CandidateInvitationEntry {
   const params = new URLSearchParams(search);
   const invite = params.get("invite")?.trim() || "";
   const token = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(invite) ? invite : null;
-  const legacyEmail = invite === "1"
-    ? (params.get("email")?.trim().toLowerCase() || null)
-    : null;
+  const legacyEmail =
+    invite === "1" ? params.get("email")?.trim().toLowerCase() || null : null;
   return { token, legacyEmail };
 }
 
@@ -314,7 +472,9 @@ export function getCandidateInvitationToken(search: string): string | null {
  * refused or expired activation link (?mode=activation&email=, REC-17): the
  * form opens in that mode with the address filled in. Null otherwise.
  */
-export function getCandidateActivationResendEmail(search: string): string | null {
+export function getCandidateActivationResendEmail(
+  search: string
+): string | null {
   const params = new URLSearchParams(search);
   if (params.get("mode") !== "activation") return null;
   return params.get("email")?.trim().slice(0, 320) ?? "";
@@ -323,12 +483,31 @@ export function getCandidateActivationResendEmail(search: string): string | null
 export default function CandidateAccessPage() {
   const [, navigate] = useLocation();
   const { language } = useLanguage();
-  const copy = candidateAccessCopy[(language in candidateAccessCopy ? language : "fr") as CandidateLanguage];
-  const [invitationEntry] = useState(() => getCandidateInvitationEntry(typeof window === "undefined" ? "" : window.location.search));
+  const copy =
+    candidateAccessCopy[
+      (language in candidateAccessCopy ? language : "fr") as CandidateLanguage
+    ];
+  const [invitationEntry] = useState(() =>
+    getCandidateInvitationEntry(
+      typeof window === "undefined" ? "" : window.location.search
+    )
+  );
   const invitationToken = invitationEntry.token;
-  const [activationResendEmail] = useState(() => getCandidateActivationResendEmail(typeof window === "undefined" ? "" : window.location.search));
-  const [mode, setMode] = useState<Mode>(() => invitationToken || invitationEntry.legacyEmail ? "register" : activationResendEmail !== null ? "activation" : "login");
-  const [email, setEmail] = useState(() => invitationEntry.legacyEmail || activationResendEmail || "");
+  const [activationResendEmail] = useState(() =>
+    getCandidateActivationResendEmail(
+      typeof window === "undefined" ? "" : window.location.search
+    )
+  );
+  const [mode, setMode] = useState<Mode>(() =>
+    invitationToken || invitationEntry.legacyEmail
+      ? "register"
+      : activationResendEmail !== null
+        ? "activation"
+        : "login"
+  );
+  const [email, setEmail] = useState(
+    () => invitationEntry.legacyEmail || activationResendEmail || ""
+  );
   const [password, setPassword] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -349,36 +528,75 @@ export default function CandidateAccessPage() {
   };
   const login = trpc.candidatePortal.login.useMutation({
     // Refresh the cached "me" (possibly null from an earlier visit) before opening the portal (CAND-10).
-    onSuccess: async () => { await utils.candidatePortal.me.invalidate(); navigate("/candidate/portal"); },
+    onSuccess: async () => {
+      await utils.candidatePortal.me.invalidate();
+      navigate("/candidate/portal");
+    },
     onError: error => {
       renewTurnstile();
-      if (error.data?.code === "PRECONDITION_FAILED") { setLoginChallenge(true); setNotice(copy.loginChallenge); return; }
-      if (error.data?.code === "TOO_MANY_REQUESTS") { setNotice(copy.tooManyAttempts); return; }
-      setNotice(candidateNotice(error.message, copy, undefined, error.data?.reason));
+      if (error.data?.code === "PRECONDITION_FAILED") {
+        setLoginChallenge(true);
+        setNotice(copy.loginChallenge);
+        return;
+      }
+      if (error.data?.code === "TOO_MANY_REQUESTS") {
+        setNotice(copy.tooManyAttempts);
+        return;
+      }
+      setNotice(
+        candidateNotice(error.message, copy, undefined, error.data?.reason)
+      );
     },
   });
   const register = trpc.candidatePortal.register.useMutation({
     onSuccess: () => setNotice(copy.registerSuccess),
-    onError: error => setNotice(candidateNotice(error.message, copy, error.data?.code, error.data?.reason)),
+    onError: error =>
+      setNotice(
+        candidateNotice(
+          error.message,
+          copy,
+          error.data?.code,
+          error.data?.reason
+        )
+      ),
     onSettled: renewTurnstile,
   });
   const reset = trpc.candidatePortal.requestPasswordReset.useMutation({
     onSuccess: () => setNotice(copy.resetSuccess),
-    onError: error => setNotice(candidateNotice(error.message, copy, error.data?.code, error.data?.reason)),
+    onError: error =>
+      setNotice(
+        candidateNotice(
+          error.message,
+          copy,
+          error.data?.code,
+          error.data?.reason
+        )
+      ),
     onSettled: renewTurnstile,
   });
   const resendActivation = trpc.candidatePortal.resendVerification.useMutation({
     onSuccess: () => setNotice(copy.activationSuccess),
-    onError: error => setNotice(candidateNotice(error.message, copy, error.data?.code, error.data?.reason)),
+    onError: error =>
+      setNotice(
+        candidateNotice(
+          error.message,
+          copy,
+          error.data?.code,
+          error.data?.reason
+        )
+      ),
     onSettled: renewTurnstile,
   });
   const invitation = trpc.candidatePortal.resolveInvitation.useQuery(
     { token: invitationToken || "invalid" },
-    { enabled: Boolean(invitationToken), retry: false },
+    { enabled: Boolean(invitationToken), retry: false }
   );
   // Only a valid, unexpired invitation is sent with the registration; an expired or
   // invalid one falls back to the normal sign-up instead of blocking it (CAND-11).
-  const activeInvitationToken = invitationToken && invitation.data && !invitation.data.expired ? invitationToken : undefined;
+  const activeInvitationToken =
+    invitationToken && invitation.data && !invitation.data.expired
+      ? invitationToken
+      : undefined;
   useEffect(() => {
     if (invitationToken || invitationEntry.legacyEmail) setMode("register");
     if (invitation.data) {
@@ -386,85 +604,418 @@ export default function CandidateAccessPage() {
       setEmail(invitation.data.email);
       setFirstName(invitation.data.firstName);
       setLastName(invitation.data.lastName);
-      setNotice(invitation.data.expired ? copy.invitationExpired : copy.invitationWelcome);
+      setNotice(
+        invitation.data.expired
+          ? copy.invitationExpired
+          : copy.invitationWelcome
+      );
     } else if (invitationEntry.legacyEmail) {
       setEmail(invitationEntry.legacyEmail);
       setNotice(copy.invitationWelcome);
     } else if (invitationToken && invitation.isError) {
       setNotice(copy.invitationInvalid);
     }
-  }, [copy.invitationExpired, copy.invitationInvalid, copy.invitationWelcome, invitation.data, invitation.isError, invitationEntry.legacyEmail, invitationToken]);
-  const pending = login.isPending || register.isPending || reset.isPending || resendActivation.isPending;
+  }, [
+    copy.invitationExpired,
+    copy.invitationInvalid,
+    copy.invitationWelcome,
+    invitation.data,
+    invitation.isError,
+    invitationEntry.legacyEmail,
+    invitationToken,
+  ]);
+  const pending =
+    login.isPending ||
+    register.isPending ||
+    reset.isPending ||
+    resendActivation.isPending;
 
   function changeMode(nextMode: Mode) {
     setMode(nextMode);
     setTurnstileToken(null);
     setNotice("");
     setConsentAttempted(false);
-    window.requestAnimationFrame(() => document.getElementById(candidateModeFocusTarget(nextMode))?.focus());
+    window.requestAnimationFrame(() =>
+      document.getElementById(candidateModeFocusTarget(nextMode))?.focus()
+    );
   }
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setNotice("");
     if (mode === "login") {
-      if (loginChallenge && !turnstileToken) { setNotice(copy.turnstileLoginMissing); return; }
-      login.mutate({ email, password, turnstileToken: loginChallenge && turnstileToken ? turnstileToken : undefined });
+      if (loginChallenge && !turnstileToken) {
+        setNotice(copy.turnstileLoginMissing);
+        return;
+      }
+      login.mutate({
+        email,
+        password,
+        turnstileToken:
+          loginChallenge && turnstileToken ? turnstileToken : undefined,
+      });
     } else if (mode === "register") {
       if (!terms || !documentConsent) {
         setConsentAttempted(true);
-        setNotice(!terms && !documentConsent ? copy.bothConsentMissing : !terms ? copy.termsMissing : copy.documentConsentMissing);
+        setNotice(
+          !terms && !documentConsent
+            ? copy.bothConsentMissing
+            : !terms
+              ? copy.termsMissing
+              : copy.documentConsentMissing
+        );
         return;
       }
       setConsentAttempted(false);
-      if (!turnstileToken) { setNotice(copy.turnstileRegisterMissing); return; }
+      if (!turnstileToken) {
+        setNotice(copy.turnstileRegisterMissing);
+        return;
+      }
       // No password at this stage: it is chosen from the emailed activation link (SEC-02).
       // The displayed language picks the language of the emails (EN-02).
-      register.mutate({ email, firstName, lastName, termsAccepted: terms, documentConsent, turnstileToken, invitationToken: activeInvitationToken, language });
+      register.mutate({
+        email,
+        firstName,
+        lastName,
+        termsAccepted: terms,
+        documentConsent,
+        turnstileToken,
+        invitationToken: activeInvitationToken,
+        language,
+      });
     } else if (mode === "forgot") {
-      if (!turnstileToken) { setNotice(copy.turnstileResetMissing); return; }
+      if (!turnstileToken) {
+        setNotice(copy.turnstileResetMissing);
+        return;
+      }
       reset.mutate({ email, turnstileToken, language });
     } else {
-      if (!turnstileToken) { setNotice(copy.turnstileActivationMissing); return; }
+      if (!turnstileToken) {
+        setNotice(copy.turnstileActivationMissing);
+        return;
+      }
       resendActivation.mutate({ email, turnstileToken, language });
     }
   }
 
-  const title = mode === "login" ? copy.loginTitle : mode === "register" ? copy.registerTitle : mode === "forgot" ? copy.forgotTitle : copy.activationTitle;
-  const description = mode === "login" ? copy.loginDescription : mode === "register" ? copy.registerDescription : mode === "forgot" ? copy.forgotDescription : copy.activationDescription;
+  const title =
+    mode === "login"
+      ? copy.loginTitle
+      : mode === "register"
+        ? copy.registerTitle
+        : mode === "forgot"
+          ? copy.forgotTitle
+          : copy.activationTitle;
+  const description =
+    mode === "login"
+      ? copy.loginDescription
+      : mode === "register"
+        ? copy.registerDescription
+        : mode === "forgot"
+          ? copy.forgotDescription
+          : copy.activationDescription;
 
   return (
     // Fond toujours sombre : les champs et libellés reprennent les jetons sombres en thème clair (A11Y-02).
-    <main id="main-content" tabIndex={-1} className="theme-dark-island dark min-h-screen bg-[#030a12] px-4 py-10 text-slate-100 sm:py-16">
-      <SEOHead title={copy.metaTitle} description={copy.metaDescription} noIndex />
-      <div className="mx-auto mb-4 flex max-w-5xl justify-end"><LanguageMenu tone="candidate" /></div>
+    <main
+      id="main-content"
+      tabIndex={-1}
+      className="theme-dark-island dark min-h-screen bg-[#030a12] px-4 py-10 text-slate-100 sm:py-16"
+    >
+      <SEOHead
+        title={copy.metaTitle}
+        description={copy.metaDescription}
+        noIndex
+      />
+      <div className="mx-auto mb-4 flex max-w-5xl justify-end">
+        <LanguageMenu tone="candidate" />
+      </div>
       <div className="mx-auto grid max-w-5xl overflow-hidden rounded-3xl border border-cyan-950/80 bg-slate-950/60 shadow-2xl shadow-cyan-950/20 lg:grid-cols-[0.9fr_1.1fr]">
         <section className="relative overflow-hidden border-b border-cyan-950/70 bg-[radial-gradient(circle_at_25%_15%,rgba(8,145,178,0.26),transparent_42%),linear-gradient(150deg,#06243a,#06121e)] p-7 sm:p-10 lg:border-b-0 lg:border-r">
           <div className="absolute -right-16 -top-12 h-56 w-56 rounded-full border border-cyan-300/20" />
           <div className="relative">
-            <div className="mb-8 flex h-12 w-12 items-center justify-center rounded-2xl border border-cyan-300/30 bg-cyan-400/10 text-cyan-300"><FileLock2 size={24} aria-hidden="true" /></div>
-            <p className="text-xs font-bold uppercase tracking-[0.22em] text-cyan-300">Hippocampus Consulting</p>
-            <h1 className="mt-3 font-serif text-4xl leading-tight text-white">{copy.brandTitle}</h1>
-            <p className="mt-5 max-w-md text-sm leading-7 text-slate-300">{copy.brandDescription}</p>
+            <div className="mb-8 flex h-12 w-12 items-center justify-center rounded-2xl border border-cyan-300/30 bg-cyan-400/10 text-cyan-300">
+              <FileLock2 size={24} aria-hidden="true" />
+            </div>
+            <p className="text-xs font-bold uppercase tracking-[0.22em] text-cyan-300">
+              Hippocampus Consulting
+            </p>
+            <h1 className="mt-3 font-serif text-4xl leading-tight text-white">
+              {copy.brandTitle}
+            </h1>
+            <p className="mt-5 max-w-md text-sm leading-7 text-slate-300">
+              {copy.brandDescription}
+            </p>
             <div className="mt-8 space-y-4 text-sm text-slate-200">
-              {copy.safeguards.map(item => <div key={item} className="flex gap-3"><ShieldCheck className="mt-0.5 shrink-0 text-cyan-300" size={18} aria-hidden="true" /><span>{item}</span></div>)}
+              {copy.safeguards.map(item => (
+                <div key={item} className="flex gap-3">
+                  <ShieldCheck
+                    className="mt-0.5 shrink-0 text-cyan-300"
+                    size={18}
+                    aria-hidden="true"
+                  />
+                  <span>{item}</span>
+                </div>
+              ))}
             </div>
           </div>
         </section>
         <section className="p-5 sm:p-10">
           <Card className="border-0 bg-transparent shadow-none">
-            <CardHeader className="px-0 pt-0"><CardTitle className="text-2xl text-white">{title}</CardTitle><CardDescription className="mt-2 leading-6 text-slate-400">{description}</CardDescription></CardHeader>
+            <CardHeader className="px-0 pt-0">
+              <CardTitle className="text-2xl text-white">{title}</CardTitle>
+              <CardDescription className="mt-2 leading-6 text-slate-400">
+                {description}
+              </CardDescription>
+            </CardHeader>
             <CardContent className="px-0">
-              <form id="candidate-access-form" className="space-y-5" onSubmit={submit}>
-                {mode === "register" && <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><Label htmlFor="candidate-first-name">{copy.firstName}</Label><Input id="candidate-first-name" value={firstName} onChange={event => setFirstName(event.target.value)} required /></div><div className="space-y-2"><Label htmlFor="candidate-last-name">{copy.lastName}</Label><Input id="candidate-last-name" value={lastName} onChange={event => setLastName(event.target.value)} required /></div></div>}
-                <div className="space-y-2"><Label htmlFor="candidate-email">{copy.email}</Label><Input id="candidate-email" type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} readOnly={mode === "register" && Boolean(activeInvitationToken)} required /></div>
-                {mode === "login" && <div className="space-y-2"><Label htmlFor="candidate-password">{copy.password}</Label><Input id="candidate-password" type="password" autoComplete="current-password" aria-describedby="candidate-password-hint" value={password} onChange={event => setPassword(event.target.value)} minLength={15} required /><p id="candidate-password-hint" className="text-xs text-slate-400">{copy.passwordHint}</p></div>}
-                {mode === "register" && <div className="candidate-consent-panel space-y-3 rounded-xl border border-slate-700/90 bg-slate-900/75 p-4 text-sm"><label className={`candidate-consent-item ${consentAttempted && !terms ? "candidate-consent-item-invalid" : ""}`}><Checkbox className="candidate-consent-checkbox" checked={terms} aria-invalid={consentAttempted && !terms} onCheckedChange={value => { const next = value === true; setTerms(next); if (next && documentConsent) setConsentAttempted(false); }} /><span>{copy.termsParts[0]}<a href={candidateLegalLinks.terms} target="_blank" rel="noopener" onClick={event => event.stopPropagation()} className="font-medium text-cyan-300 underline underline-offset-2 hover:text-cyan-200">{copy.termsParts[1]}<span className="sr-only"> {copy.newTab}</span></a>{copy.termsParts[2]}<a href={candidateLegalLinks.privacy} target="_blank" rel="noopener" onClick={event => event.stopPropagation()} className="font-medium text-cyan-300 underline underline-offset-2 hover:text-cyan-200">{copy.termsParts[3]}<span className="sr-only"> {copy.newTab}</span></a>{copy.termsParts[4]}</span></label><label className={`candidate-consent-item ${consentAttempted && !documentConsent ? "candidate-consent-item-invalid" : ""}`}><Checkbox className="candidate-consent-checkbox" checked={documentConsent} aria-invalid={consentAttempted && !documentConsent} onCheckedChange={value => { const next = value === true; setDocumentConsent(next); if (next && terms) setConsentAttempted(false); }} /><span>{copy.documentConsent}</span></label><p className="text-xs leading-5 text-slate-400">{copy.legalNotice} <a href={candidateLegalLinks.legal} target="_blank" rel="noopener" className="text-cyan-300 underline underline-offset-2 hover:text-cyan-200">{copy.legalLinks.legal}<span className="sr-only"> {copy.newTab}</span></a> · <a href={candidateLegalLinks.privacy} target="_blank" rel="noopener" className="text-cyan-300 underline underline-offset-2 hover:text-cyan-200">{copy.legalLinks.privacy}<span className="sr-only"> {copy.newTab}</span></a></p></div>}
-                {(mode === "register" || mode === "forgot" || mode === "activation" || (mode === "login" && loginChallenge)) && <TurnstileWidget key={`${mode}-${turnstileKey}`} onToken={setTurnstileToken} />}
-                {notice && <p role="status" className="rounded-lg border border-cyan-800/50 bg-cyan-950/30 p-3 text-sm text-cyan-100">{notice}</p>}
-                <Button type="submit" className="w-full bg-cyan-500 text-slate-950 hover:bg-cyan-400" disabled={pending}>{pending ? <Loader2 className="animate-spin" aria-hidden="true" /> : mode === "login" ? <LogIn aria-hidden="true" /> : mode === "register" ? <UserPlus aria-hidden="true" /> : mode === "activation" ? <MailCheck aria-hidden="true" /> : <KeyRound aria-hidden="true" />}{mode === "login" ? copy.login : mode === "register" ? copy.register : mode === "activation" ? copy.resendActivation : copy.reset}</Button>
+              <form
+                id="candidate-access-form"
+                className="space-y-5"
+                onSubmit={submit}
+              >
+                {mode === "register" && (
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="candidate-first-name">
+                        {copy.firstName}
+                      </Label>
+                      <Input
+                        id="candidate-first-name"
+                        value={firstName}
+                        onChange={event => setFirstName(event.target.value)}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="candidate-last-name">
+                        {copy.lastName}
+                      </Label>
+                      <Input
+                        id="candidate-last-name"
+                        value={lastName}
+                        onChange={event => setLastName(event.target.value)}
+                        required
+                      />
+                    </div>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <Label htmlFor="candidate-email">{copy.email}</Label>
+                  <Input
+                    id="candidate-email"
+                    type="email"
+                    autoComplete="email"
+                    value={email}
+                    onChange={event => setEmail(event.target.value)}
+                    readOnly={
+                      mode === "register" && Boolean(activeInvitationToken)
+                    }
+                    required
+                  />
+                </div>
+                {mode === "login" && (
+                  <div className="space-y-2">
+                    <Label htmlFor="candidate-password">{copy.password}</Label>
+                    <Input
+                      id="candidate-password"
+                      type="password"
+                      autoComplete="current-password"
+                      aria-describedby="candidate-password-hint"
+                      value={password}
+                      onChange={event => setPassword(event.target.value)}
+                      minLength={15}
+                      required
+                    />
+                    <p
+                      id="candidate-password-hint"
+                      className="text-xs text-slate-400"
+                    >
+                      {copy.passwordHint}
+                    </p>
+                  </div>
+                )}
+                {mode === "register" && (
+                  <div className="candidate-consent-panel space-y-3 rounded-xl border border-slate-700/90 bg-slate-900/75 p-4 text-sm">
+                    <label
+                      className={`candidate-consent-item ${consentAttempted && !terms ? "candidate-consent-item-invalid" : ""}`}
+                    >
+                      <Checkbox
+                        className="candidate-consent-checkbox"
+                        checked={terms}
+                        aria-invalid={consentAttempted && !terms}
+                        onCheckedChange={value => {
+                          const next = value === true;
+                          setTerms(next);
+                          if (next && documentConsent)
+                            setConsentAttempted(false);
+                        }}
+                      />
+                      <span>
+                        {copy.termsParts[0]}
+                        <a
+                          href={candidateLegalLinks.terms}
+                          target="_blank"
+                          rel="noopener"
+                          onClick={event => event.stopPropagation()}
+                          className="font-medium text-cyan-300 underline underline-offset-2 hover:text-cyan-200"
+                        >
+                          {copy.termsParts[1]}
+                          <span className="sr-only"> {copy.newTab}</span>
+                        </a>
+                        {copy.termsParts[2]}
+                        <a
+                          href={candidateLegalLinks.privacy}
+                          target="_blank"
+                          rel="noopener"
+                          onClick={event => event.stopPropagation()}
+                          className="font-medium text-cyan-300 underline underline-offset-2 hover:text-cyan-200"
+                        >
+                          {copy.termsParts[3]}
+                          <span className="sr-only"> {copy.newTab}</span>
+                        </a>
+                        {copy.termsParts[4]}
+                      </span>
+                    </label>
+                    <label
+                      className={`candidate-consent-item ${consentAttempted && !documentConsent ? "candidate-consent-item-invalid" : ""}`}
+                    >
+                      <Checkbox
+                        className="candidate-consent-checkbox"
+                        checked={documentConsent}
+                        aria-invalid={consentAttempted && !documentConsent}
+                        onCheckedChange={value => {
+                          const next = value === true;
+                          setDocumentConsent(next);
+                          if (next && terms) setConsentAttempted(false);
+                        }}
+                      />
+                      <span>{copy.documentConsent}</span>
+                    </label>
+                    <p className="text-xs leading-5 text-slate-400">
+                      {copy.legalNotice}{" "}
+                      <a
+                        href={candidateLegalLinks.legal}
+                        target="_blank"
+                        rel="noopener"
+                        className="text-cyan-300 underline underline-offset-2 hover:text-cyan-200"
+                      >
+                        {copy.legalLinks.legal}
+                        <span className="sr-only"> {copy.newTab}</span>
+                      </a>{" "}
+                      ·{" "}
+                      <a
+                        href={candidateLegalLinks.privacy}
+                        target="_blank"
+                        rel="noopener"
+                        className="text-cyan-300 underline underline-offset-2 hover:text-cyan-200"
+                      >
+                        {copy.legalLinks.privacy}
+                        <span className="sr-only"> {copy.newTab}</span>
+                      </a>
+                    </p>
+                  </div>
+                )}
+                {(mode === "register" ||
+                  mode === "forgot" ||
+                  mode === "activation" ||
+                  (mode === "login" && loginChallenge)) && (
+                  <TurnstileWidget
+                    key={`${mode}-${turnstileKey}`}
+                    onToken={setTurnstileToken}
+                  />
+                )}
+                {notice && (
+                  <p
+                    role="status"
+                    className="rounded-lg border border-cyan-800/50 bg-cyan-950/30 p-3 text-sm text-cyan-100"
+                  >
+                    {notice}
+                  </p>
+                )}
+                <Button
+                  type="submit"
+                  className="w-full bg-cyan-500 text-slate-950 hover:bg-cyan-400"
+                  disabled={pending}
+                >
+                  {pending ? (
+                    <Loader2 className="animate-spin" aria-hidden="true" />
+                  ) : mode === "login" ? (
+                    <LogIn aria-hidden="true" />
+                  ) : mode === "register" ? (
+                    <UserPlus aria-hidden="true" />
+                  ) : mode === "activation" ? (
+                    <MailCheck aria-hidden="true" />
+                  ) : (
+                    <KeyRound aria-hidden="true" />
+                  )}
+                  {mode === "login"
+                    ? copy.login
+                    : mode === "register"
+                      ? copy.register
+                      : mode === "activation"
+                        ? copy.resendActivation
+                        : copy.reset}
+                </Button>
               </form>
-              <div role="group" aria-label={copy.brandTitle} className="mt-6 flex flex-wrap justify-center gap-x-5 gap-y-3 text-sm"><button type="button" aria-controls="candidate-access-form" aria-pressed={mode === "login"} onClick={() => changeMode("login")} className={mode === "login" ? "font-semibold text-white underline decoration-cyan-300 underline-offset-4" : "text-cyan-300 hover:text-cyan-200"}>{copy.navigationLogin}</button><button type="button" aria-controls="candidate-access-form" aria-pressed={mode === "register"} onClick={() => changeMode("register")} className={mode === "register" ? "font-semibold text-white underline decoration-cyan-300 underline-offset-4" : "text-cyan-300 hover:text-cyan-200"}>{copy.navigationRegister}</button><button type="button" aria-controls="candidate-access-form" aria-pressed={mode === "forgot"} onClick={() => changeMode("forgot")} className={mode === "forgot" ? "font-semibold text-white underline decoration-cyan-300 underline-offset-4" : "text-slate-400 hover:text-white"}>{copy.navigationForgot}</button><button type="button" aria-controls="candidate-access-form" aria-pressed={mode === "activation"} onClick={() => changeMode("activation")} className={mode === "activation" ? "font-semibold text-white underline decoration-cyan-300 underline-offset-4" : "text-slate-400 hover:text-white"}>{copy.navigationActivation}</button></div>
+              <div
+                role="group"
+                aria-label={copy.brandTitle}
+                className="mt-6 flex flex-wrap justify-center gap-x-5 gap-y-3 text-sm"
+              >
+                <button
+                  type="button"
+                  aria-controls="candidate-access-form"
+                  aria-pressed={mode === "login"}
+                  onClick={() => changeMode("login")}
+                  className={
+                    mode === "login"
+                      ? "font-semibold text-white underline decoration-cyan-300 underline-offset-4"
+                      : "text-cyan-300 hover:text-cyan-200"
+                  }
+                >
+                  {copy.navigationLogin}
+                </button>
+                <button
+                  type="button"
+                  aria-controls="candidate-access-form"
+                  aria-pressed={mode === "register"}
+                  onClick={() => changeMode("register")}
+                  className={
+                    mode === "register"
+                      ? "font-semibold text-white underline decoration-cyan-300 underline-offset-4"
+                      : "text-cyan-300 hover:text-cyan-200"
+                  }
+                >
+                  {copy.navigationRegister}
+                </button>
+                <button
+                  type="button"
+                  aria-controls="candidate-access-form"
+                  aria-pressed={mode === "forgot"}
+                  onClick={() => changeMode("forgot")}
+                  className={
+                    mode === "forgot"
+                      ? "font-semibold text-white underline decoration-cyan-300 underline-offset-4"
+                      : "text-slate-400 hover:text-white"
+                  }
+                >
+                  {copy.navigationForgot}
+                </button>
+                <button
+                  type="button"
+                  aria-controls="candidate-access-form"
+                  aria-pressed={mode === "activation"}
+                  onClick={() => changeMode("activation")}
+                  className={
+                    mode === "activation"
+                      ? "font-semibold text-white underline decoration-cyan-300 underline-offset-4"
+                      : "text-slate-400 hover:text-white"
+                  }
+                >
+                  {copy.navigationActivation}
+                </button>
+              </div>
             </CardContent>
           </Card>
         </section>

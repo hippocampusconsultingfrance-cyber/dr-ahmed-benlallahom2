@@ -2,7 +2,10 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import bidiFactory from "bidi-js";
-import { NIGHT_RATE_END_HOUR, NIGHT_RATE_START_HOUR } from "../shared/bookingPolicy";
+import {
+  NIGHT_RATE_END_HOUR,
+  NIGHT_RATE_START_HOUR,
+} from "../shared/bookingPolicy";
 import { PARIS_TIME_ZONE } from "../shared/parisTime";
 import { storageGetBuffer, storagePutOnce } from "./storage.js";
 import { resolveInvoiceSeller, type InvoiceSeller } from "./invoiceSeller";
@@ -40,14 +43,20 @@ type InvoiceFont = keyof typeof INVOICE_FONT_FILES;
 
 // Police de repli si un fichier manque ou est illisible : la facture sort
 // quand même, avec les polices d’avant pour le texte latin.
-const FALLBACK_INVOICE_FONTS = { regular: "Helvetica", bold: "Helvetica-Bold" } as const;
+const FALLBACK_INVOICE_FONTS = {
+  regular: "Helvetica",
+  bold: "Helvetica-Bold",
+} as const;
 
 // server/fonts depuis ce fichier (tsx, vitest), ou depuis la racine du projet
 // pour les bundles esbuild (dist/vercel/index.js, que api/index.js re-exporte
 // sur Vercel, où le répertoire courant est la racine de la fonction, et
 // dist/index.js).
 function invoiceFontDirectories(): string[] {
-  return [fileURLToPath(new URL("./fonts/", import.meta.url)), path.resolve(process.cwd(), "server", "fonts")];
+  return [
+    fileURLToPath(new URL("./fonts/", import.meta.url)),
+    path.resolve(process.cwd(), "server", "fonts"),
+  ];
 }
 
 const invoiceFontData = new Map<InvoiceFont, Buffer>();
@@ -57,10 +66,13 @@ const invoiceFontData = new Map<InvoiceFont, Buffer>();
 // la facture suivante.
 let pdfDocument: Promise<typeof import("pdfkit")> | undefined;
 function loadPdfDocument(): Promise<typeof import("pdfkit")> {
-  pdfDocument ??= import("pdfkit").then(module => module.default, error => {
-    pdfDocument = undefined;
-    throw error;
-  });
+  pdfDocument ??= import("pdfkit").then(
+    module => module.default,
+    error => {
+      pdfDocument = undefined;
+      throw error;
+    }
+  );
   return pdfDocument;
 }
 
@@ -93,12 +105,19 @@ function invoiceFonts(doc: PDFKit.PDFDocument): (font: InvoiceFont) => string {
         doc.font(font); // lit la police maintenant : un fichier abîmé se rabat ici, pas au milieu de la page
         name = font;
       } catch (error) {
-        console.error("Invoice font unreadable:", INVOICE_FONT_FILES[font], error instanceof Error ? error.name : "UnknownError");
+        console.error(
+          "Invoice font unreadable:",
+          INVOICE_FONT_FILES[font],
+          error instanceof Error ? error.name : "UnknownError"
+        );
       }
     } else {
       console.error("Invoice font missing:", INVOICE_FONT_FILES[font]);
     }
-    name ??= font === "regular" || font === "bold" ? FALLBACK_INVOICE_FONTS[font] : resolve("regular");
+    name ??=
+      font === "regular" || font === "bold"
+        ? FALLBACK_INVOICE_FONTS[font]
+        : resolve("regular");
     names.set(font, name);
     return name;
   };
@@ -110,9 +129,15 @@ function invoiceFonts(doc: PDFKit.PDFDocument): (font: InvoiceFont) => string {
  * points, négative : sous le haut de la ligne). PDFKit ne type pas `_font` ;
  * undefined garde son placement par défaut.
  */
-function currentFontBaseline(doc: PDFKit.PDFDocument, fontSize: number): number | undefined {
-  const ascender = (doc as unknown as { _font?: { ascender?: unknown } })._font?.ascender;
-  return typeof ascender === "number" ? -(ascender / 1000) * fontSize : undefined;
+function currentFontBaseline(
+  doc: PDFKit.PDFDocument,
+  fontSize: number
+): number | undefined {
+  const ascender = (doc as unknown as { _font?: { ascender?: unknown } })._font
+    ?.ascender;
+  return typeof ascender === "number"
+    ? -(ascender / 1000) * fontSize
+    : undefined;
 }
 
 /**
@@ -120,10 +145,22 @@ function currentFontBaseline(doc: PDFKit.PDFDocument, fontSize: number): number 
  * vide. Lu dans la police fontkit sous `_font.font`, que PDFKit ne type pas ;
  * Helvetica, police de repli, n’a pas cette table : on la croit capable.
  */
-function fontHasGlyph(doc: PDFKit.PDFDocument, fontName: string, char: string): boolean {
+function fontHasGlyph(
+  doc: PDFKit.PDFDocument,
+  fontName: string,
+  char: string
+): boolean {
   doc.font(fontName);
-  const font = (doc as unknown as { _font?: { font?: { hasGlyphForCodePoint?: (codePoint: number) => boolean } } })._font?.font;
-  return typeof font?.hasGlyphForCodePoint === "function" ? font.hasGlyphForCodePoint(char.codePointAt(0) ?? 0) : true;
+  const font = (
+    doc as unknown as {
+      _font?: {
+        font?: { hasGlyphForCodePoint?: (codePoint: number) => boolean };
+      };
+    }
+  )._font?.font;
+  return typeof font?.hasGlyphForCodePoint === "function"
+    ? font.hasGlyphForCodePoint(char.codePointAt(0) ?? 0)
+    : true;
 }
 
 const bidi = bidiFactory();
@@ -133,7 +170,10 @@ const ARABIC_FONT_CHARACTER = new RegExp("\\p{Script_Extensions=Arabic}", "u");
 // Plus les blocs que Noto Sans n’a pas du tout : ponctuation CJK (espace
 // idéographique, 「」), signes des blocs kana (ー, ・) et formes pleine chasse
 // des claviers chinois (（ ）， ．).
-const HAN_FONT_CHARACTER = new RegExp("[\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}\\p{Script=Bopomofo}\\u3000-\\u30ff\\uff00-\\uffef]", "u");
+const HAN_FONT_CHARACTER = new RegExp(
+  "[\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}\\p{Script=Bopomofo}\\u3000-\\u30ff\\uff00-\\uffef]",
+  "u"
+);
 const ARABIC_LETTER = new RegExp("\\p{Script=Arabic}", "u");
 const MIDDLE_DOT = "\u00b7";
 // Noto Sans décompose ǹ ḿ ṃ ṅ ṣ ẹ ị ọ ụ (ccmp) en lettre de base et
@@ -141,23 +181,36 @@ const MIDDLE_DOT = "\u00b7";
 // relie alors le glyphe de base à la lettre nue et la marque à rien : le texte
 // copié ou extrait perdait le point (« Thi » pour « Thị »). Sans ccmp, la
 // police prend sa lettre précomposée, au même dessin.
-const DECOMPOSED_BY_NOTO_SANS = /[\u01f9\u1e3f\u1e43\u1e45\u1e63\u1eb9\u1ecb\u1ecd\u1ee5]/;
+const DECOMPOSED_BY_NOTO_SANS =
+  /[\u01f9\u1e3f\u1e43\u1e45\u1e63\u1eb9\u1ecb\u1ecd\u1ee5]/;
 const GRAPHEMES = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 const PICTOGRAPH = new RegExp("[\\p{Extended_Pictographic}\\p{S}]", "u");
 // Masqués par fontkit, même sans dessin dans la police (ZWJ, sélecteurs de variante…).
 const INVISIBLE = new RegExp("\\p{Default_Ignorable_Code_Point}", "u");
 const COMBINING_MARK = new RegExp("\\p{M}", "u");
 
-export type InvoiceNameRun = { text: string; font: "regular" | "arabic" | "han" };
+export type InvoiceNameRun = {
+  text: string;
+  font: "regular" | "arabic" | "han";
+};
 
-function invoiceNameCharacterFont(chars: string[], position: number): InvoiceNameRun["font"] {
+function invoiceNameCharacterFont(
+  chars: string[],
+  position: number
+): InvoiceNameRun["font"] {
   const char = chars[position];
   if (ARABIC_FONT_CHARACTER.test(char)) return "arabic";
   if (HAN_FONT_CHARACTER.test(char)) return "han";
   // Point de séparation d’un nom étranger transcrit en chinois (迈克尔·乔丹) :
   // pleine chasse, avec les idéogrammes, s’il est entre deux d’entre eux.
-  const between = (other: string | undefined) => other !== undefined && HAN_FONT_CHARACTER.test(other);
-  if (char === MIDDLE_DOT && between(chars[position - 1]) && between(chars[position + 1])) return "han";
+  const between = (other: string | undefined) =>
+    other !== undefined && HAN_FONT_CHARACTER.test(other);
+  if (
+    char === MIDDLE_DOT &&
+    between(chars[position - 1]) &&
+    between(chars[position + 1])
+  )
+    return "han";
   return "regular";
 }
 
@@ -170,9 +223,18 @@ function invoiceNameCharacterFont(chars: string[], position: number): InvoiceNam
  * seulement d’emoji devient « - ». `hasGlyph` dit si la police qui écrirait le
  * caractère en a le dessin.
  */
-export function printableInvoiceName(name: string, hasGlyph: (font: InvoiceNameRun["font"], char: string) => boolean): string {
+export function printableInvoiceName(
+  name: string,
+  hasGlyph: (font: InvoiceNameRun["font"], char: string) => boolean
+): string {
   const drawable = (chars: string[], start: number, end: number) =>
-    chars.slice(start, end).every((char, index) => INVISIBLE.test(char) || hasGlyph(invoiceNameCharacterFont(chars, start + index), char));
+    chars
+      .slice(start, end)
+      .every(
+        (char, index) =>
+          INVISIBLE.test(char) ||
+          hasGlyph(invoiceNameCharacterFont(chars, start + index), char)
+      );
   const chars = Array.from(name);
   let position = 0;
   let removed = false;
@@ -185,8 +247,11 @@ export function printableInvoiceName(name: string, hasGlyph: (font: InvoiceNameR
       continue;
     }
     // La forme simple d’abord : les lettres entourées (Ⓙ, 🄹) sont des symboles.
-    const simple = Array.from(segment.normalize("NFKD")).filter(char => !COMBINING_MARK.test(char));
-    if (simple.length > 0 && drawable(simple, 0, simple.length)) printable += simple.join("");
+    const simple = Array.from(segment.normalize("NFKD")).filter(
+      char => !COMBINING_MARK.test(char)
+    );
+    if (simple.length > 0 && drawable(simple, 0, simple.length))
+      printable += simple.join("");
     else if (PICTOGRAPH.test(segment)) removed = true;
     else printable += "?";
   }
@@ -203,12 +268,19 @@ export function printableInvoiceName(name: string, hasGlyph: (font: InvoiceNameR
  * que la liste de celles à ajouter. Un objet neuf à chaque appel : fontkit y
  * inscrit les fonctionnalités qu’il applique.
  */
-function invoiceNameFeatures(run: InvoiceNameRun): PDFKit.Mixins.OpenTypeFeatures[] | undefined {
-  if (run.font !== "regular" || !DECOMPOSED_BY_NOTO_SANS.test(run.text)) return undefined;
+function invoiceNameFeatures(
+  run: InvoiceNameRun
+): PDFKit.Mixins.OpenTypeFeatures[] | undefined {
+  if (run.font !== "regular" || !DECOMPOSED_BY_NOTO_SANS.test(run.text))
+    return undefined;
   return { ccmp: false } as unknown as PDFKit.Mixins.OpenTypeFeatures[];
 }
 
-type InvoiceNameChar = { char: string; font: InvoiceNameRun["font"]; level: number };
+type InvoiceNameChar = {
+  char: string;
+  font: InvoiceNameRun["font"];
+  level: number;
+};
 
 /** Caractères du nom, avec leur police et leur niveau bidi calculé sur tout le nom (UAX #9). */
 function invoiceNameChars(name: string): InvoiceNameChar[] {
@@ -244,17 +316,22 @@ export function invoiceNameRuns(name: string): InvoiceNameRun[] {
  * s’arrête au dernier mot qui tient (`fits`), ou dans un mot plus long qu’elle ;
  * les espaces de la coupure ne s’impriment pas.
  */
-export function invoiceNameLines(name: string, fits: (runs: InvoiceNameRun[]) => boolean): InvoiceNameRun[][] {
+export function invoiceNameLines(
+  name: string,
+  fits: (runs: InvoiceNameRun[]) => boolean
+): InvoiceNameRun[][] {
   const chars = invoiceNameChars(name);
   const space = (position: number) => chars[position]?.char === " ";
-  const line = (start: number, end: number) => invoiceLineRuns(chars.slice(start, end));
+  const line = (start: number, end: number) =>
+    invoiceLineRuns(chars.slice(start, end));
   const lines: InvoiceNameRun[][] = [];
   let start = 0;
   while (space(start)) start += 1;
   while (start < chars.length) {
     let end = start;
     for (let position = start + 1; position <= chars.length; position += 1) {
-      if (space(position - 1) || (position < chars.length && !space(position))) continue; // pas une fin de mot
+      if (space(position - 1) || (position < chars.length && !space(position)))
+        continue; // pas une fin de mot
       if (!fits(line(start, position))) break;
       end = position;
     }
@@ -270,7 +347,12 @@ export function invoiceNameLines(name: string, fits: (runs: InvoiceNameRun[]) =>
         else high = middle - 1;
       }
       end = low;
-      while (end > start + 1 && end < chars.length && COMBINING_MARK.test(chars[end].char)) end -= 1;
+      while (
+        end > start + 1 &&
+        end < chars.length &&
+        COMBINING_MARK.test(chars[end].char)
+      )
+        end -= 1;
     }
     lines.push(line(start, end));
     start = end;
@@ -288,7 +370,8 @@ function invoiceLineRuns(chars: InvoiceNameChar[]): InvoiceNameRun[] {
   const runs: Array<InvoiceNameRun & { level: number }> = [];
   for (const { char, font, level } of chars) {
     const previous = runs[runs.length - 1];
-    if (previous && previous.level === level && previous.font === font) previous.text += char;
+    if (previous && previous.level === level && previous.font === font)
+      previous.text += char;
     else runs.push({ text: char, font, level });
   }
 
@@ -301,7 +384,11 @@ function invoiceLineRuns(chars: InvoiceNameChar[]): InvoiceNameRun[] {
       if (runs[start].level < level) continue;
       let end = start;
       while (end + 1 < runs.length && runs[end + 1].level >= level) end += 1;
-      runs.splice(start, end - start + 1, ...runs.slice(start, end + 1).reverse());
+      runs.splice(
+        start,
+        end - start + 1,
+        ...runs.slice(start, end + 1).reverse()
+      );
       start = end;
     }
   }
@@ -311,7 +398,13 @@ function invoiceLineRuns(chars: InvoiceNameChar[]): InvoiceNameRun[] {
     const reversedByFontkit = font === "arabic" && ARABIC_LETTER.test(text);
     if (rightToLeft === reversedByFontkit) return { text, font };
     const chars = Array.from(text).reverse();
-    return { text: (rightToLeft ? chars.map(char => bidi.getMirroredCharacter(char) ?? char) : chars).join(""), font };
+    return {
+      text: (rightToLeft
+        ? chars.map(char => bidi.getMirroredCharacter(char) ?? char)
+        : chars
+      ).join(""),
+      font,
+    };
   });
 }
 
@@ -342,24 +435,38 @@ function pdfSafeSpaces(value: string): string {
 
 /** Montant au format français : « 1 150,00 € ». */
 export function formatInvoiceAmount(value: number): string {
-  return pdfSafeSpaces(new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(value));
+  return pdfSafeSpaces(
+    new Intl.NumberFormat("fr-FR", {
+      style: "currency",
+      currency: "EUR",
+    }).format(value)
+  );
 }
 
 /** Date calendaire à Paris, quel que soit le fuseau du serveur (UTC sur Vercel). */
 export function formatInvoiceDate(date: Date): string {
-  return pdfSafeSpaces(date.toLocaleDateString("fr-FR", { timeZone: PARIS_TIME_ZONE, year: "numeric", month: "long", day: "numeric" }));
+  return pdfSafeSpaces(
+    date.toLocaleDateString("fr-FR", {
+      timeZone: PARIS_TIME_ZONE,
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    })
+  );
 }
 
 /** Date et heure du rendez-vous à Paris, ex. « 16 octobre 2026 à 00:30 ». */
 export function formatInvoiceAppointmentDateTime(date: Date): string {
-  return pdfSafeSpaces(date.toLocaleString("fr-FR", {
-    timeZone: PARIS_TIME_ZONE,
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }));
+  return pdfSafeSpaces(
+    date.toLocaleString("fr-FR", {
+      timeZone: PARIS_TIME_ZONE,
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+  );
 }
 
 export type InvoiceContent = {
@@ -367,7 +474,12 @@ export type InvoiceContent = {
   sellerLines: string[];
   metaLines: string[];
   buyerLines: string[];
-  rows: Array<{ description: string; date: string; duration: string; amount: string }>;
+  rows: Array<{
+    description: string;
+    date: string;
+    duration: string;
+    amount: string;
+  }>;
   totalLabel: string;
   totalAmount: string;
   vatLines: string[];
@@ -380,17 +492,24 @@ export type InvoiceContent = {
  * Aucune mention légale n’est inventée : la TVA n’apparaît que si
  * INVOICE_VAT_MENTION (et, le cas échéant, INVOICE_SELLER_VAT_NUMBER) est défini.
  */
-export function buildInvoiceContent(data: InvoiceData, seller: InvoiceSeller = resolveInvoiceSeller()): InvoiceContent {
+export function buildInvoiceContent(
+  data: InvoiceData,
+  seller: InvoiceSeller = resolveInvoiceSeller()
+): InvoiceContent {
   const appointment = formatInvoiceAppointmentDateTime(data.appointmentDate);
-  const rows: InvoiceContent["rows"] = [{
-    description: "Consultation - Conseil en santé",
-    date: appointment,
-    duration: `${data.duration} min`,
-    amount: formatInvoiceAmount(data.basePrice),
-  }];
+  const rows: InvoiceContent["rows"] = [
+    {
+      description: "Consultation - Conseil en santé",
+      date: appointment,
+      duration: `${data.duration} min`,
+      amount: formatInvoiceAmount(data.basePrice),
+    },
+  ];
   if (data.isNightRate) {
     // Plage de shared/bookingPolicy.ts, majoration lue dans les montants encaissés (CODE-09).
-    const surchargePercent = Math.round(((data.finalPrice - data.basePrice) / data.basePrice) * 100);
+    const surchargePercent = Math.round(
+      ((data.finalPrice - data.basePrice) / data.basePrice) * 100
+    );
     rows.push({
       description: `Majoration tarif de nuit (${NIGHT_RATE_START_HOUR}h-${NIGHT_RATE_END_HOUR}h)${Number.isFinite(surchargePercent) ? ` +${surchargePercent} %` : ""}`,
       date: "",
@@ -404,7 +523,9 @@ export function buildInvoiceContent(data: InvoiceData, seller: InvoiceSeller = r
     `${seller.legalForm} au capital de ${seller.capital}`,
     `Siège social : ${seller.address}`,
     seller.rcs,
-    ...(seller.vatNumber ? [`N° TVA intracommunautaire : ${seller.vatNumber}`] : []),
+    ...(seller.vatNumber
+      ? [`N° TVA intracommunautaire : ${seller.vatNumber}`]
+      : []),
     `Email : ${seller.email}`,
     `Site : ${seller.website}`,
   ];
@@ -419,7 +540,11 @@ export function buildInvoiceContent(data: InvoiceData, seller: InvoiceSeller = r
     ],
     // NFC : un nom saisi en lettres décomposées (« e » + accent) s’imprime avec
     // les glyphes accentués de la police au lieu de marques flottantes.
-    buyerLines: [data.customerName.normalize("NFC"), data.customerEmail, data.customerPhone].filter(line => line.trim().length > 0),
+    buyerLines: [
+      data.customerName.normalize("NFC"),
+      data.customerEmail,
+      data.customerPhone,
+    ].filter(line => line.trim().length > 0),
     rows,
     totalLabel: "Total",
     totalAmount: formatInvoiceAmount(data.finalPrice),
@@ -436,7 +561,9 @@ export function buildInvoiceContent(data: InvoiceData, seller: InvoiceSeller = r
 }
 
 /** Where the copy of an issued invoice is stored, one per number. */
-function invoiceStorageKey(data: Pick<InvoiceData, "invoiceNumber" | "trackingId">) {
+function invoiceStorageKey(
+  data: Pick<InvoiceData, "invoiceNumber" | "trackingId">
+) {
   return `invoices/${data.invoiceNumber}-${data.trackingId}.pdf`;
 }
 
@@ -447,7 +574,7 @@ function invoiceStorageKey(data: Pick<InvoiceData, "invoiceNumber" | "trackingId
 export async function generateInvoicePDF(
   data: InvoiceData,
   seller: InvoiceSeller = resolveInvoiceSeller(),
-  options: { issuedNow?: boolean } = {},
+  options: { issuedNow?: boolean } = {}
 ): Promise<{ buffer: Buffer; key: string; url: string }> {
   const buffer = await renderInvoicePDF(data, seller);
   const invoiceKey = invoiceStorageKey(data);
@@ -457,7 +584,8 @@ export async function generateInvoicePDF(
     // stored (EXPL-02).
     stored = await storagePutOnce(invoiceKey, buffer, "application/pdf");
   } catch (storageError) {
-    const message = storageError instanceof Error ? storageError.message : "UnknownError";
+    const message =
+      storageError instanceof Error ? storageError.message : "UnknownError";
     const code = (storageError as { code?: unknown }).code;
     // The store could not say whether an invoice issued before was stored at
     // its issue (outage, rate limit, suspended store): its stored copy, issued
@@ -466,12 +594,20 @@ export async function generateInvoicePDF(
     // in its place: the caller fails and tries again (the job's next attempt,
     // a new download).
     if (message === "storage_check_failed" && !options.issuedNow) {
-      console.error("Invoice archive could not be checked; the invoice is not rebuilt:", message, code);
+      console.error(
+        "Invoice archive could not be checked; the invoice is not rebuilt:",
+        message,
+        code
+      );
       throw storageError;
     }
     // None was stored yet (first issue, or no store is configured): the
     // invoice just built is the one issued; it is stored at its next build.
-    console.error("Failed to upload invoice to private storage:", message, code);
+    console.error(
+      "Failed to upload invoice to private storage:",
+      message,
+      code
+    );
     return { buffer, key: invoiceKey, url: "" };
   }
   // An issued invoice no longer changes (EXPL-02): once stored, the email and
@@ -479,7 +615,12 @@ export async function generateInvoicePDF(
   // issued with, even after the patient's address was corrected from the
   // dashboard. A stored copy that cannot be read is not replaced by another
   // one: the caller fails and tries again.
-  if (!stored.uploaded) return { buffer: await storageGetBuffer(stored.key), key: stored.key, url: stored.url };
+  if (!stored.uploaded)
+    return {
+      buffer: await storageGetBuffer(stored.key),
+      key: stored.key,
+      url: stored.url,
+    };
   return { buffer, key: stored.key, url: stored.url };
 }
 
@@ -491,8 +632,15 @@ export async function generateInvoicePDF(
  * store cannot say whether a copy is there or cannot take it
  * ("storage_check_failed", "storage_upload_failed", with its code).
  */
-export async function archiveInvoicePDF(data: InvoiceData, seller: InvoiceSeller = resolveInvoiceSeller()): Promise<void> {
-  await storagePutOnce(invoiceStorageKey(data), await renderInvoicePDF(data, seller), "application/pdf");
+export async function archiveInvoicePDF(
+  data: InvoiceData,
+  seller: InvoiceSeller = resolveInvoiceSeller()
+): Promise<void> {
+  await storagePutOnce(
+    invoiceStorageKey(data),
+    await renderInvoicePDF(data, seller),
+    "application/pdf"
+  );
 }
 
 /**
@@ -502,7 +650,7 @@ export async function archiveInvoicePDF(data: InvoiceData, seller: InvoiceSeller
  */
 export async function renderInvoicePDF(
   data: InvoiceData,
-  seller: InvoiceSeller = resolveInvoiceSeller(),
+  seller: InvoiceSeller = resolveInvoiceSeller()
 ): Promise<Buffer> {
   const content = buildInvoiceContent(data, seller);
   const PDFDocument = await loadPdfDocument();
@@ -515,7 +663,12 @@ export async function renderInvoicePDF(
         // PDF, so the email resent under the same Resend idempotency key
         // carries the same attachment (a different payload would be refused
         // with 409 invalid_idempotent_request).
-        info: { Title: `Facture ${content.invoiceNumber}`, Author: seller.name, CreationDate: data.issueDate, ModDate: data.issueDate },
+        info: {
+          Title: `Facture ${content.invoiceNumber}`,
+          Author: seller.name,
+          CreationDate: data.issueDate,
+          ModDate: data.issueDate,
+        },
         // A11Y-21: a screen reader reads the invoice, always in French, in
         // French, and a viewer shows its title rather than the file name. Not
         // tagged: no structure is marked in its content. An invoice already
@@ -534,9 +687,17 @@ export async function renderInvoicePDF(
       const bold = font("bold");
 
       // Header
-      doc.fontSize(8).font(bold).fillColor(INVOICE_BRAND.accent).text("ABL / HIPPOCAMPUS CONSULTING", { align: "center" });
+      doc
+        .fontSize(8)
+        .font(bold)
+        .fillColor(INVOICE_BRAND.accent)
+        .text("ABL / HIPPOCAMPUS CONSULTING", { align: "center" });
       doc.moveDown(0.35);
-      doc.fontSize(24).font(bold).fillColor(INVOICE_BRAND.ink).text("FACTURE", { align: "center" });
+      doc
+        .fontSize(24)
+        .font(bold)
+        .fillColor(INVOICE_BRAND.ink)
+        .text("FACTURE", { align: "center" });
       doc.moveDown(0.5);
 
       // Seller (left)
@@ -548,14 +709,21 @@ export async function renderInvoicePDF(
 
       // Invoice details (right)
       doc.fontSize(10).font(bold);
-      doc.text(`Facture N° : ${content.invoiceNumber}`, 350, 100, { width: 195 });
+      doc.text(`Facture N° : ${content.invoiceNumber}`, 350, 100, {
+        width: 195,
+      });
       doc.fontSize(9).font(regular);
-      for (const line of content.metaLines) doc.text(line, 350, undefined, { width: 195 });
+      for (const line of content.metaLines)
+        doc.text(line, 350, undefined, { width: 195 });
       const metaBottom = doc.y;
 
       // Separator
       const separatorY = Math.max(200, sellerBottom + 12, metaBottom + 12);
-      doc.strokeColor(INVOICE_BRAND.accent).moveTo(50, separatorY).lineTo(545, separatorY).stroke();
+      doc
+        .strokeColor(INVOICE_BRAND.accent)
+        .moveTo(50, separatorY)
+        .lineTo(545, separatorY)
+        .stroke();
 
       // Client info
       const clientY = separatorY + 20;
@@ -567,22 +735,45 @@ export async function renderInvoicePDF(
       // the Arabic font: all segments take the main font's baseline instead.
       const baseline = currentFontBaseline(doc, 10);
       const lineHeight = doc.currentLineHeight(true);
-      const name = printableInvoiceName(buyerName, (key, char) => fontHasGlyph(doc, font(key), char));
+      const name = printableInvoiceName(buyerName, (key, char) =>
+        fontHasGlyph(doc, font(key), char)
+      );
       const nameRuns = invoiceNameRuns(name);
-      if (nameRuns.length === 1 && nameRuns[0].font === "regular" && !hasRightToLeft(name)) {
+      if (
+        nameRuns.length === 1 &&
+        nameRuns[0].font === "regular" &&
+        !hasRightToLeft(name)
+      ) {
         // Latin, Greek, Cyrillic: PDFKit wraps a long name itself, as before.
-        doc.font(regular).text(name, 50, clientY + 20, { baseline, features: invoiceNameFeatures(nameRuns[0]) });
+        doc.font(regular).text(name, 50, clientY + 20, {
+          baseline,
+          features: invoiceNameFeatures(nameRuns[0]),
+        });
       } else {
         // Lines cut in reading order, each one main-font line apart: the taller
         // Arabic and Chinese fonts no longer push the email and table down.
         const nameWidth = doc.page.width - 50 - doc.page.margins.right;
         const widthOf = (runs: InvoiceNameRun[]) =>
-          runs.reduce((width, run) => width + doc.font(font(run.font)).widthOfString(run.text, { features: invoiceNameFeatures(run) }), 0);
+          runs.reduce(
+            (width, run) =>
+              width +
+              doc.font(font(run.font)).widthOfString(run.text, {
+                features: invoiceNameFeatures(run),
+              }),
+            0
+          );
         let lineY = clientY + 20;
-        for (const line of invoiceNameLines(name, runs => widthOf(runs) <= nameWidth)) {
+        for (const line of invoiceNameLines(
+          name,
+          runs => widthOf(runs) <= nameWidth
+        )) {
           line.forEach((run, index) => {
             doc.font(font(run.font));
-            const options = { lineBreak: false, baseline, features: invoiceNameFeatures(run) };
+            const options = {
+              lineBreak: false,
+              baseline,
+              features: invoiceNameFeatures(run),
+            };
             if (index === 0) doc.text(run.text, 50, lineY, options);
             else doc.text(run.text, options);
           });
@@ -594,7 +785,10 @@ export async function renderInvoicePDF(
       for (const line of buyerDetails) doc.text(line, 50);
 
       const detailsY = Math.max(clientY + 80, doc.y + 20);
-      doc.fontSize(12).font(bold).text("Détails de la prestation :", 50, detailsY);
+      doc
+        .fontSize(12)
+        .font(bold)
+        .text("Détails de la prestation :", 50, detailsY);
 
       // Table header
       const tableTop = detailsY + 30;
@@ -604,7 +798,10 @@ export async function renderInvoicePDF(
       doc.text("Durée", 385, tableTop, { width: 55 });
       doc.text("Montant", 445, tableTop, { width: 100, align: "right" });
 
-      doc.moveTo(50, tableTop + 15).lineTo(545, tableTop + 15).stroke();
+      doc
+        .moveTo(50, tableTop + 15)
+        .lineTo(545, tableTop + 15)
+        .stroke();
 
       // Table rows
       doc.fontSize(9).font(regular);
@@ -622,7 +819,10 @@ export async function renderInvoicePDF(
       currentY += 10;
       doc.fontSize(11).font(bold);
       doc.text(`${content.totalLabel} :`, 350, currentY, { width: 90 });
-      doc.text(content.totalAmount, 445, currentY, { width: 100, align: "right" });
+      doc.text(content.totalAmount, 445, currentY, {
+        width: 100,
+        align: "right",
+      });
       currentY += 20;
 
       doc.fontSize(9).font(regular);
@@ -641,8 +841,14 @@ export async function renderInvoicePDF(
 
       // Footer
       doc.fontSize(8).font(regular).fillColor(INVOICE_BRAND.muted);
-      doc.text(content.footerLines[0], 50, INVOICE_LAYOUT.footerBrandY, { align: "center", width: 495 });
-      doc.text(content.footerLines[1], 50, INVOICE_LAYOUT.footerValidityY, { align: "center", width: 495 });
+      doc.text(content.footerLines[0], 50, INVOICE_LAYOUT.footerBrandY, {
+        align: "center",
+        width: 495,
+      });
+      doc.text(content.footerLines[1], 50, INVOICE_LAYOUT.footerValidityY, {
+        align: "center",
+        width: 495,
+      });
 
       doc.end();
     } catch (error) {

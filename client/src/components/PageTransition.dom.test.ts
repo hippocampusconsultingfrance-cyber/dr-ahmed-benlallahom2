@@ -56,7 +56,10 @@ describe("focus après un changement de page sans rechargement (A11Y-17)", () =>
     const focus = vi.spyOn(HTMLElement.prototype, "focus");
 
     act(() => navigate("/autre-page-introuvable"));
-    const heading = await screen.findByRole("heading", { level: 1, name: "Page introuvable" });
+    const heading = await screen.findByRole("heading", {
+      level: 1,
+      name: "Page introuvable",
+    });
     await waitFor(() => expect(document.activeElement).toBe(heading));
     expect(heading.getAttribute("tabindex")).toBe("-1");
     expect(focus).toHaveBeenCalledWith({ preventScroll: true });
@@ -66,7 +69,11 @@ describe("focus après un changement de page sans rechargement (A11Y-17)", () =>
     await mountAt("/page-introuvable", "Page introuvable");
 
     act(() => navigate("/faq"));
-    const heading = await screen.findByRole("heading", { level: 1, name: "Questions fréquentes" }, { timeout: 5_000 });
+    const heading = await screen.findByRole(
+      "heading",
+      { level: 1, name: "Questions fréquentes" },
+      { timeout: 5_000 }
+    );
     await waitFor(() => expect(document.activeElement).toBe(heading));
   });
 
@@ -76,9 +83,18 @@ describe("focus après un changement de page sans rechargement (A11Y-17)", () =>
     act(() => navigate("/press"));
     // La page n'est pas encore là : le visiteur passe au lien d'évitement, hors de la page.
     expect(screen.queryByRole("heading", { level: 1 })).toBeNull();
-    const skipLink = screen.getByRole("link", { name: "Aller au contenu principal" });
+    const skipLink = screen.getByRole("link", {
+      name: "Aller au contenu principal",
+    });
     act(() => skipLink.focus());
-    await screen.findByRole("heading", { level: 1, name: "Informations institutionnelles, sans contenu non vérifié." }, { timeout: 5_000 });
+    await screen.findByRole(
+      "heading",
+      {
+        level: 1,
+        name: "Informations institutionnelles, sans contenu non vérifié.",
+      },
+      { timeout: 5_000 }
+    );
     await new Promise(resolve => setTimeout(resolve, 50));
     expect(document.activeElement).toBe(skipLink);
   });
@@ -106,6 +122,8 @@ describe("focus après un changement de page sans rechargement (A11Y-17)", () =>
     act(() => navigate("/autre-page-introuvable#contact"));
     await screen.findByRole("heading", { level: 1, name: "Page introuvable" });
     await new Promise(resolve => setTimeout(resolve, 50));
-    expect(document.activeElement).not.toBe(screen.getByRole("heading", { level: 1 }));
+    expect(document.activeElement).not.toBe(
+      screen.getByRole("heading", { level: 1 })
+    );
   });
 });

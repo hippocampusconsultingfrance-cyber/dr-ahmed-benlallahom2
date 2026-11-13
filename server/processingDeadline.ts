@@ -19,7 +19,11 @@ export class ProcessingDeadlineError extends Error {
 }
 
 export function isProcessingDeadlineError(error: unknown) {
-  return error instanceof ProcessingDeadlineError || (error instanceof Error && error.message.startsWith("processing_deadline_reached:"));
+  return (
+    error instanceof ProcessingDeadlineError ||
+    (error instanceof Error &&
+      error.message.startsWith("processing_deadline_reached:"))
+  );
 }
 
 type DeadlineContext = {
@@ -39,10 +43,23 @@ export function runWithProcessingDeadline<T>(
   deadlineAt: number,
   run: () => Promise<T>,
   now: () => number = Date.now,
-  options: { firstPauseDeadlineAt?: number } = {},
+  options: { firstPauseDeadlineAt?: number } = {}
 ): Promise<T> {
-  const firstPauseDeadlineAt = Math.max(deadlineAt, options.firstPauseDeadlineAt ?? deadlineAt);
-  return deadlineStorage.run({ deadlineAt, now, firstPauseDeadlineAt, paused: false, lastPauseEndAt: null, pauseRefused: false }, run);
+  const firstPauseDeadlineAt = Math.max(
+    deadlineAt,
+    options.firstPauseDeadlineAt ?? deadlineAt
+  );
+  return deadlineStorage.run(
+    {
+      deadlineAt,
+      now,
+      firstPauseDeadlineAt,
+      paused: false,
+      lastPauseEndAt: null,
+      pauseRefused: false,
+    },
+    run
+  );
 }
 
 /**
@@ -50,10 +67,15 @@ export function runWithProcessingDeadline<T>(
  * for the steps that follow. Throws ProcessingDeadlineError when less than
  * `minimumMs` would remain.
  */
-export function stepTimeoutMs(step: string, ownTimeoutMs: number, options: { reserveMs?: number; minimumMs: number }): number {
+export function stepTimeoutMs(
+  step: string,
+  ownTimeoutMs: number,
+  options: { reserveMs?: number; minimumMs: number }
+): number {
   const context = deadlineStorage.getStore();
   if (!context) return ownTimeoutMs;
-  const available = context.deadlineAt - context.now() - (options.reserveMs ?? 0);
+  const available =
+    context.deadlineAt - context.now() - (options.reserveMs ?? 0);
   if (available < options.minimumMs) throw new ProcessingDeadlineError(step);
   return Math.min(ownTimeoutMs, available);
 }
@@ -70,7 +92,9 @@ export function stepTimeoutMs(step: string, ownTimeoutMs: number, options: { res
 export function waitFitsDeadline(waitMs: number): boolean {
   const context = deadlineStorage.getStore();
   if (!context) return true;
-  const fits = context.now() + waitMs < (context.paused ? context.deadlineAt : context.firstPauseDeadlineAt);
+  const fits =
+    context.now() + waitMs <
+    (context.paused ? context.deadlineAt : context.firstPauseDeadlineAt);
   if (!fits) context.pauseRefused = true;
   return fits;
 }
@@ -79,7 +103,9 @@ export function waitFitsDeadline(waitMs: number): boolean {
 export function pauseWithinDeadline(waitMs: number): Promise<void> {
   const context = deadlineStorage.getStore();
   if (context) {
-    context.lastPauseEndAt = context.paused ? context.deadlineAt : context.firstPauseDeadlineAt;
+    context.lastPauseEndAt = context.paused
+      ? context.deadlineAt
+      : context.firstPauseDeadlineAt;
     context.paused = true;
   }
   return new Promise(resolve => setTimeout(resolve, waitMs));
@@ -96,7 +122,11 @@ export function pauseWithinDeadline(waitMs: number): Promise<void> {
  */
 export function startFitsDeadline(): boolean {
   const context = deadlineStorage.getStore();
-  if (!context || context.now() < (context.lastPauseEndAt ?? context.firstPauseDeadlineAt)) return true;
+  if (
+    !context ||
+    context.now() < (context.lastPauseEndAt ?? context.firstPauseDeadlineAt)
+  )
+    return true;
   context.pauseRefused = true;
   return false;
 }
@@ -108,7 +138,11 @@ export function startFitsDeadline(): boolean {
  */
 export function startFitsDeadlineAfter(waitMs: number): boolean {
   const context = deadlineStorage.getStore();
-  return !context || context.now() + waitMs < (context.lastPauseEndAt ?? context.firstPauseDeadlineAt);
+  return (
+    !context ||
+    context.now() + waitMs <
+      (context.lastPauseEndAt ?? context.firstPauseDeadlineAt)
+  );
 }
 
 /**

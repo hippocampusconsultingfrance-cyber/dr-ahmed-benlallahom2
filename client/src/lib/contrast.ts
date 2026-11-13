@@ -3,7 +3,11 @@ export type Oklch = readonly [lightness: number, chroma: number, hue: number];
 const clamp = (value: number) => Math.min(1, Math.max(0, value));
 
 /** Conversion OKLCH vers RGB linéaire, suffisante pour auditer les jetons CSS du projet. */
-export function oklchToLinearRgb([lightness, chroma, hue]: Oklch): readonly [number, number, number] {
+export function oklchToLinearRgb([lightness, chroma, hue]: Oklch): readonly [
+  number,
+  number,
+  number,
+] {
   const radians = (hue * Math.PI) / 180;
   const a = chroma * Math.cos(radians);
   const b = chroma * Math.sin(radians);
@@ -23,31 +27,54 @@ export function relativeLuminance(color: Oklch): number {
 }
 
 export function contrastRatio(foreground: Oklch, background: Oklch): number {
-  const [lighter, darker] = [relativeLuminance(foreground), relativeLuminance(background)].sort((a, b) => b - a);
+  const [lighter, darker] = [
+    relativeLuminance(foreground),
+    relativeLuminance(background),
+  ].sort((a, b) => b - a);
   return (lighter + 0.05) / (darker + 0.05);
 }
 
 /** A colour as the browser paints it: sRGB channels from 0 to 1. */
 export type Srgb = readonly [red: number, green: number, blue: number];
 
-const encodeSrgb = (channel: number) => (channel <= 0.0031308 ? 12.92 * channel : 1.055 * channel ** (1 / 2.4) - 0.055);
-const decodeSrgb = (channel: number) => (channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
+const encodeSrgb = (channel: number) =>
+  channel <= 0.0031308 ? 12.92 * channel : 1.055 * channel ** (1 / 2.4) - 0.055;
+const decodeSrgb = (channel: number) =>
+  channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
 
-export const oklchToSrgb = (color: Oklch): Srgb => oklchToLinearRgb(color).map(encodeSrgb) as unknown as Srgb;
+export const oklchToSrgb = (color: Oklch): Srgb =>
+  oklchToLinearRgb(color).map(encodeSrgb) as unknown as Srgb;
 
 /** `top` at opacity `alpha` (bg-cyan-950/15: 0.15) laid over `under`, blended as the browser does, in sRGB. */
-export const blendSrgb = (top: Srgb, alpha: number, under: Srgb): Srgb => top.map((channel, index) => channel * alpha + under[index]! * (1 - alpha)) as unknown as Srgb;
+export const blendSrgb = (top: Srgb, alpha: number, under: Srgb): Srgb =>
+  top.map(
+    (channel, index) => channel * alpha + under[index]! * (1 - alpha)
+  ) as unknown as Srgb;
 
-const srgbLuminance = ([red, green, blue]: Srgb) => 0.2126 * decodeSrgb(red) + 0.7152 * decodeSrgb(green) + 0.0722 * decodeSrgb(blue);
+const srgbLuminance = ([red, green, blue]: Srgb) =>
+  0.2126 * decodeSrgb(red) +
+  0.7152 * decodeSrgb(green) +
+  0.0722 * decodeSrgb(blue);
 
 export function srgbContrastRatio(foreground: Srgb, background: Srgb): number {
-  const [lighter, darker] = [srgbLuminance(foreground), srgbLuminance(background)].sort((a, b) => b - a);
+  const [lighter, darker] = [
+    srgbLuminance(foreground),
+    srgbLuminance(background),
+  ].sort((a, b) => b - a);
   return (lighter! + 0.05) / (darker! + 0.05);
 }
 
 /** Contrast of a text on a tint of opacity `alpha` (bg-cyan-950/15: 0.15) laid over a surface, blended as the browser does, in sRGB. */
-export function contrastOnTint(text: Oklch, tint: Oklch, alpha: number, surface: Oklch): number {
-  return srgbContrastRatio(oklchToSrgb(text), blendSrgb(oklchToSrgb(tint), alpha, oklchToSrgb(surface)));
+export function contrastOnTint(
+  text: Oklch,
+  tint: Oklch,
+  alpha: number,
+  surface: Oklch
+): number {
+  return srgbContrastRatio(
+    oklchToSrgb(text),
+    blendSrgb(oklchToSrgb(tint), alpha, oklchToSrgb(surface))
+  );
 }
 
 export const contrastTokens = {

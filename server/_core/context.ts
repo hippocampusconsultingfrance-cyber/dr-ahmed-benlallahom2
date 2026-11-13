@@ -22,15 +22,24 @@ export async function createContext(
   // Local development without Clerk keys (CODE-15, never in production): createApp
   // leaves clerkMiddleware out, without which getAuth throws; nobody is signed in, so
   // every admin route, tRPC or Express, refuses as it refuses any visitor.
-  if (localDevelopmentShortcuts().includes("clerk_optional")) return { req: opts.req, res: opts.res, user, mfaVerified };
+  if (localDevelopmentShortcuts().includes("clerk_optional"))
+    return { req: opts.req, res: opts.res, user, mfaVerified };
 
   const auth = getAuth(opts.req);
   if (auth.isAuthenticated && auth.userId) {
     try {
       const clerkUser = await clerkClient.users.getUser(auth.userId);
-      const primaryEmail = clerkUser.emailAddresses.find(address => address.id === clerkUser.primaryEmailAddressId);
-      const verifiedEmail = primaryEmail?.verification?.status === "verified" ? primaryEmail.emailAddress : null;
-      const name = [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ") || verifiedEmail || "Administrateur";
+      const primaryEmail = clerkUser.emailAddresses.find(
+        address => address.id === clerkUser.primaryEmailAddressId
+      );
+      const verifiedEmail =
+        primaryEmail?.verification?.status === "verified"
+          ? primaryEmail.emailAddress
+          : null;
+      const name =
+        [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ") ||
+        verifiedEmail ||
+        "Administrateur";
 
       await db.upsertUser({
         openId: auth.userId,
@@ -41,12 +50,17 @@ export async function createContext(
       });
       const synchronizedUser = (await db.getUserByOpenId(auth.userId)) ?? null;
       user = synchronizedUser
-        ? { ...synchronizedUser, role: isConfiguredAdminOpenId(auth.userId) ? "admin" : "user" }
+        ? {
+            ...synchronizedUser,
+            role: isConfiguredAdminOpenId(auth.userId) ? "admin" : "user",
+          }
         : null;
 
       mfaVerified = await isAdminMfaVerified(opts.req, auth.userId);
     } catch (error) {
-      logError("[Clerk] Unable to synchronize authenticated user", error, { req: opts.req });
+      logError("[Clerk] Unable to synchronize authenticated user", error, {
+        req: opts.req,
+      });
     }
   }
 

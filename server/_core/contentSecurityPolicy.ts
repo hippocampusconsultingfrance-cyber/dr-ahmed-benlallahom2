@@ -29,7 +29,8 @@ const CONTENT_SECURITY_POLICY_DIRECTIVES = [
   "upgrade-insecure-requests",
 ];
 
-export const CONTENT_SECURITY_POLICY = CONTENT_SECURITY_POLICY_DIRECTIVES.join("; ");
+export const CONTENT_SECURITY_POLICY =
+  CONTENT_SECURITY_POLICY_DIRECTIVES.join("; ");
 
 /**
  * Hashes ('sha256-…') of the legitimate inline scripts the observation finds,
@@ -50,9 +51,16 @@ export const OBSERVED_INLINE_SCRIPT_HASHES: readonly string[] = [];
  * every page.
  */
 export const CONTENT_SECURITY_POLICY_REPORT_ONLY = [
-  ...CONTENT_SECURITY_POLICY_DIRECTIVES
-    .filter(directive => directive !== "upgrade-insecure-requests")
-    .map(directive => directive.startsWith("script-src ") ? [directive.replace(" 'unsafe-inline'", ""), ...OBSERVED_INLINE_SCRIPT_HASHES].join(" ") : directive),
+  ...CONTENT_SECURITY_POLICY_DIRECTIVES.filter(
+    directive => directive !== "upgrade-insecure-requests"
+  ).map(directive =>
+    directive.startsWith("script-src ")
+      ? [
+          directive.replace(" 'unsafe-inline'", ""),
+          ...OBSERVED_INLINE_SCRIPT_HASHES,
+        ].join(" ")
+      : directive
+  ),
   `report-uri ${CSP_REPORT_ROUTE}`,
   `report-to ${CSP_REPORTING_ENDPOINT}`,
 ].join("; ");
@@ -66,24 +74,37 @@ export const REPORTING_ENDPOINTS = `${CSP_REPORTING_ENDPOINT}="${CSP_REPORT_ROUT
  * browsers ignore it.
  */
 export function withInlineScripts(policy: string) {
-  return policy.split("; ").map(directive => {
-    const [name, ...sources] = directive.split(" ");
-    if (name !== "script-src") return directive;
-    const kept = sources.filter(source => source !== "'unsafe-inline'" && source !== "'strict-dynamic'" && !/^'(?:sha256|sha384|sha512|nonce)-/i.test(source));
-    kept.splice(kept.indexOf("'self'") + 1, 0, "'unsafe-inline'");
-    return [name, ...kept].join(" ");
-  }).join("; ");
+  return policy
+    .split("; ")
+    .map(directive => {
+      const [name, ...sources] = directive.split(" ");
+      if (name !== "script-src") return directive;
+      const kept = sources.filter(
+        source =>
+          source !== "'unsafe-inline'" &&
+          source !== "'strict-dynamic'" &&
+          !/^'(?:sha256|sha384|sha512|nonce)-/i.test(source)
+      );
+      kept.splice(kept.indexOf("'self'") + 1, 0, "'unsafe-inline'");
+      return [name, ...kept].join(" ");
+    })
+    .join("; ");
 }
 
 /** The policy with a connect-src that also lets Vite's hot reload open its WebSocket: ws: and wss: after 'self'. */
 function withHotReloadSocket(policy: string) {
-  return policy.split("; ").map(directive => {
-    const [name, ...sources] = directive.split(" ");
-    if (name !== "connect-src") return directive;
-    const kept = sources.filter(source => source !== "ws:" && source !== "wss:");
-    kept.splice(kept.indexOf("'self'") + 1, 0, "ws:", "wss:");
-    return [name, ...kept].join(" ");
-  }).join("; ");
+  return policy
+    .split("; ")
+    .map(directive => {
+      const [name, ...sources] = directive.split(" ");
+      if (name !== "connect-src") return directive;
+      const kept = sources.filter(
+        source => source !== "ws:" && source !== "wss:"
+      );
+      kept.splice(kept.indexOf("'self'") + 1, 0, "ws:", "wss:");
+      return [name, ...kept].join(" ");
+    })
+    .join("; ");
 }
 
 /**
@@ -92,8 +113,15 @@ function withHotReloadSocket(policy: string) {
  * (ws:, wss:) and observes nothing: Vite's page has an inline script (the React
  * refresh preamble of @vitejs/plugin-react) without which no component loads.
  */
-export function contentSecurityPolicyHeaders(nodeEnv = process.env.NODE_ENV): Record<string, string> {
-  if (nodeEnv === "development") return { "Content-Security-Policy": withHotReloadSocket(withInlineScripts(CONTENT_SECURITY_POLICY)) };
+export function contentSecurityPolicyHeaders(
+  nodeEnv = process.env.NODE_ENV
+): Record<string, string> {
+  if (nodeEnv === "development")
+    return {
+      "Content-Security-Policy": withHotReloadSocket(
+        withInlineScripts(CONTENT_SECURITY_POLICY)
+      ),
+    };
   return {
     "Content-Security-Policy": CONTENT_SECURITY_POLICY,
     "Content-Security-Policy-Report-Only": CONTENT_SECURITY_POLICY_REPORT_ONLY,
@@ -102,7 +130,10 @@ export function contentSecurityPolicyHeaders(nodeEnv = process.env.NODE_ENV): Re
 }
 
 /** report-uri sends application/csp-report, report-to application/reports+json. */
-const CSP_REPORT_CONTENT_TYPES = ["application/csp-report", "application/reports+json"];
+const CSP_REPORT_CONTENT_TYPES = [
+  "application/csp-report",
+  "application/reports+json",
+];
 /**
  * Each report repeats the policy (about 1.5 KB with its URLs), and a Reporting
  * API batch holds every report of the last minute or so: room for about 40.
@@ -110,14 +141,25 @@ const CSP_REPORT_CONTENT_TYPES = ["application/csp-report", "application/reports
  */
 export const CSP_REPORT_MAX_BYTES = 64 * 1024;
 /** Per client IP: enough for a visit with a few violations on each page, not to flood the logs. */
-export const CSP_REPORT_RATE_LIMIT = { action: "csp_report_ip", maxAttempts: 30, windowMs: 10 * 60 * 1000, blockMs: 10 * 60 * 1000 };
+export const CSP_REPORT_RATE_LIMIT = {
+  action: "csp_report_ip",
+  maxAttempts: 30,
+  windowMs: 10 * 60 * 1000,
+  blockMs: 10 * 60 * 1000,
+};
 const CSP_REPORT_MAX_SUMMARIES = 10;
 
 /** What is logged of a violation: no query string, no path of a blocked URL, no IP or user agent. */
-export type CspViolationSummary = { directive: string; blocked: string; page: string; source?: string };
+export type CspViolationSummary = {
+  directive: string;
+  blocked: string;
+  page: string;
+  source?: string;
+};
 
 type Fields = Record<string, unknown>;
-const isFields = (value: unknown): value is Fields => typeof value === "object" && value !== null && !Array.isArray(value);
+const isFields = (value: unknown): value is Fields =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
 
 function parseUrl(value: string): URL | null {
   try {
@@ -129,7 +171,10 @@ function parseUrl(value: string): URL | null {
 
 function directiveName(value: unknown): string {
   // CSP level 2 browsers send the whole violated directive ("script-src 'self' …").
-  const name = typeof value === "string" ? value.trim().split(/\s+/, 1)[0]!.toLowerCase() : "";
+  const name =
+    typeof value === "string"
+      ? value.trim().split(/\s+/, 1)[0]!.toLowerCase()
+      : "";
   return /^[a-z-]{1,40}$/.test(name) ? name : "unknown";
 }
 
@@ -138,14 +183,18 @@ function originOnly(value: unknown): string | undefined {
   if (typeof value !== "string" || !value.trim()) return undefined;
   const text = value.trim();
   const url = parseUrl(text);
-  if (!url) return /^[a-z][a-z-]{0,39}$/i.test(text) ? text.toLowerCase() : "unknown";
-  return ["http:", "https:", "ws:", "wss:"].includes(url.protocol) ? url.origin : url.protocol;
+  if (!url)
+    return /^[a-z][a-z-]{0,39}$/i.test(text) ? text.toLowerCase() : "unknown";
+  return ["http:", "https:", "ws:", "wss:"].includes(url.protocol)
+    ? url.origin
+    : url.protocol;
 }
 
 function pageWithoutQuery(value: unknown): string {
   const url = typeof value === "string" ? parseUrl(value.trim()) : null;
   if (!url) return "unknown";
-  if (url.protocol !== "http:" && url.protocol !== "https:") return url.protocol;
+  if (url.protocol !== "http:" && url.protocol !== "https:")
+    return url.protocol;
   return `${url.origin}${url.pathname.slice(0, 200)}`;
 }
 
@@ -153,18 +202,43 @@ function pageWithoutQuery(value: unknown): string {
  * Summaries of the CSP violations of a report body, deduplicated; null when
  * the body is neither format. Other Reporting API report types are skipped.
  */
-export function summarizeCspReports(payload: unknown): CspViolationSummary[] | null {
-  let violations: Array<{ directive: unknown; blocked: unknown; page: unknown; source: unknown }>;
+export function summarizeCspReports(
+  payload: unknown
+): CspViolationSummary[] | null {
+  let violations: Array<{
+    directive: unknown;
+    blocked: unknown;
+    page: unknown;
+    source: unknown;
+  }>;
   if (Array.isArray(payload)) {
     violations = payload
-      .filter((report): report is Fields => isFields(report) && report.type === "csp-violation" && isFields(report.body))
+      .filter(
+        (report): report is Fields =>
+          isFields(report) &&
+          report.type === "csp-violation" &&
+          isFields(report.body)
+      )
       .map(report => {
         const body = report.body as Fields;
-        return { directive: body.effectiveDirective, blocked: body.blockedURL, page: body.documentURL ?? report.url, source: body.sourceFile };
+        return {
+          directive: body.effectiveDirective,
+          blocked: body.blockedURL,
+          page: body.documentURL ?? report.url,
+          source: body.sourceFile,
+        };
       });
   } else if (isFields(payload) && isFields(payload["csp-report"])) {
     const report = payload["csp-report"];
-    violations = [{ directive: report["effective-directive"] ?? report["violated-directive"], blocked: report["blocked-uri"], page: report["document-uri"], source: report["source-file"] }];
+    violations = [
+      {
+        directive:
+          report["effective-directive"] ?? report["violated-directive"],
+        blocked: report["blocked-uri"],
+        page: report["document-uri"],
+        source: report["source-file"],
+      },
+    ];
   } else {
     return null;
   }
@@ -189,11 +263,17 @@ export type CspReportDependencies = {
 };
 
 async function countReportOfIp(clientIp: string) {
-  const state = await recordPersistentRateLimitAttempt({ ...CSP_REPORT_RATE_LIMIT, subject: clientIp });
+  const state = await recordPersistentRateLimitAttempt({
+    ...CSP_REPORT_RATE_LIMIT,
+    subject: clientIp,
+  });
   return !state.blocked;
 }
 
-const readReportBody = express.raw({ type: CSP_REPORT_CONTENT_TYPES, limit: CSP_REPORT_MAX_BYTES });
+const readReportBody = express.raw({
+  type: CSP_REPORT_CONTENT_TYPES,
+  limit: CSP_REPORT_MAX_BYTES,
+});
 
 /**
  * POST /api/csp-report: receives the browsers' reports of the report-only
@@ -202,7 +282,13 @@ const readReportBody = express.raw({ type: CSP_REPORT_CONTENT_TYPES, limit: CSP_
  * (413) or over the per-IP limit (429); never 500, a report is not worth an
  * error. Mounted before clerkMiddleware, like /api/health.
  */
-export function registerCspReportRoute(app: Express, { countReport = countReportOfIp, log = (message, summary) => console.warn(message, summary) }: CspReportDependencies = {}) {
+export function registerCspReportRoute(
+  app: Express,
+  {
+    countReport = countReportOfIp,
+    log = (message, summary) => console.warn(message, summary),
+  }: CspReportDependencies = {}
+) {
   app.post(CSP_REPORT_ROUTE, (req, res) => {
     if (!req.is(CSP_REPORT_CONTENT_TYPES)) {
       res.status(415).end();
@@ -211,12 +297,20 @@ export function registerCspReportRoute(app: Express, { countReport = countReport
     readReportBody(req, res, async parseError => {
       try {
         if (parseError) {
-          res.status((parseError as { type?: string }).type === "entity.too.large" ? 413 : 400).end();
+          res
+            .status(
+              (parseError as { type?: string }).type === "entity.too.large"
+                ? 413
+                : 400
+            )
+            .end();
           return;
         }
         let payload: unknown;
         try {
-          payload = JSON.parse(Buffer.isBuffer(req.body) ? req.body.toString("utf8") : "");
+          payload = JSON.parse(
+            Buffer.isBuffer(req.body) ? req.body.toString("utf8") : ""
+          );
         } catch {
           res.status(400).end();
           return;
@@ -232,17 +326,24 @@ export function registerCspReportRoute(app: Express, { countReport = countReport
             allowed = await countReport(req.ip || "unknown");
           } catch (error) {
             // Limiter unavailable (database): the report is still logged.
-            console.error("[CspReport] Rate limit unavailable:", error instanceof Error ? error.name : "UnknownError");
+            console.error(
+              "[CspReport] Rate limit unavailable:",
+              error instanceof Error ? error.name : "UnknownError"
+            );
           }
           if (!allowed) {
             res.status(429).end();
             return;
           }
-          for (const summary of summaries) log("[CspReport] Report-Only violation", summary);
+          for (const summary of summaries)
+            log("[CspReport] Report-Only violation", summary);
         }
         res.status(204).end();
       } catch (error) {
-        console.error("[CspReport] Report dropped:", error instanceof Error ? error.name : "UnknownError");
+        console.error(
+          "[CspReport] Report dropped:",
+          error instanceof Error ? error.name : "UnknownError"
+        );
         if (!res.headersSent) res.status(204).end();
       }
     });

@@ -15,13 +15,19 @@ export const adminPersonalDataRouter = router({
     .input(z.object({ email: z.string().trim().email().max(320) }))
     .mutation(async ({ input, ctx }) => {
       const { exportPersonalData } = await import("../../personalDataAdmin");
-      return exportPersonalData({ email: input.email, actorOpenId: ctx.user.openId });
+      return exportPersonalData({
+        email: input.email,
+        actorOpenId: ctx.user.openId,
+      });
     }),
 
   erase: adminProcedure
     .input(z.object({ email: z.string().trim().email().max(320) }))
     .mutation(async ({ input, ctx }) => {
       const { erasePersonalData } = await import("../../personalDataAdmin");
-      return erasePersonalData({ email: input.email, actorOpenId: ctx.user.openId });
+      return erasePersonalData({
+        email: input.email,
+        actorOpenId: ctx.user.openId,
+      });
     }),
 });

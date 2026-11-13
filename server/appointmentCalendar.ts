@@ -40,7 +40,10 @@ export type AppointmentCalendarInput = {
 
 /** "20261020T080000Z". */
 export function formatCalendarUtc(date: Date): string {
-  return date.toISOString().replace(/\.\d{3}Z$/, "Z").replace(/[-:]/g, "");
+  return date
+    .toISOString()
+    .replace(/\.\d{3}Z$/, "Z")
+    .replace(/[-:]/g, "");
 }
 
 /** TEXT value escaping: backslash, semicolon, comma and line breaks (RFC 5545, 3.3.11). */
@@ -77,14 +80,22 @@ export function appointmentCalendarFilename(trackingId: string): string {
   return `consultation-${trackingId}.ics`;
 }
 
-export function buildAppointmentCalendarEvent(input: AppointmentCalendarInput): string {
+export function buildAppointmentCalendarEvent(
+  input: AppointmentCalendarInput
+): string {
   const copy = CALENDAR_COPY[input.language];
   const end = new Date(input.start.getTime() + input.durationMinutes * 60_000);
   const separator = input.language === "fr" ? " : " : ": ";
   const description = [
     `${copy.reference}${separator}${input.trackingId}`,
-    ...(input.modalityText ? [`${copy.modality}${separator}${input.modalityText}`] : []),
-    ...(input.contact ? [`${copy.contact}${input.language === "fr" ? " ?" : "?"} ${input.contact.email} · ${input.contact.phone}`] : []),
+    ...(input.modalityText
+      ? [`${copy.modality}${separator}${input.modalityText}`]
+      : []),
+    ...(input.contact
+      ? [
+          `${copy.contact}${input.language === "fr" ? " ?" : "?"} ${input.contact.email} · ${input.contact.phone}`,
+        ]
+      : []),
   ].join("\n");
   const lines = [
     "BEGIN:VCALENDAR",

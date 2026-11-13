@@ -52,7 +52,8 @@ const KEPT_HOLD_REPORTED_AFTER_MS = 24 * 60 * 60 * 1000;
  * The two minutes between them absorb the clock difference between the app,
  * which computes the end, and the database, which stamps the creation.
  */
-const CHECKOUT_HOLD_LIMIT_MINUTES = (APPOINTMENT_HOLD_MS + 2 * 60 * 1000) / 60_000;
+const CHECKOUT_HOLD_LIMIT_MINUTES =
+  (APPOINTMENT_HOLD_MS + 2 * 60 * 1000) / 60_000;
 
 /**
  * Hold still within its Checkout session, as opposed to one the cleanup kept
@@ -70,9 +71,14 @@ export function holdWithinCheckoutSession() {
  * once the slot has begun. Returns null when the slot is too close to leave a
  * valid Stripe expiry: the booking must then be refused.
  */
-export function getAppointmentHoldExpiry(now = new Date(), appointmentStart?: Date): Date | null {
+export function getAppointmentHoldExpiry(
+  now = new Date(),
+  appointmentStart?: Date
+): Date | null {
   const latest = now.getTime() + APPOINTMENT_HOLD_MS;
-  const expiresAt = appointmentStart ? Math.min(latest, appointmentStart.getTime()) : latest;
+  const expiresAt = appointmentStart
+    ? Math.min(latest, appointmentStart.getTime())
+    : latest;
   if (expiresAt - now.getTime() < STRIPE_CHECKOUT_MIN_EXPIRY_MS) return null;
   return new Date(expiresAt);
 }
@@ -93,7 +99,12 @@ export function getExpiredAppointmentHoldUpdate(cancelledAt = new Date()) {
 
 type Database = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 type ExpiredHoldOutcome = "released" | "confirmed" | "kept";
-type ExpiredHold = { id: number; trackingId: string; stripeSessionId: string; createdAt: Date };
+type ExpiredHold = {
+  id: number;
+  trackingId: string;
+  stripeSessionId: string;
+  createdAt: Date;
+};
 /**
  * `fulfillmentTimeoutMs`: how long the post-payment emails of a paid hold are
  * tried right away (the webhook's budget by default).
@@ -106,11 +117,17 @@ type SettleOptions = { fulfillmentTimeoutMs?: number };
  * account after a key change, invalid id), as opposed to a transient failure.
  */
 function isMissingStripeSession(error: unknown) {
-  const { statusCode, code } = (error ?? {}) as { statusCode?: unknown; code?: unknown };
+  const { statusCode, code } = (error ?? {}) as {
+    statusCode?: unknown;
+    code?: unknown;
+  };
   return statusCode === 404 || code === "resource_missing";
 }
 
-function buildMissingSessionHoldAlert(input: { trackingId: string; stripeSessionId: string }) {
+function buildMissingSessionHoldAlert(input: {
+  trackingId: string;
+  stripeSessionId: string;
+}) {
   return {
     title: `Réservation libérée : session Stripe introuvable (${input.trackingId})`,
     content: [
@@ -123,12 +140,17 @@ function buildMissingSessionHoldAlert(input: { trackingId: string; stripeSession
 }
 
 async function releaseExpiredHold(db: Database, hold: ExpiredHold, now: Date) {
-  const result = await db.update(appointments).set(getExpiredAppointmentHoldUpdate(now)).where(and(
-    eq(appointments.id, hold.id),
-    eq(appointments.stripeSessionId, hold.stripeSessionId),
-    eq(appointments.paymentStatus, "pending"),
-    eq(appointments.appointmentStatus, "held"),
-  ));
+  const result = await db
+    .update(appointments)
+    .set(getExpiredAppointmentHoldUpdate(now))
+    .where(
+      and(
+        eq(appointments.id, hold.id),
+        eq(appointments.stripeSessionId, hold.stripeSessionId),
+        eq(appointments.paymentStatus, "pending"),
+        eq(appointments.appointmentStatus, "held")
+      )
+    );
   return mutationRowCount(result) === 1;
 }
 
@@ -139,18 +161,29 @@ async function releaseExpiredHold(db: Database, hold: ExpiredHold, now: Date) {
  */
 async function keepExpiredHold(db: Database, hold: ExpiredHold, now: Date) {
   try {
-    await db.update(appointments).set({ holdExpiresAt: new Date(now.getTime() + KEPT_HOLD_RECHECK_MS) }).where(and(
-      eq(appointments.id, hold.id),
-      eq(appointments.stripeSessionId, hold.stripeSessionId),
-      eq(appointments.paymentStatus, "pending"),
-      eq(appointments.appointmentStatus, "held"),
-      lte(appointments.holdExpiresAt, now),
-    ));
+    await db
+      .update(appointments)
+      .set({ holdExpiresAt: new Date(now.getTime() + KEPT_HOLD_RECHECK_MS) })
+      .where(
+        and(
+          eq(appointments.id, hold.id),
+          eq(appointments.stripeSessionId, hold.stripeSessionId),
+          eq(appointments.paymentStatus, "pending"),
+          eq(appointments.appointmentStatus, "held"),
+          lte(appointments.holdExpiresAt, now)
+        )
+      );
   } catch (error) {
-    console.error("[AppointmentHolds] Kept hold could not be extended", { trackingId: hold.trackingId, error: error instanceof Error ? error.name : "UnknownError" });
+    console.error("[AppointmentHolds] Kept hold could not be extended", {
+      trackingId: hold.trackingId,
+      error: error instanceof Error ? error.name : "UnknownError",
+    });
   }
   if (now.getTime() - hold.createdAt.getTime() > KEPT_HOLD_REPORTED_AFTER_MS) {
-    console.error("[AppointmentHolds] Hold kept for over a day; check its Stripe session and payment", { trackingId: hold.trackingId });
+    console.error(
+      "[AppointmentHolds] Hold kept for over a day; check its Stripe session and payment",
+      { trackingId: hold.trackingId }
+    );
   }
 }
 
@@ -163,42 +196,68 @@ async function keepExpiredHold(db: Database, hold: ExpiredHold, now: Date) {
  * Stripe does not know at all can never be paid there, so its hold is released
  * and the owner told.
  */
-async function settleExpiredHold(db: Database, stripe: () => Stripe, hold: ExpiredHold, now: Date, options: SettleOptions): Promise<ExpiredHoldOutcome> {
+async function settleExpiredHold(
+  db: Database,
+  stripe: () => Stripe,
+  hold: ExpiredHold,
+  now: Date,
+  options: SettleOptions
+): Promise<ExpiredHoldOutcome> {
   let session: Stripe.Checkout.Session;
   try {
     session = await stripe().checkout.sessions.retrieve(hold.stripeSessionId);
   } catch (error) {
     if (isMissingStripeSession(error)) {
-      if (!await releaseExpiredHold(db, hold, now)) return "kept";
-      console.warn("[AppointmentHolds] Stripe does not know the session of an expired hold; hold released", { trackingId: hold.trackingId });
-      await notifyOwner(buildMissingSessionHoldAlert(hold), { idempotencyKey: `appointment-hold-missing-session-${hold.trackingId}` }).catch(() => false);
+      if (!(await releaseExpiredHold(db, hold, now))) return "kept";
+      console.warn(
+        "[AppointmentHolds] Stripe does not know the session of an expired hold; hold released",
+        { trackingId: hold.trackingId }
+      );
+      await notifyOwner(buildMissingSessionHoldAlert(hold), {
+        idempotencyKey: `appointment-hold-missing-session-${hold.trackingId}`,
+      }).catch(() => false);
       return "released";
     }
     // Unreachable, rate limited or not configured.
-    console.warn("[AppointmentHolds] Stripe session could not be checked; hold kept until the next run", { trackingId: hold.trackingId });
+    console.warn(
+      "[AppointmentHolds] Stripe session could not be checked; hold kept until the next run",
+      { trackingId: hold.trackingId }
+    );
     return "kept";
   }
   try {
-    if (session.status === "open") session = await stripe().checkout.sessions.expire(hold.stripeSessionId);
+    if (session.status === "open")
+      session = await stripe().checkout.sessions.expire(hold.stripeSessionId);
   } catch {
     // Unreachable, or the session was just paid while being closed.
-    console.warn("[AppointmentHolds] Open Stripe session could not be closed; hold kept until the next run", { trackingId: hold.trackingId });
+    console.warn(
+      "[AppointmentHolds] Open Stripe session could not be closed; hold kept until the next run",
+      { trackingId: hold.trackingId }
+    );
     return "kept";
   }
   if (session.payment_status === "paid") {
     try {
       // Once the consultation time has passed, the fulfillment queue skips the
       // patient confirmation and alerts the owner instead.
-      const completion = await handleCheckoutSessionCompleted(session, { fulfillmentTimeoutMs: options.fulfillmentTimeoutMs });
-      return completion.outcome === "confirmed" || completion.outcome === "duplicate" ? "confirmed" : "kept";
+      const completion = await handleCheckoutSessionCompleted(session, {
+        fulfillmentTimeoutMs: options.fulfillmentTimeoutMs,
+      });
+      return completion.outcome === "confirmed" ||
+        completion.outcome === "duplicate"
+        ? "confirmed"
+        : "kept";
     } catch {
-      console.error("[AppointmentHolds] Paid session of an expired hold could not be confirmed; hold kept until the next run", { trackingId: hold.trackingId });
+      console.error(
+        "[AppointmentHolds] Paid session of an expired hold could not be confirmed; hold kept until the next run",
+        { trackingId: hold.trackingId }
+      );
       return "kept";
     }
   }
   // Complete but not paid yet (delayed payment method): the webhook settles it.
   if (session.status !== "expired") return "kept";
-  return await releaseExpiredHold(db, hold, now) ? "released" : "kept";
+  return (await releaseExpiredHold(db, hold, now)) ? "released" : "kept";
 }
 
 /**
@@ -213,30 +272,46 @@ async function settleExpiredHold(db: Database, stripe: () => Stripe, hold: Expir
  * (bookingHoldSettlementFulfillment) bounds what another patient's booking
  * waits for the emails of a hold it confirms.
  */
-export async function releaseExpiredAppointmentHolds(stripe: () => Stripe, now = new Date(), options: SettleOptions = {}) {
+export async function releaseExpiredAppointmentHolds(
+  stripe: () => Stripe,
+  now = new Date(),
+  options: SettleOptions = {}
+) {
   const db = await getDb();
   if (!db) throw new Error("appointment_hold_database_unavailable");
   const expiredHold = and(
     eq(appointments.paymentStatus, "pending"),
     eq(appointments.appointmentStatus, "held"),
-    lte(appointments.holdExpiresAt, now),
+    lte(appointments.holdExpiresAt, now)
   );
   const withoutSession = await db
     .update(appointments)
     .set(getExpiredAppointmentHoldUpdate(now))
     .where(and(expiredHold, isNull(appointments.stripeSessionId)));
   const withSession = await db
-    .select({ id: appointments.id, trackingId: appointments.trackingId, stripeSessionId: appointments.stripeSessionId, createdAt: appointments.createdAt })
+    .select({
+      id: appointments.id,
+      trackingId: appointments.trackingId,
+      stripeSessionId: appointments.stripeSessionId,
+      createdAt: appointments.createdAt,
+    })
     .from(appointments)
     .where(and(expiredHold, isNotNull(appointments.stripeSessionId)))
     .orderBy(appointments.holdExpiresAt)
     .limit(EXPIRED_HOLDS_CHECKED_PER_RUN);
-  const outcomes = await Promise.all(withSession.map(async row => {
-    const hold = { ...row, stripeSessionId: row.stripeSessionId! };
-    const outcome = await settleExpiredHold(db, stripe, hold, now, options);
-    if (outcome === "kept") await keepExpiredHold(db, hold, now);
-    return outcome;
-  }));
-  const count = (outcome: ExpiredHoldOutcome) => outcomes.filter(value => value === outcome).length;
-  return { released: mutationRowCount(withoutSession) + count("released"), confirmed: count("confirmed"), kept: count("kept") };
+  const outcomes = await Promise.all(
+    withSession.map(async row => {
+      const hold = { ...row, stripeSessionId: row.stripeSessionId! };
+      const outcome = await settleExpiredHold(db, stripe, hold, now, options);
+      if (outcome === "kept") await keepExpiredHold(db, hold, now);
+      return outcome;
+    })
+  );
+  const count = (outcome: ExpiredHoldOutcome) =>
+    outcomes.filter(value => value === outcome).length;
+  return {
+    released: mutationRowCount(withoutSession) + count("released"),
+    confirmed: count("confirmed"),
+    kept: count("kept"),
+  };
 }

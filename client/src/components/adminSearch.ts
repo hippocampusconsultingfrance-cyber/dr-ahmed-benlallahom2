@@ -54,7 +54,13 @@ export function useAdminFilterDelay<T extends string>(value: T): T {
  * has loaded: the list's count for the term, or that nothing matches. Empty
  * without search, and while that first page loads or fails.
  */
-export function adminSearchStatus(search: string | undefined, list: { isLoading: boolean; error: unknown; shown: number; total: number }, noun: string): string {
+export function adminSearchStatus(
+  search: string | undefined,
+  list: { isLoading: boolean; error: unknown; shown: number; total: number },
+  noun: string
+): string {
   if (!search || list.isLoading || list.error) return "";
-  return list.shown ? `${adminListCount(list.shown, list.total, noun)} pour « ${search} »` : `Aucun résultat pour « ${search} »`;
+  return list.shown
+    ? `${adminListCount(list.shown, list.total, noun)} pour « ${search} »`
+    : `Aucun résultat pour « ${search} »`;
 }

@@ -14,9 +14,15 @@ import {
 
 class MemoryStorage {
   private values = new Map<string, string>();
-  getItem(key: string) { return this.values.get(key) ?? null; }
-  setItem(key: string, value: string) { this.values.set(key, value); }
-  removeItem(key: string) { this.values.delete(key); }
+  getItem(key: string) {
+    return this.values.get(key) ?? null;
+  }
+  setItem(key: string, value: string) {
+    this.values.set(key, value);
+  }
+  removeItem(key: string) {
+    this.values.delete(key);
+  }
 }
 
 const NOW = Date.UTC(2026, 9, 16, 10, 0);
@@ -52,16 +58,31 @@ describe("réservation en attente après un retour depuis Stripe", () => {
   });
 
   it("ignore une valeur corrompue et conserve la saisie du formulaire", () => {
-    (window as unknown as { sessionStorage: MemoryStorage }).sessionStorage.setItem("booking:pending:v1", "{not json");
+    (
+      window as unknown as { sessionStorage: MemoryStorage }
+    ).sessionStorage.setItem("booking:pending:v1", "{not json");
     expect(loadPendingBooking(NOW)).toBeNull();
-    saveBookingDraft({ name: "Patient Test", email: "patient@example.test", phone: "+33612345678", appointmentDate: "2026-10-20T08:00:00.000Z", details: "Demande d’avis" });
-    expect(loadBookingDraft()).toMatchObject({ name: "Patient Test", appointmentDate: "2026-10-20T08:00:00.000Z" });
+    saveBookingDraft({
+      name: "Patient Test",
+      email: "patient@example.test",
+      phone: "+33612345678",
+      appointmentDate: "2026-10-20T08:00:00.000Z",
+      details: "Demande d’avis",
+    });
+    expect(loadBookingDraft()).toMatchObject({
+      name: "Patient Test",
+      appointmentDate: "2026-10-20T08:00:00.000Z",
+    });
     clearBookingDraft();
     expect(loadBookingDraft()).toBeNull();
   });
 
   it("reste utilisable sans stockage (navigation privée bloquée)", () => {
-    vi.stubGlobal("window", { get sessionStorage() { throw new Error("SecurityError"); } });
+    vi.stubGlobal("window", {
+      get sessionStorage() {
+        throw new Error("SecurityError");
+      },
+    });
     expect(() => savePendingBooking(pending)).not.toThrow();
     expect(loadPendingBooking(NOW)).toBeNull();
     expect(loadBookingDraft()).toBeNull();

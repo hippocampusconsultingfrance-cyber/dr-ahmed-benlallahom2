@@ -9,7 +9,10 @@ export const adminTestimonialsRouter = router({
   list: adminProcedure.query(async () => {
     const db = await getDb();
     if (!db) return [];
-    return await db.select().from(testimonials).orderBy(desc(testimonials.createdAt));
+    return await db
+      .select()
+      .from(testimonials)
+      .orderBy(desc(testimonials.createdAt));
   }),
 
   updateStatus: adminProcedure
@@ -24,7 +27,9 @@ export const adminTestimonialsRouter = router({
       const db = await getDb();
       if (!db) throw new Error("Database connection failed");
 
-      const updateData: Partial<typeof testimonials.$inferInsert> = { status: input.status };
+      const updateData: Partial<typeof testimonials.$inferInsert> = {
+        status: input.status,
+      };
       if (input.featured !== undefined) updateData.featured = input.featured;
 
       await db

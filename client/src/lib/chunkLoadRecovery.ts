@@ -19,11 +19,17 @@ export const CHUNK_RELOAD_GUARD_MS = 60_000;
 
 /** Same-origin /static/ URL named in a module loading error (Chrome, Edge, Firefox name it; Safari does not). */
 export function failedChunkUrl(error: unknown, origin: string): string | null {
-  const message = error instanceof Error ? error.message : typeof error === "string" ? error : "";
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : "";
   for (const candidate of message.match(/https?:\/\/[^\s"'<>]+/g) ?? []) {
     try {
       const url = new URL(candidate);
-      if (url.origin === origin && url.pathname.startsWith("/static/")) return url.href;
+      if (url.origin === origin && url.pathname.startsWith("/static/"))
+        return url.href;
     } catch {
       // Not a URL: keep looking.
     }
@@ -36,11 +42,16 @@ type RecoveryWindow = Pick<Window, "addEventListener" | "sessionStorage"> & {
   fetch: typeof fetch;
 };
 
-export function installChunkLoadRecovery(target: RecoveryWindow = window, now: () => number = Date.now) {
+export function installChunkLoadRecovery(
+  target: RecoveryWindow = window,
+  now: () => number = Date.now
+) {
   target.addEventListener("vite:preloadError", event => {
     let canReload = false;
     try {
-      const last = Number(target.sessionStorage.getItem(CHUNK_RELOAD_GUARD_KEY) ?? 0);
+      const last = Number(
+        target.sessionStorage.getItem(CHUNK_RELOAD_GUARD_KEY) ?? 0
+      );
       if (now() - last >= CHUNK_RELOAD_GUARD_MS) {
         target.sessionStorage.setItem(CHUNK_RELOAD_GUARD_KEY, String(now()));
         canReload = true;
@@ -48,9 +59,15 @@ export function installChunkLoadRecovery(target: RecoveryWindow = window, now: (
     } catch {
       canReload = false;
     }
-    const url = failedChunkUrl((event as Event & { payload?: unknown }).payload, target.location.origin);
+    const url = failedChunkUrl(
+      (event as Event & { payload?: unknown }).payload,
+      target.location.origin
+    );
     const refreshed = url
-      ? target.fetch(url, { cache: "reload", credentials: "same-origin" }).then(() => undefined, () => undefined)
+      ? target.fetch(url, { cache: "reload", credentials: "same-origin" }).then(
+          () => undefined,
+          () => undefined
+        )
       : Promise.resolve();
     if (canReload) void refreshed.then(() => target.location.reload());
   });

@@ -5,9 +5,17 @@ import { serveStatic } from "./static";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { clerkMiddleware } from "@clerk/express";
-import { assertCriticalProductionEnvironment, clerkPublishableKey, LOCAL_STRIPE_API_URL_VARIABLE, localDevelopmentShortcuts } from "./env";
+import {
+  assertCriticalProductionEnvironment,
+  clerkPublishableKey,
+  LOCAL_STRIPE_API_URL_VARIABLE,
+  localDevelopmentShortcuts,
+} from "./env";
 import { registerHealthRoute } from "./health";
-import { contentSecurityPolicyHeaders, registerCspReportRoute } from "./contentSecurityPolicy";
+import {
+  contentSecurityPolicyHeaders,
+  registerCspReportRoute,
+} from "./contentSecurityPolicy";
 import { registerGoogleDriveOAuthRoutes } from "../googleDriveOAuthRoutes";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
@@ -55,8 +63,14 @@ export async function createApp() {
   app.use((_req, res, next) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
-    res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(self)");
-    res.setHeader("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
+    res.setHeader(
+      "Permissions-Policy",
+      "camera=(), microphone=(), geolocation=(), payment=(self)"
+    );
+    res.setHeader(
+      "Strict-Transport-Security",
+      "max-age=63072000; includeSubDomains; preload"
+    );
     for (const [name, value] of cspHeaders) res.setHeader(name, value);
     next();
   });
@@ -72,10 +86,16 @@ export async function createApp() {
   // clerkMiddleware, which would answer every request with a 500; createContext then
   // signs nobody in, so the public site works and /admin stays closed.
   if (!localDevelopmentShortcuts().includes("clerk_optional")) {
-    app.use(clerkMiddleware({
-      publishableKey: clerkPublishableKey(),
-      authorizedParties: [PUBLIC_APP_ORIGIN, "http://localhost:3000", "http://127.0.0.1:3000"],
-    }));
+    app.use(
+      clerkMiddleware({
+        publishableKey: clerkPublishableKey(),
+        authorizedParties: [
+          PUBLIC_APP_ORIGIN,
+          "http://localhost:3000",
+          "http://127.0.0.1:3000",
+        ],
+      })
+    );
   }
 
   // Stripe and Resend webhooks (MUST be before express.json() to receive raw body)
@@ -115,9 +135,14 @@ export async function createApp() {
   // one and the client always sends JSON, so any other POST body is refused
   // here, before tRPC.
   app.use("/api/trpc", (req, res, next) => {
-    const contentType = String(req.headers["content-type"] ?? "").split(";")[0].trim().toLowerCase();
+    const contentType = String(req.headers["content-type"] ?? "")
+      .split(";")[0]
+      .trim()
+      .toLowerCase();
     if (req.method === "POST" && contentType !== "application/json") {
-      return res.status(415).json({ error: "Format de requête non pris en charge." });
+      return res
+        .status(415)
+        .json({ error: "Format de requête non pris en charge." });
     }
     next();
   });
@@ -162,10 +187,18 @@ async function startServer() {
   // Local development (CODE-15): without Resend or Stripe keys, local doubles write
   // every email and payment to the console (server/_core/localServices.ts).
   const shortcuts = localDevelopmentShortcuts();
-  if (shortcuts.length > 0) console.log(`[Local mode] ${shortcuts.join(", ")} (README, « Mode local »)`);
-  if (shortcuts.includes("console_emails") || shortcuts.includes("console_payments")) {
+  if (shortcuts.length > 0)
+    console.log(
+      `[Local mode] ${shortcuts.join(", ")} (README, « Mode local »)`
+    );
+  if (
+    shortcuts.includes("console_emails") ||
+    shortcuts.includes("console_payments")
+  ) {
     const { startLocalServices } = await import("./localServices");
-    const local = await startLocalServices({ appOrigin: `http://127.0.0.1:${port}` });
+    const local = await startLocalServices({
+      appOrigin: `http://127.0.0.1:${port}`,
+    });
     if (shortcuts.includes("console_emails")) {
       process.env.RESEND_API_KEY = "re_local_console";
       process.env.RESEND_BASE_URL = local.origin;

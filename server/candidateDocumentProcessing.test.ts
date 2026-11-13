@@ -1,44 +1,113 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { candidateAccounts, candidateDocumentAuditLogs, candidateDocumentProcessingJobs, candidateDocuments } from "../drizzle/schema";
+import {
+  candidateAccounts,
+  candidateDocumentAuditLogs,
+  candidateDocumentProcessingJobs,
+  candidateDocuments,
+} from "../drizzle/schema";
 import { canRequestCandidateDocumentReanalysis } from "../shared/candidateDocumentReanalysis";
-import { createInMemoryDrizzle, type InMemoryDrizzle } from "./testSupport/inMemoryDrizzle";
+import {
+  createInMemoryDrizzle,
+  type InMemoryDrizzle,
+} from "./testSupport/inMemoryDrizzle";
 import type { TrpcContext } from "./_core/context";
 
-const state = vi.hoisted(() => ({ db: null as unknown, analyses: [] as number[] }));
+const state = vi.hoisted(() => ({
+  db: null as unknown,
+  analyses: [] as number[],
+}));
 
 vi.mock("./db", () => ({ getDb: async () => state.db }));
-vi.mock("./_core/notification", () => ({ notifyOwner: vi.fn(async () => true) }));
-vi.mock("./adminMfa", async importOriginal => ({ ...await importOriginal<typeof import("./adminMfa")>(), isAdminMfaVerified: vi.fn(async () => true) }));
-vi.mock("./storage", () => ({ storageGetSignedUrl: vi.fn(async (key: string) => `https://blob.test/${key}`) }));
+vi.mock("./_core/notification", () => ({
+  notifyOwner: vi.fn(async () => true),
+}));
+vi.mock("./adminMfa", async importOriginal => ({
+  ...(await importOriginal<typeof import("./adminMfa")>()),
+  isAdminMfaVerified: vi.fn(async () => true),
+}));
+vi.mock("./storage", () => ({
+  storageGetSignedUrl: vi.fn(async (key: string) => `https://blob.test/${key}`),
+}));
 vi.mock("./candidateDocumentAnalysis", async importOriginal => ({
-  ...await importOriginal<typeof import("./candidateDocumentAnalysis")>(),
+  ...(await importOriginal<typeof import("./candidateDocumentAnalysis")>()),
   analyzeCandidateDocument: vi.fn(async (input: { attempt: number }) => {
     state.analyses.push(input.attempt);
     // Each await yields: a concurrent run gets its turn in the middle of the analysis.
     await new Promise(resolve => setTimeout(resolve, 5));
-    return { model: "test-model", analysis: { documentKind: "Diplôme", summary: "Synthèse de test", issuingOrganization: null, issueDate: null, expiryDate: null, confidence: 80, flags: [], missingInformation: [] } };
+    return {
+      model: "test-model",
+      analysis: {
+        documentKind: "Diplôme",
+        summary: "Synthèse de test",
+        issuingOrganization: null,
+        issueDate: null,
+        expiryDate: null,
+        confidence: 80,
+        flags: [],
+        missingInformation: [],
+      },
+    };
   }),
 }));
-vi.stubGlobal("fetch", vi.fn(async () => new Response(Buffer.from("%PDF-1.7 diplome"))));
+vi.stubGlobal(
+  "fetch",
+  vi.fn(async () => new Response(Buffer.from("%PDF-1.7 diplome")))
+);
 
-const { processDueCandidateDocumentAnalysisJobs, recoverStaleCandidateDocumentJobs } = await import("./candidateDocumentProcessing");
-const { analyzeCandidateDocument } = await import("./candidateDocumentAnalysis");
-const { ProcessingDeadlineError, runWithProcessingDeadline } = await import("./processingDeadline");
-const { runCandidateDocumentProcessingWorker } = await import("./scheduledJobs");
-const { adminCandidateDocumentsRouter } = await import("./routers/admin/candidateDocuments");
+const {
+  processDueCandidateDocumentAnalysisJobs,
+  recoverStaleCandidateDocumentJobs,
+} = await import("./candidateDocumentProcessing");
+const { analyzeCandidateDocument } = await import(
+  "./candidateDocumentAnalysis"
+);
+const { ProcessingDeadlineError, runWithProcessingDeadline } = await import(
+  "./processingDeadline"
+);
+const { runCandidateDocumentProcessingWorker } = await import(
+  "./scheduledJobs"
+);
+const { adminCandidateDocumentsRouter } = await import(
+  "./routers/admin/candidateDocuments"
+);
 
 const MINUTE = 60_000;
-const worker = () => runCandidateDocumentProcessingWorker({ batchSize: 1, maxBatches: 6, budgetMs: 20_000 });
-
-function db() { return state.db as InMemoryDrizzle; }
-
-function seedDiploma(document: Record<string, unknown> = {}, job: Record<string, unknown> | null = {}) {
-  const row = db().seed(candidateDocuments, {
-    candidateId: 1, category: "diploma", originalName: "diplome.pdf", storageKey: "candidate-documents/quarantine/1/diplome.pdf",
-    mimeType: "application/pdf", sizeBytes: 2048, checksum: "0".repeat(64), status: "uploaded", analysisStatus: "queued",
-    createdAt: new Date(Date.now() - 3 * 24 * 60 * MINUTE), ...document,
+const worker = () =>
+  runCandidateDocumentProcessingWorker({
+    batchSize: 1,
+    maxBatches: 6,
+    budgetMs: 20_000,
   });
-  if (job) db().seed(candidateDocumentProcessingJobs, { documentId: row.id, status: "queued", maxAttempts: 3, scheduledFor: new Date(Date.now() - MINUTE), ...job });
+
+function db() {
+  return state.db as InMemoryDrizzle;
+}
+
+function seedDiploma(
+  document: Record<string, unknown> = {},
+  job: Record<string, unknown> | null = {}
+) {
+  const row = db().seed(candidateDocuments, {
+    candidateId: 1,
+    category: "diploma",
+    originalName: "diplome.pdf",
+    storageKey: "candidate-documents/quarantine/1/diplome.pdf",
+    mimeType: "application/pdf",
+    sizeBytes: 2048,
+    checksum: "0".repeat(64),
+    status: "uploaded",
+    analysisStatus: "queued",
+    createdAt: new Date(Date.now() - 3 * 24 * 60 * MINUTE),
+    ...document,
+  });
+  if (job)
+    db().seed(candidateDocumentProcessingJobs, {
+      documentId: row.id,
+      status: "queued",
+      maxAttempts: 3,
+      scheduledFor: new Date(Date.now() - MINUTE),
+      ...job,
+    });
   return row;
 }
 
@@ -49,7 +118,10 @@ function admin() {
     user: { openId: "user_owner", role: "admin" } as TrpcContext["user"],
     mfaVerified: true,
     req: { protocol: "https", headers: {} } as TrpcContext["req"],
-    res: { clearCookie: vi.fn(), cookie: vi.fn() } as unknown as TrpcContext["res"],
+    res: {
+      clearCookie: vi.fn(),
+      cookie: vi.fn(),
+    } as unknown as TrpcContext["res"],
   });
 }
 
@@ -57,190 +129,515 @@ beforeEach(() => {
   state.db = createInMemoryDrizzle();
   state.analyses.length = 0;
   vi.mocked(analyzeCandidateDocument).mockClear();
-  db().seed(candidateAccounts, { email: "vera@example.test", firstName: "Vera", lastName: "Victime", passwordHash: "scrypt$unused" });
+  db().seed(candidateAccounts, {
+    email: "vera@example.test",
+    firstName: "Vera",
+    lastName: "Victime",
+    passwordHash: "scrypt$unused",
+  });
 });
 
 describe("EXPL-12 — document interrompu en cours d’analyse", () => {
   it("une tâche « running » depuis 2 jours repasse en file au passage suivant, et son document est analysé", async () => {
-    const document = seedDiploma({ status: "analyzing", analysisStatus: "analyzing", analysisAttempts: 1 }, { status: "running", attempts: 1, startedAt: new Date(Date.now() - 2 * 24 * 60 * MINUTE) });
+    const document = seedDiploma(
+      { status: "analyzing", analysisStatus: "analyzing", analysisAttempts: 1 },
+      {
+        status: "running",
+        attempts: 1,
+        startedAt: new Date(Date.now() - 2 * 24 * 60 * MINUTE),
+      }
+    );
 
-    await expect(worker()).resolves.toMatchObject({ jobsRecovered: 1, jobsExhausted: 0, processed: 1, completed: 1 });
+    await expect(worker()).resolves.toMatchObject({
+      jobsRecovered: 1,
+      jobsExhausted: 0,
+      processed: 1,
+      completed: 1,
+    });
 
     // The interrupted attempt counts: this run is the second.
     expect(state.analyses).toEqual([2]);
     expect(jobs()).toMatchObject([{ status: "completed", attempts: 2 }]);
-    expect(document).toMatchObject({ status: "needs_review", analysisStatus: "completed", analysisAttempts: 2 });
+    expect(document).toMatchObject({
+      status: "needs_review",
+      analysisStatus: "completed",
+      analysisAttempts: 2,
+    });
   });
 
   it("une tâche encore récente est laissée au passage qui la traite", async () => {
-    const document = seedDiploma({ status: "analyzing", analysisStatus: "analyzing" }, { status: "running", attempts: 1, startedAt: new Date(Date.now() - 5 * MINUTE) });
+    const document = seedDiploma(
+      { status: "analyzing", analysisStatus: "analyzing" },
+      {
+        status: "running",
+        attempts: 1,
+        startedAt: new Date(Date.now() - 5 * MINUTE),
+      }
+    );
 
-    await expect(recoverStaleCandidateDocumentJobs()).resolves.toEqual({ recovered: 0, exhausted: 0, closed: 0 });
+    await expect(recoverStaleCandidateDocumentJobs()).resolves.toEqual({
+      recovered: 0,
+      exhausted: 0,
+      closed: 0,
+    });
     expect(jobs()).toMatchObject([{ status: "running", attempts: 1 }]);
     expect(document).toMatchObject({ analysisStatus: "analyzing" });
   });
 
   it("une tâche interrompue à sa dernière tentative passe le document en revue humaine, sans nouvel appel à l’IA", async () => {
-    const document = seedDiploma({ status: "analyzing", analysisStatus: "analyzing", analysisAttempts: 3 }, { status: "running", attempts: 3, startedAt: new Date(Date.now() - 20 * MINUTE) });
+    const document = seedDiploma(
+      { status: "analyzing", analysisStatus: "analyzing", analysisAttempts: 3 },
+      {
+        status: "running",
+        attempts: 3,
+        startedAt: new Date(Date.now() - 20 * MINUTE),
+      }
+    );
 
-    await expect(worker()).resolves.toMatchObject({ jobsRecovered: 0, jobsExhausted: 1, processed: 0 });
+    await expect(worker()).resolves.toMatchObject({
+      jobsRecovered: 0,
+      jobsExhausted: 1,
+      processed: 0,
+    });
 
     expect(state.analyses).toEqual([]);
-    expect(jobs()).toMatchObject([{ status: "completed", lastError: "worker_interrupted_attempts_exhausted" }]);
-    expect(document).toMatchObject({ status: "needs_review", analysisStatus: "needs_review", analysisLastError: "worker_interrupted_attempts_exhausted", aiConfidence: 0 });
-    expect(JSON.parse(String(document.aiFlags))).toEqual(["ai_analysis_unavailable", "worker_interrupted_attempts_exhausted"]);
-    expect(db().rows(candidateDocumentAuditLogs)).toMatchObject([{ documentId: document.id, candidateId: 1, actorType: "system", action: "analysis_completed" }]);
+    expect(jobs()).toMatchObject([
+      {
+        status: "completed",
+        lastError: "worker_interrupted_attempts_exhausted",
+      },
+    ]);
+    expect(document).toMatchObject({
+      status: "needs_review",
+      analysisStatus: "needs_review",
+      analysisLastError: "worker_interrupted_attempts_exhausted",
+      aiConfidence: 0,
+    });
+    expect(JSON.parse(String(document.aiFlags))).toEqual([
+      "ai_analysis_unavailable",
+      "worker_interrupted_attempts_exhausted",
+    ]);
+    expect(db().rows(candidateDocumentAuditLogs)).toMatchObject([
+      {
+        documentId: document.id,
+        candidateId: 1,
+        actorType: "system",
+        action: "analysis_completed",
+      },
+    ]);
   });
 
   it("ne rouvre pas l’analyse d’un document déjà terminée quand seule sa tâche est restée « running »", async () => {
-    const document = seedDiploma({ status: "needs_review", analysisStatus: "completed", aiSummary: "Analyse gardée" }, { status: "running", attempts: 3, startedAt: new Date(Date.now() - 20 * MINUTE) });
+    const document = seedDiploma(
+      {
+        status: "needs_review",
+        analysisStatus: "completed",
+        aiSummary: "Analyse gardée",
+      },
+      {
+        status: "running",
+        attempts: 3,
+        startedAt: new Date(Date.now() - 20 * MINUTE),
+      }
+    );
 
-    await expect(recoverStaleCandidateDocumentJobs()).resolves.toEqual({ recovered: 0, exhausted: 0, closed: 1 });
+    await expect(recoverStaleCandidateDocumentJobs()).resolves.toEqual({
+      recovered: 0,
+      exhausted: 0,
+      closed: 1,
+    });
 
-    expect(jobs()).toMatchObject([{ status: "completed", lastError: "worker_interrupted_document_settled" }]);
-    expect(document).toMatchObject({ status: "needs_review", analysisStatus: "completed", aiSummary: "Analyse gardée" });
+    expect(jobs()).toMatchObject([
+      { status: "completed", lastError: "worker_interrupted_document_settled" },
+    ]);
+    expect(document).toMatchObject({
+      status: "needs_review",
+      analysisStatus: "completed",
+      aiSummary: "Analyse gardée",
+    });
     expect(db().rows(candidateDocumentAuditLogs)).toHaveLength(0);
   });
 
   it("ne relance pas l’IA sur un document déjà analysé et approuvé dont la tâche est restée « running » avant sa dernière tentative", async () => {
-    const document = seedDiploma({ status: "reviewed", analysisStatus: "completed", aiSummary: "Analyse gardée", reviewNotes: "Original vérifié" }, { status: "running", attempts: 1, startedAt: new Date(Date.now() - 2 * 24 * 60 * MINUTE) });
+    const document = seedDiploma(
+      {
+        status: "reviewed",
+        analysisStatus: "completed",
+        aiSummary: "Analyse gardée",
+        reviewNotes: "Original vérifié",
+      },
+      {
+        status: "running",
+        attempts: 1,
+        startedAt: new Date(Date.now() - 2 * 24 * 60 * MINUTE),
+      }
+    );
 
-    await expect(worker()).resolves.toMatchObject({ jobsRecovered: 0, jobsExhausted: 0, jobsClosed: 1, processed: 0 });
+    await expect(worker()).resolves.toMatchObject({
+      jobsRecovered: 0,
+      jobsExhausted: 0,
+      jobsClosed: 1,
+      processed: 0,
+    });
 
     expect(state.analyses).toEqual([]);
-    expect(jobs()).toMatchObject([{ status: "completed", attempts: 1, lastError: "worker_interrupted_document_settled" }]);
-    expect(document).toMatchObject({ status: "reviewed", analysisStatus: "completed", aiSummary: "Analyse gardée", reviewNotes: "Original vérifié" });
+    expect(jobs()).toMatchObject([
+      {
+        status: "completed",
+        attempts: 1,
+        lastError: "worker_interrupted_document_settled",
+      },
+    ]);
+    expect(document).toMatchObject({
+      status: "reviewed",
+      analysisStatus: "completed",
+      aiSummary: "Analyse gardée",
+      reviewNotes: "Original vérifié",
+    });
   });
 
   it("garde la décision de l’admin sur un document resté « en cours » qu’il a refusé ou archivé pendant le blocage", async () => {
     const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * MINUTE);
-    const rejected = seedDiploma({ status: "rejected", analysisStatus: "analyzing", reviewNotes: "Document illisible" }, { status: "running", attempts: 1, startedAt: twoDaysAgo });
-    const archived = seedDiploma({ status: "archived", analysisStatus: "analyzing", analysisAttempts: 3 }, { status: "running", attempts: 3, startedAt: twoDaysAgo });
+    const rejected = seedDiploma(
+      {
+        status: "rejected",
+        analysisStatus: "analyzing",
+        reviewNotes: "Document illisible",
+      },
+      { status: "running", attempts: 1, startedAt: twoDaysAgo }
+    );
+    const archived = seedDiploma(
+      { status: "archived", analysisStatus: "analyzing", analysisAttempts: 3 },
+      { status: "running", attempts: 3, startedAt: twoDaysAgo }
+    );
 
-    await expect(worker()).resolves.toMatchObject({ jobsRecovered: 0, jobsExhausted: 0, jobsClosed: 2, processed: 0 });
+    await expect(worker()).resolves.toMatchObject({
+      jobsRecovered: 0,
+      jobsExhausted: 0,
+      jobsClosed: 2,
+      processed: 0,
+    });
 
     expect(state.analyses).toEqual([]);
-    expect(jobs()).toMatchObject([{ status: "completed", lastError: "worker_interrupted_document_settled" }, { status: "completed", lastError: "worker_interrupted_document_settled" }]);
+    expect(jobs()).toMatchObject([
+      { status: "completed", lastError: "worker_interrupted_document_settled" },
+      { status: "completed", lastError: "worker_interrupted_document_settled" },
+    ]);
     // Their analysis no longer says « en cours » once no job is left (EXPL-12).
-    expect(rejected).toMatchObject({ status: "rejected", reviewNotes: "Document illisible", analysisStatus: "needs_review", analysisLastError: "document_settled" });
-    expect(archived).toMatchObject({ status: "archived", analysisAttempts: 3, aiSummary: null, analysisStatus: "needs_review", analysisLastError: "document_settled" });
+    expect(rejected).toMatchObject({
+      status: "rejected",
+      reviewNotes: "Document illisible",
+      analysisStatus: "needs_review",
+      analysisLastError: "document_settled",
+    });
+    expect(archived).toMatchObject({
+      status: "archived",
+      analysisAttempts: 3,
+      aiSummary: null,
+      analysisStatus: "needs_review",
+      analysisLastError: "document_settled",
+    });
     expect(db().rows(candidateDocumentAuditLogs)).toHaveLength(0);
   });
 
   it("garde la décision de l’admin prise après la remise en file d’une tâche interrompue : le passage suivant ferme la tâche sans appel à l’IA", async () => {
-    const document = seedDiploma({ status: "analyzing", analysisStatus: "analyzing", analysisAttempts: 1 }, { status: "running", attempts: 1, startedAt: new Date(Date.now() - 16 * MINUTE) });
-    await expect(recoverStaleCandidateDocumentJobs()).resolves.toMatchObject({ recovered: 1 });
+    const document = seedDiploma(
+      { status: "analyzing", analysisStatus: "analyzing", analysisAttempts: 1 },
+      {
+        status: "running",
+        attempts: 1,
+        startedAt: new Date(Date.now() - 16 * MINUTE),
+      }
+    );
+    await expect(recoverStaleCandidateDocumentJobs()).resolves.toMatchObject({
+      recovered: 1,
+    });
     expect(jobs()).toMatchObject([{ status: "retry" }]);
 
-    await admin().review({ id: Number(document.id), status: "rejected", notes: "Document falsifié" });
-    await expect(worker()).resolves.toMatchObject({ processed: 1, completed: 0, needsReview: 0 });
+    await admin().review({
+      id: Number(document.id),
+      status: "rejected",
+      notes: "Document falsifié",
+    });
+    await expect(worker()).resolves.toMatchObject({
+      processed: 1,
+      completed: 0,
+      needsReview: 0,
+    });
 
     expect(state.analyses).toEqual([]);
-    expect(jobs()).toMatchObject([{ status: "completed", lastError: "document_settled" }]);
-    expect(document).toMatchObject({ status: "rejected", reviewNotes: "Document falsifié", analysisStatus: "needs_review", analysisLastError: "document_settled", aiSummary: null, aiModel: null });
-    expect(db().rows(candidateDocumentAuditLogs).map(log => log.action)).toEqual(["reviewed"]);
+    expect(jobs()).toMatchObject([
+      { status: "completed", lastError: "document_settled" },
+    ]);
+    expect(document).toMatchObject({
+      status: "rejected",
+      reviewNotes: "Document falsifié",
+      analysisStatus: "needs_review",
+      analysisLastError: "document_settled",
+      aiSummary: null,
+      aiModel: null,
+    });
+    expect(
+      db()
+        .rows(candidateDocumentAuditLogs)
+        .map(log => log.action)
+    ).toEqual(["reviewed"]);
   });
 
-  it.each(["reviewed", "archived"] as const)("garde la décision « %s » de l’admin sur un document neuf encore en file, et ne l’envoie pas à l’IA", async decision => {
-    const document = seedDiploma();
+  it.each(["reviewed", "archived"] as const)(
+    "garde la décision « %s » de l’admin sur un document neuf encore en file, et ne l’envoie pas à l’IA",
+    async decision => {
+      const document = seedDiploma();
 
-    await admin().review({ id: Number(document.id), status: decision, notes: "Original vérifié" });
-    await worker();
+      await admin().review({
+        id: Number(document.id),
+        status: decision,
+        notes: "Original vérifié",
+      });
+      await worker();
 
-    expect(state.analyses).toEqual([]);
-    expect(jobs()).toMatchObject([{ status: "completed", lastError: "document_settled" }]);
-    expect(document).toMatchObject({ status: decision, reviewNotes: "Original vérifié", validationStatus: "quarantined", aiSummary: null, analysisStatus: "needs_review", analysisLastError: "document_settled" });
-  });
+      expect(state.analyses).toEqual([]);
+      expect(jobs()).toMatchObject([
+        { status: "completed", lastError: "document_settled" },
+      ]);
+      expect(document).toMatchObject({
+        status: decision,
+        reviewNotes: "Original vérifié",
+        validationStatus: "quarantined",
+        aiSummary: null,
+        analysisStatus: "needs_review",
+        analysisLastError: "document_settled",
+      });
+    }
+  );
 
   it("garde la décision de l’admin prise pendant l’analyse : le résultat de l’IA n’écrase ni le statut ni la note", async () => {
     const document = seedDiploma();
     vi.mocked(analyzeCandidateDocument).mockImplementationOnce(async () => {
-      await admin().review({ id: Number(document.id), status: "rejected", notes: "Refusé pendant l’analyse" });
-      return { model: "test-model", analysis: { documentKind: "Diplôme", summary: "Synthèse de test", issuingOrganization: null, issueDate: null, expiryDate: null, confidence: 80, flags: [], missingInformation: [] } };
+      await admin().review({
+        id: Number(document.id),
+        status: "rejected",
+        notes: "Refusé pendant l’analyse",
+      });
+      return {
+        model: "test-model",
+        analysis: {
+          documentKind: "Diplôme",
+          summary: "Synthèse de test",
+          issuingOrganization: null,
+          issueDate: null,
+          expiryDate: null,
+          confidence: 80,
+          flags: [],
+          missingInformation: [],
+        },
+      };
     });
 
-    await expect(processDueCandidateDocumentAnalysisJobs(1)).resolves.toMatchObject({ processed: 1, completed: 0 });
+    await expect(
+      processDueCandidateDocumentAnalysisJobs(1)
+    ).resolves.toMatchObject({ processed: 1, completed: 0 });
 
-    expect(jobs()).toMatchObject([{ status: "completed", lastError: "document_settled" }]);
-    expect(document).toMatchObject({ status: "rejected", reviewNotes: "Refusé pendant l’analyse", aiSummary: null, aiModel: null, analysisStatus: "needs_review", analysisLastError: "document_settled" });
-    expect(db().rows(candidateDocumentAuditLogs).find(log => log.action === "analysis_completed")).toMatchObject({ metadata: JSON.stringify({ model: "test-model", outcome: "result_dropped_document_settled" }) });
+    expect(jobs()).toMatchObject([
+      { status: "completed", lastError: "document_settled" },
+    ]);
+    expect(document).toMatchObject({
+      status: "rejected",
+      reviewNotes: "Refusé pendant l’analyse",
+      aiSummary: null,
+      aiModel: null,
+      analysisStatus: "needs_review",
+      analysisLastError: "document_settled",
+    });
+    expect(
+      db()
+        .rows(candidateDocumentAuditLogs)
+        .find(log => log.action === "analysis_completed")
+    ).toMatchObject({
+      metadata: JSON.stringify({
+        model: "test-model",
+        outcome: "result_dropped_document_settled",
+      }),
+    });
   });
 
   it.each([
-    ["une erreur de l’IA", () => new Error("candidate_document_ai_unavailable_test")],
+    [
+      "une erreur de l’IA",
+      () => new Error("candidate_document_ai_unavailable_test"),
+    ],
     ["la fin de la fonction", () => new ProcessingDeadlineError("llm")],
-  ])("une analyse arrêtée par %s après la décision de l’admin ne remet pas le document refusé « en attente » : sa tâche est fermée sans nouvel essai", async (_cause, failure) => {
-    const document = seedDiploma();
-    vi.mocked(analyzeCandidateDocument).mockImplementationOnce(async () => {
-      await admin().review({ id: Number(document.id), status: "rejected", notes: "Refusé pendant l’analyse" });
-      throw failure();
-    });
+  ])(
+    "une analyse arrêtée par %s après la décision de l’admin ne remet pas le document refusé « en attente » : sa tâche est fermée sans nouvel essai",
+    async (_cause, failure) => {
+      const document = seedDiploma();
+      vi.mocked(analyzeCandidateDocument).mockImplementationOnce(async () => {
+        await admin().review({
+          id: Number(document.id),
+          status: "rejected",
+          notes: "Refusé pendant l’analyse",
+        });
+        throw failure();
+      });
 
-    await expect(processDueCandidateDocumentAnalysisJobs(1)).resolves.toMatchObject({ processed: 1, retried: 0, released: 0, needsReview: 0 });
+      await expect(
+        processDueCandidateDocumentAnalysisJobs(1)
+      ).resolves.toMatchObject({
+        processed: 1,
+        retried: 0,
+        released: 0,
+        needsReview: 0,
+      });
 
-    expect(jobs()).toMatchObject([{ status: "completed", lastError: "document_settled" }]);
-    expect(document).toMatchObject({ status: "rejected", reviewNotes: "Refusé pendant l’analyse", analysisStatus: "needs_review", analysisLastError: "document_settled", aiSummary: null });
-    await worker();
-    expect(vi.mocked(analyzeCandidateDocument)).toHaveBeenCalledTimes(1);
-  });
+      expect(jobs()).toMatchObject([
+        { status: "completed", lastError: "document_settled" },
+      ]);
+      expect(document).toMatchObject({
+        status: "rejected",
+        reviewNotes: "Refusé pendant l’analyse",
+        analysisStatus: "needs_review",
+        analysisLastError: "document_settled",
+        aiSummary: null,
+      });
+      await worker();
+      expect(vi.mocked(analyzeCandidateDocument)).toHaveBeenCalledTimes(1);
+    }
+  );
 
   it.each([
     ["avant le passage quotidien", "reviewed", false],
     ["pendant l’appel à l’IA", "reviewed", true],
     ["pendant l’appel à l’IA", "archived", true],
-  ] as const)("un document tranché par l’admin %s (%s) n’est plus listé « en file » ni « en cours » une fois sa tâche fermée", async (_moment, decision, duringAnalysis) => {
-    const document = seedDiploma();
-    const decide = () => admin().review({ id: Number(document.id), status: decision, notes: "Original vérifié" });
-    if (duringAnalysis) {
-      vi.mocked(analyzeCandidateDocument).mockImplementationOnce(async () => {
+  ] as const)(
+    "un document tranché par l’admin %s (%s) n’est plus listé « en file » ni « en cours » une fois sa tâche fermée",
+    async (_moment, decision, duringAnalysis) => {
+      const document = seedDiploma();
+      const decide = () =>
+        admin().review({
+          id: Number(document.id),
+          status: decision,
+          notes: "Original vérifié",
+        });
+      if (duringAnalysis) {
+        vi.mocked(analyzeCandidateDocument).mockImplementationOnce(async () => {
+          await decide();
+          return {
+            model: "test-model",
+            analysis: {
+              documentKind: "Diplôme",
+              summary: "Synthèse de test",
+              issuingOrganization: null,
+              issueDate: null,
+              expiryDate: null,
+              confidence: 80,
+              flags: [],
+              missingInformation: [],
+            },
+          };
+        });
+      } else {
         await decide();
-        return { model: "test-model", analysis: { documentKind: "Diplôme", summary: "Synthèse de test", issuingOrganization: null, issueDate: null, expiryDate: null, confidence: 80, flags: [], missingInformation: [] } };
+      }
+
+      await worker();
+
+      expect(await admin().list({ status: decision })).toMatchObject([
+        {
+          status: decision,
+          analysisStatus: "needs_review",
+          hasActiveAnalysisJob: false,
+          aiSummary: null,
+          aiModel: null,
+        },
+      ]);
+      // « Relancer l’analyse » then queues it again, and only then is it analysed.
+      await admin().reanalyze({ id: Number(document.id) });
+      expect(document).toMatchObject({
+        status: "validating",
+        analysisStatus: "queued",
       });
-    } else {
-      await decide();
+      await worker();
+      expect(document).toMatchObject({
+        status: "needs_review",
+        analysisStatus: "completed",
+        analysisLastError: null,
+        aiSummary: "Synthèse de test",
+      });
     }
-
-    await worker();
-
-    expect(await admin().list({ status: decision })).toMatchObject([{ status: decision, analysisStatus: "needs_review", hasActiveAnalysisJob: false, aiSummary: null, aiModel: null }]);
-    // « Relancer l’analyse » then queues it again, and only then is it analysed.
-    await admin().reanalyze({ id: Number(document.id) });
-    expect(document).toMatchObject({ status: "validating", analysisStatus: "queued" });
-    await worker();
-    expect(document).toMatchObject({ status: "needs_review", analysisStatus: "completed", analysisLastError: null, aiSummary: "Synthèse de test" });
-  });
+  );
 
   it("deux passages simultanés ne prennent la tâche qu’une fois : le document est analysé une seule fois", async () => {
     const document = seedDiploma();
 
-    const [first, second] = await Promise.all([processDueCandidateDocumentAnalysisJobs(1), processDueCandidateDocumentAnalysisJobs(1)]);
+    const [first, second] = await Promise.all([
+      processDueCandidateDocumentAnalysisJobs(1),
+      processDueCandidateDocumentAnalysisJobs(1),
+    ]);
 
     expect(first.processed + second.processed).toBe(1);
     expect(first.completed + second.completed).toBe(1);
     expect(state.analyses).toEqual([1]);
     expect(jobs()).toMatchObject([{ status: "completed", attempts: 1 }]);
-    expect(document).toMatchObject({ analysisStatus: "completed", analysisAttempts: 1 });
+    expect(document).toMatchObject({
+      analysisStatus: "completed",
+      analysisAttempts: 1,
+    });
   });
 
   it("deux reprises simultanées ne remettent la tâche en file qu’une fois", async () => {
-    seedDiploma({ status: "analyzing", analysisStatus: "analyzing" }, { status: "running", attempts: 1, startedAt: new Date(Date.now() - 20 * MINUTE) });
+    seedDiploma(
+      { status: "analyzing", analysisStatus: "analyzing" },
+      {
+        status: "running",
+        attempts: 1,
+        startedAt: new Date(Date.now() - 20 * MINUTE),
+      }
+    );
 
-    const [first, second] = await Promise.all([recoverStaleCandidateDocumentJobs(), recoverStaleCandidateDocumentJobs()]);
+    const [first, second] = await Promise.all([
+      recoverStaleCandidateDocumentJobs(),
+      recoverStaleCandidateDocumentJobs(),
+    ]);
 
     expect(first.recovered + second.recovered).toBe(1);
-    expect(jobs()).toMatchObject([{ status: "retry", attempts: 1, startedAt: null, lastError: "worker_interrupted" }]);
+    expect(jobs()).toMatchObject([
+      {
+        status: "retry",
+        attempts: 1,
+        startedAt: null,
+        lastError: "worker_interrupted",
+      },
+    ]);
   });
 
   it("une analyse que la fin de la fonction ne laisse pas commencer rend la tâche à la file sans compter de tentative", async () => {
     const document = seedDiploma({}, { status: "retry", attempts: 1 });
     const second = seedDiploma({ originalName: "licence.pdf" });
-    vi.mocked(analyzeCandidateDocument).mockRejectedValueOnce(new ProcessingDeadlineError("llm"));
+    vi.mocked(analyzeCandidateDocument).mockRejectedValueOnce(
+      new ProcessingDeadlineError("llm")
+    );
 
-    const result = await runWithProcessingDeadline(Date.now() + 5_000, () => processDueCandidateDocumentAnalysisJobs(2));
+    const result = await runWithProcessingDeadline(Date.now() + 5_000, () =>
+      processDueCandidateDocumentAnalysisJobs(2)
+    );
 
-    expect(result).toMatchObject({ processed: 1, completed: 0, retried: 0, needsReview: 0, released: 1 });
-    expect(jobs()[0]).toMatchObject({ status: "retry", attempts: 1, startedAt: null });
-    expect(document).toMatchObject({ status: "uploaded", analysisStatus: "queued", analysisAttempts: 1 });
+    expect(result).toMatchObject({
+      processed: 1,
+      completed: 0,
+      retried: 0,
+      needsReview: 0,
+      released: 1,
+    });
+    expect(jobs()[0]).toMatchObject({
+      status: "retry",
+      attempts: 1,
+      startedAt: null,
+    });
+    expect(document).toMatchObject({
+      status: "uploaded",
+      analysisStatus: "queued",
+      analysisAttempts: 1,
+    });
     // No other analysis starts in this run.
     expect(jobs()[1]).toMatchObject({ status: "queued", attempts: 0 });
     expect(second).toMatchObject({ analysisStatus: "queued" });
@@ -270,63 +667,160 @@ describe("DATA-06 — « Relancer l’analyse » d’un document resté sans tâ
 
     const listed = await admin().list({});
     const card = (id: unknown) => listed.find(document => document.id === id)!;
-    expect(card(stuck.id)).toMatchObject({ analysisStatus: "queued", hasActiveAnalysisJob: false });
-    expect(card(queued.id)).toMatchObject({ analysisStatus: "queued", hasActiveAnalysisJob: true });
+    expect(card(stuck.id)).toMatchObject({
+      analysisStatus: "queued",
+      hasActiveAnalysisJob: false,
+    });
+    expect(card(queued.id)).toMatchObject({
+      analysisStatus: "queued",
+      hasActiveAnalysisJob: true,
+    });
     // The dashboard's button follows the same rule.
     expect(canRequestCandidateDocumentReanalysis(card(stuck.id))).toBe(true);
     expect(canRequestCandidateDocumentReanalysis(card(queued.id))).toBe(false);
 
-    await expect(admin().reanalyze({ id: Number(stuck.id) })).resolves.toEqual({ success: true, queued: true });
-    expect(jobs().filter(job => job.documentId === stuck.id)).toMatchObject([{ status: "queued", attempts: 0 }]);
-    await expect(admin().reanalyze({ id: Number(stuck.id) })).rejects.toMatchObject({ code: "CONFLICT", message: "Une analyse de ce document est déjà en cours." });
-    await expect(admin().reanalyze({ id: Number(queued.id) })).rejects.toMatchObject({ code: "CONFLICT" });
+    await expect(admin().reanalyze({ id: Number(stuck.id) })).resolves.toEqual({
+      success: true,
+      queued: true,
+    });
+    expect(jobs().filter(job => job.documentId === stuck.id)).toMatchObject([
+      { status: "queued", attempts: 0 },
+    ]);
+    await expect(
+      admin().reanalyze({ id: Number(stuck.id) })
+    ).rejects.toMatchObject({
+      code: "CONFLICT",
+      message: "Une analyse de ce document est déjà en cours.",
+    });
+    await expect(
+      admin().reanalyze({ id: Number(queued.id) })
+    ).rejects.toMatchObject({ code: "CONFLICT" });
   });
 
   it("relance sans attendre le passage quotidien un document dont la tâche est restée « running » depuis plus de 15 min, une seule fois (EXPL-12)", async () => {
-    const stuck = seedDiploma({ status: "analyzing", analysisStatus: "analyzing", analysisAttempts: 1 }, { status: "running", attempts: 1, startedAt: new Date(Date.now() - 2 * 24 * 60 * MINUTE) });
-    const running = seedDiploma({ originalName: "licence.pdf", status: "analyzing", analysisStatus: "analyzing" }, { status: "running", attempts: 1, startedAt: new Date(Date.now() - 5 * MINUTE) });
+    const stuck = seedDiploma(
+      { status: "analyzing", analysisStatus: "analyzing", analysisAttempts: 1 },
+      {
+        status: "running",
+        attempts: 1,
+        startedAt: new Date(Date.now() - 2 * 24 * 60 * MINUTE),
+      }
+    );
+    const running = seedDiploma(
+      {
+        originalName: "licence.pdf",
+        status: "analyzing",
+        analysisStatus: "analyzing",
+      },
+      {
+        status: "running",
+        attempts: 1,
+        startedAt: new Date(Date.now() - 5 * MINUTE),
+      }
+    );
 
     const listed = await admin().list({});
-    expect(listed.find(document => document.id === stuck.id)).toMatchObject({ hasActiveAnalysisJob: false });
-    expect(listed.find(document => document.id === running.id)).toMatchObject({ hasActiveAnalysisJob: true });
-    await expect(admin().reanalyze({ id: Number(running.id) })).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(listed.find(document => document.id === stuck.id)).toMatchObject({
+      hasActiveAnalysisJob: false,
+    });
+    expect(listed.find(document => document.id === running.id)).toMatchObject({
+      hasActiveAnalysisJob: true,
+    });
+    await expect(
+      admin().reanalyze({ id: Number(running.id) })
+    ).rejects.toMatchObject({ code: "CONFLICT" });
 
-    await expect(admin().reanalyze({ id: Number(stuck.id) })).resolves.toEqual({ success: true, queued: true });
+    await expect(admin().reanalyze({ id: Number(stuck.id) })).resolves.toEqual({
+      success: true,
+      queued: true,
+    });
     expect(jobs().filter(job => job.documentId === stuck.id)).toMatchObject([
-      { status: "completed", lastError: "worker_interrupted_reanalysis_requested" },
+      {
+        status: "completed",
+        lastError: "worker_interrupted_reanalysis_requested",
+      },
       { status: "queued", attempts: 0 },
     ]);
     // The next run analyses it once: the interrupted job is not queued again.
-    await expect(worker()).resolves.toMatchObject({ jobsRecovered: 0, processed: 1, completed: 1 });
+    await expect(worker()).resolves.toMatchObject({
+      jobsRecovered: 0,
+      processed: 1,
+      completed: 1,
+    });
     expect(state.analyses).toEqual([1]);
-    expect(stuck).toMatchObject({ status: "needs_review", analysisStatus: "completed" });
+    expect(stuck).toMatchObject({
+      status: "needs_review",
+      analysisStatus: "completed",
+    });
   });
 
   it("« Relancer l’analyse » pendant que le passage quotidien recrée la tâche manquante : l’IA ne lit le document qu’une fois", async () => {
-    const document = seedDiploma({ createdAt: new Date(Date.now() - 16 * MINUTE) }, null);
-    await expect(admin().reanalyze({ id: Number(document.id) })).resolves.toEqual({ success: true, queued: true });
-    db().seed(candidateDocumentProcessingJobs, { documentId: document.id, status: "queued", maxAttempts: 3, scheduledFor: new Date() });
+    const document = seedDiploma(
+      { createdAt: new Date(Date.now() - 16 * MINUTE) },
+      null
+    );
+    await expect(
+      admin().reanalyze({ id: Number(document.id) })
+    ).resolves.toEqual({ success: true, queued: true });
+    db().seed(candidateDocumentProcessingJobs, {
+      documentId: document.id,
+      status: "queued",
+      maxAttempts: 3,
+      scheduledFor: new Date(),
+    });
     let concurrent: unknown;
     vi.mocked(analyzeCandidateDocument).mockImplementationOnce(async input => {
       state.analyses.push(input.attempt);
       // A second run takes the other job while the first one is being analysed.
       concurrent = await processDueCandidateDocumentAnalysisJobs(1);
-      return { model: "test-model", analysis: { documentKind: "Diplôme", summary: "Synthèse de test", issuingOrganization: null, issueDate: null, expiryDate: null, confidence: 80, flags: [], missingInformation: [] } };
+      return {
+        model: "test-model",
+        analysis: {
+          documentKind: "Diplôme",
+          summary: "Synthèse de test",
+          issuingOrganization: null,
+          issueDate: null,
+          expiryDate: null,
+          confidence: 80,
+          flags: [],
+          missingInformation: [],
+        },
+      };
     });
 
-    await expect(processDueCandidateDocumentAnalysisJobs(1)).resolves.toMatchObject({ processed: 1, completed: 1 });
+    await expect(
+      processDueCandidateDocumentAnalysisJobs(1)
+    ).resolves.toMatchObject({ processed: 1, completed: 1 });
 
     expect(concurrent).toMatchObject({ processed: 1, completed: 0 });
     expect(state.analyses).toEqual([1]);
-    expect(jobs()).toMatchObject([{ status: "completed", lastError: null }, { status: "completed", lastError: "document_settled" }]);
-    expect(document).toMatchObject({ status: "needs_review", analysisStatus: "completed" });
-    expect(db().rows(candidateDocumentAuditLogs).filter(log => log.action === "analysis_completed")).toHaveLength(1);
+    expect(jobs()).toMatchObject([
+      { status: "completed", lastError: null },
+      { status: "completed", lastError: "document_settled" },
+    ]);
+    expect(document).toMatchObject({
+      status: "needs_review",
+      analysisStatus: "completed",
+    });
+    expect(
+      db()
+        .rows(candidateDocumentAuditLogs)
+        .filter(log => log.action === "analysis_completed")
+    ).toHaveLength(1);
   });
 
   it("relance un document resté « en cours » dont la tâche s’est terminée sans le mettre à jour", async () => {
-    const document = seedDiploma({ status: "analyzing", analysisStatus: "analyzing" }, { status: "completed", attempts: 1, finishedAt: new Date() });
+    const document = seedDiploma(
+      { status: "analyzing", analysisStatus: "analyzing" },
+      { status: "completed", attempts: 1, finishedAt: new Date() }
+    );
 
-    await expect(admin().reanalyze({ id: Number(document.id) })).resolves.toEqual({ success: true, queued: true });
-    expect(document).toMatchObject({ status: "validating", analysisStatus: "queued" });
+    await expect(
+      admin().reanalyze({ id: Number(document.id) })
+    ).resolves.toEqual({ success: true, queued: true });
+    expect(document).toMatchObject({
+      status: "validating",
+      analysisStatus: "queued",
+    });
   });
 });

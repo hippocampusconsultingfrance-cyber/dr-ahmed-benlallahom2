@@ -8,7 +8,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // qu’il faut changer pour chaque incohérence relevée selon VERCEL_ENV (EXPL-20),
 // dont le serveur n’envoie que le code.
 
-const view = vi.hoisted(() => ({ data: undefined as undefined | { ok: boolean; missing: string[]; enforced: boolean; warnings?: string[] }, procedures: [] as string[] }));
+const view = vi.hoisted(() => ({
+  data: undefined as
+    | undefined
+    | {
+        ok: boolean;
+        missing: string[];
+        enforced: boolean;
+        warnings?: string[];
+      },
+  procedures: [] as string[],
+}));
 
 vi.mock("@/lib/trpc", () => ({
   trpc: {
@@ -23,10 +33,15 @@ vi.mock("@/lib/trpc", () => ({
   },
 }));
 
-const { default: AdminConfigurationBanner, CONFIGURATION_WARNING_ADVICE, MISSING_VARIABLE_IMPACT } = await import("./AdminConfigurationBanner");
+const {
+  default: AdminConfigurationBanner,
+  CONFIGURATION_WARNING_ADVICE,
+  MISSING_VARIABLE_IMPACT,
+} = await import("./AdminConfigurationBanner");
 const { CONFIGURATION_WARNINGS } = await import("../../../server/_core/env");
 
-const render = () => renderToStaticMarkup(createElement(AdminConfigurationBanner));
+const render = () =>
+  renderToStaticMarkup(createElement(AdminConfigurationBanner));
 
 beforeEach(() => {
   view.data = undefined;
@@ -35,7 +50,11 @@ beforeEach(() => {
 
 describe("bandeau admin de configuration", () => {
   it("annonce les noms manquants et leur effet dans une alerte", () => {
-    view.data = { ok: false, missing: ["CRON_SECRET", "RESEND_WEBHOOK_SECRET"], enforced: true };
+    view.data = {
+      ok: false,
+      missing: ["CRON_SECRET", "RESEND_WEBHOOK_SECRET"],
+      enforced: true,
+    };
     const html = render();
 
     expect(view.procedures).toEqual(["system.configurationStatus"]);
@@ -56,14 +75,21 @@ describe("bandeau admin de configuration", () => {
   });
 
   it("dit ce qu’il faut changer pour une clé de test en production, sans variable manquante", () => {
-    view.data = { ok: true, missing: [], enforced: true, warnings: ["stripe_test_key_in_production", "turnstile_test_key"] };
+    view.data = {
+      ok: true,
+      missing: [],
+      enforced: true,
+      warnings: ["stripe_test_key_in_production", "turnstile_test_key"],
+    };
     const html = render();
 
     expect(html).toMatch(/^<div role="alert"/);
     expect(html).toContain("Configuration à vérifier");
     expect(html).not.toContain("Configuration de production incomplète");
     expect(html).toContain("aucun paiement réel n’est encaissé");
-    expect(html).toContain("la vérification anti-robot des formulaires publics accepte tout");
+    expect(html).toContain(
+      "la vérification anti-robot des formulaires publics accepte tout"
+    );
     expect(html).not.toContain("préproduction (Preview)");
   });
 
@@ -73,16 +99,29 @@ describe("bandeau admin de configuration", () => {
       return render();
     };
     // The owner's account has another id in Clerk's production instance: without it, no one is admin.
-    expect(advice("clerk_test_key_in_production")).toContain("l’identifiant de ce compte (user_…) dans CLERK_OWNER_USER_ID");
+    expect(advice("clerk_test_key_in_production")).toContain(
+      "l’identifiant de ce compte (user_…) dans CLERK_OWNER_USER_ID"
+    );
     // A real secret with Cloudflare's test site key refuses the dummy token of every public form.
-    expect(advice("turnstile_test_key")).toContain("la clé de site et la clé secrète d’un même widget du site (Cloudflare → Turnstile) dans VITE_TURNSTILE_SITE_KEY et TURNSTILE_SECRET_KEY");
+    expect(advice("turnstile_test_key")).toContain(
+      "la clé de site et la clé secrète d’un même widget du site (Cloudflare → Turnstile) dans VITE_TURNSTILE_SITE_KEY et TURNSTILE_SECRET_KEY"
+    );
     // Restricted Stripe keys are flagged too: the advice names their prefix.
-    expect(advice("stripe_test_key_in_production")).toContain("sk_test_ ou rk_test_");
-    expect(advice("live_key_in_preview")).toContain("Stripe (sk_live_, rk_live_)");
+    expect(advice("stripe_test_key_in_production")).toContain(
+      "sk_test_ ou rk_test_"
+    );
+    expect(advice("live_key_in_preview")).toContain(
+      "Stripe (sk_live_, rk_live_)"
+    );
   });
 
   it("montre ensemble les variables manquantes et les incohérences", () => {
-    view.data = { ok: false, missing: ["CRON_SECRET"], enforced: true, warnings: ["live_key_in_preview"] };
+    view.data = {
+      ok: false,
+      missing: ["CRON_SECRET"],
+      enforced: true,
+      warnings: ["live_key_in_preview"],
+    };
     const html = render();
 
     expect(html.match(/role="alert"/g)).toHaveLength(1);
@@ -98,7 +137,14 @@ describe("bandeau admin de configuration", () => {
       expect(CONFIGURATION_WARNING_ADVICE[code], code).toBeTruthy();
       expect(html, code).not.toContain(`>${code}<`);
     }
-    view.data = { ok: true, missing: [], enforced: true, warnings: ["public_origin_mismatch"] };
-    expect(render()).toContain("PUBLIC_APP_ORIGIN n’est pas exactement https://drahmedbenlallahom.com");
+    view.data = {
+      ok: true,
+      missing: [],
+      enforced: true,
+      warnings: ["public_origin_mismatch"],
+    };
+    expect(render()).toContain(
+      "PUBLIC_APP_ORIGIN n’est pas exactement https://drahmedbenlallahom.com"
+    );
   });
 });

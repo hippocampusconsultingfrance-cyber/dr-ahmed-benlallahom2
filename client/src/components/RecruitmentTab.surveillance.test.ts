@@ -1,7 +1,10 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { MANUAL_REVIEW_FALLBACK_MODEL, RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "@shared/recruitmentAiAnalysis";
+import {
+  MANUAL_REVIEW_FALLBACK_MODEL,
+  RECRUITMENT_ANALYSIS_PROMPT_VERSION,
+} from "@shared/recruitmentAiAnalysis";
 
 // REC-08 et REC-09 dans l’onglet Candidatures : un dossier que l’IA n’a pas
 // pu analyser (facturation) est étiqueté comme tel, et les copies Drive en
@@ -9,36 +12,108 @@ import { MANUAL_REVIEW_FALLBACK_MODEL, RECRUITMENT_ANALYSIS_PROMPT_VERSION } fro
 
 const view = vi.hoisted(() => ({
   items: [] as Array<Record<string, unknown>>,
-  driveStatus: { connected: true, lastError: null as string | null, failedExports: 0 },
+  driveStatus: {
+    connected: true,
+    lastError: null as string | null,
+    failedExports: 0,
+  },
 }));
 
-const dossier = (id: number, lastName: string, extra: Record<string, unknown>) => ({
-  id, trackingId: `CV${id}`, firstName: "Dr", lastName, email: `${lastName}@test.local`, phone: null, specialty: "Anesthésie", targetCountries: "[]", languages: "[]",
-  diplomaCountry: null, availability: null, mobility: null, certifications: null, yearsExperience: null, message: null, status: "new",
-  aiScore: null, aiSummary: null, aiStrengths: null, aiWeaknesses: null, aiExtractedSkills: null, aiMatchReasoning: null, aiAnalyzedAt: null,
-  analysisStatus: "queued", analysisAttempts: 1, analysisLastError: null, analysisModel: null, analysisPromptVersion: null, extractionWarnings: null,
-  driveExport: null, emailDelivery: null, candidatePortalActive: false, ...extra,
+const dossier = (
+  id: number,
+  lastName: string,
+  extra: Record<string, unknown>
+) => ({
+  id,
+  trackingId: `CV${id}`,
+  firstName: "Dr",
+  lastName,
+  email: `${lastName}@test.local`,
+  phone: null,
+  specialty: "Anesthésie",
+  targetCountries: "[]",
+  languages: "[]",
+  diplomaCountry: null,
+  availability: null,
+  mobility: null,
+  certifications: null,
+  yearsExperience: null,
+  message: null,
+  status: "new",
+  aiScore: null,
+  aiSummary: null,
+  aiStrengths: null,
+  aiWeaknesses: null,
+  aiExtractedSkills: null,
+  aiMatchReasoning: null,
+  aiAnalyzedAt: null,
+  analysisStatus: "queued",
+  analysisAttempts: 1,
+  analysisLastError: null,
+  analysisModel: null,
+  analysisPromptVersion: null,
+  extractionWarnings: null,
+  driveExport: null,
+  emailDelivery: null,
+  candidatePortalActive: false,
+  ...extra,
 });
 
 const mutation = () => ({ mutate: vi.fn(), isPending: false });
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() } }));
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
+}));
 vi.mock("./Candidate360Dialog", () => ({ default: () => null }));
 vi.mock("@/lib/trpc", () => ({
   trpc: {
-    useUtils: () => ({ admin: { recruitment: { list: { invalidate: vi.fn() } } } }),
+    useUtils: () => ({
+      admin: { recruitment: { list: { invalidate: vi.fn() } } },
+    }),
     // The list loads its pages of 50 through useQueries (ADM-01): one page here, which says
     // whether a dossier has an analysis without carrying it (ADM-20).
     useQueries: (build: (t: unknown) => unknown[]) => {
       const t = { admin: { recruitment: { list: (input: unknown) => input } } };
-      return build(t).map(() => ({ data: { items: view.items.map(item => ({ ...item, hasAiSummary: Boolean(item.aiSummary) })), total: view.items.length }, isLoading: false, error: null, refetch: vi.fn() }));
+      return build(t).map(() => ({
+        data: {
+          items: view.items.map(item => ({
+            ...item,
+            hasAiSummary: Boolean(item.aiSummary),
+          })),
+          total: view.items.length,
+        },
+        isLoading: false,
+        error: null,
+        refetch: vi.fn(),
+      }));
     },
     admin: {
       recruitment: {
-        list: { useQuery: () => ({ data: { items: view.items, total: view.items.length }, isLoading: false, error: null, refetch: vi.fn() }) },
-        profiles: { list: { useQuery: () => ({ data: [], refetch: vi.fn() }) }, create: { useMutation: mutation }, delete: { useMutation: mutation } },
-        detail: { useQuery: () => ({ data: undefined, isLoading: true, isFetching: false, error: null, refetch: vi.fn() }) },
+        list: {
+          useQuery: () => ({
+            data: { items: view.items, total: view.items.length },
+            isLoading: false,
+            error: null,
+            refetch: vi.fn(),
+          }),
+        },
+        profiles: {
+          list: { useQuery: () => ({ data: [], refetch: vi.fn() }) },
+          create: { useMutation: mutation },
+          delete: { useMutation: mutation },
+        },
+        detail: {
+          useQuery: () => ({
+            data: undefined,
+            isLoading: true,
+            isFetching: false,
+            error: null,
+            refetch: vi.fn(),
+          }),
+        },
         driveExport: {
-          status: { useQuery: () => ({ data: view.driveStatus, refetch: vi.fn() }) },
+          status: {
+            useQuery: () => ({ data: view.driveStatus, refetch: vi.fn() }),
+          },
           retry: { useMutation: mutation },
           retryAllFailed: { useMutation: mutation },
         },
@@ -64,17 +139,39 @@ function render() {
 /** Text of the score chip, right after the dossier's tracking reference. */
 function scoreChipOf(html: string, trackingId: string) {
   const after = html.slice(html.indexOf(`· ${trackingId}<`));
-  return /<span class="rounded-full border px-2\.5 py-1 text-xs font-medium [^"]*">([^<]+)<\/span>/.exec(after)?.[1];
+  return /<span class="rounded-full border px-2\.5 py-1 text-xs font-medium [^"]*">([^<]+)<\/span>/.exec(
+    after
+  )?.[1];
 }
 
 describe("REC-08 — dossier sans analyse IA (facturation du fournisseur)", () => {
   it("étiquette « Analyse IA indisponible », y compris un dossier enregistré avant le statut dédié ; les autres étiquettes ne changent pas", () => {
-    const fallback = { aiSummary: "Le texte du CV a été extrait avec succès. L’analyse IA complète est temporairement indisponible.", analysisModel: MANUAL_REVIEW_FALLBACK_MODEL, analysisPromptVersion: RECRUITMENT_ANALYSIS_PROMPT_VERSION };
+    const fallback = {
+      aiSummary:
+        "Le texte du CV a été extrait avec succès. L’analyse IA complète est temporairement indisponible.",
+      analysisModel: MANUAL_REVIEW_FALLBACK_MODEL,
+      analysisPromptVersion: RECRUITMENT_ANALYSIS_PROMPT_VERSION,
+    };
     view.items = [
-      dossier(1, "Degraded", { ...fallback, analysisStatus: "degraded", analysisLastError: "ai_gateway_billing_unavailable" }),
+      dossier(1, "Degraded", {
+        ...fallback,
+        analysisStatus: "degraded",
+        analysisLastError: "ai_gateway_billing_unavailable",
+      }),
       dossier(2, "Legacy", { ...fallback, analysisStatus: "needs_review" }),
-      dossier(3, "Outdated", { aiSummary: "Ancienne synthèse", aiScore: 90, analysisStatus: "completed", analysisPromptVersion: "recruitment-v6" }),
-      dossier(4, "Scored", { aiSummary: "Synthèse", aiScore: 82, analysisStatus: "completed", analysisModel: "openai/gpt-6-astra", analysisPromptVersion: RECRUITMENT_ANALYSIS_PROMPT_VERSION }),
+      dossier(3, "Outdated", {
+        aiSummary: "Ancienne synthèse",
+        aiScore: 90,
+        analysisStatus: "completed",
+        analysisPromptVersion: "recruitment-v6",
+      }),
+      dossier(4, "Scored", {
+        aiSummary: "Synthèse",
+        aiScore: 82,
+        analysisStatus: "completed",
+        analysisModel: "openai/gpt-6-astra",
+        analysisPromptVersion: RECRUITMENT_ANALYSIS_PROMPT_VERSION,
+      }),
       dossier(5, "Pending", {}),
     ];
     const html = render();
@@ -99,7 +196,11 @@ describe("REC-09 — relance groupée des copies Google Drive", () => {
 
   it("garde l’appel à la reconnexion visible quand la connexion est à renouveler", () => {
     view.items = [];
-    view.driveStatus = { connected: true, lastError: "google_drive_token_invalid_grant", failedExports: 2 };
+    view.driveStatus = {
+      connected: true,
+      lastError: "google_drive_token_invalid_grant",
+      failedExports: 2,
+    };
     const html = render();
     expect(html).toContain("Reconnexion Google Drive requise");
     expect(html).toContain("Relancer toutes les copies échouées (2)");

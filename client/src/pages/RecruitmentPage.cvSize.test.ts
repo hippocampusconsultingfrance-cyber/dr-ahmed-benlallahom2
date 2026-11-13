@@ -1,6 +1,10 @@
 import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { elementsOf, renderStateful, resetStatefulHooks } from "@/testing/statefulRender";
+import {
+  elementsOf,
+  renderStateful,
+  resetStatefulHooks,
+} from "@/testing/statefulRender";
 
 // Taille du CV choisi dans le formulaire standard, sous son nom : en Ko pour un
 // petit fichier (et non « 0.00 MB »), en Mo au-delà, avec les unités et la
@@ -8,25 +12,48 @@ import { elementsOf, renderStateful, resetStatefulHooks } from "@/testing/statef
 
 const state = vi.hoisted(() => ({ language: "fr" }));
 
-vi.mock("react", async importOriginal => (await import("@/testing/statefulRender")).withStatefulHooks(await importOriginal()));
-vi.mock("@/contexts/LanguageContext", () => ({ useLanguage: () => ({ language: state.language }) }));
-vi.mock("@/components/TurnstileWidget", () => ({ TurnstileWidget: function TurnstileWidget() { return null; } }));
+vi.mock("react", async importOriginal =>
+  (await import("@/testing/statefulRender")).withStatefulHooks(
+    await importOriginal()
+  )
+);
+vi.mock("@/contexts/LanguageContext", () => ({
+  useLanguage: () => ({ language: state.language }),
+}));
+vi.mock("@/components/TurnstileWidget", () => ({
+  TurnstileWidget: function TurnstileWidget() {
+    return null;
+  },
+}));
 vi.mock("@/components/Navigation", () => ({ default: () => null }));
 vi.mock("@/components/Footer", () => ({ default: () => null }));
-vi.mock("@/components/SEOHead", () => ({ SEOHead: function SEOHead() { return null; } }));
-vi.mock("wouter", () => ({ useLocation: () => ["/recruitment/standard", vi.fn()], Link: () => null }));
+vi.mock("@/components/SEOHead", () => ({
+  SEOHead: function SEOHead() {
+    return null;
+  },
+}));
+vi.mock("wouter", () => ({
+  useLocation: () => ["/recruitment/standard", vi.fn()],
+  Link: () => null,
+}));
 
 const { default: RecruitmentPage } = await import("./RecruitmentPage");
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the props of any element of the tree, read and called as each test needs
 type Element = { type: unknown; props: Record<string, any> };
-const elements = () => elementsOf(renderStateful(RecruitmentPage as () => ReactElement)) as Element[];
-const byId = (id: string) => elements().find(element => element.props.id === id)!;
+const elements = () =>
+  elementsOf(
+    renderStateful(RecruitmentPage as () => ReactElement)
+  ) as Element[];
+const byId = (id: string) =>
+  elements().find(element => element.props.id === id)!;
 const textOf = (node: unknown): string => {
-  if (node === null || node === undefined || typeof node === "boolean") return "";
+  if (node === null || node === undefined || typeof node === "boolean")
+    return "";
   if (typeof node === "string" || typeof node === "number") return String(node);
   if (Array.isArray(node)) return node.map(textOf).join("");
-  if (typeof node === "object" && "props" in (node as object)) return textOf((node as Element).props.children);
+  if (typeof node === "object" && "props" in (node as object))
+    return textOf((node as Element).props.children);
   return "";
 };
 
@@ -34,13 +61,28 @@ const textOf = (node: unknown): string => {
 function hintFor(language: string, bytes: number) {
   resetStatefulHooks();
   state.language = language;
-  byId("recruitment-cv").props.onChange({ target: { files: [new File([new Uint8Array(bytes)], "cv.pdf", { type: "application/pdf" })] } });
-  return textOf(byId("recruitment-cv-hint").props.children).replace(/\u00a0/g, " ");
+  byId("recruitment-cv").props.onChange({
+    target: {
+      files: [
+        new File([new Uint8Array(bytes)], "cv.pdf", {
+          type: "application/pdf",
+        }),
+      ],
+    },
+  });
+  return textOf(byId("recruitment-cv-hint").props.children).replace(
+    /\u00a0/g,
+    " "
+  );
 }
 
 beforeEach(() => {
   vi.stubGlobal("window", { requestAnimationFrame: vi.fn() });
-  vi.stubGlobal("document", { addEventListener: vi.fn(), removeEventListener: vi.fn(), getElementById: () => ({ focus: vi.fn() }) });
+  vi.stubGlobal("document", {
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    getElementById: () => ({ focus: vi.fn() }),
+  });
 });
 afterEach(() => {
   resetStatefulHooks();
@@ -59,8 +101,12 @@ describe("taille du CV choisi dans le formulaire standard", () => {
   });
 
   it("passe en Mo au-delà de 1 024 Ko, avec la virgule décimale en français et le point en anglais", () => {
-    expect(hintFor("fr", 1_572_864)).toBe("1,5 Mo · CV (PDF ou DOCX — 4 Mo maximum)");
-    expect(hintFor("en", 1_572_864)).toBe("1.5 MB · CV (PDF or DOCX — 4 MB maximum)");
+    expect(hintFor("fr", 1_572_864)).toBe(
+      "1,5 Mo · CV (PDF ou DOCX — 4 Mo maximum)"
+    );
+    expect(hintFor("en", 1_572_864)).toBe(
+      "1.5 MB · CV (PDF or DOCX — 4 MB maximum)"
+    );
     expect(hintFor("en", 250_000)).toMatch(/^244 KB · /);
     expect(hintFor("fr", 3 * 1024 * 1024 + 41_944)).toMatch(/^3,04 Mo · /);
   });

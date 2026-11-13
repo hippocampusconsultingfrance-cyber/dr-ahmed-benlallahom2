@@ -1,4 +1,7 @@
-import { isCandidateAccessReason, type CandidateAccessReason } from "@shared/candidateAccessReasons";
+import {
+  isCandidateAccessReason,
+  type CandidateAccessReason,
+} from "@shared/candidateAccessReasons";
 import { INVALID_CHARACTERS_REASON } from "@shared/publicFormRefusalReasons";
 import { publicFormCopy } from "@/lib/publicFormCopy";
 
@@ -9,31 +12,39 @@ export const candidateAccountCopy = {
     verifyingTitle: "Vérification sécurisée…",
     verifyingDescription: "Validation de votre lien d’activation en cours.",
     activationTitle: "Activez votre espace candidat",
-    activationDescription: "Votre adresse email est confirmée par ce lien. Vérifiez votre identité et choisissez votre mot de passe pour activer votre espace.",
+    activationDescription:
+      "Votre adresse email est confirmée par ce lien. Vérifiez votre identité et choisissez votre mot de passe pour activer votre espace.",
     firstName: "Prénom",
     lastName: "Nom",
     email: "Email",
-    passwordHint: "Minimum 15 caractères. Choisissez un mot de passe long et unique, que vous n’utilisez nulle part ailleurs.",
+    passwordHint:
+      "Minimum 15 caractères. Choisissez un mot de passe long et unique, que vous n’utilisez nulle part ailleurs.",
     activate: "Activer mon espace",
     verifiedTitle: "Votre espace est activé",
     verifiedDescription: "Redirection vers votre coffre documentaire.",
     invalidTitle: "Lien indisponible",
-    invalidDescription: "Ce lien est invalide ou a expiré. Demandez un nouveau lien depuis l’espace candidat.",
+    invalidDescription:
+      "Ce lien est invalide ou a expiré. Demandez un nouveau lien depuis l’espace candidat.",
     backToAccess: "Retour à la connexion",
     requestNewLink: "Recevoir un nouveau lien",
     resetMetaTitle: "Réinitialisation du mot de passe | Hippocampus Consulting",
     resetMetaDescription: "Réinitialisez votre accès candidat sécurisé.",
     resetTitle: "Nouveau mot de passe",
-    resetDescription: "Choisissez un mot de passe unique d’au moins 15 caractères.",
+    resetDescription:
+      "Choisissez un mot de passe unique d’au moins 15 caractères.",
     password: "Mot de passe",
     confirmPassword: "Confirmer le mot de passe",
     passwordMismatch: "Les deux mots de passe doivent être identiques.",
-    genericError: "Cette action n’a pas pu être finalisée. Vérifiez le lien et réessayez.",
+    genericError:
+      "Cette action n’a pas pu être finalisée. Vérifiez le lien et réessayez.",
     save: "Enregistrer et accéder à mon espace",
     passwordTooShort: "Choisissez un mot de passe d’au moins 15 caractères.",
-    passwordCompromised: "Ce mot de passe a déjà été compromis. Choisissez-en un autre, long et unique.",
-    passwordCheckUnavailable: "Le contrôle de sécurité du mot de passe est temporairement indisponible. Réessayez dans quelques instants.",
-    serviceUnavailable: "Le service candidat est temporairement indisponible. Veuillez réessayer dans quelques instants.",
+    passwordCompromised:
+      "Ce mot de passe a déjà été compromis. Choisissez-en un autre, long et unique.",
+    passwordCheckUnavailable:
+      "Le contrôle de sécurité du mot de passe est temporairement indisponible. Réessayez dans quelques instants.",
+    serviceUnavailable:
+      "Le service candidat est temporairement indisponible. Veuillez réessayer dans quelques instants.",
     invalidCharacters: publicFormCopy.invalidCharacters.fr,
   },
   en: {
@@ -42,16 +53,19 @@ export const candidateAccountCopy = {
     verifyingTitle: "Secure verification…",
     verifyingDescription: "Your activation link is being validated.",
     activationTitle: "Activate your candidate portal",
-    activationDescription: "This link confirms your email address. Check your details and choose your password to activate your portal.",
+    activationDescription:
+      "This link confirms your email address. Check your details and choose your password to activate your portal.",
     firstName: "First name",
     lastName: "Last name",
     email: "Email",
-    passwordHint: "At least 15 characters. Choose a long, unique password that you do not use anywhere else.",
+    passwordHint:
+      "At least 15 characters. Choose a long, unique password that you do not use anywhere else.",
     activate: "Activate my portal",
     verifiedTitle: "Your portal is activated",
     verifiedDescription: "Redirecting to your document vault.",
     invalidTitle: "Link unavailable",
-    invalidDescription: "This link is invalid or has expired. Request a new link from the candidate portal.",
+    invalidDescription:
+      "This link is invalid or has expired. Request a new link from the candidate portal.",
     backToAccess: "Back to sign in",
     requestNewLink: "Get a new link",
     resetMetaTitle: "Password reset | Hippocampus Consulting",
@@ -61,12 +75,16 @@ export const candidateAccountCopy = {
     password: "Password",
     confirmPassword: "Confirm password",
     passwordMismatch: "Both passwords must match.",
-    genericError: "This action could not be completed. Check the link and try again.",
+    genericError:
+      "This action could not be completed. Check the link and try again.",
     save: "Save and access my portal",
     passwordTooShort: "Choose a password of at least 15 characters.",
-    passwordCompromised: "This password has already appeared in a data breach. Choose another one, long and unique.",
-    passwordCheckUnavailable: "The password security check is temporarily unavailable. Please try again in a few moments.",
-    serviceUnavailable: "The candidate service is temporarily unavailable. Please try again in a few moments.",
+    passwordCompromised:
+      "This password has already appeared in a data breach. Choose another one, long and unique.",
+    passwordCheckUnavailable:
+      "The password security check is temporarily unavailable. Please try again in a few moments.",
+    serviceUnavailable:
+      "The candidate service is temporarily unavailable. Please try again in a few moments.",
     invalidCharacters: publicFormCopy.invalidCharacters.en,
   },
   de: {
@@ -75,31 +93,39 @@ export const candidateAccountCopy = {
     verifyingTitle: "Sichere Bestätigung…",
     verifyingDescription: "Ihr Aktivierungslink wird überprüft.",
     activationTitle: "Aktivieren Sie Ihr Kandidatenportal",
-    activationDescription: "Dieser Link bestätigt Ihre E-Mail-Adresse. Prüfen Sie Ihre Angaben und wählen Sie Ihr Passwort, um Ihr Portal zu aktivieren.",
+    activationDescription:
+      "Dieser Link bestätigt Ihre E-Mail-Adresse. Prüfen Sie Ihre Angaben und wählen Sie Ihr Passwort, um Ihr Portal zu aktivieren.",
     firstName: "Vorname",
     lastName: "Nachname",
     email: "E-Mail",
-    passwordHint: "Mindestens 15 Zeichen. Wählen Sie ein langes, eindeutiges Passwort, das Sie nirgendwo sonst verwenden.",
+    passwordHint:
+      "Mindestens 15 Zeichen. Wählen Sie ein langes, eindeutiges Passwort, das Sie nirgendwo sonst verwenden.",
     activate: "Portal aktivieren",
     verifiedTitle: "Ihr Portal ist aktiviert",
     verifiedDescription: "Weiterleitung zu Ihrem Dokumententresor.",
     invalidTitle: "Link nicht verfügbar",
-    invalidDescription: "Dieser Link ist ungültig oder abgelaufen. Fordern Sie im Kandidatenportal einen neuen Link an.",
+    invalidDescription:
+      "Dieser Link ist ungültig oder abgelaufen. Fordern Sie im Kandidatenportal einen neuen Link an.",
     backToAccess: "Zur Anmeldung",
     requestNewLink: "Neuen Link erhalten",
     resetMetaTitle: "Passwort zurücksetzen | Hippocampus Consulting",
     resetMetaDescription: "Setzen Sie Ihren sicheren Kandidatenzugang zurück.",
     resetTitle: "Neues Passwort",
-    resetDescription: "Wählen Sie ein eindeutiges Passwort mit mindestens 15 Zeichen.",
+    resetDescription:
+      "Wählen Sie ein eindeutiges Passwort mit mindestens 15 Zeichen.",
     password: "Passwort",
     confirmPassword: "Passwort bestätigen",
     passwordMismatch: "Die beiden Passwörter müssen übereinstimmen.",
-    genericError: "Diese Aktion konnte nicht abgeschlossen werden. Prüfen Sie den Link und versuchen Sie es erneut.",
+    genericError:
+      "Diese Aktion konnte nicht abgeschlossen werden. Prüfen Sie den Link und versuchen Sie es erneut.",
     save: "Speichern und Portal öffnen",
     passwordTooShort: "Wählen Sie ein Passwort mit mindestens 15 Zeichen.",
-    passwordCompromised: "Dieses Passwort ist bereits in einem Datenleck aufgetaucht. Wählen Sie ein anderes, langes und eindeutiges Passwort.",
-    passwordCheckUnavailable: "Die Sicherheitsprüfung des Passworts ist vorübergehend nicht verfügbar. Bitte versuchen Sie es in wenigen Augenblicken erneut.",
-    serviceUnavailable: "Der Kandidatendienst ist vorübergehend nicht verfügbar. Bitte versuchen Sie es in wenigen Augenblicken erneut.",
+    passwordCompromised:
+      "Dieses Passwort ist bereits in einem Datenleck aufgetaucht. Wählen Sie ein anderes, langes und eindeutiges Passwort.",
+    passwordCheckUnavailable:
+      "Die Sicherheitsprüfung des Passworts ist vorübergehend nicht verfügbar. Bitte versuchen Sie es in wenigen Augenblicken erneut.",
+    serviceUnavailable:
+      "Der Kandidatendienst ist vorübergehend nicht verfügbar. Bitte versuchen Sie es in wenigen Augenblicken erneut.",
     invalidCharacters: publicFormCopy.invalidCharacters.de,
   },
   zh: {
@@ -108,11 +134,13 @@ export const candidateAccountCopy = {
     verifyingTitle: "正在安全验证…",
     verifyingDescription: "正在验证您的激活链接。",
     activationTitle: "激活您的候选人门户",
-    activationDescription: "此链接确认了您的电子邮件地址。请核对您的信息并设置密码以激活门户。",
+    activationDescription:
+      "此链接确认了您的电子邮件地址。请核对您的信息并设置密码以激活门户。",
     firstName: "名字",
     lastName: "姓氏",
     email: "电子邮件",
-    passwordHint: "至少 15 个字符。请选择一个长且唯一、未在其他地方使用过的密码。",
+    passwordHint:
+      "至少 15 个字符。请选择一个长且唯一、未在其他地方使用过的密码。",
     activate: "激活我的门户",
     verifiedTitle: "您的门户已激活",
     verifiedDescription: "正在跳转至您的文档库。",
@@ -130,7 +158,8 @@ export const candidateAccountCopy = {
     genericError: "无法完成此操作。请检查链接后重试。",
     save: "保存并访问我的门户",
     passwordTooShort: "请选择至少 15 个字符的密码。",
-    passwordCompromised: "该密码已在数据泄露中出现过。请另选一个长且唯一的密码。",
+    passwordCompromised:
+      "该密码已在数据泄露中出现过。请另选一个长且唯一的密码。",
     passwordCheckUnavailable: "密码安全检查暂时不可用。请稍后重试。",
     serviceUnavailable: "候选人服务暂时不可用。请稍后重试。",
     invalidCharacters: publicFormCopy.invalidCharacters.zh,
@@ -138,7 +167,8 @@ export const candidateAccountCopy = {
 } as const;
 
 export type CandidateAccountLanguage = keyof typeof candidateAccountCopy;
-type CandidateAccountCopy = (typeof candidateAccountCopy)[CandidateAccountLanguage];
+type CandidateAccountCopy =
+  (typeof candidateAccountCopy)[CandidateAccountLanguage];
 
 /**
  * Refusal of the activation or password reset page, translated from the stable
@@ -146,7 +176,11 @@ type CandidateAccountCopy = (typeof candidateAccountCopy)[CandidateAccountLangua
  * (INTL-05) included. Without a known reason, the French page keeps the
  * server's message and the other languages show the generic one.
  */
-export function candidateAccountNotice(error: { message: string; data?: { reason?: string } | null }, copy: CandidateAccountCopy, language: string): string {
+export function candidateAccountNotice(
+  error: { message: string; data?: { reason?: string } | null },
+  copy: CandidateAccountCopy,
+  language: string
+): string {
   const reason = error.data?.reason;
   if (reason === INVALID_CHARACTERS_REASON) return copy.invalidCharacters;
   if (isCandidateAccessReason(reason)) {

@@ -6,6 +6,14 @@
 // a change of it is a change of ci.yml. CODE-14.
 export default {
   test: {
-    projects: [{ test: { name: "ci-workflow", include: ["server/ciWorkflow.test.ts"], environment: "node" } }],
+    projects: [
+      {
+        test: {
+          name: "ci-workflow",
+          include: ["server/ciWorkflow.test.ts"],
+          environment: "node",
+        },
+      },
+    ],
   },
 };

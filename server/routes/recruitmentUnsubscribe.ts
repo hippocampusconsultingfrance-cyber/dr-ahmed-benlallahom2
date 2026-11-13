@@ -1,5 +1,9 @@
 import type { Express } from "express";
-import { RECRUITMENT_ONE_CLICK_UNSUBSCRIBE_PATH, recruitmentUnsubscribeToken, unsubscribeFromRecruitmentMarketing } from "../routers/recruitmentPreferences";
+import {
+  RECRUITMENT_ONE_CLICK_UNSUBSCRIBE_PATH,
+  recruitmentUnsubscribeToken,
+  unsubscribeFromRecruitmentMarketing,
+} from "../routers/recruitmentPreferences";
 import { PUBLIC_APP_ORIGIN, safeErrorName } from "./routeHelpers";
 
 /**
@@ -13,7 +17,8 @@ import { PUBLIC_APP_ORIGIN, safeErrorName } from "./routeHelpers";
  * of the link, which asks for a confirmation.
  */
 export function registerRecruitmentUnsubscribeRoute(app: Express) {
-  const tokenOf = (query: unknown) => recruitmentUnsubscribeToken.safeParse((query as { token?: unknown }).token);
+  const tokenOf = (query: unknown) =>
+    recruitmentUnsubscribeToken.safeParse((query as { token?: unknown }).token);
 
   app.post(RECRUITMENT_ONE_CLICK_UNSUBSCRIBE_PATH, async (req, res) => {
     const token = tokenOf(req.query);
@@ -22,15 +27,28 @@ export function registerRecruitmentUnsubscribeRoute(app: Express) {
       return;
     }
     try {
-      const result = await unsubscribeFromRecruitmentMarketing(token.data, "list_unsubscribe_one_click");
+      const result = await unsubscribeFromRecruitmentMarketing(
+        token.data,
+        "list_unsubscribe_one_click"
+      );
       if (!result) {
-        res.status(404).json({ error: "Lien de désinscription invalide ou expiré." });
+        res
+          .status(404)
+          .json({ error: "Lien de désinscription invalide ou expiré." });
         return;
       }
-      res.status(200).json({ success: true, alreadyUnsubscribed: result.alreadyUnsubscribed });
+      res.status(200).json({
+        success: true,
+        alreadyUnsubscribed: result.alreadyUnsubscribed,
+      });
     } catch (error) {
-      console.error("[RecruitmentUnsubscribe] One-click unsubscribe failed", { error: safeErrorName(error) });
-      res.status(500).json({ error: "La désinscription n’a pas pu être enregistrée. Réessayez dans quelques instants." });
+      console.error("[RecruitmentUnsubscribe] One-click unsubscribe failed", {
+        error: safeErrorName(error),
+      });
+      res.status(500).json({
+        error:
+          "La désinscription n’a pas pu être enregistrée. Réessayez dans quelques instants.",
+      });
     }
   });
 

@@ -24,18 +24,25 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("./db", () => ({ getDb: mocks.getDb }));
 vi.mock("./appointmentHolds", async importOriginal => ({
-  ...await importOriginal<typeof import("./appointmentHolds")>(),
+  ...(await importOriginal<typeof import("./appointmentHolds")>()),
   releaseExpiredAppointmentHolds: mocks.releaseExpiredAppointmentHolds,
 }));
 // Few holds awaiting payment: no anti-robot check (ABUS-02, covered by appointments.holdAbuse.test.ts).
-vi.mock("./appointmentHoldAbuse", () => ({ bookingChallengeRequired: vi.fn(async () => false), recordBookingHold: vi.fn(async () => undefined) }));
+vi.mock("./appointmentHoldAbuse", () => ({
+  bookingChallengeRequired: vi.fn(async () => false),
+  recordBookingHold: vi.fn(async () => undefined),
+}));
 vi.mock("stripe", () => ({
   default: vi.fn().mockImplementation(() => ({
     checkout: { sessions: { create: mocks.stripeCreate, retrieve: vi.fn() } },
   })),
 }));
 
-const ALL_DAY_SLOTS = Array.from({ length: 7 }, (_, dayOfWeek) => ({ dayOfWeek, startTime: "00:00", endTime: "00:00" }));
+const ALL_DAY_SLOTS = Array.from({ length: 7 }, (_, dayOfWeek) => ({
+  dayOfWeek,
+  startTime: "00:00",
+  endTime: "00:00",
+}));
 
 function fakeDb() {
   const selectResults: unknown[][] = [[{ count: 0 }], [], ALL_DAY_SLOTS, []];
@@ -48,12 +55,20 @@ function fakeDb() {
         from: () => query,
         where: () => query,
         limit: async () => result,
-        then: (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) => Promise.resolve(result).then(resolve, reject),
+        then: (
+          resolve: (value: unknown) => unknown,
+          reject: (reason: unknown) => unknown
+        ) => Promise.resolve(result).then(resolve, reject),
       };
       return query;
     }),
-    execute: vi.fn(async (statement: unknown) => { inserted.push(statement); return { rowCount: 1 }; }),
-    update: vi.fn(() => ({ set: () => ({ where: async () => ({ rowCount: 1 }) }) })),
+    execute: vi.fn(async (statement: unknown) => {
+      inserted.push(statement);
+      return { rowCount: 1 };
+    }),
+    update: vi.fn(() => ({
+      set: () => ({ where: async () => ({ rowCount: 1 }) }),
+    })),
   };
 }
 
@@ -65,7 +80,10 @@ function slotStartAfter(offsetMs: number): Date {
   return new Date(Math.ceil((Date.now() + offsetMs) / halfHour) * halfHour);
 }
 
-function booking(appointmentDate: string, overrides: Record<string, unknown> = {}) {
+function booking(
+  appointmentDate: string,
+  overrides: Record<string, unknown> = {}
+) {
   return {
     customerName: "Patient Synthétique",
     customerEmail: "patient@example.com",
@@ -80,10 +98,15 @@ let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
   vi.clearAllMocks();
-  consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  consoleErrorSpy = vi
+    .spyOn(console, "error")
+    .mockImplementation(() => undefined);
   vi.stubEnv("STRIPE_SECRET_KEY", "sk_test_synthetic_booking_window");
   mocks.releaseExpiredAppointmentHolds.mockResolvedValue({ released: 0 });
-  mocks.stripeCreate.mockResolvedValue({ id: "cs_test_window", url: "https://checkout.stripe.test/window" });
+  mocks.stripeCreate.mockResolvedValue({
+    id: "cs_test_window",
+    url: "https://checkout.stripe.test/window",
+  });
 });
 
 afterEach(() => {
@@ -97,10 +120,18 @@ describe("règles partagées de fenêtre de réservation", () => {
     expect(BOOKING_MIN_LEAD_TIME_MS).toBe(2 * 60 * 60 * 1000);
     expect(BOOKING_HORIZON_MS).toBe(90 * 24 * 60 * 60 * 1000);
     expect(getBookingWindowIssue(new Date(now - 60_000), now)).toBe("too_soon");
-    expect(getBookingWindowIssue(new Date(now + BOOKING_MIN_LEAD_TIME_MS - 1), now)).toBe("too_soon");
-    expect(getBookingWindowIssue(new Date(now + BOOKING_MIN_LEAD_TIME_MS), now)).toBeNull();
-    expect(getBookingWindowIssue(new Date(now + BOOKING_HORIZON_MS), now)).toBeNull();
-    expect(getBookingWindowIssue(new Date(now + BOOKING_HORIZON_MS + 1), now)).toBe("too_far");
+    expect(
+      getBookingWindowIssue(new Date(now + BOOKING_MIN_LEAD_TIME_MS - 1), now)
+    ).toBe("too_soon");
+    expect(
+      getBookingWindowIssue(new Date(now + BOOKING_MIN_LEAD_TIME_MS), now)
+    ).toBeNull();
+    expect(
+      getBookingWindowIssue(new Date(now + BOOKING_HORIZON_MS), now)
+    ).toBeNull();
+    expect(
+      getBookingWindowIssue(new Date(now + BOOKING_HORIZON_MS + 1), now)
+    ).toBe("too_far");
   });
 
   it("valide un numéro de téléphone plausible, avec son indicatif de pays, et le donne au format E.164 (INTL-09)", () => {
@@ -119,41 +150,101 @@ describe("règles partagées de fenêtre de réservation", () => {
     }
     // Sans indicatif (« 06 12 34 56 78 ») ou avec un « indicatif » commençant par 0 (« +06… ») :
     // le médecin ne saurait pas quel pays appeler.
-    for (const invalid of ["abc", "123", "+33 6 12 34 56 78 90 12 34", "06 12 34 56 78 ext", "++33612345678", "-0612345678", "06.12.34.56.78", "0612345678", "00", "+", "+0612345678", "+ 06 12 34 56 78", "0006 12 34 56 78", "+(0)6 12 34 56 78"]) {
+    for (const invalid of [
+      "abc",
+      "123",
+      "+33 6 12 34 56 78 90 12 34",
+      "06 12 34 56 78 ext",
+      "++33612345678",
+      "-0612345678",
+      "06.12.34.56.78",
+      "0612345678",
+      "00",
+      "+",
+      "+0612345678",
+      "+ 06 12 34 56 78",
+      "0006 12 34 56 78",
+      "+(0)6 12 34 56 78",
+    ]) {
       expect(isPlausiblePhoneNumber(invalid), invalid).toBe(false);
       expect(toE164PhoneNumber(invalid), invalid).toBeNull();
     }
   });
 
   it("lit l’adresse email par la règle de z.string().email(), la même sur la page et au serveur (RES-10)", () => {
-    const addresses = ["jean@gmail.com", "jean.dupont+rdv@exemple.co.uk", "o'brien@example.ie", "patient@gmail", "jean@gmail.c0m", "jean@gmail.com1", "jean.@exemple.fr", ".jean@exemple.fr", "jean..x@exemple.fr", "jean@-exemple.fr", "jean@exemple.f", "jean @exemple.fr", "é@exemple.fr"];
-    for (const address of addresses) expect(isBookingEmailAddress(address), address).toBe(z.string().email().safeParse(address).success);
-    expect(addresses.filter(isBookingEmailAddress)).toEqual(["jean@gmail.com", "jean.dupont+rdv@exemple.co.uk", "o'brien@example.ie"]);
+    const addresses = [
+      "jean@gmail.com",
+      "jean.dupont+rdv@exemple.co.uk",
+      "o'brien@example.ie",
+      "patient@gmail",
+      "jean@gmail.c0m",
+      "jean@gmail.com1",
+      "jean.@exemple.fr",
+      ".jean@exemple.fr",
+      "jean..x@exemple.fr",
+      "jean@-exemple.fr",
+      "jean@exemple.f",
+      "jean @exemple.fr",
+      "é@exemple.fr",
+    ];
+    for (const address of addresses)
+      expect(isBookingEmailAddress(address), address).toBe(
+        z.string().email().safeParse(address).success
+      );
+    expect(addresses.filter(isBookingEmailAddress)).toEqual([
+      "jean@gmail.com",
+      "jean.dupont+rdv@exemple.co.uk",
+      "o'brien@example.ie",
+    ]);
   });
 });
 
 describe("parseAppointmentDate — dates impossibles", () => {
   it("refuse une date calendaire impossible au lieu de la décaler", () => {
-    for (const value of ["2027-02-30T10:00", "2027-02-30T10:00:00.000Z", "2026-13-01T10:00", "2026-04-31", "2026-10-20T25:00", "2026-10-20T10:60"]) {
-      expect(() => parseAppointmentDate(value), value).toThrow("Invalid appointment date");
+    for (const value of [
+      "2027-02-30T10:00",
+      "2027-02-30T10:00:00.000Z",
+      "2026-13-01T10:00",
+      "2026-04-31",
+      "2026-10-20T25:00",
+      "2026-10-20T10:60",
+    ]) {
+      expect(() => parseAppointmentDate(value), value).toThrow(
+        "Invalid appointment date"
+      );
     }
   });
 
   it("refuse une heure de Paris inexistante (passage à l’heure d’été)", () => {
-    expect(() => parseAppointmentDate("2026-03-29T02:30")).toThrow("Invalid appointment date");
-    expect(parseAppointmentDate("2026-03-29T03:30").toISOString()).toBe("2026-03-29T01:30:00.000Z");
+    expect(() => parseAppointmentDate("2026-03-29T02:30")).toThrow(
+      "Invalid appointment date"
+    );
+    expect(parseAppointmentDate("2026-03-29T03:30").toISOString()).toBe(
+      "2026-03-29T01:30:00.000Z"
+    );
   });
 
   it("accepte toujours les formats envoyés par le client et l’heure de Paris", () => {
-    expect(parseAppointmentDate("2026-10-20T08:00:00.000Z").toISOString()).toBe("2026-10-20T08:00:00.000Z");
-    expect(parseAppointmentDate("2026-10-20T10:00").toISOString()).toBe("2026-10-20T08:00:00.000Z");
-    expect(parseAppointmentDate("2026-10-20T10:00+02:00").toISOString()).toBe("2026-10-20T08:00:00.000Z");
-    expect(parseAppointmentDate("2027-02-28T10:00").toISOString()).toBe("2027-02-28T09:00:00.000Z");
+    expect(parseAppointmentDate("2026-10-20T08:00:00.000Z").toISOString()).toBe(
+      "2026-10-20T08:00:00.000Z"
+    );
+    expect(parseAppointmentDate("2026-10-20T10:00").toISOString()).toBe(
+      "2026-10-20T08:00:00.000Z"
+    );
+    expect(parseAppointmentDate("2026-10-20T10:00+02:00").toISOString()).toBe(
+      "2026-10-20T08:00:00.000Z"
+    );
+    expect(parseAppointmentDate("2027-02-28T10:00").toISOString()).toBe(
+      "2027-02-28T09:00:00.000Z"
+    );
   });
 
   it("refuse aussi une date impossible dans le calcul du tarif", async () => {
-    await expect(appRouter.createCaller(publicContext()).appointments.calculatePrice({ appointmentDate: "2026-02-30T10:00" }))
-      .rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(
+      appRouter
+        .createCaller(publicContext())
+        .appointments.calculatePrice({ appointmentDate: "2026-02-30T10:00" })
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
 });
 
@@ -162,10 +253,26 @@ describe("appointments.create — délai, horizon, téléphone et expiration Str
     const db = fakeDb();
     mocks.getDb.mockResolvedValue(db);
 
-    await expect(appRouter.createCaller(publicContext()).appointments.create(booking(slotStartAfter(60 * 60 * 1000).toISOString())))
-      .rejects.toMatchObject({ code: "UNPROCESSABLE_CONTENT", message: BOOKING_TOO_SOON_MESSAGE });
-    await expect(appRouter.createCaller(publicContext()).appointments.create(booking(new Date(Date.now() - 60 * 60 * 1000).toISOString())))
-      .rejects.toMatchObject({ code: "UNPROCESSABLE_CONTENT", message: BOOKING_TOO_SOON_MESSAGE });
+    await expect(
+      appRouter
+        .createCaller(publicContext())
+        .appointments.create(
+          booking(slotStartAfter(60 * 60 * 1000).toISOString())
+        )
+    ).rejects.toMatchObject({
+      code: "UNPROCESSABLE_CONTENT",
+      message: BOOKING_TOO_SOON_MESSAGE,
+    });
+    await expect(
+      appRouter
+        .createCaller(publicContext())
+        .appointments.create(
+          booking(new Date(Date.now() - 60 * 60 * 1000).toISOString())
+        )
+    ).rejects.toMatchObject({
+      code: "UNPROCESSABLE_CONTENT",
+      message: BOOKING_TOO_SOON_MESSAGE,
+    });
 
     expect(db.execute).not.toHaveBeenCalled();
     expect(mocks.stripeCreate).not.toHaveBeenCalled();
@@ -175,10 +282,21 @@ describe("appointments.create — délai, horizon, téléphone et expiration Str
     const db = fakeDb();
     mocks.getDb.mockResolvedValue(db);
 
-    await expect(appRouter.createCaller(publicContext()).appointments.create(booking("2099-06-15T10:00")))
-      .rejects.toMatchObject({ code: "UNPROCESSABLE_CONTENT", message: BOOKING_TOO_FAR_MESSAGE });
-    await expect(appRouter.createCaller(publicContext()).appointments.create(booking(slotStartAfter(91 * 24 * 60 * 60 * 1000).toISOString())))
-      .rejects.toMatchObject({ code: "UNPROCESSABLE_CONTENT" });
+    await expect(
+      appRouter
+        .createCaller(publicContext())
+        .appointments.create(booking("2099-06-15T10:00"))
+    ).rejects.toMatchObject({
+      code: "UNPROCESSABLE_CONTENT",
+      message: BOOKING_TOO_FAR_MESSAGE,
+    });
+    await expect(
+      appRouter
+        .createCaller(publicContext())
+        .appointments.create(
+          booking(slotStartAfter(91 * 24 * 60 * 60 * 1000).toISOString())
+        )
+    ).rejects.toMatchObject({ code: "UNPROCESSABLE_CONTENT" });
     expect(db.execute).not.toHaveBeenCalled();
   });
 
@@ -186,13 +304,27 @@ describe("appointments.create — délai, horizon, téléphone et expiration Str
     mocks.getDb.mockResolvedValue(fakeDb());
     const caller = appRouter.createCaller(publicContext());
 
-    await expect(caller.appointments.create(booking(slotStartAfter(3 * 24 * 60 * 60 * 1000).toISOString(), { customerPhone: "abc" })))
-      .rejects.toMatchObject({ code: "BAD_REQUEST", message: expect.stringContaining(BOOKING_INVALID_PHONE_MESSAGE) });
-    await expect(caller.appointments.create(booking("2027-02-30T10:00")))
-      .rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(
+      caller.appointments.create(
+        booking(slotStartAfter(3 * 24 * 60 * 60 * 1000).toISOString(), {
+          customerPhone: "abc",
+        })
+      )
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: expect.stringContaining(BOOKING_INVALID_PHONE_MESSAGE),
+    });
+    await expect(
+      caller.appointments.create(booking("2027-02-30T10:00"))
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
     // Faute de frappe que la page refuse aussi sous le champ (RES-10).
-    await expect(caller.appointments.create(booking(slotStartAfter(3 * 24 * 60 * 60 * 1000).toISOString(), { customerEmail: "patient@gmail.c0m" })))
-      .rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(
+      caller.appointments.create(
+        booking(slotStartAfter(3 * 24 * 60 * 60 * 1000).toISOString(), {
+          customerEmail: "patient@gmail.c0m",
+        })
+      )
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
     expect(mocks.stripeCreate).not.toHaveBeenCalled();
   });
 
@@ -202,13 +334,22 @@ describe("appointments.create — délai, horizon, téléphone et expiration Str
     const start = slotStartAfter(BOOKING_MIN_LEAD_TIME_MS + 5 * 60 * 1000);
     const before = Math.floor(Date.now() / 1000);
 
-    const result = await appRouter.createCaller(publicContext()).appointments.create(booking(start.toISOString()));
+    const result = await appRouter
+      .createCaller(publicContext())
+      .appointments.create(booking(start.toISOString()));
 
     // Session et fin du maintien renvoyées pour « Reprendre le paiement » après un retour arrière.
-    expect(result).toMatchObject({ success: true, checkoutSessionId: "cs_test_window" });
+    expect(result).toMatchObject({
+      success: true,
+      checkoutSessionId: "cs_test_window",
+    });
     const [params] = mocks.stripeCreate.mock.calls[0];
-    expect(Math.floor(new Date(result.holdExpiresAt).getTime() / 1000)).toBe(params.expires_at);
+    expect(Math.floor(new Date(result.holdExpiresAt).getTime() / 1000)).toBe(
+      params.expires_at
+    );
     expect(params.expires_at - before).toBeGreaterThanOrEqual(31 * 60);
-    expect(params.expires_at).toBeLessThanOrEqual(Math.floor(start.getTime() / 1000));
+    expect(params.expires_at).toBeLessThanOrEqual(
+      Math.floor(start.getTime() / 1000)
+    );
   });
 });

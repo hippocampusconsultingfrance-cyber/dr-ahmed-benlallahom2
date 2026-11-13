@@ -4,23 +4,33 @@ export default function EducationSection() {
   const { content } = useLanguage();
 
   return (
-    <section id="education" className="education-section py-28 sm:py-36 relative">
+    <section
+      id="education"
+      className="education-section py-28 sm:py-36 relative"
+    >
       <div className="container">
         {/* Header — asymmetric with large year accent */}
         <div className="grid lg:grid-cols-12 gap-8 mb-16">
           <div className="lg:col-span-4 hidden lg:flex items-end justify-end">
-            <span className="font-display text-7xl font-bold text-gold-gradient opacity-30">2006–2026</span>
+            <span className="font-display text-7xl font-bold text-gold-gradient opacity-30">
+              2006–2026
+            </span>
           </div>
           <div className="lg:col-span-8 section-heading">
             {/* English kicker on every page, its wording left to the owner (PUB-15): read with an English voice (A11Y-13). */}
-            <span lang="en" className="eyebrow-label mb-5">Clinical formation</span>
+            <span lang="en" className="eyebrow-label mb-5">
+              Clinical formation
+            </span>
             <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-bold text-foreground mb-4">
               {content.education.title}
             </h2>
             <p className="text-muted-foreground text-lg max-w-xl">
               {content.education.subtitle}
             </p>
-            <div className="w-16 h-0.5 mt-4" style={{ background: "oklch(0.72 0.1 75 / 0.5)" }} />
+            <div
+              className="w-16 h-0.5 mt-4"
+              style={{ background: "oklch(0.72 0.1 75 / 0.5)" }}
+            />
           </div>
         </div>
 

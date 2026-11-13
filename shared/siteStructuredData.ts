@@ -29,7 +29,8 @@ export function buildSiteStructuredData(): Record<string, unknown>[] {
       name: SITE_NAME,
       url: SITE_ORIGIN,
       image: PERSON_IMAGE_URL,
-      description: "Anesthésiste-réanimateur, entrepreneur en santé et consultant médical basé en France.",
+      description:
+        "Anesthésiste-réanimateur, entrepreneur en santé et consultant médical basé en France.",
       jobTitle: "Anesthésiste-réanimateur",
       honorificSuffix: siteConfig.credentials,
       worksFor: {
@@ -47,11 +48,18 @@ export function buildSiteStructuredData(): Record<string, unknown>[] {
       name: SITE_NAME,
       url: SITE_ORIGIN,
       logo: ORGANIZATION_LOGO_URL,
-      description: "Conseil en santé, information sur l’anesthésie et recrutement médical international (Hippocampus Consulting).",
+      description:
+        "Conseil en santé, information sur l’anesthésie et recrutement médical international (Hippocampus Consulting).",
       sameAs,
       contactPoint,
       address,
-      knowsAbout: ["Anesthésie", "Réanimation", "Entrepreneuriat en santé", "Conseil médical", "Recrutement médical"],
+      knowsAbout: [
+        "Anesthésie",
+        "Réanimation",
+        "Entrepreneuriat en santé",
+        "Conseil médical",
+        "Recrutement médical",
+      ],
     },
     {
       "@context": "https://schema.org",
@@ -64,8 +72,13 @@ export function buildSiteStructuredData(): Record<string, unknown>[] {
 }
 
 /** Sérialisation sûre dans un <script> (aucune séquence </script> possible). */
-export function renderStructuredDataScripts(schemas: Record<string, unknown>[]): string {
+export function renderStructuredDataScripts(
+  schemas: Record<string, unknown>[]
+): string {
   return schemas
-    .map(schema => `<script type="application/ld+json">${JSON.stringify(schema).replace(/</g, "\\u003c")}</script>`)
+    .map(
+      schema =>
+        `<script type="application/ld+json">${JSON.stringify(schema).replace(/</g, "\\u003c")}</script>`
+    )
     .join("\n    ");
 }

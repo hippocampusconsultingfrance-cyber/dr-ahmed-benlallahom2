@@ -15,17 +15,27 @@ import { pathToFileURL } from "node:url";
 export const IN_SYNC_MESSAGE = "No schema changes, nothing to migrate";
 
 // Le binaire de drizzle-kit (bin.cjs, non exporté) est à côté de son point d'entrée.
-const DRIZZLE_KIT_BIN = path.join(path.dirname(createRequire(import.meta.url).resolve("drizzle-kit")), "bin.cjs");
+const DRIZZLE_KIT_BIN = path.join(
+  path.dirname(createRequire(import.meta.url).resolve("drizzle-kit")),
+  "bin.cjs"
+);
 
 /**
  * `args` : options passées à drizzle-kit (par défaut, drizzle.config.ts).
  * `bin` : script Node lancé à la place de drizzle-kit (tests).
  */
-export function checkMigrationsInSync(args = [], { cwd = process.cwd(), timeoutMs = 120_000, bin = DRIZZLE_KIT_BIN } = {}) {
+export function checkMigrationsInSync(
+  args = [],
+  { cwd = process.cwd(), timeoutMs = 120_000, bin = DRIZZLE_KIT_BIN } = {}
+) {
   return new Promise((resolve, reject) => {
     // Node lance drizzle-kit lui-même, sans pnpm, dans son propre groupe de processus : à la durée
     // limite, tout le groupe est tué. stdin fermé : une question (table renommée ?) échoue au lieu d'attendre.
-    const child = spawn(process.execPath, [bin, "generate", ...args], { cwd, detached: true, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(process.execPath, [bin, "generate", ...args], {
+      cwd,
+      detached: true,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
     let output = "";
     let settled = false;
     const settle = result => {
@@ -34,8 +44,12 @@ export function checkMigrationsInSync(args = [], { cwd = process.cwd(), timeoutM
       clearTimeout(timer);
       resolve(result);
     };
-    child.stdout.setEncoding("utf8").on("data", chunk => { output += chunk; });
-    child.stderr.setEncoding("utf8").on("data", chunk => { output += chunk; });
+    child.stdout.setEncoding("utf8").on("data", chunk => {
+      output += chunk;
+    });
+    child.stderr.setEncoding("utf8").on("data", chunk => {
+      output += chunk;
+    });
     const timer = setTimeout(() => {
       try {
         process.kill(-child.pid, "SIGKILL");
@@ -45,14 +59,19 @@ export function checkMigrationsInSync(args = [], { cwd = process.cwd(), timeoutM
       // Un descendant sorti du groupe garderait les tubes ouverts : on n'attend pas « close ».
       child.stdout.destroy();
       child.stderr.destroy();
-      settle({ inSync: false, output: `${output}\ndrizzle-kit arrêté par SIGKILL (durée limite : ${timeoutMs / 1000} s).\n` });
+      settle({
+        inSync: false,
+        output: `${output}\ndrizzle-kit arrêté par SIGKILL (durée limite : ${timeoutMs / 1000} s).\n`,
+      });
     }, timeoutMs);
     child.once("error", error => {
       settled = true;
       clearTimeout(timer);
       reject(error);
     });
-    child.once("close", code => settle({ inSync: code === 0 && output.includes(IN_SYNC_MESSAGE), output }));
+    child.once("close", code =>
+      settle({ inSync: code === 0 && output.includes(IN_SYNC_MESSAGE), output })
+    );
   });
 }
 
@@ -62,10 +81,14 @@ async function main() {
   if (!inSync) {
     console.error(
       `\ndrizzle-kit generate n'a pas répondu « ${IN_SYNC_MESSAGE} » : drizzle/pg ne décrit pas drizzle/schema.ts, ` +
-        "ou drizzle-kit a échoué (voir ci-dessus). Procédure : drizzle/MIGRATION_SOURCE_OF_TRUTH.md.",
+        "ou drizzle-kit a échoué (voir ci-dessus). Procédure : drizzle/MIGRATION_SOURCE_OF_TRUTH.md."
     );
     process.exitCode = 1;
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) await main();
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
+)
+  await main();

@@ -4,8 +4,14 @@ import { createRequire as createModuleRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
-import { DOCUMENT_DECOMPRESSION_LIMITS, type DocumentDecompressionLimits } from "./documentDecompressionLimits";
-import { visibleTextContent, type PdfVisibilityFindings } from "./pdfVisibleText";
+import {
+  DOCUMENT_DECOMPRESSION_LIMITS,
+  type DocumentDecompressionLimits,
+} from "./documentDecompressionLimits";
+import {
+  visibleTextContent,
+  type PdfVisibilityFindings,
+} from "./pdfVisibleText";
 
 /**
  * Isolated PDF reader. pdf.js decodes every stream of a PDF (content, fonts,
@@ -40,11 +46,20 @@ export type PdfTextReading = {
   total: number | null;
   pages: Array<{ num: number; text: string }>;
   /** Absent when the text was read without the visibility check (in-process fallback). */
-  visibility?: { invisibleText: string[]; uncheckedPages: number[]; unverifiableText: PdfVisibilityFindings["unverifiableText"] };
+  visibility?: {
+    invisibleText: string[];
+    uncheckedPages: number[];
+    unverifiableText: PdfVisibilityFindings["unverifiableText"];
+  };
 };
-export type PdfRendering = { total: number | null; pages: Array<{ pageNumber: number; dataUrl: string | null }> };
+export type PdfRendering = {
+  total: number | null;
+  pages: Array<{ pageNumber: number; dataUrl: string | null }>;
+};
 /** `pages`, when given, renders those pages instead of the first ones. */
-export type PdfReaderTask = { kind: "text"; first: number } | { kind: "render"; first: number; desiredWidth: number; pages?: number[] };
+export type PdfReaderTask =
+  | { kind: "text"; first: number }
+  | { kind: "render"; first: number; desiredWidth: number; pages?: number[] };
 
 const VISIBILITY_TIME_SHARE = 0.6;
 
@@ -60,11 +75,20 @@ let standardFontDirectory: string | null | undefined;
  */
 export function pdfStandardFontDataUrl() {
   if (standardFontDirectory === undefined) {
-    standardFontDirectory = [fileURLToPath(new URL("./fonts/pdfjs/", import.meta.url)), path.resolve(process.cwd(), "server", "fonts", "pdfjs")]
-      // pdf.js wants the trailing slash.
-      .map(directory => `${directory.replace(/[\\/]+$/, "")}/`)
-      .find(directory => existsSync(`${directory}LiberationSans-Regular.ttf`)) ?? null;
-    if (!standardFontDirectory) console.error("[PdfReader] pdf.js standard fonts not found: text in a font that is not embedded stays unchecked");
+    standardFontDirectory =
+      [
+        fileURLToPath(new URL("./fonts/pdfjs/", import.meta.url)),
+        path.resolve(process.cwd(), "server", "fonts", "pdfjs"),
+      ]
+        // pdf.js wants the trailing slash.
+        .map(directory => `${directory.replace(/[\\/]+$/, "")}/`)
+        .find(directory =>
+          existsSync(`${directory}LiberationSans-Regular.ttf`)
+        ) ?? null;
+    if (!standardFontDirectory)
+      console.error(
+        "[PdfReader] pdf.js standard fonts not found: text in a font that is not embedded stays unchecked"
+      );
   }
   return standardFontDirectory ?? undefined;
 }
@@ -149,7 +173,8 @@ const visibleTextContent = ${visibleTextContent.toString()};
 
 /** URL of the module that `import(specifier)` loads from this file (the one bundled deployments trace). */
 function moduleUrl(specifier: string) {
-  const resolve = (import.meta as { resolve?: (value: string) => string }).resolve;
+  const resolve = (import.meta as { resolve?: (value: string) => string })
+    .resolve;
   if (typeof resolve === "function") {
     try {
       return resolve(specifier);
@@ -157,7 +182,8 @@ function moduleUrl(specifier: string) {
       // Fall back to the CommonJS resolution below.
     }
   }
-  return pathToFileURL(createModuleRequire(import.meta.url).resolve(specifier)).href;
+  return pathToFileURL(createModuleRequire(import.meta.url).resolve(specifier))
+    .href;
 }
 
 type WorkerMessage =
@@ -166,30 +192,74 @@ type WorkerMessage =
   | { type: "result"; result: PdfTextReading | PdfRendering }
   | { type: "error"; name: string; message: string };
 
-export function readPdfIsolated(buffer: Buffer, task: { kind: "text"; first: number }, limits?: DocumentDecompressionLimits): Promise<PdfTextReading>;
-export function readPdfIsolated(buffer: Buffer, task: { kind: "render"; first: number; desiredWidth: number; pages?: number[] }, limits?: DocumentDecompressionLimits): Promise<PdfRendering>;
-export function readPdfIsolated(buffer: Buffer, task: PdfReaderTask, limits: DocumentDecompressionLimits = DOCUMENT_DECOMPRESSION_LIMITS): Promise<PdfTextReading | PdfRendering> {
+export function readPdfIsolated(
+  buffer: Buffer,
+  task: { kind: "text"; first: number },
+  limits?: DocumentDecompressionLimits
+): Promise<PdfTextReading>;
+export function readPdfIsolated(
+  buffer: Buffer,
+  task: {
+    kind: "render";
+    first: number;
+    desiredWidth: number;
+    pages?: number[];
+  },
+  limits?: DocumentDecompressionLimits
+): Promise<PdfRendering>;
+export function readPdfIsolated(
+  buffer: Buffer,
+  task: PdfReaderTask,
+  limits: DocumentDecompressionLimits = DOCUMENT_DECOMPRESSION_LIMITS
+): Promise<PdfTextReading | PdfRendering> {
   return new Promise((resolve, reject) => {
     let modules: { pdfModuleUrl: string; canvasModuleUrl: string };
     try {
-      modules = { pdfModuleUrl: moduleUrl("pdf-parse"), canvasModuleUrl: moduleUrl("pdf-parse/worker") };
+      modules = {
+        pdfModuleUrl: moduleUrl("pdf-parse"),
+        canvasModuleUrl: moduleUrl("pdf-parse/worker"),
+      };
     } catch (error) {
-      reject(new PdfReaderUnavailableError(error instanceof Error ? error.name : "resolve_failed"));
+      reject(
+        new PdfReaderUnavailableError(
+          error instanceof Error ? error.name : "resolve_failed"
+        )
+      );
       return;
     }
-    const timeoutMs = task.kind === "text" ? limits.pdfTextTimeoutMs : limits.pdfRenderTimeoutMs;
-    const workerTask = task.kind === "text" ? { ...task, visibilityBudgetMs: Math.floor(timeoutMs * VISIBILITY_TIME_SHARE), visibilityUnits: limits.pdfVisibilityWorkUnits } : task;
+    const timeoutMs =
+      task.kind === "text"
+        ? limits.pdfTextTimeoutMs
+        : limits.pdfRenderTimeoutMs;
+    const workerTask =
+      task.kind === "text"
+        ? {
+            ...task,
+            visibilityBudgetMs: Math.floor(timeoutMs * VISIBILITY_TIME_SHARE),
+            visibilityUnits: limits.pdfVisibilityWorkUnits,
+          }
+        : task;
     const baselineRss = process.memoryUsage.rss();
     let worker: Worker;
     try {
       worker = new Worker(WORKER_SOURCE, {
         eval: true,
         execArgv: [],
-        workerData: { ...modules, task: workerTask, maxImagePixels: limits.pdfMaxImagePixels, standardFontDataUrl: pdfStandardFontDataUrl(), data: new Uint8Array(buffer) },
+        workerData: {
+          ...modules,
+          task: workerTask,
+          maxImagePixels: limits.pdfMaxImagePixels,
+          standardFontDataUrl: pdfStandardFontDataUrl(),
+          data: new Uint8Array(buffer),
+        },
         resourceLimits: { maxOldGenerationSizeMb: limits.pdfReaderMaxHeapMb },
       });
     } catch (error) {
-      reject(new PdfReaderUnavailableError(error instanceof Error ? error.name : "spawn_failed"));
+      reject(
+        new PdfReaderUnavailableError(
+          error instanceof Error ? error.name : "spawn_failed"
+        )
+      );
       return;
     }
     let ready = false;
@@ -203,14 +273,32 @@ export function readPdfIsolated(buffer: Buffer, task: PdfReaderTask, limits: Doc
       outcome();
     };
     // Errors caused by the file only count once pdf.js has started reading it.
-    const fileFailure = (code: string, transient: string) => new Error(ready ? code : transient);
+    const fileFailure = (code: string, transient: string) =>
+      new Error(ready ? code : transient);
     const memoryWatch = setInterval(() => {
-      if (process.memoryUsage.rss() - baselineRss > limits.pdfReaderMaxMemoryGrowthBytes) {
-        settle(() => reject(fileFailure("cv_validation_pdf_decompressed_size_exceeded", "pdf_reader_memory_pressure")));
+      if (
+        process.memoryUsage.rss() - baselineRss >
+        limits.pdfReaderMaxMemoryGrowthBytes
+      ) {
+        settle(() =>
+          reject(
+            fileFailure(
+              "cv_validation_pdf_decompressed_size_exceeded",
+              "pdf_reader_memory_pressure"
+            )
+          )
+        );
       }
     }, MEMORY_CHECK_INTERVAL_MS);
     const deadline = setTimeout(() => {
-      settle(() => reject(fileFailure("cv_validation_pdf_processing_timeout", "pdf_reader_start_timeout")));
+      settle(() =>
+        reject(
+          fileFailure(
+            "cv_validation_pdf_processing_timeout",
+            "pdf_reader_start_timeout"
+          )
+        )
+      );
     }, timeoutMs);
     worker.on("message", (message: WorkerMessage) => {
       if (message.type === "ready") {
@@ -220,12 +308,26 @@ export function readPdfIsolated(buffer: Buffer, task: PdfReaderTask, limits: Doc
       } else if (message.type === "result") {
         settle(() => resolve(message.result));
       } else {
-        settle(() => reject(Object.assign(new Error(message.message), { name: message.name })));
+        settle(() =>
+          reject(
+            Object.assign(new Error(message.message), { name: message.name })
+          )
+        );
       }
     });
     worker.on("error", error => {
-      const outOfMemory = (error as NodeJS.ErrnoException).code === "ERR_WORKER_OUT_OF_MEMORY";
-      settle(() => reject(outOfMemory ? fileFailure("cv_validation_pdf_decompressed_size_exceeded", "pdf_reader_out_of_memory") : new Error(`pdf_reader_failed:${error.name}`)));
+      const outOfMemory =
+        (error as NodeJS.ErrnoException).code === "ERR_WORKER_OUT_OF_MEMORY";
+      settle(() =>
+        reject(
+          outOfMemory
+            ? fileFailure(
+                "cv_validation_pdf_decompressed_size_exceeded",
+                "pdf_reader_out_of_memory"
+              )
+            : new Error(`pdf_reader_failed:${error.name}`)
+        )
+      );
     });
     worker.on("exit", code => {
       settle(() => reject(new Error(`pdf_reader_exited:${code}`)));

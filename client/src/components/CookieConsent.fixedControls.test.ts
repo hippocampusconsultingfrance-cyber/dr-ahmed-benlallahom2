@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { COOKIE_BANNER_HEIGHT_PROPERTY, COOKIE_BANNER_OPEN_ATTRIBUTE, cookieCopy, syncCookieBannerOpenAttribute, trackCookieBannerHeight } from "./CookieConsent";
+import {
+  COOKIE_BANNER_HEIGHT_PROPERTY,
+  COOKIE_BANNER_OPEN_ATTRIBUTE,
+  cookieCopy,
+  syncCookieBannerOpenAttribute,
+  trackCookieBannerHeight,
+} from "./CookieConsent";
 
 // Dialogue des préférences, retrait du consentement et section #cookies de la
 // politique : CookieConsent.behaviour.test.ts et pages/LegalPage.cookies.test.ts.
@@ -15,7 +21,10 @@ describe("coordination des contrôles fixes", () => {
 
     syncCookieBannerOpenAttribute(root, true);
 
-    expect(root.setAttribute).toHaveBeenCalledWith(COOKIE_BANNER_OPEN_ATTRIBUTE, "true");
+    expect(root.setAttribute).toHaveBeenCalledWith(
+      COOKIE_BANNER_OPEN_ATTRIBUTE,
+      "true"
+    );
     expect(root.removeAttribute).not.toHaveBeenCalled();
   });
 
@@ -24,7 +33,9 @@ describe("coordination des contrôles fixes", () => {
 
     syncCookieBannerOpenAttribute(root, false);
 
-    expect(root.removeAttribute).toHaveBeenCalledWith(COOKIE_BANNER_OPEN_ATTRIBUTE);
+    expect(root.removeAttribute).toHaveBeenCalledWith(
+      COOKIE_BANNER_OPEN_ATTRIBUTE
+    );
     expect(root.setAttribute).not.toHaveBeenCalled();
   });
 
@@ -40,29 +51,45 @@ describe("coordination des contrôles fixes", () => {
     }) as unknown as typeof ResizeObserver;
 
     const stop = trackCookieBannerHeight(root, banner, Observer);
-    expect(root.style.setProperty).toHaveBeenLastCalledWith(COOKIE_BANNER_HEIGHT_PROPERTY, "257px");
+    expect(root.style.setProperty).toHaveBeenLastCalledWith(
+      COOKIE_BANNER_HEIGHT_PROPERTY,
+      "257px"
+    );
     expect(observe).toHaveBeenCalledWith(banner);
 
     // Texte qui se replie autrement (rotation, langue) : la nouvelle hauteur remplace l'ancienne.
     (banner as { offsetHeight: number }).offsetHeight = 329;
     onResize();
-    expect(root.style.setProperty).toHaveBeenLastCalledWith(COOKIE_BANNER_HEIGHT_PROPERTY, "329px");
+    expect(root.style.setProperty).toHaveBeenLastCalledWith(
+      COOKIE_BANNER_HEIGHT_PROPERTY,
+      "329px"
+    );
 
     stop();
     expect(disconnect).toHaveBeenCalled();
-    expect(root.style.removeProperty).toHaveBeenCalledWith(COOKIE_BANNER_HEIGHT_PROPERTY);
+    expect(root.style.removeProperty).toHaveBeenCalledWith(
+      COOKIE_BANNER_HEIGHT_PROPERTY
+    );
   });
 
   it("mesure le bandeau une fois quand ResizeObserver n'existe pas", () => {
     const root = { style: { setProperty: vi.fn(), removeProperty: vi.fn() } };
 
-    const stop = trackCookieBannerHeight(root, { offsetHeight: 180 } as HTMLElement, undefined);
-    expect(root.style.setProperty).toHaveBeenCalledWith(COOKIE_BANNER_HEIGHT_PROPERTY, "180px");
+    const stop = trackCookieBannerHeight(
+      root,
+      { offsetHeight: 180 } as HTMLElement,
+      undefined
+    );
+    expect(root.style.setProperty).toHaveBeenCalledWith(
+      COOKIE_BANNER_HEIGHT_PROPERTY,
+      "180px"
+    );
 
     stop();
-    expect(root.style.removeProperty).toHaveBeenCalledWith(COOKIE_BANNER_HEIGHT_PROPERTY);
+    expect(root.style.removeProperty).toHaveBeenCalledWith(
+      COOKIE_BANNER_HEIGHT_PROPERTY
+    );
   });
-
 });
 
 describe("bandeau et préférences cookies (PUB-COOKIE-01 / PUB-COOKIE-04)", () => {
@@ -72,7 +99,9 @@ describe("bandeau et préférences cookies (PUB-COOKIE-01 / PUB-COOKIE-04)", () 
       expect(copy).not.toHaveProperty("preferences");
       expect(copy.functionalDescription.length).toBeGreaterThan(40);
     }
-    expect(cookieCopy.fr.functionalDescription).toContain("exempté de consentement");
+    expect(cookieCopy.fr.functionalDescription).toContain(
+      "exempté de consentement"
+    );
   });
 
   it("renvoie, dans chaque langue, au bouton « Gérer les cookies » du pied de page (PUB-12)", () => {
@@ -81,5 +110,4 @@ describe("bandeau et préférences cookies (PUB-COOKIE-01 / PUB-COOKIE-04)", () 
       expect(copy.settingsDescription).not.toContain(copy.settings);
     }
   });
-
 });

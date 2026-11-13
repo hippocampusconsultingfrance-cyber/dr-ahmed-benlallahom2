@@ -26,7 +26,9 @@ export default function ServicesSection() {
       <div className="container relative z-10">
         {/* Header — left-aligned with oversized number accent */}
         <div className="section-heading flex items-end gap-6 mb-16">
-          <span className="font-display text-8xl sm:text-9xl font-bold text-primary/10 leading-none hidden lg:block">06</span>
+          <span className="font-display text-8xl sm:text-9xl font-bold text-primary/10 leading-none hidden lg:block">
+            06
+          </span>
           <div className="max-w-xl">
             <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-bold text-foreground mb-4">
               {content.services.title}

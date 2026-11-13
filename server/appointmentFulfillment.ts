@@ -1,5 +1,16 @@
 import { createHash } from "node:crypto";
-import { and, eq, gte, inArray, isNull, like, lt, lte, ne, or } from "drizzle-orm";
+import {
+  and,
+  eq,
+  gte,
+  inArray,
+  isNull,
+  like,
+  lt,
+  lte,
+  ne,
+  or,
+} from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { appointmentFulfillmentJobs, appointments } from "../drizzle/schema";
 import { getDb } from "./db";
@@ -13,12 +24,30 @@ import {
   sendRefundConfirmationEmail,
 } from "./_core/notifications";
 import { notifyOwner } from "./_core/notification";
-import { alertSendSlot, RESEND_QUOTA_SECURITY_CATEGORY, runWithSendSlot } from "./_core/resendDelivery";
+import {
+  alertSendSlot,
+  RESEND_QUOTA_SECURITY_CATEGORY,
+  runWithSendSlot,
+} from "./_core/resendDelivery";
 import { sendQueuedSecurityAlert } from "./candidateSecurity";
 import { emailLanguageFor } from "./emailLanguage";
-import { archiveInvoicePDF, generateInvoicePDF, renderInvoicePDF, type InvoiceData } from "./invoice";
-import { allocateAppointmentInvoice, findAppointmentInvoices, type AppointmentInvoiceRecord } from "./invoiceNumbering";
-import { deadlineCutShort, ProcessingDeadlineError, runWithProcessingDeadline, startFitsDeadline } from "./processingDeadline";
+import {
+  archiveInvoicePDF,
+  generateInvoicePDF,
+  renderInvoicePDF,
+  type InvoiceData,
+} from "./invoice";
+import {
+  allocateAppointmentInvoice,
+  findAppointmentInvoices,
+  type AppointmentInvoiceRecord,
+} from "./invoiceNumbering";
+import {
+  deadlineCutShort,
+  ProcessingDeadlineError,
+  runWithProcessingDeadline,
+  startFitsDeadline,
+} from "./processingDeadline";
 import { hasErasedPatientData } from "./personalDataRetention";
 import type { ResendAppointmentEmail } from "./resendWebhookCorrelation";
 import { adminLink } from "./adminLinks";
@@ -52,7 +81,10 @@ export const APPOINTMENT_FULFILLMENT_WAITING_AFTER_MS = 5 * 60_000;
  * waitForSendSlot): an invoice leaves once its PDF is built, well after the
  * start of its job. Mutable for tests.
  */
-export const appointmentFulfillmentPacing = { delayMs: 600, claimTurnLimitMs: 5_000 };
+export const appointmentFulfillmentPacing = {
+  delayMs: 600,
+  claimTurnLimitMs: 5_000,
+};
 /** End of the last job run in this instance. */
 let lastJobRunAt: number | null = null;
 /** Start of the last job that took its turn. */
@@ -75,22 +107,31 @@ let sendsWaiting = 0;
 async function waitForFulfillmentTurn(): Promise<(claimed: boolean) => void> {
   const previousTurn = lastJobTurn;
   let endTurn!: () => void;
-  lastJobTurn = new Promise<void>(resolve => { endTurn = resolve; });
+  lastJobTurn = new Promise<void>(resolve => {
+    endTurn = resolve;
+  });
   await previousTurn;
   const delayMs = appointmentFulfillmentPacing.delayMs;
   const now = Date.now();
-  const readyAt = Math.max(lastJobStartAt === null ? now : lastJobStartAt + delayMs, lastJobRunAt === null ? now : lastJobRunAt + delayMs);
+  const readyAt = Math.max(
+    lastJobStartAt === null ? now : lastJobStartAt + delayMs,
+    lastJobRunAt === null ? now : lastJobRunAt + delayMs
+  );
   // Never more than one pause, even with a clock set back (or stopped, in tests).
   const waitMs = Math.min(readyAt - now, delayMs);
   if (waitMs > 0) await new Promise(resolve => setTimeout(resolve, waitMs));
   const previousStartAt = lastJobStartAt;
   const startAt = Date.now();
   lastJobStartAt = startAt;
-  const turnLimit = setTimeout(endTurn, appointmentFulfillmentPacing.claimTurnLimitMs);
+  const turnLimit = setTimeout(
+    endTurn,
+    appointmentFulfillmentPacing.claimTurnLimitMs
+  );
   return claimed => {
     clearTimeout(turnLimit);
     // Past the limit, a later job may have taken its turn: its start stays.
-    if (!claimed && lastJobStartAt === startAt) lastJobStartAt = previousStartAt;
+    if (!claimed && lastJobStartAt === startAt)
+      lastJobStartAt = previousStartAt;
     endTurn();
   };
 }
@@ -107,13 +148,18 @@ async function waitForFulfillmentTurn(): Promise<(claimed: boolean) => void> {
 async function waitForSendSlot(mayStart: () => boolean): Promise<boolean> {
   const previousSlot = lastSendSlot;
   let release!: () => void;
-  lastSendSlot = new Promise<void>(resolve => { release = resolve; });
+  lastSendSlot = new Promise<void>(resolve => {
+    release = resolve;
+  });
   sendsWaiting += 1;
   try {
     await previousSlot;
     const delayMs = appointmentFulfillmentPacing.delayMs;
     // Never more than one pause, even with a clock set back (or stopped, in tests).
-    const waitMs = lastSendAt === null ? 0 : Math.min(lastSendAt + delayMs - Date.now(), delayMs);
+    const waitMs =
+      lastSendAt === null
+        ? 0
+        : Math.min(lastSendAt + delayMs - Date.now(), delayMs);
     if (waitMs > 0) await new Promise(resolve => setTimeout(resolve, waitMs));
     // A send given up at its slot (budget spent) does not hold back the next one.
     if (!mayStart()) return false;
@@ -132,12 +178,18 @@ async function waitForSendSlot(mayStart: () => boolean): Promise<boolean> {
  */
 function longestSendSlotWaitMs() {
   const delayMs = appointmentFulfillmentPacing.delayMs;
-  const afterLastSend = lastSendAt === null ? 0 : Math.max(0, Math.min(lastSendAt + delayMs - Date.now(), delayMs));
+  const afterLastSend =
+    lastSendAt === null
+      ? 0
+      : Math.max(0, Math.min(lastSendAt + delayMs - Date.now(), delayMs));
   return afterLastSend + sendsWaiting * delayMs;
 }
 
 /** The send slot of this instance, for the new tries of a job's emails and its owner alerts (runWithSendSlot). */
-const SEND_SLOT = { wait: waitForSendSlot, longestWaitMs: longestSendSlotWaitMs };
+const SEND_SLOT = {
+  wait: waitForSendSlot,
+  longestWaitMs: longestSendSlotWaitMs,
+};
 
 /**
  * The send slot of a job's email (ABUS-03). Sent right after a payment, the
@@ -149,7 +201,8 @@ const SEND_SLOT = { wait: waitForSendSlot, longestWaitMs: longestSendSlotWaitMs 
  * runJob), for the next processing or « Renvoyer ».
  */
 async function waitForJobSendSlot() {
-  if (!startFitsDeadline() || !(await waitForSendSlot(startFitsDeadline))) throw new ProcessingDeadlineError("send_slot");
+  if (!startFitsDeadline() || !(await waitForSendSlot(startFitsDeadline)))
+    throw new ProcessingDeadlineError("send_slot");
 }
 
 /**
@@ -177,13 +230,24 @@ export const APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS = 7;
  * runs often, so a two-day outage is covered there too. Each stays under a
  * day, so the daily run always finds the job due.
  */
-export const APPOINTMENT_FULFILLMENT_RETRY_DELAYS_MS = [10 * 60_000, 60 * 60_000, 4 * 3_600_000, 12 * 3_600_000, 20 * 3_600_000, 20 * 3_600_000] as const;
+export const APPOINTMENT_FULFILLMENT_RETRY_DELAYS_MS = [
+  10 * 60_000,
+  60 * 60_000,
+  4 * 3_600_000,
+  12 * 3_600_000,
+  20 * 3_600_000,
+  20 * 3_600_000,
+] as const;
 
 /**
  * Independent jobs, processed in this order: the owner learns about the paid
  * booking first, even when the patient email or the invoice fails.
  */
-export const APPOINTMENT_FULFILLMENT_JOB_TYPES = ["owner", "confirmation", "invoice"] as const;
+export const APPOINTMENT_FULFILLMENT_JOB_TYPES = [
+  "owner",
+  "confirmation",
+  "invoice",
+] as const;
 /**
  * Notices of a full refund, in this order: the patient email, then the owner
  * alert, which says whether the patient was told. Both for a refund that
@@ -192,18 +256,30 @@ export const APPOINTMENT_FULFILLMENT_JOB_TYPES = ["owner", "confirmation", "invo
  * Same queue, attempts and dashboard as the post-payment emails, for a
  * refunded appointment.
  */
-export const STRIPE_REFUND_NOTICE_JOB_TYPES = ["refund", "refund_owner"] as const;
+export const STRIPE_REFUND_NOTICE_JOB_TYPES = [
+  "refund",
+  "refund_owner",
+] as const;
 type PostPaymentJobType = (typeof APPOINTMENT_FULFILLMENT_JOB_TYPES)[number];
 type RefundNoticeJobType = (typeof STRIPE_REFUND_NOTICE_JOB_TYPES)[number];
 type FulfillmentJobType = PostPaymentJobType | RefundNoticeJobType;
-const JOB_ORDER: readonly FulfillmentJobType[] = [...APPOINTMENT_FULFILLMENT_JOB_TYPES, ...STRIPE_REFUND_NOTICE_JOB_TYPES];
+const JOB_ORDER: readonly FulfillmentJobType[] = [
+  ...APPOINTMENT_FULFILLMENT_JOB_TYPES,
+  ...STRIPE_REFUND_NOTICE_JOB_TYPES,
+];
 
 function isRefundNoticeJob(jobType: string): jobType is RefundNoticeJobType {
-  return (STRIPE_REFUND_NOTICE_JOB_TYPES as readonly string[]).includes(jobType);
+  return (STRIPE_REFUND_NOTICE_JOB_TYPES as readonly string[]).includes(
+    jobType
+  );
 }
 
 /** Jobs that write to the patient; the others alert the owner. */
-const PATIENT_JOB_TYPES = ["confirmation", "invoice", "refund"] as const satisfies readonly FulfillmentJobType[];
+const PATIENT_JOB_TYPES = [
+  "confirmation",
+  "invoice",
+  "refund",
+] as const satisfies readonly FulfillmentJobType[];
 type PatientJobType = (typeof PATIENT_JOB_TYPES)[number];
 
 function isPatientJob(jobType: string): jobType is PatientJobType {
@@ -228,7 +304,11 @@ type FailureAlertJobType = (typeof FAILURE_ALERT_JOB_TYPES)[PatientJobType];
 
 /** The patient email whose failure this job alerts the owner about, if it is a failure alert. */
 function alertedPatientJob(jobType: string): PatientJobType | null {
-  return PATIENT_JOB_TYPES.find(patientJobType => FAILURE_ALERT_JOB_TYPES[patientJobType] === jobType) ?? null;
+  return (
+    PATIENT_JOB_TYPES.find(
+      patientJobType => FAILURE_ALERT_JOB_TYPES[patientJobType] === jobType
+    ) ?? null
+  );
 }
 
 /**
@@ -269,22 +349,52 @@ function isBounceAlertJob(jobType: string): jobType is BounceAlertJobType {
 const QUOTA_ALERT_JOB_TYPE = "quota_alert";
 
 async function queueQuotaAlert(db: Database, appointmentId: number) {
-  const [waiting] = await db.select({ id: appointmentFulfillmentJobs.id }).from(appointmentFulfillmentJobs)
-    .where(and(eq(appointmentFulfillmentJobs.jobType, QUOTA_ALERT_JOB_TYPE), inArray(appointmentFulfillmentJobs.status, ["queued", "retry", "running"]))).limit(1);
+  const [waiting] = await db
+    .select({ id: appointmentFulfillmentJobs.id })
+    .from(appointmentFulfillmentJobs)
+    .where(
+      and(
+        eq(appointmentFulfillmentJobs.jobType, QUOTA_ALERT_JOB_TYPE),
+        inArray(appointmentFulfillmentJobs.status, [
+          "queued",
+          "retry",
+          "running",
+        ])
+      )
+    )
+    .limit(1);
   if (waiting) return;
   const now = new Date();
-  await db.insert(appointmentFulfillmentJobs).values({
-    appointmentId,
-    jobType: QUOTA_ALERT_JOB_TYPE,
-    status: "queued",
-    attempts: 0,
-    maxAttempts: APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS,
-    scheduledFor: now,
-  }).onConflictDoUpdate({
-    target: [appointmentFulfillmentJobs.appointmentId, appointmentFulfillmentJobs.jobType],
-    set: { status: "queued", attempts: 0, maxAttempts: APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS, scheduledFor: now, startedAt: null, finishedAt: null, lastError: null, updatedAt: now },
-    setWhere: inArray(appointmentFulfillmentJobs.status, ["completed", "failed"]),
-  });
+  await db
+    .insert(appointmentFulfillmentJobs)
+    .values({
+      appointmentId,
+      jobType: QUOTA_ALERT_JOB_TYPE,
+      status: "queued",
+      attempts: 0,
+      maxAttempts: APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS,
+      scheduledFor: now,
+    })
+    .onConflictDoUpdate({
+      target: [
+        appointmentFulfillmentJobs.appointmentId,
+        appointmentFulfillmentJobs.jobType,
+      ],
+      set: {
+        status: "queued",
+        attempts: 0,
+        maxAttempts: APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS,
+        scheduledFor: now,
+        startedAt: null,
+        finishedAt: null,
+        lastError: null,
+        updatedAt: now,
+      },
+      setWhere: inArray(appointmentFulfillmentJobs.status, [
+        "completed",
+        "failed",
+      ]),
+    });
 }
 
 /**
@@ -292,10 +402,16 @@ async function queueQuotaAlert(db: Database, appointmentId: number) {
  * give the patient's details: closed unsent once those details are erased
  * (RGPD-12), as are the bounce alerts.
  */
-const PATIENT_DATA_JOB_TYPES = [...PATIENT_JOB_TYPES, ...Object.values(FAILURE_ALERT_JOB_TYPES)];
+const PATIENT_DATA_JOB_TYPES = [
+  ...PATIENT_JOB_TYPES,
+  ...Object.values(FAILURE_ALERT_JOB_TYPES),
+];
 
 function isPatientDataJob(jobType: string) {
-  return (PATIENT_DATA_JOB_TYPES as readonly string[]).includes(jobType) || isBounceAlertJob(jobType);
+  return (
+    (PATIENT_DATA_JOB_TYPES as readonly string[]).includes(jobType) ||
+    isBounceAlertJob(jobType)
+  );
 }
 
 /** Jobs the dashboard shows (deliveries, « À traiter »): every one but the failure and bounce alerts. */
@@ -308,13 +424,17 @@ const PATIENT_DATA_ERASED = "patient_data_erased";
 
 /** Payment status an appointment must have for a job to be sent: paid, or refunded for the refund notices and their failure alert. */
 function jobPaymentStatus(jobType: string) {
-  return isRefundNoticeJob(alertedPatientJob(jobType) ?? jobType) ? "refunded" : "completed";
+  return isRefundNoticeJob(alertedPatientJob(jobType) ?? jobType)
+    ? "refunded"
+    : "completed";
 }
 
 /** Whether a job is sent for an appointment with this payment status: a bounce alert, for a paid or refunded one; the quota alert, whatever it is. */
 function jobSentFor(jobType: string, paymentStatus: string) {
   if (jobType === QUOTA_ALERT_JOB_TYPE) return true;
-  return isBounceAlertJob(jobType) ? paymentStatus === "completed" || paymentStatus === "refunded" : paymentStatus === jobPaymentStatus(jobType);
+  return isBounceAlertJob(jobType)
+    ? paymentStatus === "completed" || paymentStatus === "refunded"
+    : paymentStatus === jobPaymentStatus(jobType);
 }
 
 const JOB_LABELS: Record<FulfillmentJobType, string> = {
@@ -329,18 +449,28 @@ type Database = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 type FulfillmentJob = typeof appointmentFulfillmentJobs.$inferSelect;
 type Appointment = typeof appointments.$inferSelect;
 
-function queueJob(db: Database, appointmentId: number, jobType: FulfillmentJobType) {
-  return db.insert(appointmentFulfillmentJobs).values({
-    appointmentId,
-    jobType,
-    status: "queued",
-    attempts: 0,
-    maxAttempts: APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS,
-    scheduledFor: new Date(),
-  }).onConflictDoUpdate({
-    target: [appointmentFulfillmentJobs.appointmentId, appointmentFulfillmentJobs.jobType],
-    set: { updatedAt: new Date() },
-  });
+function queueJob(
+  db: Database,
+  appointmentId: number,
+  jobType: FulfillmentJobType
+) {
+  return db
+    .insert(appointmentFulfillmentJobs)
+    .values({
+      appointmentId,
+      jobType,
+      status: "queued",
+      attempts: 0,
+      maxAttempts: APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS,
+      scheduledFor: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: [
+        appointmentFulfillmentJobs.appointmentId,
+        appointmentFulfillmentJobs.jobType,
+      ],
+      set: { updatedAt: new Date() },
+    });
 }
 
 /**
@@ -377,21 +507,44 @@ function triedAddressOf(lastError: string | null) {
  * new failure; one still waiting or being sent is left as it is: it is
  * written from the email's job as it stands at its run (keepTriedAddress).
  */
-function queueFailureAlert(db: Database, appointmentId: number, jobType: PatientJobType, customerEmail: string) {
+function queueFailureAlert(
+  db: Database,
+  appointmentId: number,
+  jobType: PatientJobType,
+  customerEmail: string
+) {
   const now = new Date();
-  return db.insert(appointmentFulfillmentJobs).values({
-    appointmentId,
-    jobType: FAILURE_ALERT_JOB_TYPES[jobType],
-    status: "queued",
-    attempts: 0,
-    maxAttempts: APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS,
-    scheduledFor: now,
-    lastError: triedAddressMark(customerEmail),
-  }).onConflictDoUpdate({
-    target: [appointmentFulfillmentJobs.appointmentId, appointmentFulfillmentJobs.jobType],
-    set: { status: "queued", attempts: 0, maxAttempts: APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS, scheduledFor: now, startedAt: null, finishedAt: null, lastError: triedAddressMark(customerEmail), updatedAt: now },
-    setWhere: inArray(appointmentFulfillmentJobs.status, ["completed", "failed"]),
-  });
+  return db
+    .insert(appointmentFulfillmentJobs)
+    .values({
+      appointmentId,
+      jobType: FAILURE_ALERT_JOB_TYPES[jobType],
+      status: "queued",
+      attempts: 0,
+      maxAttempts: APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS,
+      scheduledFor: now,
+      lastError: triedAddressMark(customerEmail),
+    })
+    .onConflictDoUpdate({
+      target: [
+        appointmentFulfillmentJobs.appointmentId,
+        appointmentFulfillmentJobs.jobType,
+      ],
+      set: {
+        status: "queued",
+        attempts: 0,
+        maxAttempts: APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS,
+        scheduledFor: now,
+        startedAt: null,
+        finishedAt: null,
+        lastError: triedAddressMark(customerEmail),
+        updatedAt: now,
+      },
+      setWhere: inArray(appointmentFulfillmentJobs.status, [
+        "completed",
+        "failed",
+      ]),
+    });
 }
 
 /**
@@ -400,19 +553,33 @@ function queueFailureAlert(db: Database, appointmentId: number, jobType: Patient
  * failure the owner is told of, it takes the address of that failure, not of
  * the one it was queued for.
  */
-function keepTriedAddress(db: Database, appointmentId: number, jobType: PatientJobType, customerEmail: string) {
-  return db.update(appointmentFulfillmentJobs).set({ lastError: triedAddressMark(customerEmail) }).where(and(
-    eq(appointmentFulfillmentJobs.appointmentId, appointmentId),
-    eq(appointmentFulfillmentJobs.jobType, FAILURE_ALERT_JOB_TYPES[jobType]),
-    inArray(appointmentFulfillmentJobs.status, ["queued", "retry"]),
-  ));
+function keepTriedAddress(
+  db: Database,
+  appointmentId: number,
+  jobType: PatientJobType,
+  customerEmail: string
+) {
+  return db
+    .update(appointmentFulfillmentJobs)
+    .set({ lastError: triedAddressMark(customerEmail) })
+    .where(
+      and(
+        eq(appointmentFulfillmentJobs.appointmentId, appointmentId),
+        eq(
+          appointmentFulfillmentJobs.jobType,
+          FAILURE_ALERT_JOB_TYPES[jobType]
+        ),
+        inArray(appointmentFulfillmentJobs.status, ["queued", "retry"])
+      )
+    );
 }
 
 /** Queues the notices of a refund recorded from Stripe's notification (RES-06); idempotent. */
 export async function enqueueStripeRefundNotices(appointmentId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  for (const jobType of STRIPE_REFUND_NOTICE_JOB_TYPES) await queueJob(db, appointmentId, jobType);
+  for (const jobType of STRIPE_REFUND_NOTICE_JOB_TYPES)
+    await queueJob(db, appointmentId, jobType);
 }
 
 /**
@@ -423,16 +590,25 @@ export async function enqueueStripeRefundNotices(appointmentId: number) {
  * throws: the email's state after this attempt, null when it could not be
  * queued or read.
  */
-export async function sendAppointmentRefundEmail(appointmentId: number): Promise<AppointmentDeliveryState | null> {
+export async function sendAppointmentRefundEmail(
+  appointmentId: number
+): Promise<AppointmentDeliveryState | null> {
   try {
     const db = await getDb();
     if (!db) throw new Error("Database connection failed");
     await queueJob(db, appointmentId, "refund");
     await processAppointmentFulfillmentNow(appointmentId);
-    const deliveries = (await getAppointmentDeliveries([appointmentId])).get(appointmentId) ?? [];
-    return deliveries.find(delivery => delivery.jobType === "refund")?.state ?? null;
+    const deliveries =
+      (await getAppointmentDeliveries([appointmentId])).get(appointmentId) ??
+      [];
+    return (
+      deliveries.find(delivery => delivery.jobType === "refund")?.state ?? null
+    );
   } catch (error) {
-    console.error("[AppointmentFulfillment] Refund email could not be queued or sent", error instanceof Error ? error.name : "UnknownError");
+    console.error(
+      "[AppointmentFulfillment] Refund email could not be queued or sent",
+      error instanceof Error ? error.name : "UnknownError"
+    );
     return null;
   }
 }
@@ -448,7 +624,10 @@ export async function enqueueAppointmentFulfillment(appointmentId: number) {
       // confirmation job notifies the owner itself (see ensureOwnerNotification).
       // Patient jobs must be stored, or Stripe has to redeliver the event.
       if (jobType !== "owner") throw error;
-      console.error("[AppointmentFulfillment] Owner notification job could not be queued; the confirmation job will notify the owner", error instanceof Error ? error.name : "UnknownError");
+      console.error(
+        "[AppointmentFulfillment] Owner notification job could not be queued; the confirmation job will notify the owner",
+        error instanceof Error ? error.name : "UnknownError"
+      );
     }
   }
 }
@@ -458,19 +637,43 @@ export async function enqueueAppointmentFulfillment(appointmentId: number) {
  * be stored) still get exactly one owner notification: queue the owner job if
  * it is missing, or send the notification inline when it cannot be queued.
  */
-async function ensureOwnerNotification(db: Database, appointment: Appointment, finalPrice: number) {
+async function ensureOwnerNotification(
+  db: Database,
+  appointment: Appointment,
+  finalPrice: number
+) {
   try {
-    await db.insert(appointmentFulfillmentJobs).values({
-      appointmentId: appointment.id,
-      jobType: "owner",
-      status: "queued",
-      attempts: 0,
-      maxAttempts: APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS,
-      scheduledFor: new Date(),
-    }).onConflictDoNothing({ target: [appointmentFulfillmentJobs.appointmentId, appointmentFulfillmentJobs.jobType] });
+    await db
+      .insert(appointmentFulfillmentJobs)
+      .values({
+        appointmentId: appointment.id,
+        jobType: "owner",
+        status: "queued",
+        attempts: 0,
+        maxAttempts: APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS,
+        scheduledFor: new Date(),
+      })
+      .onConflictDoNothing({
+        target: [
+          appointmentFulfillmentJobs.appointmentId,
+          appointmentFulfillmentJobs.jobType,
+        ],
+      });
   } catch {
-    await sendOwnerNotificationEmail(appointment.customerName, appointment.customerEmail, appointment.customerPhone, appointment.trackingId, appointment.appointmentDate, finalPrice, { idempotencyKey: ownerNotificationKey(appointment), language: appointment.language })
-      .catch(() => console.error("[AppointmentFulfillment] Inline owner notification failed"));
+    await sendOwnerNotificationEmail(
+      appointment.customerName,
+      appointment.customerEmail,
+      appointment.customerPhone,
+      appointment.trackingId,
+      appointment.appointmentDate,
+      finalPrice,
+      {
+        idempotencyKey: ownerNotificationKey(appointment),
+        language: appointment.language,
+      }
+    ).catch(() =>
+      console.error("[AppointmentFulfillment] Inline owner notification failed")
+    );
   }
 }
 
@@ -479,8 +682,13 @@ async function ensureOwnerNotification(db: Database, appointment: Appointment, f
  * quotes: sent again after a correction of the patient's address (« Renvoyer »),
  * it leaves under a new key, which Resend does not refuse with 409 (ABUS-03).
  */
-function ownerNotificationKey(appointment: Pick<Appointment, "trackingId" | "customerEmail">) {
-  return patientEmailIdempotencyKey(`appointment-owner-${appointment.trackingId}`, appointment.customerEmail);
+function ownerNotificationKey(
+  appointment: Pick<Appointment, "trackingId" | "customerEmail">
+) {
+  return patientEmailIdempotencyKey(
+    `appointment-owner-${appointment.trackingId}`,
+    appointment.customerEmail
+  );
 }
 
 /**
@@ -499,19 +707,29 @@ export function patientEmailIdempotencyKey(key: string, customerEmail: string) {
 
 /** The mailbox an address reaches, whatever its case: a bounce is told once per mailbox (EXPL-13). */
 function addressFingerprint(customerEmail: string) {
-  return createHash("sha256").update(customerEmail.trim().toLowerCase()).digest("hex").slice(0, 16);
+  return createHash("sha256")
+    .update(customerEmail.trim().toLowerCase())
+    .digest("hex")
+    .slice(0, 16);
 }
 
 function retryAt(attempt: number) {
   const delays = APPOINTMENT_FULFILLMENT_RETRY_DELAYS_MS;
-  return new Date(Date.now() + delays[Math.min(Math.max(1, attempt), delays.length) - 1]);
+  return new Date(
+    Date.now() + delays[Math.min(Math.max(1, attempt), delays.length) - 1]
+  );
 }
 
 /** Start of the last error of a job ended at once because the email service refused its email (EXPL-02). */
 const PROVIDER_REJECTED_ERROR = "provider_rejected:";
 
-function isRefusedJob(job: Pick<FulfillmentJob, "status" | "lastError"> | undefined) {
-  return job?.status === "failed" && Boolean(job.lastError?.startsWith(PROVIDER_REJECTED_ERROR));
+function isRefusedJob(
+  job: Pick<FulfillmentJob, "status" | "lastError"> | undefined
+) {
+  return (
+    job?.status === "failed" &&
+    Boolean(job.lastError?.startsWith(PROVIDER_REJECTED_ERROR))
+  );
 }
 
 /**
@@ -529,10 +747,19 @@ function bouncedAfterAcceptanceError(customerEmail: string) {
 }
 
 /** The jobs whose email bounced after Resend accepted it, as a SQL condition (see isBouncedJob). */
-const bouncedJobCondition = () => and(eq(appointmentFulfillmentJobs.status, "completed"), like(appointmentFulfillmentJobs.lastError, `${BOUNCED_AFTER_ACCEPTANCE}:%`));
+const bouncedJobCondition = () =>
+  and(
+    eq(appointmentFulfillmentJobs.status, "completed"),
+    like(appointmentFulfillmentJobs.lastError, `${BOUNCED_AFTER_ACCEPTANCE}:%`)
+  );
 
-function isBouncedJob(job: Pick<FulfillmentJob, "status" | "lastError"> | undefined) {
-  return job?.status === "completed" && Boolean(job.lastError?.startsWith(`${BOUNCED_AFTER_ACCEPTANCE}:`));
+function isBouncedJob(
+  job: Pick<FulfillmentJob, "status" | "lastError"> | undefined
+) {
+  return (
+    job?.status === "completed" &&
+    Boolean(job.lastError?.startsWith(`${BOUNCED_AFTER_ACCEPTANCE}:`))
+  );
 }
 
 /**
@@ -542,13 +769,30 @@ function isBouncedJob(job: Pick<FulfillmentJob, "status" | "lastError"> | undefi
  * accepting it (EXPL-13): the only case in which the dashboard corrects the
  * patient's address (EXPL-02), as its card.
  */
-export async function hasRefusedPatientEmail(appointment: Pick<Appointment, "id" | "paymentStatus">): Promise<boolean> {
+export async function hasRefusedPatientEmail(
+  appointment: Pick<Appointment, "id" | "paymentStatus">
+): Promise<boolean> {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  const jobs = await db.select({ jobType: appointmentFulfillmentJobs.jobType, status: appointmentFulfillmentJobs.status, lastError: appointmentFulfillmentJobs.lastError })
+  const jobs = await db
+    .select({
+      jobType: appointmentFulfillmentJobs.jobType,
+      status: appointmentFulfillmentJobs.status,
+      lastError: appointmentFulfillmentJobs.lastError,
+    })
     .from(appointmentFulfillmentJobs)
-    .where(and(eq(appointmentFulfillmentJobs.appointmentId, appointment.id), inArray(appointmentFulfillmentJobs.status, ["failed", "completed"])));
-  return jobs.some(job => isPatientJob(job.jobType) && jobPaymentStatus(job.jobType) === appointment.paymentStatus && (isRefusedJob(job) || isBouncedJob(job)));
+    .where(
+      and(
+        eq(appointmentFulfillmentJobs.appointmentId, appointment.id),
+        inArray(appointmentFulfillmentJobs.status, ["failed", "completed"])
+      )
+    );
+  return jobs.some(
+    job =>
+      isPatientJob(job.jobType) &&
+      jobPaymentStatus(job.jobType) === appointment.paymentStatus &&
+      (isRefusedJob(job) || isBouncedJob(job))
+  );
 }
 
 /**
@@ -559,22 +803,56 @@ export async function hasRefusedPatientEmail(appointment: Pick<Appointment, "id"
  * and address (bounceAlertJobType). The caller has checked that the bounce is
  * about the address the appointment holds now.
  */
-export function appointmentEmailBounceEffects(db: Database, input: { appointmentId: number; customerEmail: string; email: ResendAppointmentEmail; now?: Date }): BatchItem<"pg">[] {
+export function appointmentEmailBounceEffects(
+  db: Database,
+  input: {
+    appointmentId: number;
+    customerEmail: string;
+    email: ResendAppointmentEmail;
+    now?: Date;
+  }
+): BatchItem<"pg">[] {
   const now = input.now ?? new Date();
-  const jobOf = (jobType: PatientJobType) => and(eq(appointmentFulfillmentJobs.appointmentId, input.appointmentId), eq(appointmentFulfillmentJobs.jobType, jobType));
+  const jobOf = (jobType: PatientJobType) =>
+    and(
+      eq(appointmentFulfillmentJobs.appointmentId, input.appointmentId),
+      eq(appointmentFulfillmentJobs.jobType, jobType)
+    );
   return [
     // The reminder has no job of its own (server/scheduledJobs.ts).
-    ...input.email === "reminder" ? [] : [db.update(appointmentFulfillmentJobs)
-      .set({ lastError: bouncedAfterAcceptanceError(input.customerEmail), updatedAt: now })
-      .where(and(jobOf(input.email), eq(appointmentFulfillmentJobs.status, "completed"), isNull(appointmentFulfillmentJobs.lastError)))],
-    db.insert(appointmentFulfillmentJobs).values({
-      appointmentId: input.appointmentId,
-      jobType: bounceAlertJobType(input.customerEmail),
-      status: "queued",
-      attempts: 0,
-      maxAttempts: APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS,
-      scheduledFor: now,
-    }).onConflictDoNothing({ target: [appointmentFulfillmentJobs.appointmentId, appointmentFulfillmentJobs.jobType] }),
+    ...(input.email === "reminder"
+      ? []
+      : [
+          db
+            .update(appointmentFulfillmentJobs)
+            .set({
+              lastError: bouncedAfterAcceptanceError(input.customerEmail),
+              updatedAt: now,
+            })
+            .where(
+              and(
+                jobOf(input.email),
+                eq(appointmentFulfillmentJobs.status, "completed"),
+                isNull(appointmentFulfillmentJobs.lastError)
+              )
+            ),
+        ]),
+    db
+      .insert(appointmentFulfillmentJobs)
+      .values({
+        appointmentId: input.appointmentId,
+        jobType: bounceAlertJobType(input.customerEmail),
+        status: "queued",
+        attempts: 0,
+        maxAttempts: APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS,
+        scheduledFor: now,
+      })
+      .onConflictDoNothing({
+        target: [
+          appointmentFulfillmentJobs.appointmentId,
+          appointmentFulfillmentJobs.jobType,
+        ],
+      }),
   ];
 }
 
@@ -584,11 +862,26 @@ export function appointmentEmailBounceEffects(db: Database, input: { appointment
  * or made from the dashboard, for the patient email only. The patient email is
  * read from the appointment, the same at every attempt. Null for neither.
  */
-async function refundNoticeOf(appointment: Pick<Appointment, "paymentStatus" | "cancellationReason">) {
+async function refundNoticeOf(
+  appointment: Pick<Appointment, "paymentStatus" | "cancellationReason">
+) {
   // Loaded only for the refund notices (the webhook module queues the post-payment jobs).
-  const stripeRefundOf = (await import("./appointmentPaymentWebhook")).stripeRecordedRefundOf(appointment);
-  if (stripeRefundOf) return { stripeRefundOf, email: { context: stripeRefundOf === "paid" ? "refund" as const : "unconfirmed_payment" as const } };
-  const email = (await import("./appointmentAdminActions")).dashboardRefundEmailOf(appointment);
+  const stripeRefundOf = (
+    await import("./appointmentPaymentWebhook")
+  ).stripeRecordedRefundOf(appointment);
+  if (stripeRefundOf)
+    return {
+      stripeRefundOf,
+      email: {
+        context:
+          stripeRefundOf === "paid"
+            ? ("refund" as const)
+            : ("unconfirmed_payment" as const),
+      },
+    };
+  const email = (
+    await import("./appointmentAdminActions")
+  ).dashboardRefundEmailOf(appointment);
   return email ? { stripeRefundOf: null, email } : null;
 }
 
@@ -598,20 +891,28 @@ async function refundNoticeOf(appointment: Pick<Appointment, "paymentStatus" | "
  * and attempt count it read may send. A concurrent worker matches zero rows and
  * skips the job, so a confirmation or invoice is never sent twice in parallel.
  */
-async function claimFulfillmentJob(db: Database, job: FulfillmentJob): Promise<boolean> {
+async function claimFulfillmentJob(
+  db: Database,
+  job: FulfillmentJob
+): Promise<boolean> {
   const startedAt = new Date();
-  const result = await db.update(appointmentFulfillmentJobs).set({
-    status: "running",
-    attempts: job.attempts + 1,
-    startedAt,
-    finishedAt: null,
-    updatedAt: startedAt,
-  }).where(and(
-    eq(appointmentFulfillmentJobs.id, job.id),
-    inArray(appointmentFulfillmentJobs.status, ["queued", "retry"]),
-    eq(appointmentFulfillmentJobs.attempts, job.attempts),
-    lte(appointmentFulfillmentJobs.scheduledFor, startedAt),
-  ));
+  const result = await db
+    .update(appointmentFulfillmentJobs)
+    .set({
+      status: "running",
+      attempts: job.attempts + 1,
+      startedAt,
+      finishedAt: null,
+      updatedAt: startedAt,
+    })
+    .where(
+      and(
+        eq(appointmentFulfillmentJobs.id, job.id),
+        inArray(appointmentFulfillmentJobs.status, ["queued", "retry"]),
+        eq(appointmentFulfillmentJobs.attempts, job.attempts),
+        lte(appointmentFulfillmentJobs.scheduledFor, startedAt)
+      )
+    );
   return mutationRowCount(result) === 1;
 }
 
@@ -620,7 +921,10 @@ async function claimFulfillmentJob(db: Database, job: FulfillmentJob): Promise<b
  * that emails it and the dashboard download build the same PDF, and give the
  * copy stored at its issue once there is one (EXPL-02).
  */
-function appointmentInvoiceData(appointment: Appointment, invoiceRecord: AppointmentInvoiceRecord): InvoiceData {
+function appointmentInvoiceData(
+  appointment: Appointment,
+  invoiceRecord: AppointmentInvoiceRecord
+): InvoiceData {
   return {
     invoiceNumber: invoiceRecord.invoiceNumber,
     issueDate: invoiceRecord.issuedAt,
@@ -647,7 +951,10 @@ function patientContact(appointment: Appointment) {
  * was tried with: the one its alert quotes, even once the appointment holds a
  * corrected one (ABUS-03).
  */
-type PatientEmailFailure = Pick<FulfillmentJob, "attempts" | "maxAttempts" | "lastError"> & { refused: boolean; terminal: boolean; customerEmail: string };
+type PatientEmailFailure = Pick<
+  FulfillmentJob,
+  "attempts" | "maxAttempts" | "lastError"
+> & { refused: boolean; terminal: boolean; customerEmail: string };
 
 /**
  * The owner's alert that a patient email did not go out: at its first failure
@@ -662,15 +969,26 @@ type PatientEmailFailure = Pick<FulfillmentJob, "attempts" | "maxAttempts" | "la
  * the alert leaves, the address the appointment now holds is named as
  * corrected since, never as refused, and changes the key too (ABUS-03).
  */
-function failureAlertOf(jobType: PatientJobType, appointment: Appointment, failure: PatientEmailFailure) {
+function failureAlertOf(
+  jobType: PatientJobType,
+  appointment: Appointment,
+  failure: PatientEmailFailure
+) {
   const { refused, terminal, attempts, maxAttempts } = failure;
   const corrected = failure.customerEmail !== appointment.customerEmail;
   const contact = `${patientContact({ ...appointment, customerEmail: failure.customerEmail })}${corrected ? ` Cet envoi visait cette adresse, corrigée depuis sur le rendez-vous en ${appointment.customerEmail} (pas encore essayée) : « Renvoyer » l’y envoie.` : ""}`;
-  const recorded = isRefundNoticeJob(jobType) ? "Le remboursement est bien enregistré" : "Le paiement est bien enregistré";
+  const recorded = isRefundNoticeJob(jobType)
+    ? "Le remboursement est bien enregistré"
+    : "Le paiement est bien enregistré";
   // The invoice storage, not the email service, is named when it kept the invoice from going out.
   const storage = failedOnInvoiceStorage(failure.lastError);
-  const cause = storage ? " : sa copie archivée dans le stockage des factures (Vercel Blob) n’a pas pu être vérifiée ou lue, et elle n’est pas refaite à sa place ; vérifiez dans Vercel que le stockage Blob est actif" : "";
-  const key = patientEmailIdempotencyKey(`appointment-${jobType}-failure-${appointment.trackingId}-${refused ? "refused" : terminal ? "final" : "first"}${storage ? "-storage" : ""}`, failure.customerEmail);
+  const cause = storage
+    ? " : sa copie archivée dans le stockage des factures (Vercel Blob) n’a pas pu être vérifiée ou lue, et elle n’est pas refaite à sa place ; vérifiez dans Vercel que le stockage Blob est actif"
+    : "";
+  const key = patientEmailIdempotencyKey(
+    `appointment-${jobType}-failure-${appointment.trackingId}-${refused ? "refused" : terminal ? "final" : "first"}${storage ? "-storage" : ""}`,
+    failure.customerEmail
+  );
   return {
     payload: {
       title: `Échec d’envoi après ${isRefundNoticeJob(jobType) ? "remboursement" : "paiement"} (${appointment.trackingId})`,
@@ -681,7 +999,9 @@ function failureAlertOf(jobType: PatientJobType, appointment: Appointment, failu
           : `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} vient d’échouer (tentative ${attempts} sur ${maxAttempts})${cause}. ${recorded}. Un nouvel essai automatique aura lieu lors de la prochaine exécution planifiée ; en attendant, vous pouvez contacter le patient. ${contact}`,
     },
     // The corrected address it names changes its content, and so its key.
-    idempotencyKey: corrected ? patientEmailIdempotencyKey(key, appointment.customerEmail) : key,
+    idempotencyKey: corrected
+      ? patientEmailIdempotencyKey(key, appointment.customerEmail)
+      : key,
   };
 }
 
@@ -694,14 +1014,21 @@ function failureAlertOf(jobType: PatientJobType, appointment: Appointment, failu
  * one key per wording and address.
  */
 function bounceAlertOf(appointment: Appointment) {
-  const consultation = appointment.appointmentDate.toLocaleString("fr-FR", { timeZone: PARIS_TIME_ZONE, dateStyle: "full", timeStyle: "short" });
+  const consultation = appointment.appointmentDate.toLocaleString("fr-FR", {
+    timeZone: PARIS_TIME_ZONE,
+    dateStyle: "full",
+    timeStyle: "short",
+  });
   const refunded = appointment.paymentStatus === "refunded";
   return {
     payload: {
       title: `Email non reçu par le patient (${appointment.trackingId})`,
       content: `Un email du rendez-vous ${appointment.trackingId} (consultation du ${consultation}, heure de Paris) a été accepté par le service d’envoi, puis refusé par la messagerie du patient ou signalé par lui comme indésirable (adresse inexistante ou boîte pleine, plainte, ou adresse bloquée par le service d’envoi) : les emails envoyés à cette adresse ne lui parviennent pas. Appelez-le au ${appointment.customerPhone} pour vérifier son adresse${refunded ? " et le prévenir de son remboursement" : " et lui rappeler la date et l’heure de sa consultation"}. Pour lui écrire à une autre adresse : ${adminLink("appointments", appointment.trackingId)}, onglet « Réservations », rendez-vous ${appointment.trackingId} : « Corriger l’email du patient », puis « Renvoyer » lui envoie de nouveau ${refunded ? "l’email de remboursement" : "la confirmation et la facture"} (pas le rappel). ${patientContact(appointment)}`,
     },
-    idempotencyKey: patientEmailIdempotencyKey(`appointment-bounce-${appointment.trackingId}-${refunded ? "refunded" : "paid"}`, appointment.customerEmail),
+    idempotencyKey: patientEmailIdempotencyKey(
+      `appointment-bounce-${appointment.trackingId}-${refunded ? "refunded" : "paid"}`,
+      appointment.customerEmail
+    ),
   };
 }
 
@@ -714,46 +1041,118 @@ function bounceAlertOf(appointment: Appointment) {
  * address the alert kept (TRIED_ADDRESS_MARK), or else the one the
  * appointment holds.
  */
-function recordedFailureOf(job: FulfillmentJob, appointment: Appointment, triedAddress: string | null): PatientEmailFailure | null {
+function recordedFailureOf(
+  job: FulfillmentJob,
+  appointment: Appointment,
+  triedAddress: string | null
+): PatientEmailFailure | null {
   const customerEmail = triedAddress ?? appointment.customerEmail;
-  if (job.status === "failed") return { ...job, refused: isRefusedJob(job), terminal: true, customerEmail };
-  if (job.status === "retry") return { ...job, attempts: 1, refused: false, terminal: false, customerEmail };
+  if (job.status === "failed")
+    return {
+      ...job,
+      refused: isRefusedJob(job),
+      terminal: true,
+      customerEmail,
+    };
+  if (job.status === "retry")
+    return {
+      ...job,
+      attempts: 1,
+      refused: false,
+      terminal: false,
+      customerEmail,
+    };
   return null;
 }
 
 /** A claimed job back in the queue as it was, due, without counting this attempt. */
 function releaseClaimedJob(db: Database, job: FulfillmentJob) {
-  return db.update(appointmentFulfillmentJobs).set({ status: job.attempts > 1 ? "retry" : "queued", attempts: job.attempts - 1, startedAt: null }).where(eq(appointmentFulfillmentJobs.id, job.id));
+  return db
+    .update(appointmentFulfillmentJobs)
+    .set({
+      status: job.attempts > 1 ? "retry" : "queued",
+      attempts: job.attempts - 1,
+      startedAt: null,
+    })
+    .where(eq(appointmentFulfillmentJobs.id, job.id));
 }
 
 async function runJob(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  const [job] = await db.select().from(appointmentFulfillmentJobs).where(eq(appointmentFulfillmentJobs.id, id)).limit(1);
+  const [job] = await db
+    .select()
+    .from(appointmentFulfillmentJobs)
+    .where(eq(appointmentFulfillmentJobs.id, id))
+    .limit(1);
   if (!job || job.status !== "running") return { skipped: true };
-  const jobType = job.jobType as FulfillmentJobType | FailureAlertJobType | BounceAlertJobType | typeof QUOTA_ALERT_JOB_TYPE;
-  const [appointment] = await db.select().from(appointments).where(eq(appointments.id, job.appointmentId)).limit(1);
-  const refundNotice = isRefundNoticeJob(jobType) && appointment ? await refundNoticeOf(appointment) : null;
+  const jobType = job.jobType as
+    | FulfillmentJobType
+    | FailureAlertJobType
+    | BounceAlertJobType
+    | typeof QUOTA_ALERT_JOB_TYPE;
+  const [appointment] = await db
+    .select()
+    .from(appointments)
+    .where(eq(appointments.id, job.appointmentId))
+    .limit(1);
+  const refundNotice =
+    isRefundNoticeJob(jobType) && appointment
+      ? await refundNoticeOf(appointment)
+      : null;
   // A refund closes the post-payment jobs still waiting; the patient refund
   // email only goes out for a refund recorded from Stripe or the dashboard,
   // the owner refund alert for one recorded from Stripe.
-  const refundNoticeMissing = jobType === "refund" ? !refundNotice : jobType === "refund_owner" && !refundNotice?.stripeRefundOf;
-  if (!appointment || !jobSentFor(jobType, appointment.paymentStatus) || refundNoticeMissing) {
-    await db.update(appointmentFulfillmentJobs).set({ status: "completed", finishedAt: new Date(), lastError: isRefundNoticeJob(jobType) ? "appointment_refund_not_recorded_or_missing" : "appointment_not_paid_or_missing" }).where(eq(appointmentFulfillmentJobs.id, id));
+  const refundNoticeMissing =
+    jobType === "refund"
+      ? !refundNotice
+      : jobType === "refund_owner" && !refundNotice?.stripeRefundOf;
+  if (
+    !appointment ||
+    !jobSentFor(jobType, appointment.paymentStatus) ||
+    refundNoticeMissing
+  ) {
+    await db
+      .update(appointmentFulfillmentJobs)
+      .set({
+        status: "completed",
+        finishedAt: new Date(),
+        lastError: isRefundNoticeJob(jobType)
+          ? "appointment_refund_not_recorded_or_missing"
+          : "appointment_not_paid_or_missing",
+      })
+      .where(eq(appointmentFulfillmentJobs.id, id));
     return { skipped: true };
   }
   // RGPD-12: a booking reduced to its accounting record has no address left.
   // Its patient emails, and the owner's alerts about them, are closed unsent;
   // the owner's other notices still go out.
   if (isPatientDataJob(jobType) && hasErasedPatientData(appointment)) {
-    await db.update(appointmentFulfillmentJobs).set({ status: "completed", finishedAt: new Date(), lastError: PATIENT_DATA_ERASED }).where(eq(appointmentFulfillmentJobs.id, id));
+    await db
+      .update(appointmentFulfillmentJobs)
+      .set({
+        status: "completed",
+        finishedAt: new Date(),
+        lastError: PATIENT_DATA_ERASED,
+      })
+      .where(eq(appointmentFulfillmentJobs.id, id));
     return { skipped: true };
   }
   const finalPrice = Number(appointment.finalPrice);
   // A backlog drained late must not tell a patient that a consultation which
   // already took place is "confirmed". The owner job and the invoice still run.
-  if (jobType === "confirmation" && appointment.appointmentDate.getTime() < Date.now()) {
-    await db.update(appointmentFulfillmentJobs).set({ status: "completed", finishedAt: new Date(), lastError: "appointment_already_past_confirmation_skipped" }).where(eq(appointmentFulfillmentJobs.id, id));
+  if (
+    jobType === "confirmation" &&
+    appointment.appointmentDate.getTime() < Date.now()
+  ) {
+    await db
+      .update(appointmentFulfillmentJobs)
+      .set({
+        status: "completed",
+        finishedAt: new Date(),
+        lastError: "appointment_already_past_confirmation_skipped",
+      })
+      .where(eq(appointmentFulfillmentJobs.id, id));
     await ensureOwnerNotification(db, appointment, finalPrice);
     if (appointment.emailSent !== 1) {
       await notifyOwner({
@@ -768,66 +1167,170 @@ async function runJob(id: number) {
   try {
     if (jobType === "owner") {
       await waitForJobSendSlot();
-      await sendOwnerNotificationEmail(appointment.customerName, appointment.customerEmail, appointment.customerPhone, appointment.trackingId, appointment.appointmentDate, finalPrice, { idempotencyKey: ownerNotificationKey(appointment), language: appointment.language });
+      await sendOwnerNotificationEmail(
+        appointment.customerName,
+        appointment.customerEmail,
+        appointment.customerPhone,
+        appointment.trackingId,
+        appointment.appointmentDate,
+        finalPrice,
+        {
+          idempotencyKey: ownerNotificationKey(appointment),
+          language: appointment.language,
+        }
+      );
     } else if (jobType === "confirmation") {
       await ensureOwnerNotification(db, appointment, finalPrice);
       await waitForJobSendSlot();
       // The job is created at the payment confirmation: its creation time stamps
       // the attached .ics, identical on every retry (RES-05).
-      await sendConfirmationEmail(appointment.customerEmail, appointment.customerName, appointment.trackingId, appointment.appointmentDate, finalPrice, undefined, { idempotencyKey: patientEmailIdempotencyKey(`appointment-confirmation-${appointment.trackingId}`, appointment.customerEmail), language, confirmedAt: job.createdAt ?? appointment.appointmentDate });
-      const smsSent = await sendCustomerConfirmationSMS(appointment.customerPhone, appointment.trackingId, appointment.appointmentDate);
-      await db.update(appointments).set({ emailSent: 1, smsSent: smsSent ? 1 : 0 }).where(eq(appointments.id, appointment.id));
+      await sendConfirmationEmail(
+        appointment.customerEmail,
+        appointment.customerName,
+        appointment.trackingId,
+        appointment.appointmentDate,
+        finalPrice,
+        undefined,
+        {
+          idempotencyKey: patientEmailIdempotencyKey(
+            `appointment-confirmation-${appointment.trackingId}`,
+            appointment.customerEmail
+          ),
+          language,
+          confirmedAt: job.createdAt ?? appointment.appointmentDate,
+        }
+      );
+      const smsSent = await sendCustomerConfirmationSMS(
+        appointment.customerPhone,
+        appointment.trackingId,
+        appointment.appointmentDate
+      );
+      await db
+        .update(appointments)
+        .set({ emailSent: 1, smsSent: smsSent ? 1 : 0 })
+        .where(eq(appointments.id, appointment.id));
     } else if (jobType === "refund") {
       await waitForJobSendSlot();
       // One key whatever the refund's origin: the patient is told once. Its
       // failure carries its cause, so a refused address is told apart (RES-06).
-      await sendRefundConfirmationEmail(appointment.customerEmail, appointment.customerName, appointment.trackingId, appointment.appointmentDate, appointment.refundAmount ?? appointment.finalPrice, { ...refundNotice!.email, idempotencyKey: patientEmailIdempotencyKey(`appointment-refund-${appointment.trackingId}`, appointment.customerEmail), language });
+      await sendRefundConfirmationEmail(
+        appointment.customerEmail,
+        appointment.customerName,
+        appointment.trackingId,
+        appointment.appointmentDate,
+        appointment.refundAmount ?? appointment.finalPrice,
+        {
+          ...refundNotice!.email,
+          idempotencyKey: patientEmailIdempotencyKey(
+            `appointment-refund-${appointment.trackingId}`,
+            appointment.customerEmail
+          ),
+          language,
+        }
+      );
     } else if (jobType === "refund_owner") {
       // Queued after the patient email: says whether it went out.
-      const [patientJob] = await db.select({ status: appointmentFulfillmentJobs.status, lastError: appointmentFulfillmentJobs.lastError }).from(appointmentFulfillmentJobs)
-        .where(and(eq(appointmentFulfillmentJobs.appointmentId, appointment.id), eq(appointmentFulfillmentJobs.jobType, "refund"))).limit(1);
+      const [patientJob] = await db
+        .select({
+          status: appointmentFulfillmentJobs.status,
+          lastError: appointmentFulfillmentJobs.lastError,
+        })
+        .from(appointmentFulfillmentJobs)
+        .where(
+          and(
+            eq(appointmentFulfillmentJobs.appointmentId, appointment.id),
+            eq(appointmentFulfillmentJobs.jobType, "refund")
+          )
+        )
+        .limit(1);
       // An email that bounced after Resend accepted it (EXPL-13) did not reach the patient either.
-      const patientEmail = patientJob?.status === "completed" && !patientJob.lastError ? "sent" : isRefusedJob(patientJob) || isBouncedJob(patientJob) ? "refused" : "pending";
+      const patientEmail =
+        patientJob?.status === "completed" && !patientJob.lastError
+          ? "sent"
+          : isRefusedJob(patientJob) || isBouncedJob(patientJob)
+            ? "refused"
+            : "pending";
       const patientDataErased = hasErasedPatientData(appointment);
-      const { buildStripeRefundAlert } = await import("./appointmentPaymentWebhook");
+      const { buildStripeRefundAlert } = await import(
+        "./appointmentPaymentWebhook"
+      );
       await waitForJobSendSlot();
-      const delivered = await notifyOwner(buildStripeRefundAlert({
-        trackingId: appointment.trackingId,
-        refundAmount: appointment.refundAmount ?? appointment.finalPrice,
-        paymentIntentId: appointment.stripePaymentIntentId ?? "non communiqué",
-        effect: refundNotice!.stripeRefundOf === "unconfirmed" ? "unconfirmed_payment" : appointment.appointmentStatus === "cancelled" ? "cancelled" : "status_kept",
-        appointmentStatus: appointment.appointmentStatus,
-        patientEmail,
-        patientDataErased,
-      }), {
-        // Written at each attempt: one key per wording (status, patient told,
-        // refused, not yet, or no longer reachable), as Resend refuses a key
-        // reused with another content (409).
-        idempotencyKey: `appointment-stripe-refund-${appointment.trackingId}-${appointment.appointmentStatus}-${patientDataErased ? "erased" : patientEmail === "sent" ? "notified" : patientEmail}`,
-        // Not asked again after the immediate budget: the job goes back to the queue (ABUS-03).
-        stopAtDeadline: true,
-      }).catch(() => false);
+      const delivered = await notifyOwner(
+        buildStripeRefundAlert({
+          trackingId: appointment.trackingId,
+          refundAmount: appointment.refundAmount ?? appointment.finalPrice,
+          paymentIntentId:
+            appointment.stripePaymentIntentId ?? "non communiqué",
+          effect:
+            refundNotice!.stripeRefundOf === "unconfirmed"
+              ? "unconfirmed_payment"
+              : appointment.appointmentStatus === "cancelled"
+                ? "cancelled"
+                : "status_kept",
+          appointmentStatus: appointment.appointmentStatus,
+          patientEmail,
+          patientDataErased,
+        }),
+        {
+          // Written at each attempt: one key per wording (status, patient told,
+          // refused, not yet, or no longer reachable), as Resend refuses a key
+          // reused with another content (409).
+          idempotencyKey: `appointment-stripe-refund-${appointment.trackingId}-${appointment.appointmentStatus}-${patientDataErased ? "erased" : patientEmail === "sent" ? "notified" : patientEmail}`,
+          // Not asked again after the immediate budget: the job goes back to the queue (ABUS-03).
+          stopAtDeadline: true,
+        }
+      ).catch(() => false);
       if (!delivered) throw new Error("owner_refund_alert_failed");
     } else if (jobType === "invoice") {
       // Numbered once per paid appointment; a retried job reuses the same
       // number, issue date and payment date. The job row is created by the
       // webhook right after the payment confirmation: its creation time is the
       // payment date.
-      const invoiceRecord = await allocateAppointmentInvoice({ appointmentId: appointment.id, paidAt: job.createdAt ?? new Date() });
+      const invoiceRecord = await allocateAppointmentInvoice({
+        appointmentId: appointment.id,
+        paidAt: job.createdAt ?? new Date(),
+      });
       // At its first issue, built and sent even while the store cannot be
       // checked: no copy of a number just allocated can be stored (EXPL-02).
-      const invoice = await generateInvoicePDF(appointmentInvoiceData(appointment, invoiceRecord), undefined, { issuedNow: invoiceRecord.issuedNow });
+      const invoice = await generateInvoicePDF(
+        appointmentInvoiceData(appointment, invoiceRecord),
+        undefined,
+        { issuedNow: invoiceRecord.issuedNow }
+      );
       // Its pause counts from here, once the PDF is built.
       await waitForJobSendSlot();
       // The PDF stays in French whatever the language of the email (EN-01).
-      await sendInvoiceEmail(appointment.customerEmail, appointment.customerName, appointment.trackingId, finalPrice, invoice.buffer, invoiceRecord.invoiceNumber, { idempotencyKey: patientEmailIdempotencyKey(`appointment-invoice-${invoiceRecord.invoiceNumber}`, appointment.customerEmail), language });
+      await sendInvoiceEmail(
+        appointment.customerEmail,
+        appointment.customerName,
+        appointment.trackingId,
+        finalPrice,
+        invoice.buffer,
+        invoiceRecord.invoiceNumber,
+        {
+          idempotencyKey: patientEmailIdempotencyKey(
+            `appointment-invoice-${invoiceRecord.invoiceNumber}`,
+            appointment.customerEmail
+          ),
+          language,
+        }
+      );
     } else if (jobType === QUOTA_ALERT_JOB_TYPE) {
       await waitForJobSendSlot();
-      const sent = await sendQueuedSecurityAlert(RESEND_QUOTA_SECURITY_CATEGORY);
+      const sent = await sendQueuedSecurityAlert(
+        RESEND_QUOTA_SECURITY_CATEGORY
+      );
       if (!sent) throw new Error("quota_alert_not_sent");
       if (sent === "covered") {
         // Told by an alert of the same window, sent at once since it was queued.
-        await db.update(appointmentFulfillmentJobs).set({ status: "completed", finishedAt: new Date(), lastError: "quota_alert_covered" }).where(eq(appointmentFulfillmentJobs.id, id));
+        await db
+          .update(appointmentFulfillmentJobs)
+          .set({
+            status: "completed",
+            finishedAt: new Date(),
+            lastError: "quota_alert_covered",
+          })
+          .where(eq(appointmentFulfillmentJobs.id, id));
         return { skipped: true };
       }
     } else if (isBounceAlertJob(jobType)) {
@@ -836,13 +1339,23 @@ async function runJob(id: number) {
       // appointment, nothing is left to alert about: a new address that
       // bounces in turn gets its own alert.
       if (jobType !== bounceAlertJobType(appointment.customerEmail)) {
-        await db.update(appointmentFulfillmentJobs).set({ status: "completed", finishedAt: new Date(), lastError: "bounce_alert_outdated" }).where(eq(appointmentFulfillmentJobs.id, id));
+        await db
+          .update(appointmentFulfillmentJobs)
+          .set({
+            status: "completed",
+            finishedAt: new Date(),
+            lastError: "bounce_alert_outdated",
+          })
+          .where(eq(appointmentFulfillmentJobs.id, id));
         return { skipped: true };
       }
       const alert = bounceAlertOf(appointment);
       await waitForJobSendSlot();
       // Not asked again after the immediate budget: the job goes back to the queue.
-      const delivered = await notifyOwner(alert.payload, { idempotencyKey: alert.idempotencyKey, stopAtDeadline: true }).catch(() => false);
+      const delivered = await notifyOwner(alert.payload, {
+        idempotencyKey: alert.idempotencyKey,
+        stopAtDeadline: true,
+      }).catch(() => false);
       if (!delivered) throw new Error("owner_bounce_alert_failed");
     } else {
       // The owner's failure alert of a patient email, queued when it could not
@@ -851,25 +1364,52 @@ async function runJob(id: number) {
       // was tried with, which it kept (TRIED_ADDRESS_MARK), and takes its key,
       // even once the appointment holds a corrected one (failureAlertOf).
       const patientJobType = alertedPatientJob(jobType)!;
-      const [patientJob] = await db.select().from(appointmentFulfillmentJobs)
-        .where(and(eq(appointmentFulfillmentJobs.appointmentId, appointment.id), eq(appointmentFulfillmentJobs.jobType, patientJobType))).limit(1);
+      const [patientJob] = await db
+        .select()
+        .from(appointmentFulfillmentJobs)
+        .where(
+          and(
+            eq(appointmentFulfillmentJobs.appointmentId, appointment.id),
+            eq(appointmentFulfillmentJobs.jobType, patientJobType)
+          )
+        )
+        .limit(1);
       if (patientJob?.status === "running") {
         // The email is being tried again right now: the alert waits for its outcome.
         await releaseClaimedJob(db, job);
         return { completed: false, retry: true };
       }
-      const failure = patientJob ? recordedFailureOf(patientJob, appointment, triedAddressOf(job.lastError)) : null;
+      const failure = patientJob
+        ? recordedFailureOf(
+            patientJob,
+            appointment,
+            triedAddressOf(job.lastError)
+          )
+        : null;
       if (!failure) {
-        await db.update(appointmentFulfillmentJobs).set({ status: "completed", finishedAt: new Date(), lastError: "failure_alert_outdated" }).where(eq(appointmentFulfillmentJobs.id, id));
+        await db
+          .update(appointmentFulfillmentJobs)
+          .set({
+            status: "completed",
+            finishedAt: new Date(),
+            lastError: "failure_alert_outdated",
+          })
+          .where(eq(appointmentFulfillmentJobs.id, id));
         return { skipped: true };
       }
       const alert = failureAlertOf(patientJobType, appointment, failure);
       await waitForJobSendSlot();
       // Not asked again after the immediate budget: the job goes back to the queue.
-      const delivered = await notifyOwner(alert.payload, { idempotencyKey: alert.idempotencyKey, stopAtDeadline: true }).catch(() => false);
+      const delivered = await notifyOwner(alert.payload, {
+        idempotencyKey: alert.idempotencyKey,
+        stopAtDeadline: true,
+      }).catch(() => false);
       if (!delivered) throw new Error("owner_failure_alert_failed");
     }
-    await db.update(appointmentFulfillmentJobs).set({ status: "completed", finishedAt: new Date(), lastError: null }).where(eq(appointmentFulfillmentJobs.id, id));
+    await db
+      .update(appointmentFulfillmentJobs)
+      .set({ status: "completed", finishedAt: new Date(), lastError: null })
+      .where(eq(appointmentFulfillmentJobs.id, id));
     return { completed: true };
   } catch (error) {
     if (deadlineCutShort()) {
@@ -881,10 +1421,16 @@ async function runJob(id: number) {
       // minutes later, it is listed in « À traiter »
       // (listAppointmentDeliveriesToHandle).
       await releaseClaimedJob(db, job);
-      console.warn("[AppointmentFulfillment] Immediate processing out of time; job left for the next run", { trackingId: appointment.trackingId, jobType });
+      console.warn(
+        "[AppointmentFulfillment] Immediate processing out of time; job left for the next run",
+        { trackingId: appointment.trackingId, jobType }
+      );
       return { completed: false, retry: true, deadlineReached: true };
     }
-    const message = error instanceof Error ? error.message.slice(0, 4000) : "fulfillment_unknown_error";
+    const message =
+      error instanceof Error
+        ? error.message.slice(0, 4000)
+        : "fulfillment_unknown_error";
     // A refusal of this very email (address, content) does not pass with
     // time (EXPL-02): the job ends now, as refused, instead of failing again
     // at each automatic attempt; « Renvoyer » sends it again once the address
@@ -893,14 +1439,28 @@ async function runJob(id: number) {
     // stops every email until it is corrected: it keeps its automatic attempts.
     const refused = postPaymentEmailRefused(error);
     const terminal = refused || job.attempts >= job.maxAttempts;
-    const lastError = refused ? `${PROVIDER_REJECTED_ERROR}${message}` : message;
+    const lastError = refused
+      ? `${PROVIDER_REJECTED_ERROR}${message}`
+      : message;
     // A failure alert waiting for its next attempt keeps the address its email
     // was tried with (TRIED_ADDRESS_MARK); one that gives up no longer does.
     const kept = terminal ? "" : keptTriedAddress(job.lastError);
-    await db.update(appointmentFulfillmentJobs).set({ status: terminal ? "failed" : "retry", lastError: `${lastError}${kept}`, scheduledFor: retryAt(job.attempts), finishedAt: terminal ? new Date() : null }).where(eq(appointmentFulfillmentJobs.id, id));
+    await db
+      .update(appointmentFulfillmentJobs)
+      .set({
+        status: terminal ? "failed" : "retry",
+        lastError: `${lastError}${kept}`,
+        scheduledFor: retryAt(job.attempts),
+        finishedAt: terminal ? new Date() : null,
+      })
+      .where(eq(appointmentFulfillmentJobs.id, id));
     if (!isPatientJob(jobType)) {
       // The owner alert would use the very channel that just failed.
-      console.error("[AppointmentFulfillment] Owner notification failed", { trackingId: appointment.trackingId, jobType, terminal });
+      console.error("[AppointmentFulfillment] Owner notification failed", {
+        trackingId: appointment.trackingId,
+        jobType,
+        terminal,
+      });
     } else if (job.attempts === 1 || terminal) {
       // The owner is alerted (failureAlertOf). The alert takes its send slot,
       // a pause after the email that failed (ABUS-03). When that slot may come
@@ -908,14 +1468,48 @@ async function runJob(id: number) {
       // is queued as a job of its own, sent by the next processing under the
       // same key while the address is unchanged: never without its slot nor
       // after the page or the webhook has answered, and not lost.
-      const alert = failureAlertOf(jobType, appointment, { attempts: job.attempts, maxAttempts: job.maxAttempts, lastError, refused, terminal, customerEmail: appointment.customerEmail });
-      const delivered = (await alertSendSlot()) && (await notifyOwner(alert.payload, { idempotencyKey: alert.idempotencyKey, stopAtDeadline: true }).catch(() => false));
+      const alert = failureAlertOf(jobType, appointment, {
+        attempts: job.attempts,
+        maxAttempts: job.maxAttempts,
+        lastError,
+        refused,
+        terminal,
+        customerEmail: appointment.customerEmail,
+      });
+      const delivered =
+        (await alertSendSlot()) &&
+        (await notifyOwner(alert.payload, {
+          idempotencyKey: alert.idempotencyKey,
+          stopAtDeadline: true,
+        }).catch(() => false));
       // An alert of this email still waiting from an earlier failure is written from this one at its run.
-      await keepTriedAddress(db, appointment.id, jobType, appointment.customerEmail).catch(() => undefined);
+      await keepTriedAddress(
+        db,
+        appointment.id,
+        jobType,
+        appointment.customerEmail
+      ).catch(() => undefined);
       if (!delivered) {
-        console.warn("[AppointmentFulfillment] Owner failure alert not sent at once; queued for the next run", { trackingId: appointment.trackingId, jobType });
-        await queueFailureAlert(db, appointment.id, jobType, appointment.customerEmail)
-          .catch(queueError => console.error("[AppointmentFulfillment] Owner failure alert could not be queued", { trackingId: appointment.trackingId, jobType, error: queueError instanceof Error ? queueError.name : "UnknownError" }));
+        console.warn(
+          "[AppointmentFulfillment] Owner failure alert not sent at once; queued for the next run",
+          { trackingId: appointment.trackingId, jobType }
+        );
+        await queueFailureAlert(
+          db,
+          appointment.id,
+          jobType,
+          appointment.customerEmail
+        ).catch(queueError =>
+          console.error(
+            "[AppointmentFulfillment] Owner failure alert could not be queued",
+            {
+              trackingId: appointment.trackingId,
+              jobType,
+              error:
+                queueError instanceof Error ? queueError.name : "UnknownError",
+            }
+          )
+        );
       }
     }
     return { completed: false, retry: !terminal };
@@ -930,22 +1524,37 @@ async function runJob(id: number) {
  * after the answer may be frozen with the function. The jobs not started stay
  * due, as they were, for the next processing.
  */
-export async function processDueAppointmentFulfillmentJobs(limit = MAX_BATCH, options: { appointmentId?: number; deadlineAt?: number } = {}) {
+export async function processDueAppointmentFulfillmentJobs(
+  limit = MAX_BATCH,
+  options: { appointmentId?: number; deadlineAt?: number } = {}
+) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
   const now = new Date();
   const dueJobs = and(
     inArray(appointmentFulfillmentJobs.status, ["queued", "retry"]),
     lte(appointmentFulfillmentJobs.scheduledFor, now),
-    lt(appointmentFulfillmentJobs.attempts, appointmentFulfillmentJobs.maxAttempts),
-    ...(options.appointmentId === undefined ? [] : [eq(appointmentFulfillmentJobs.appointmentId, options.appointmentId)]),
+    lt(
+      appointmentFulfillmentJobs.attempts,
+      appointmentFulfillmentJobs.maxAttempts
+    ),
+    ...(options.appointmentId === undefined
+      ? []
+      : [eq(appointmentFulfillmentJobs.appointmentId, options.appointmentId)])
   );
-  const jobs = await db.select().from(appointmentFulfillmentJobs)
+  const jobs = await db
+    .select()
+    .from(appointmentFulfillmentJobs)
     .where(dueJobs)
-    .orderBy(appointmentFulfillmentJobs.scheduledFor, appointmentFulfillmentJobs.id).limit(Math.min(Math.max(1, limit), MAX_BATCH));
+    .orderBy(
+      appointmentFulfillmentJobs.scheduledFor,
+      appointmentFulfillmentJobs.id
+    )
+    .limit(Math.min(Math.max(1, limit), MAX_BATCH));
   const results = [];
   const { deadlineAt } = options;
-  const budgetSpent = () => deadlineAt !== undefined && Date.now() >= deadlineAt;
+  const budgetSpent = () =>
+    deadlineAt !== undefined && Date.now() >= deadlineAt;
   for (let index = 0; index < jobs.length; index += 1) {
     const job = jobs[index];
     if (budgetSpent()) break;
@@ -969,11 +1578,21 @@ export async function processDueAppointmentFulfillmentJobs(limit = MAX_BATCH, op
       await queueQuotaAlert(db, job.appointmentId);
       return true;
     };
-    const run = () => runWithSendSlot({ ...SEND_SLOT, deferAlert }, () => runJob(job.id));
+    const run = () =>
+      runWithSendSlot({ ...SEND_SLOT, deferAlert }, () => runJob(job.id));
     try {
-      results.push(await (deadlineAt === undefined
-        ? run()
-        : runWithProcessingDeadline(deadlineAt - (jobs.length - 1 - index) * immediateFulfillmentBudget.reservePerJobMs, run, Date.now, { firstPauseDeadlineAt: deadlineAt })));
+      results.push(
+        await (deadlineAt === undefined
+          ? run()
+          : runWithProcessingDeadline(
+              deadlineAt -
+                (jobs.length - 1 - index) *
+                  immediateFulfillmentBudget.reservePerJobMs,
+              run,
+              Date.now,
+              { firstPauseDeadlineAt: deadlineAt }
+            ))
+      );
     } finally {
       lastJobRunAt = Date.now();
     }
@@ -988,60 +1607,110 @@ export async function processDueAppointmentFulfillmentJobs(limit = MAX_BATCH, op
  * still under way. The payment status page sends those again
  * (appointmentPublicStatus.ts).
  */
-export async function hasDeliveriesLeftInQueue(appointmentId: number, dueForMs: number, now = new Date()): Promise<boolean> {
+export async function hasDeliveriesLeftInQueue(
+  appointmentId: number,
+  dueForMs: number,
+  now = new Date()
+): Promise<boolean> {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  const [leftover] = await db.select({ id: appointmentFulfillmentJobs.id }).from(appointmentFulfillmentJobs).where(and(
-    eq(appointmentFulfillmentJobs.appointmentId, appointmentId),
-    inArray(appointmentFulfillmentJobs.status, ["queued", "retry"]),
-    lte(appointmentFulfillmentJobs.scheduledFor, new Date(now.getTime() - dueForMs)),
-    lt(appointmentFulfillmentJobs.attempts, appointmentFulfillmentJobs.maxAttempts),
-  )).limit(1);
+  const [leftover] = await db
+    .select({ id: appointmentFulfillmentJobs.id })
+    .from(appointmentFulfillmentJobs)
+    .where(
+      and(
+        eq(appointmentFulfillmentJobs.appointmentId, appointmentId),
+        inArray(appointmentFulfillmentJobs.status, ["queued", "retry"]),
+        lte(
+          appointmentFulfillmentJobs.scheduledFor,
+          new Date(now.getTime() - dueForMs)
+        ),
+        lt(
+          appointmentFulfillmentJobs.attempts,
+          appointmentFulfillmentJobs.maxAttempts
+        )
+      )
+    )
+    .limit(1);
   return Boolean(leftover);
 }
 
 /** Same claim/idempotency path as the scheduled worker, restricted to one appointment. */
-export function processAppointmentFulfillmentNow(appointmentId: number, options: { deadlineAt?: number } = {}) {
-  return processDueAppointmentFulfillmentJobs(MAX_BATCH, { appointmentId, deadlineAt: options.deadlineAt });
+export function processAppointmentFulfillmentNow(
+  appointmentId: number,
+  options: { deadlineAt?: number } = {}
+) {
+  return processDueAppointmentFulfillmentJobs(MAX_BATCH, {
+    appointmentId,
+    deadlineAt: options.deadlineAt,
+  });
 }
 
 /**
  * Requeues jobs whose worker was interrupted (function timeout, frozen instance
  * after the webhook answered Stripe). Exhausted jobs are closed as failed.
  */
-export async function recoverStaleAppointmentFulfillmentJobs(staleAfterMs = APPOINTMENT_FULFILLMENT_STALE_AFTER_MS, now = new Date()) {
+export async function recoverStaleAppointmentFulfillmentJobs(
+  staleAfterMs = APPOINTMENT_FULFILLMENT_STALE_AFTER_MS,
+  now = new Date()
+) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
   const staleBefore = new Date(now.getTime() - staleAfterMs);
-  const candidates = await db.select({
-    id: appointmentFulfillmentJobs.id,
-    status: appointmentFulfillmentJobs.status,
-    attempts: appointmentFulfillmentJobs.attempts,
-    maxAttempts: appointmentFulfillmentJobs.maxAttempts,
-    lastError: appointmentFulfillmentJobs.lastError,
-  }).from(appointmentFulfillmentJobs).where(or(
-    and(eq(appointmentFulfillmentJobs.status, "running"), lte(appointmentFulfillmentJobs.startedAt, staleBefore)),
-    and(inArray(appointmentFulfillmentJobs.status, ["queued", "retry"]), gte(appointmentFulfillmentJobs.attempts, appointmentFulfillmentJobs.maxAttempts)),
-  )).orderBy(appointmentFulfillmentJobs.id).limit(25);
+  const candidates = await db
+    .select({
+      id: appointmentFulfillmentJobs.id,
+      status: appointmentFulfillmentJobs.status,
+      attempts: appointmentFulfillmentJobs.attempts,
+      maxAttempts: appointmentFulfillmentJobs.maxAttempts,
+      lastError: appointmentFulfillmentJobs.lastError,
+    })
+    .from(appointmentFulfillmentJobs)
+    .where(
+      or(
+        and(
+          eq(appointmentFulfillmentJobs.status, "running"),
+          lte(appointmentFulfillmentJobs.startedAt, staleBefore)
+        ),
+        and(
+          inArray(appointmentFulfillmentJobs.status, ["queued", "retry"]),
+          gte(
+            appointmentFulfillmentJobs.attempts,
+            appointmentFulfillmentJobs.maxAttempts
+          )
+        )
+      )
+    )
+    .orderBy(appointmentFulfillmentJobs.id)
+    .limit(25);
 
   let recovered = 0;
   let exhausted = 0;
   for (const candidate of candidates) {
     const terminal = candidate.attempts >= candidate.maxAttempts;
-    const result = await db.update(appointmentFulfillmentJobs).set({
-      status: terminal ? "failed" : "retry",
-      scheduledFor: now,
-      startedAt: null,
-      finishedAt: terminal ? now : null,
-      // A failure alert tried again keeps the address its email was tried with (TRIED_ADDRESS_MARK).
-      lastError: terminal ? "worker_interrupted_attempts_exhausted" : `worker_interrupted${keptTriedAddress(candidate.lastError)}`,
-      updatedAt: now,
-    }).where(and(
-      eq(appointmentFulfillmentJobs.id, candidate.id),
-      eq(appointmentFulfillmentJobs.status, candidate.status),
-      eq(appointmentFulfillmentJobs.attempts, candidate.attempts),
-      ...(candidate.status === "running" ? [lte(appointmentFulfillmentJobs.startedAt, staleBefore)] : []),
-    ));
+    const result = await db
+      .update(appointmentFulfillmentJobs)
+      .set({
+        status: terminal ? "failed" : "retry",
+        scheduledFor: now,
+        startedAt: null,
+        finishedAt: terminal ? now : null,
+        // A failure alert tried again keeps the address its email was tried with (TRIED_ADDRESS_MARK).
+        lastError: terminal
+          ? "worker_interrupted_attempts_exhausted"
+          : `worker_interrupted${keptTriedAddress(candidate.lastError)}`,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(appointmentFulfillmentJobs.id, candidate.id),
+          eq(appointmentFulfillmentJobs.status, candidate.status),
+          eq(appointmentFulfillmentJobs.attempts, candidate.attempts),
+          ...(candidate.status === "running"
+            ? [lte(appointmentFulfillmentJobs.startedAt, staleBefore)]
+            : [])
+        )
+      );
     if (mutationRowCount(result) !== 1) continue;
     if (terminal) exhausted += 1;
     else recovered += 1;
@@ -1064,9 +1733,23 @@ export async function recoverStaleAppointmentFulfillmentJobs(staleAfterMs = APPO
  * appointment no longer paid, patient data erased); or accepted by the email
  * service, then bounced by the patient's mailbox (EXPL-13).
  */
-export type AppointmentDeliveryState = "sent" | "failed" | "refused" | "retrying" | "pending" | "sending" | "interrupted" | "not_sent" | "bounced";
+export type AppointmentDeliveryState =
+  | "sent"
+  | "failed"
+  | "refused"
+  | "retrying"
+  | "pending"
+  | "sending"
+  | "interrupted"
+  | "not_sent"
+  | "bounced";
 
-const DELIVERY_STATES: Record<string, AppointmentDeliveryState> = { failed: "failed", retry: "retrying", queued: "pending", running: "sending" };
+const DELIVERY_STATES: Record<string, AppointmentDeliveryState> = {
+  failed: "failed",
+  retry: "retrying",
+  queued: "pending",
+  running: "sending",
+};
 
 export type AppointmentDelivery = {
   jobType: FulfillmentJobType;
@@ -1095,40 +1778,74 @@ function failedOnInvoiceStorage(lastError: string | null | undefined) {
 }
 
 /** Same rule as recoverStaleAppointmentFulfillmentJobs: no worker runs that long. */
-function isInterruptedJob(job: Pick<FulfillmentJob, "status" | "startedAt">, now: Date) {
-  return job.status === "running" && job.startedAt !== null && job.startedAt.getTime() <= now.getTime() - APPOINTMENT_FULFILLMENT_STALE_AFTER_MS;
+function isInterruptedJob(
+  job: Pick<FulfillmentJob, "status" | "startedAt">,
+  now: Date
+) {
+  return (
+    job.status === "running" &&
+    job.startedAt !== null &&
+    job.startedAt.getTime() <=
+      now.getTime() - APPOINTMENT_FULFILLMENT_STALE_AFTER_MS
+  );
 }
 
 function deliveryOf(job: FulfillmentJob, now: Date): AppointmentDelivery {
-  const state = isBouncedJob(job) ? "bounced"
-    : job.status === "completed" ? job.lastError ? "not_sent" : "sent"
-    : isRefusedJob(job) ? "refused"
-      : isInterruptedJob(job, now) ? "interrupted" : DELIVERY_STATES[job.status] ?? "pending";
+  const state = isBouncedJob(job)
+    ? "bounced"
+    : job.status === "completed"
+      ? job.lastError
+        ? "not_sent"
+        : "sent"
+      : isRefusedJob(job)
+        ? "refused"
+        : isInterruptedJob(job, now)
+          ? "interrupted"
+          : (DELIVERY_STATES[job.status] ?? "pending");
   return {
     jobType: job.jobType as FulfillmentJobType,
     state,
     attempts: job.attempts,
     maxAttempts: job.maxAttempts,
     nextAttemptAt: job.status === "retry" ? job.scheduledFor : null,
-    notSentReason: state !== "not_sent" ? null
-      : job.lastError === "appointment_already_past_confirmation_skipped" ? "appointment_past"
-      : job.lastError === PATIENT_DATA_ERASED ? "patient_data_erased" : "not_paid",
-    failureCause: (state === "retrying" || state === "failed") && failedOnInvoiceStorage(job.lastError) ? "invoice_storage" : null,
+    notSentReason:
+      state !== "not_sent"
+        ? null
+        : job.lastError === "appointment_already_past_confirmation_skipped"
+          ? "appointment_past"
+          : job.lastError === PATIENT_DATA_ERASED
+            ? "patient_data_erased"
+            : "not_paid",
+    failureCause:
+      (state === "retrying" || state === "failed") &&
+      failedOnInvoiceStorage(job.lastError)
+        ? "invoice_storage"
+        : null,
   };
 }
 
 /** Delivery state of the post-payment jobs of each appointment, in processing order. */
-export async function getAppointmentDeliveries(appointmentIds: number[]): Promise<Map<number, AppointmentDelivery[]>> {
+export async function getAppointmentDeliveries(
+  appointmentIds: number[]
+): Promise<Map<number, AppointmentDelivery[]>> {
   const deliveries = new Map<number, AppointmentDelivery[]>();
   if (appointmentIds.length === 0) return deliveries;
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  const jobs = (await db.select().from(appointmentFulfillmentJobs).where(inArray(appointmentFulfillmentJobs.appointmentId, appointmentIds)))
-    .filter(job => isDeliveryJob(job.jobType));
-  const order = (jobType: string) => JOB_ORDER.indexOf(jobType as FulfillmentJobType);
+  const jobs = (
+    await db
+      .select()
+      .from(appointmentFulfillmentJobs)
+      .where(inArray(appointmentFulfillmentJobs.appointmentId, appointmentIds))
+  ).filter(job => isDeliveryJob(job.jobType));
+  const order = (jobType: string) =>
+    JOB_ORDER.indexOf(jobType as FulfillmentJobType);
   const now = new Date();
   for (const job of jobs.sort((a, b) => order(a.jobType) - order(b.jobType))) {
-    deliveries.set(job.appointmentId, [...(deliveries.get(job.appointmentId) ?? []), deliveryOf(job, now)]);
+    deliveries.set(job.appointmentId, [
+      ...(deliveries.get(job.appointmentId) ?? []),
+      deliveryOf(job, now),
+    ]);
   }
   return deliveries;
 }
@@ -1136,7 +1853,12 @@ export async function getAppointmentDeliveries(appointmentIds: number[]): Promis
 export type AppointmentFulfillmentRetry =
   | { outcome: "not_found" }
   | { outcome: "not_paid" }
-  | { outcome: "retried"; requeued: number; requeuedJobTypes: FulfillmentJobType[]; deliveries: AppointmentDelivery[] };
+  | {
+      outcome: "retried";
+      requeued: number;
+      requeuedJobTypes: FulfillmentJobType[];
+      deliveries: AppointmentDelivery[];
+    };
 
 /**
  * « Renvoyer » from the dashboard (EXPL-02): the jobs of a paid appointment
@@ -1151,42 +1873,85 @@ export type AppointmentFulfillmentRetry =
  * the patient's address is corrected, not before: to the same address, Resend
  * would answer its idempotency key without sending anything.
  */
-export async function retryAppointmentFulfillment(trackingId: string): Promise<AppointmentFulfillmentRetry> {
+export async function retryAppointmentFulfillment(
+  trackingId: string
+): Promise<AppointmentFulfillmentRetry> {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  const [appointment] = await db.select({ id: appointments.id, paymentStatus: appointments.paymentStatus, cancellationReason: appointments.cancellationReason, customerEmail: appointments.customerEmail })
-    .from(appointments).where(eq(appointments.trackingId, trackingId)).limit(1);
+  const [appointment] = await db
+    .select({
+      id: appointments.id,
+      paymentStatus: appointments.paymentStatus,
+      cancellationReason: appointments.cancellationReason,
+      customerEmail: appointments.customerEmail,
+    })
+    .from(appointments)
+    .where(eq(appointments.trackingId, trackingId))
+    .limit(1);
   if (!appointment) return { outcome: "not_found" };
-  const refundNotice = appointment.paymentStatus === "refunded" ? await refundNoticeOf(appointment) : null;
-  if (appointment.paymentStatus !== "completed" && !refundNotice) return { outcome: "not_paid" };
+  const refundNotice =
+    appointment.paymentStatus === "refunded"
+      ? await refundNoticeOf(appointment)
+      : null;
+  if (appointment.paymentStatus !== "completed" && !refundNotice)
+    return { outcome: "not_paid" };
   const patientDataErased = hasErasedPatientData(appointment);
-  const jobTypes = JOB_ORDER.filter(jobType => jobPaymentStatus(jobType) === appointment.paymentStatus && !(patientDataErased && isPatientJob(jobType)));
+  const jobTypes = JOB_ORDER.filter(
+    jobType =>
+      jobPaymentStatus(jobType) === appointment.paymentStatus &&
+      !(patientDataErased && isPatientJob(jobType))
+  );
   const now = new Date();
-  const requeued = await db.update(appointmentFulfillmentJobs).set({
-    status: "queued",
-    attempts: 0,
-    maxAttempts: APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS,
-    scheduledFor: now,
-    startedAt: null,
-    finishedAt: null,
-    lastError: null,
-    updatedAt: now,
-  }).where(and(
-    eq(appointmentFulfillmentJobs.appointmentId, appointment.id),
-    inArray(appointmentFulfillmentJobs.jobType, jobTypes),
-    or(
-      inArray(appointmentFulfillmentJobs.status, ["queued", "retry", "failed"]),
-      and(eq(appointmentFulfillmentJobs.status, "running"), lte(appointmentFulfillmentJobs.startedAt, new Date(now.getTime() - APPOINTMENT_FULFILLMENT_STALE_AFTER_MS))),
-      and(bouncedJobCondition(), ne(appointmentFulfillmentJobs.lastError, bouncedAfterAcceptanceError(appointment.customerEmail))),
-    ),
-  )).returning({ jobType: appointmentFulfillmentJobs.jobType });
-  if (requeued.length > 0) await processAppointmentFulfillmentNow(appointment.id);
+  const requeued = await db
+    .update(appointmentFulfillmentJobs)
+    .set({
+      status: "queued",
+      attempts: 0,
+      maxAttempts: APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS,
+      scheduledFor: now,
+      startedAt: null,
+      finishedAt: null,
+      lastError: null,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(appointmentFulfillmentJobs.appointmentId, appointment.id),
+        inArray(appointmentFulfillmentJobs.jobType, jobTypes),
+        or(
+          inArray(appointmentFulfillmentJobs.status, [
+            "queued",
+            "retry",
+            "failed",
+          ]),
+          and(
+            eq(appointmentFulfillmentJobs.status, "running"),
+            lte(
+              appointmentFulfillmentJobs.startedAt,
+              new Date(now.getTime() - APPOINTMENT_FULFILLMENT_STALE_AFTER_MS)
+            )
+          ),
+          and(
+            bouncedJobCondition(),
+            ne(
+              appointmentFulfillmentJobs.lastError,
+              bouncedAfterAcceptanceError(appointment.customerEmail)
+            )
+          )
+        )
+      )
+    )
+    .returning({ jobType: appointmentFulfillmentJobs.jobType });
+  if (requeued.length > 0)
+    await processAppointmentFulfillmentNow(appointment.id);
   return {
     outcome: "retried",
     requeued: requeued.length,
     // What this retry sent or skipped, told apart from the jobs already sent before it.
     requeuedJobTypes: requeued.map(job => job.jobType as FulfillmentJobType),
-    deliveries: (await getAppointmentDeliveries([appointment.id])).get(appointment.id) ?? [],
+    deliveries:
+      (await getAppointmentDeliveries([appointment.id])).get(appointment.id) ??
+      [],
   };
 }
 
@@ -1201,22 +1966,40 @@ export async function retryAppointmentFulfillment(trackingId: string): Promise<A
  * appointment, are never closed here, nor the alert that the patient's
  * address bounces (EXPL-13), which still holds.
  */
-export async function closeUnsentAppointmentFulfillment(appointmentId: number, now = new Date()) {
+export async function closeUnsentAppointmentFulfillment(
+  appointmentId: number,
+  now = new Date()
+) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  const result = await db.update(appointmentFulfillmentJobs).set({
-    status: "completed",
-    finishedAt: now,
-    lastError: "appointment_not_paid_or_missing",
-    updatedAt: now,
-  }).where(and(
-    eq(appointmentFulfillmentJobs.appointmentId, appointmentId),
-    inArray(appointmentFulfillmentJobs.jobType, [...APPOINTMENT_FULFILLMENT_JOB_TYPES, FAILURE_ALERT_JOB_TYPES.confirmation, FAILURE_ALERT_JOB_TYPES.invoice]),
-    or(
-      inArray(appointmentFulfillmentJobs.status, ["queued", "retry"]),
-      and(eq(appointmentFulfillmentJobs.status, "running"), lte(appointmentFulfillmentJobs.startedAt, new Date(now.getTime() - APPOINTMENT_FULFILLMENT_STALE_AFTER_MS))),
-    ),
-  ));
+  const result = await db
+    .update(appointmentFulfillmentJobs)
+    .set({
+      status: "completed",
+      finishedAt: now,
+      lastError: "appointment_not_paid_or_missing",
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(appointmentFulfillmentJobs.appointmentId, appointmentId),
+        inArray(appointmentFulfillmentJobs.jobType, [
+          ...APPOINTMENT_FULFILLMENT_JOB_TYPES,
+          FAILURE_ALERT_JOB_TYPES.confirmation,
+          FAILURE_ALERT_JOB_TYPES.invoice,
+        ]),
+        or(
+          inArray(appointmentFulfillmentJobs.status, ["queued", "retry"]),
+          and(
+            eq(appointmentFulfillmentJobs.status, "running"),
+            lte(
+              appointmentFulfillmentJobs.startedAt,
+              new Date(now.getTime() - APPOINTMENT_FULFILLMENT_STALE_AFTER_MS)
+            )
+          )
+        )
+      )
+    );
   return mutationRowCount(result);
 }
 
@@ -1229,24 +2012,48 @@ export async function closeUnsentAppointmentFulfillment(appointmentId: number, n
  * bounced, as no one is left to contact. A job being sent right now is left
  * to its worker, and the owner's other notices are kept.
  */
-export async function closeErasedPatientFulfillment(appointmentIds: number[], now = new Date()) {
+export async function closeErasedPatientFulfillment(
+  appointmentIds: number[],
+  now = new Date()
+) {
   if (appointmentIds.length === 0) return 0;
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  const result = await db.update(appointmentFulfillmentJobs).set({
-    status: "completed",
-    finishedAt: now,
-    lastError: PATIENT_DATA_ERASED,
-    updatedAt: now,
-  }).where(and(
-    inArray(appointmentFulfillmentJobs.appointmentId, appointmentIds),
-    or(inArray(appointmentFulfillmentJobs.jobType, PATIENT_DATA_JOB_TYPES), like(appointmentFulfillmentJobs.jobType, `${BOUNCE_ALERT_JOB_PREFIX}%`)),
-    or(
-      inArray(appointmentFulfillmentJobs.status, ["queued", "retry", "failed"]),
-      and(eq(appointmentFulfillmentJobs.status, "running"), lte(appointmentFulfillmentJobs.startedAt, new Date(now.getTime() - APPOINTMENT_FULFILLMENT_STALE_AFTER_MS))),
-      bouncedJobCondition(),
-    ),
-  ));
+  const result = await db
+    .update(appointmentFulfillmentJobs)
+    .set({
+      status: "completed",
+      finishedAt: now,
+      lastError: PATIENT_DATA_ERASED,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        inArray(appointmentFulfillmentJobs.appointmentId, appointmentIds),
+        or(
+          inArray(appointmentFulfillmentJobs.jobType, PATIENT_DATA_JOB_TYPES),
+          like(
+            appointmentFulfillmentJobs.jobType,
+            `${BOUNCE_ALERT_JOB_PREFIX}%`
+          )
+        ),
+        or(
+          inArray(appointmentFulfillmentJobs.status, [
+            "queued",
+            "retry",
+            "failed",
+          ]),
+          and(
+            eq(appointmentFulfillmentJobs.status, "running"),
+            lte(
+              appointmentFulfillmentJobs.startedAt,
+              new Date(now.getTime() - APPOINTMENT_FULFILLMENT_STALE_AFTER_MS)
+            )
+          ),
+          bouncedJobCondition()
+        )
+      )
+    );
   return mutationRowCount(result);
 }
 
@@ -1267,60 +2074,137 @@ export async function closeErasedPatientFulfillment(appointmentIds: number[], no
  * email service, kept from going out; another job of the same appointment, or
  * of another group, is not said to be held by it.
  */
-export async function listAppointmentDeliveriesToHandle(limit = 20, now = new Date()) {
+export async function listAppointmentDeliveriesToHandle(
+  limit = 20,
+  now = new Date()
+) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
   // No cap here: the failed post-payment jobs of refunded appointments stay
   // failed, and a cap applied before the payment filter would push the new
   // failures out.
-  const candidates = (await db.select({
-    appointmentId: appointmentFulfillmentJobs.appointmentId,
-    jobType: appointmentFulfillmentJobs.jobType,
-    status: appointmentFulfillmentJobs.status,
-    lastError: appointmentFulfillmentJobs.lastError,
-    scheduledFor: appointmentFulfillmentJobs.scheduledFor,
-  }).from(appointmentFulfillmentJobs)
-    .where(or(
-      inArray(appointmentFulfillmentJobs.status, ["failed", "retry"]),
-      and(eq(appointmentFulfillmentJobs.status, "running"), lte(appointmentFulfillmentJobs.startedAt, new Date(now.getTime() - APPOINTMENT_FULFILLMENT_STALE_AFTER_MS))),
-      and(eq(appointmentFulfillmentJobs.status, "queued"), lte(appointmentFulfillmentJobs.scheduledFor, new Date(now.getTime() - APPOINTMENT_FULFILLMENT_WAITING_AFTER_MS))),
-      bouncedJobCondition(),
-    ))
-    .orderBy(appointmentFulfillmentJobs.updatedAt, appointmentFulfillmentJobs.id))
+  const candidates = (
+    await db
+      .select({
+        appointmentId: appointmentFulfillmentJobs.appointmentId,
+        jobType: appointmentFulfillmentJobs.jobType,
+        status: appointmentFulfillmentJobs.status,
+        lastError: appointmentFulfillmentJobs.lastError,
+        scheduledFor: appointmentFulfillmentJobs.scheduledFor,
+      })
+      .from(appointmentFulfillmentJobs)
+      .where(
+        or(
+          inArray(appointmentFulfillmentJobs.status, ["failed", "retry"]),
+          and(
+            eq(appointmentFulfillmentJobs.status, "running"),
+            lte(
+              appointmentFulfillmentJobs.startedAt,
+              new Date(now.getTime() - APPOINTMENT_FULFILLMENT_STALE_AFTER_MS)
+            )
+          ),
+          and(
+            eq(appointmentFulfillmentJobs.status, "queued"),
+            lte(
+              appointmentFulfillmentJobs.scheduledFor,
+              new Date(now.getTime() - APPOINTMENT_FULFILLMENT_WAITING_AFTER_MS)
+            )
+          ),
+          bouncedJobCondition()
+        )
+      )
+      .orderBy(
+        appointmentFulfillmentJobs.updatedAt,
+        appointmentFulfillmentJobs.id
+      )
+  )
     // The emails themselves, not the owner's failure or bounce alerts about them.
     .filter(job => isDeliveryJob(job.jobType));
-  const candidateIds = Array.from(new Set(candidates.map(job => job.appointmentId)));
-  const handled = candidateIds.length === 0 ? [] : await db.select({ id: appointments.id, trackingId: appointments.trackingId, customerName: appointments.customerName, appointmentDate: appointments.appointmentDate, paymentStatus: appointments.paymentStatus, customerPhone: appointments.customerPhone })
-    .from(appointments)
-    .where(and(inArray(appointments.id, candidateIds), inArray(appointments.paymentStatus, ["completed", "refunded"])));
-  const byId = new Map(handled.map(({ id, paymentStatus, customerPhone, ...appointment }) => [id, { appointment, paymentStatus, customerPhone }]));
+  const candidateIds = Array.from(
+    new Set(candidates.map(job => job.appointmentId))
+  );
+  const handled =
+    candidateIds.length === 0
+      ? []
+      : await db
+          .select({
+            id: appointments.id,
+            trackingId: appointments.trackingId,
+            customerName: appointments.customerName,
+            appointmentDate: appointments.appointmentDate,
+            paymentStatus: appointments.paymentStatus,
+            customerPhone: appointments.customerPhone,
+          })
+          .from(appointments)
+          .where(
+            and(
+              inArray(appointments.id, candidateIds),
+              inArray(appointments.paymentStatus, ["completed", "refunded"])
+            )
+          );
+  const byId = new Map(
+    handled.map(({ id, paymentStatus, customerPhone, ...appointment }) => [
+      id,
+      { appointment, paymentStatus, customerPhone },
+    ])
+  );
   // A job still to send for its appointment's payment status: post-payment
   // emails of a paid appointment, refund notices of a refunded one.
-  const jobs = candidates.filter(job => byId.get(job.appointmentId)?.paymentStatus === jobPaymentStatus(job.jobType));
+  const jobs = candidates.filter(
+    job =>
+      byId.get(job.appointmentId)?.paymentStatus ===
+      jobPaymentStatus(job.jobType)
+  );
   const failed = new Map<number, FulfillmentJobType[]>();
   const refused = new Map<number, FulfillmentJobType[]>();
   const bounced = new Map<number, FulfillmentJobType[]>();
   // Earliest next automatic attempt; null when only interrupted jobs wait for the next scheduled run.
-  const retrying = new Map<number, { jobTypes: FulfillmentJobType[]; nextAttemptAt: Date | null }>();
+  const retrying = new Map<
+    number,
+    { jobTypes: FulfillmentJobType[]; nextAttemptAt: Date | null }
+  >();
   // Earliest moment a job still waiting for its first attempt was due.
-  const waiting = new Map<number, { jobTypes: FulfillmentJobType[]; dueSince: Date }>();
+  const waiting = new Map<
+    number,
+    { jobTypes: FulfillmentJobType[]; dueSince: Date }
+  >();
   // Jobs of the failed and retrying groups the invoice storage kept from going out.
   const failedOnStorage = new Map<number, FulfillmentJobType[]>();
   const retryingOnStorage = new Map<number, FulfillmentJobType[]>();
   for (const job of jobs) {
     const jobType = job.jobType as FulfillmentJobType;
-    const onStorage = job.status === "failed" ? failedOnStorage : job.status === "retry" ? retryingOnStorage : null;
-    if (onStorage && failedOnInvoiceStorage(job.lastError)) onStorage.set(job.appointmentId, [...(onStorage.get(job.appointmentId) ?? []), jobType]);
+    const onStorage =
+      job.status === "failed"
+        ? failedOnStorage
+        : job.status === "retry"
+          ? retryingOnStorage
+          : null;
+    if (onStorage && failedOnInvoiceStorage(job.lastError))
+      onStorage.set(job.appointmentId, [
+        ...(onStorage.get(job.appointmentId) ?? []),
+        jobType,
+      ]);
     if (job.status === "failed" || job.status === "completed") {
-      const group = job.status === "completed" ? bounced : isRefusedJob(job) ? refused : failed;
-      group.set(job.appointmentId, [...(group.get(job.appointmentId) ?? []), jobType]);
+      const group =
+        job.status === "completed"
+          ? bounced
+          : isRefusedJob(job)
+            ? refused
+            : failed;
+      group.set(job.appointmentId, [
+        ...(group.get(job.appointmentId) ?? []),
+        jobType,
+      ]);
       continue;
     }
     if (job.status === "queued") {
       const previous = waiting.get(job.appointmentId);
       waiting.set(job.appointmentId, {
         jobTypes: [...(previous?.jobTypes ?? []), jobType],
-        dueSince: previous && previous.dueSince < job.scheduledFor ? previous.dueSince : job.scheduledFor,
+        dueSince:
+          previous && previous.dueSince < job.scheduledFor
+            ? previous.dueSince
+            : job.scheduledFor,
       });
       continue;
     }
@@ -1328,20 +2212,57 @@ export async function listAppointmentDeliveriesToHandle(limit = 20, now = new Da
     const nextAttemptAt = job.status === "retry" ? job.scheduledFor : null;
     retrying.set(job.appointmentId, {
       jobTypes: [...(previous?.jobTypes ?? []), jobType],
-      nextAttemptAt: previous?.nextAttemptAt && (!nextAttemptAt || previous.nextAttemptAt < nextAttemptAt) ? previous.nextAttemptAt : nextAttemptAt,
+      nextAttemptAt:
+        previous?.nextAttemptAt &&
+        (!nextAttemptAt || previous.nextAttemptAt < nextAttemptAt)
+          ? previous.nextAttemptAt
+          : nextAttemptAt,
     });
   }
-  const page = <T>(items: T[]) => ({ total: items.length, items: items.slice(0, limit) });
+  const page = <T>(items: T[]) => ({
+    total: items.length,
+    items: items.slice(0, limit),
+  });
   // Appointments oldest first; each one's emails in processing order (notification, confirmation, invoice…).
-  const inJobOrder = (jobTypes: FulfillmentJobType[]) => [...jobTypes].sort((a, b) => JOB_ORDER.indexOf(a) - JOB_ORDER.indexOf(b));
-  const withJobTypes = (group: Map<number, FulfillmentJobType[]>, onStorage = new Map<number, FulfillmentJobType[]>()) => page(Array.from(group.entries()).map(([appointmentId, jobTypes]) => ({ ...byId.get(appointmentId)!.appointment, jobTypes: inJobOrder(jobTypes), storageJobTypes: inJobOrder(onStorage.get(appointmentId) ?? []) })));
+  const inJobOrder = (jobTypes: FulfillmentJobType[]) =>
+    [...jobTypes].sort((a, b) => JOB_ORDER.indexOf(a) - JOB_ORDER.indexOf(b));
+  const withJobTypes = (
+    group: Map<number, FulfillmentJobType[]>,
+    onStorage = new Map<number, FulfillmentJobType[]>()
+  ) =>
+    page(
+      Array.from(group.entries()).map(([appointmentId, jobTypes]) => ({
+        ...byId.get(appointmentId)!.appointment,
+        jobTypes: inJobOrder(jobTypes),
+        storageJobTypes: inJobOrder(onStorage.get(appointmentId) ?? []),
+      }))
+    );
   return {
     failed: withJobTypes(failed, failedOnStorage),
     refused: withJobTypes(refused),
-    retrying: page(Array.from(retrying.entries()).map(([appointmentId, delivery]) => ({ ...byId.get(appointmentId)!.appointment, ...delivery, jobTypes: inJobOrder(delivery.jobTypes), storageJobTypes: inJobOrder(retryingOnStorage.get(appointmentId) ?? []) }))),
-    waiting: page(Array.from(waiting.entries()).map(([appointmentId, delivery]) => ({ ...byId.get(appointmentId)!.appointment, ...delivery, jobTypes: inJobOrder(delivery.jobTypes) }))),
+    retrying: page(
+      Array.from(retrying.entries()).map(([appointmentId, delivery]) => ({
+        ...byId.get(appointmentId)!.appointment,
+        ...delivery,
+        jobTypes: inJobOrder(delivery.jobTypes),
+        storageJobTypes: inJobOrder(retryingOnStorage.get(appointmentId) ?? []),
+      }))
+    ),
+    waiting: page(
+      Array.from(waiting.entries()).map(([appointmentId, delivery]) => ({
+        ...byId.get(appointmentId)!.appointment,
+        ...delivery,
+        jobTypes: inJobOrder(delivery.jobTypes),
+      }))
+    ),
     // The patient's phone: the doctor calls before correcting the address.
-    bounced: page(Array.from(bounced.entries()).map(([appointmentId, jobTypes]) => ({ ...byId.get(appointmentId)!.appointment, customerPhone: byId.get(appointmentId)!.customerPhone, jobTypes: inJobOrder(jobTypes) }))),
+    bounced: page(
+      Array.from(bounced.entries()).map(([appointmentId, jobTypes]) => ({
+        ...byId.get(appointmentId)!.appointment,
+        customerPhone: byId.get(appointmentId)!.customerPhone,
+        jobTypes: inJobOrder(jobTypes),
+      }))
+    ),
   };
 }
 
@@ -1356,16 +2277,31 @@ export async function listAppointmentDeliveriesToHandle(limit = 20, now = new Da
  * identity, the stored copy neither read nor written, as the GDPR procedure
  * states. Never allocates a number: null when no invoice was issued yet.
  */
-export async function regenerateAppointmentInvoice(trackingId: string): Promise<{ invoiceNumber: string; buffer: Buffer } | null> {
+export async function regenerateAppointmentInvoice(
+  trackingId: string
+): Promise<{ invoiceNumber: string; buffer: Buffer } | null> {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  const [appointment] = await db.select().from(appointments).where(eq(appointments.trackingId, trackingId)).limit(1);
+  const [appointment] = await db
+    .select()
+    .from(appointments)
+    .where(eq(appointments.trackingId, trackingId))
+    .limit(1);
   if (!appointment) return null;
-  const invoiceRecord = (await findAppointmentInvoices([appointment.id])).get(appointment.id);
+  const invoiceRecord = (await findAppointmentInvoices([appointment.id])).get(
+    appointment.id
+  );
   if (!invoiceRecord) return null;
   const data = appointmentInvoiceData(appointment, invoiceRecord);
-  if (hasErasedPatientData(appointment)) return { invoiceNumber: invoiceRecord.invoiceNumber, buffer: await renderInvoicePDF(data) };
-  return { invoiceNumber: invoiceRecord.invoiceNumber, buffer: (await generateInvoicePDF(data)).buffer };
+  if (hasErasedPatientData(appointment))
+    return {
+      invoiceNumber: invoiceRecord.invoiceNumber,
+      buffer: await renderInvoicePDF(data),
+    };
+  return {
+    invoiceNumber: invoiceRecord.invoiceNumber,
+    buffer: (await generateInvoicePDF(data)).buffer,
+  };
 }
 
 /**
@@ -1378,7 +2314,12 @@ export async function regenerateAppointmentInvoice(trackingId: string): Promise<
  * is there or cannot take it (archiveInvoicePDF): the details must not change
  * yet. Nothing to do when no invoice was issued.
  */
-export async function archiveIssuedAppointmentInvoice(appointment: Appointment): Promise<void> {
-  const invoiceRecord = (await findAppointmentInvoices([appointment.id])).get(appointment.id);
-  if (invoiceRecord) await archiveInvoicePDF(appointmentInvoiceData(appointment, invoiceRecord));
+export async function archiveIssuedAppointmentInvoice(
+  appointment: Appointment
+): Promise<void> {
+  const invoiceRecord = (await findAppointmentInvoices([appointment.id])).get(
+    appointment.id
+  );
+  if (invoiceRecord)
+    await archiveInvoicePDF(appointmentInvoiceData(appointment, invoiceRecord));
 }

@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const readSource = (relativePath: string) => readFileSync(resolve(process.cwd(), relativePath), "utf8");
+const readSource = (relativePath: string) =>
+  readFileSync(resolve(process.cwd(), relativePath), "utf8");
 
 // L’ordre des liens de navigation est vérifié sur la barre montée (Navigation.dom.test.ts).
 describe("page de recrutement principale", () => {

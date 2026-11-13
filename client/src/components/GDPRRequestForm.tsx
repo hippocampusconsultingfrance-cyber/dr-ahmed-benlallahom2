@@ -1,8 +1,15 @@
 import { useLanguage } from "@/contexts/LanguageContext";
 import { siteConfig } from "@/data/site-config";
 import { trpc } from "@/lib/trpc";
-import { getGdprRequestCopy, publicFormCopy, publicFormErrorMessage } from "@/lib/publicFormCopy";
-import { GDPR_REQUEST_TYPES, type GdprRequestType } from "@shared/gdprRequestTypes";
+import {
+  getGdprRequestCopy,
+  publicFormCopy,
+  publicFormErrorMessage,
+} from "@/lib/publicFormCopy";
+import {
+  GDPR_REQUEST_TYPES,
+  type GdprRequestType,
+} from "@shared/gdprRequestTypes";
 import { cleanTextInput } from "@shared/textInputCleaning";
 import { CheckCircle, Loader2, ArrowLeft } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -30,35 +37,79 @@ function gdprConfirmationTokenOf(search: string) {
  * (RGPD-13) : par un bouton, jamais à l’ouverture de la page, qu’un antivirus
  * de messagerie peut faire seul.
  */
-function GdprEmailConfirmation({ token, onDone }: { token: string; onDone: () => void }) {
+function GdprEmailConfirmation({
+  token,
+  onDone,
+}: {
+  token: string;
+  onDone: () => void;
+}) {
   const { content } = useLanguage();
   const text = content.gdpr.confirmation;
   const confirm = trpc.gdpr.confirmEmail.useMutation();
-  const reason = (confirm.error as { data?: { reason?: unknown } | null } | null)?.data?.reason;
-  const refusal = reason === "gdpr_confirmation_used" ? text.used : reason === "gdpr_confirmation_invalid" ? text.invalid : confirm.error ? text.error : "";
+  const reason = (
+    confirm.error as { data?: { reason?: unknown } | null } | null
+  )?.data?.reason;
+  const refusal =
+    reason === "gdpr_confirmation_used"
+      ? text.used
+      : reason === "gdpr_confirmation_invalid"
+        ? text.invalid
+        : confirm.error
+          ? text.error
+          : "";
   return (
     <div className="p-8 sm:p-10 rounded-2xl bg-card/60 backdrop-blur-sm border border-border/30 flex flex-col items-center justify-center min-h-[300px] text-center">
       {confirm.isSuccess ? (
         <div role="status">
-          <CheckCircle className="w-16 h-16 text-primary mb-6 mx-auto" aria-hidden="true" />
-          <h2 className="font-display text-2xl font-bold text-foreground mb-3">{text.confirmedTitle}</h2>
-          <p className="text-muted-foreground max-w-sm mb-8">{text.confirmed.replace("{reference}", confirm.data.reference)}</p>
+          <CheckCircle
+            className="w-16 h-16 text-primary mb-6 mx-auto"
+            aria-hidden="true"
+          />
+          <h2 className="font-display text-2xl font-bold text-foreground mb-3">
+            {text.confirmedTitle}
+          </h2>
+          <p className="text-muted-foreground max-w-sm mb-8">
+            {text.confirmed.replace("{reference}", confirm.data.reference)}
+          </p>
         </div>
       ) : (
         <>
-          <h2 className="font-display text-2xl font-bold text-foreground mb-3">{text.title}</h2>
-          <p className="text-muted-foreground max-w-sm mb-8">{text.description}</p>
-          {refusal && <p role="alert" className="form-alert text-sm text-destructive mb-6">{refusal}</p>}
-          {reason !== "gdpr_confirmation_used" && reason !== "gdpr_confirmation_invalid" && (
-            <button
-              type="button"
-              onClick={() => confirm.mutate({ token })}
-              disabled={confirm.isPending}
-              className="mb-6 flex items-center justify-center gap-2 px-7 py-4 rounded-lg bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+          <h2 className="font-display text-2xl font-bold text-foreground mb-3">
+            {text.title}
+          </h2>
+          <p className="text-muted-foreground max-w-sm mb-8">
+            {text.description}
+          </p>
+          {refusal && (
+            <p
+              role="alert"
+              className="form-alert text-sm text-destructive mb-6"
             >
-              {confirm.isPending ? <><Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />{text.confirming}</> : text.button}
-            </button>
+              {refusal}
+            </p>
           )}
+          {reason !== "gdpr_confirmation_used" &&
+            reason !== "gdpr_confirmation_invalid" && (
+              <button
+                type="button"
+                onClick={() => confirm.mutate({ token })}
+                disabled={confirm.isPending}
+                className="mb-6 flex items-center justify-center gap-2 px-7 py-4 rounded-lg bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {confirm.isPending ? (
+                  <>
+                    <Loader2
+                      className="w-4 h-4 animate-spin"
+                      aria-hidden="true"
+                    />
+                    {text.confirming}
+                  </>
+                ) : (
+                  text.button
+                )}
+              </button>
+            )}
         </>
       )}
       <button
@@ -80,16 +131,30 @@ interface GDPRRequestFormProps {
 export default function GDPRRequestForm({ backHref }: GDPRRequestFormProps) {
   const { content, language } = useLanguage();
   const copy = getGdprRequestCopy(language);
-  const [confirmationToken, setConfirmationToken] = useState(() => typeof window === "undefined" ? "" : gdprConfirmationTokenOf(window.location.search));
+  const [confirmationToken, setConfirmationToken] = useState(() =>
+    typeof window === "undefined"
+      ? ""
+      : gdprConfirmationTokenOf(window.location.search)
+  );
   // Lu une fois, le jeton quitte aussitôt l’adresse (le reste de l’adresse, ?lang= compris, est gardé) :
   // ni l’historique ni la mesure d’audience ne gardent ce lien à usage unique.
   useEffect(() => {
     if (!gdprConfirmationTokenOf(window.location.search)) return;
     const address = new URL(window.location.href);
     address.searchParams.delete("confirm");
-    window.history.replaceState(window.history.state, "", `${address.pathname}${address.search}${address.hash}`);
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${address.pathname}${address.search}${address.hash}`
+    );
   }, []);
-  const [formData, setFormData] = useState<{ name: string; email: string; phone: string; requestType: GdprRequestType; description: string }>({
+  const [formData, setFormData] = useState<{
+    name: string;
+    email: string;
+    phone: string;
+    requestType: GdprRequestType;
+    description: string;
+  }>({
     name: "",
     email: "",
     phone: "",
@@ -99,7 +164,11 @@ export default function GDPRRequestForm({ backHref }: GDPRRequestFormProps) {
   const [submitted, setSubmitted] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   // Une fois la limite atteinte, rappeler l'adresse de contact donnée par la politique de confidentialité.
-  const errorMessage = (error: unknown) => publicFormErrorMessage(error, copy.refusals, copy.error).replace("{email}", siteConfig.email);
+  const errorMessage = (error: unknown) =>
+    publicFormErrorMessage(error, copy.refusals, copy.error).replace(
+      "{email}",
+      siteConfig.email
+    );
 
   const submitMutation = trpc.gdpr.submit.useMutation({
     onSuccess: () => {
@@ -114,7 +183,7 @@ export default function GDPRRequestForm({ backHref }: GDPRRequestFormProps) {
       setTurnstileToken(null);
       toast.success(copy.submitted);
     },
-    onError: (error) => {
+    onError: error => {
       toast.error(errorMessage(error));
       console.error("GDPR form error:", error);
     },
@@ -173,14 +242,15 @@ export default function GDPRRequestForm({ backHref }: GDPRRequestFormProps) {
             <p className="text-muted-foreground text-lg mb-4">
               {content.gdpr.subtitle}
             </p>
-            <p className="text-muted-foreground">
-              {content.gdpr.description}
-            </p>
+            <p className="text-muted-foreground">{content.gdpr.description}</p>
           </div>
 
           {/* Address confirmation, Form or Success Message */}
           {confirmationToken ? (
-            <GdprEmailConfirmation token={confirmationToken} onDone={leaveConfirmation} />
+            <GdprEmailConfirmation
+              token={confirmationToken}
+              onDone={leaveConfirmation}
+            />
           ) : submitted ? (
             <div className="p-8 sm:p-10 rounded-2xl bg-card/60 backdrop-blur-sm border border-border/30 flex flex-col items-center justify-center min-h-[400px] text-center">
               <CheckCircle className="w-16 h-16 text-primary mb-6" />
@@ -198,10 +268,16 @@ export default function GDPRRequestForm({ backHref }: GDPRRequestFormProps) {
               </button>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="p-8 sm:p-10 rounded-2xl bg-card/60 backdrop-blur-sm border border-border/30 space-y-5">
+            <form
+              onSubmit={handleSubmit}
+              className="p-8 sm:p-10 rounded-2xl bg-card/60 backdrop-blur-sm border border-border/30 space-y-5"
+            >
               <div className="grid sm:grid-cols-2 gap-5">
                 <div>
-                  <label htmlFor={gdprFieldIds.name} className="block text-sm font-medium text-foreground mb-2">
+                  <label
+                    htmlFor={gdprFieldIds.name}
+                    className="block text-sm font-medium text-foreground mb-2"
+                  >
                     {content.gdpr.form.name}
                   </label>
                   <input
@@ -211,12 +287,17 @@ export default function GDPRRequestForm({ backHref }: GDPRRequestFormProps) {
                     required
                     placeholder={content.gdpr.form.namePlaceholder}
                     value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    onChange={e =>
+                      setFormData({ ...formData, name: e.target.value })
+                    }
                     className="w-full px-4 py-3 rounded-lg bg-input/50 border border-border/50 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 transition-all"
                   />
                 </div>
                 <div>
-                  <label htmlFor={gdprFieldIds.email} className="block text-sm font-medium text-foreground mb-2">
+                  <label
+                    htmlFor={gdprFieldIds.email}
+                    className="block text-sm font-medium text-foreground mb-2"
+                  >
                     {content.gdpr.form.email}
                   </label>
                   <input
@@ -227,14 +308,22 @@ export default function GDPRRequestForm({ backHref }: GDPRRequestFormProps) {
                     placeholder={content.gdpr.form.emailPlaceholder}
                     value={formData.email}
                     // Pasted address: without the spaces and direction marks left at either end, as the server reads it (INTL-05).
-                    onChange={(e) => setFormData({ ...formData, email: cleanTextInput(e.target.value) })}
+                    onChange={e =>
+                      setFormData({
+                        ...formData,
+                        email: cleanTextInput(e.target.value),
+                      })
+                    }
                     className="w-full px-4 py-3 rounded-lg bg-input/50 border border-border/50 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 transition-all"
                   />
                 </div>
               </div>
 
               <div>
-                <label htmlFor={gdprFieldIds.phone} className="block text-sm font-medium text-foreground mb-2">
+                <label
+                  htmlFor={gdprFieldIds.phone}
+                  className="block text-sm font-medium text-foreground mb-2"
+                >
                   {content.gdpr.form.phone}
                 </label>
                 <input
@@ -243,30 +332,45 @@ export default function GDPRRequestForm({ backHref }: GDPRRequestFormProps) {
                   autoComplete="tel"
                   placeholder={content.gdpr.form.phonePlaceholder}
                   value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  onChange={e =>
+                    setFormData({ ...formData, phone: e.target.value })
+                  }
                   className="w-full px-4 py-3 rounded-lg bg-input/50 border border-border/50 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 transition-all"
                 />
               </div>
 
               <div>
-                <label htmlFor={gdprFieldIds.requestType} className="block text-sm font-medium text-foreground mb-2">
+                <label
+                  htmlFor={gdprFieldIds.requestType}
+                  className="block text-sm font-medium text-foreground mb-2"
+                >
                   {content.gdpr.form.requestType}
                 </label>
                 <select
                   required
                   id={gdprFieldIds.requestType}
                   value={formData.requestType}
-                  onChange={(e) => setFormData({ ...formData, requestType: e.target.value as GdprRequestType })}
+                  onChange={e =>
+                    setFormData({
+                      ...formData,
+                      requestType: e.target.value as GdprRequestType,
+                    })
+                  }
                   className="w-full px-4 py-3 rounded-lg bg-input/50 border border-border/50 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 transition-all"
                 >
                   {GDPR_REQUEST_TYPES.map(type => (
-                    <option key={type} value={type}>{content.gdpr.form.requestTypes[type]}</option>
+                    <option key={type} value={type}>
+                      {content.gdpr.form.requestTypes[type]}
+                    </option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label htmlFor={gdprFieldIds.description} className="block text-sm font-medium text-foreground mb-2">
+                <label
+                  htmlFor={gdprFieldIds.description}
+                  className="block text-sm font-medium text-foreground mb-2"
+                >
                   {content.gdpr.form.description}
                 </label>
                 <textarea
@@ -274,7 +378,9 @@ export default function GDPRRequestForm({ backHref }: GDPRRequestFormProps) {
                   id={gdprFieldIds.description}
                   placeholder={content.gdpr.form.descriptionPlaceholder}
                   value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  onChange={e =>
+                    setFormData({ ...formData, description: e.target.value })
+                  }
                   className="w-full px-4 py-3 rounded-lg bg-input/50 border border-border/50 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 transition-all resize-none"
                 />
               </div>

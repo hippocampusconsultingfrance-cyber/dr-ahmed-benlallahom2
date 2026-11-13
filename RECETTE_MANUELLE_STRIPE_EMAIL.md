@@ -6,14 +6,14 @@ Cette recette vérifie, sur le **domaine publié** `https://drahmedbenlallahom.c
 
 > La confirmation et la facture partent dès que le paiement est reçu (webhook Stripe, ou page de retour du paiement). Un envoi en échec est repris par la tâche quotidienne `appointment-fulfillment` (06:20 UTC), ou tout de suite avec « Renvoyer » sur le rendez-vous (onglet « Réservations »). Horaires et procédures de référence : [docs/EXPLOITATION.md](./docs/EXPLOITATION.md).
 
-| Élément | Valeur de test |
-|---|---|
-| Environnement | Domaine public, jamais l’aperçu de développement |
-| Carte Stripe de test | `4242 4242 4242 4242` |
-| Date d’expiration | Toute date future |
-| CVC | Trois chiffres quelconques |
-| Code postal | Toute valeur valide pour le pays choisi |
-| Données personnelles | Email de test et identité fictive uniquement |
+| Élément              | Valeur de test                                   |
+| -------------------- | ------------------------------------------------ |
+| Environnement        | Domaine public, jamais l’aperçu de développement |
+| Carte Stripe de test | `4242 4242 4242 4242`                            |
+| Date d’expiration    | Toute date future                                |
+| CVC                  | Trois chiffres quelconques                       |
+| Code postal          | Toute valeur valide pour le pays choisi          |
+| Données personnelles | Email de test et identité fictive uniquement     |
 
 ## Parcours de réservation et paiement
 
@@ -28,12 +28,12 @@ Cette recette vérifie, sur le **domaine publié** `https://drahmedbenlallahom.c
 
 Si l’email ou la facture n’est pas reçu quelques minutes après le paiement, ne recréez pas une seconde réservation. Recherchez d’abord la réservation dans l’administration (« À traiter » dans « Vue d'ensemble », puis le rendez-vous dans l’onglet « Réservations ») et vérifiez ses envois après paiement. La tâche `appointment-fulfillment` reprend les confirmations et factures en échec une fois par jour, à 06:20 UTC ; « Renvoyer » les envoie tout de suite.
 
-| Situation constatée | Contrôle à effectuer | Action sûre |
-|---|---|---|
-| Paiement validé, email absent | Vérifier les spams et le statut de la réservation | « Renvoyer » sur le rendez-vous, ou attendre le passage quotidien de 06:20 UTC ; ne pas payer une seconde fois |
-| Facture absente, email reçu | Vérifier la file post-paiement et l’adresse email de test | Déclencher une reprise administrative seulement après vérification |
-| Retour Stripe interrompu | Vérifier le paiement dans Stripe puis la réservation dans l’administration | Laisser le webhook et la file reprendre le traitement |
-| Double réservation suspectée | Rechercher le même créneau dans l’administration | Ne pas supprimer de données ; documenter l’heure et les références |
+| Situation constatée           | Contrôle à effectuer                                                       | Action sûre                                                                                                    |
+| ----------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Paiement validé, email absent | Vérifier les spams et le statut de la réservation                          | « Renvoyer » sur le rendez-vous, ou attendre le passage quotidien de 06:20 UTC ; ne pas payer une seconde fois |
+| Facture absente, email reçu   | Vérifier la file post-paiement et l’adresse email de test                  | Déclencher une reprise administrative seulement après vérification                                             |
+| Retour Stripe interrompu      | Vérifier le paiement dans Stripe puis la réservation dans l’administration | Laisser le webhook et la file reprendre le traitement                                                          |
+| Double réservation suspectée  | Rechercher le même créneau dans l’administration                           | Ne pas supprimer de données ; documenter l’heure et les références                                             |
 
 ## Contrôle de délivrabilité des emails
 

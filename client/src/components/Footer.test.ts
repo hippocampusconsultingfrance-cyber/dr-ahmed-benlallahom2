@@ -11,7 +11,12 @@ describe("liens de navigation du pied de page", () => {
   });
 
   it("propose une alternative de marque dans les quatre langues actives", () => {
-    expect(Object.keys(footerBrandLogoAltCopy)).toEqual(["fr", "en", "de", "zh"]);
+    expect(Object.keys(footerBrandLogoAltCopy)).toEqual([
+      "fr",
+      "en",
+      "de",
+      "zh",
+    ]);
     for (const alt of Object.values(footerBrandLogoAltCopy)) {
       expect(alt.trim()).not.toHaveLength(0);
     }

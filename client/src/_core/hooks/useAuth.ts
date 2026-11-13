@@ -35,7 +35,7 @@ export function useAuth(options?: UseAuthOptions) {
   }, [clerk, serverLogout, utils]);
 
   const state = useMemo(() => {
-    const user = isSignedIn ? meQuery.data ?? null : null;
+    const user = isSignedIn ? (meQuery.data ?? null) : null;
     return {
       user,
       loading: !isLoaded || (Boolean(isSignedIn) && meQuery.isLoading),
@@ -43,13 +43,7 @@ export function useAuth(options?: UseAuthOptions) {
       isAuthenticated: Boolean(isSignedIn && user),
       mfaVerified: Boolean(user?.mfaVerified),
     };
-  }, [
-    isLoaded,
-    isSignedIn,
-    meQuery.data,
-    meQuery.error,
-    meQuery.isLoading,
-  ]);
+  }, [isLoaded, isSignedIn, meQuery.data, meQuery.error, meQuery.isLoading]);
 
   useEffect(() => {
     if (!redirectOnUnauthenticated) return;

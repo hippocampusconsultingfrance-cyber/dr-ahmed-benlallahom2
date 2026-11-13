@@ -11,7 +11,11 @@ import Footer from "@/components/Footer";
 export default function TestimonialsPage() {
   const { language } = useLanguage();
   const [filter, setFilter] = useState<string>("all");
-  const { data: testimonials = [], isLoading: loading, error } = trpc.testimonials.list.useQuery(
+  const {
+    data: testimonials = [],
+    isLoading: loading,
+    error,
+  } = trpc.testimonials.list.useQuery(
     {
       language,
     },
@@ -68,14 +72,16 @@ export default function TestimonialsPage() {
           <Star
             key={i}
             size={20}
-            className={i < rating ? "fill-cyan-400 text-cyan-400" : "text-gray-600"}
+            className={
+              i < rating ? "fill-cyan-400 text-cyan-400" : "text-gray-600"
+            }
           />
         ))}
       </div>
     );
   };
 
-  const filteredTestimonials = testimonials.filter((t) => {
+  const filteredTestimonials = testimonials.filter(t => {
     if (filter === "5stars") return t.rating === 5;
     if (filter === "4stars") return t.rating >= 4;
     return true;
@@ -92,7 +98,11 @@ export default function TestimonialsPage() {
         ogUrl="https://drahmedbenlallahom.com/testimonials"
       />
       <Navigation />
-      <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 pt-28 pb-16">
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="max-w-4xl mx-auto px-4 pt-28 pb-16"
+      >
         {/* Breadcrumb */}
         <Breadcrumb items={[{ label: currentContent.title }]} />
 
@@ -141,17 +151,21 @@ export default function TestimonialsPage() {
         {/* Testimonials */}
         {error ? (
           <div className="text-center py-12">
-            <p className="text-red-400 text-lg">Erreur lors du chargement des témoignages</p>
+            <p className="text-red-400 text-lg">
+              Erreur lors du chargement des témoignages
+            </p>
           </div>
         ) : loading ? (
           <PublicContentSkeleton label="Chargement des témoignages partenaires" />
         ) : filteredTestimonials.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-gray-400 text-lg">{currentContent.noTestimonials}</p>
+            <p className="text-gray-400 text-lg">
+              {currentContent.noTestimonials}
+            </p>
           </div>
         ) : (
           <div className="space-y-6">
-            {filteredTestimonials.map((testimonial) => (
+            {filteredTestimonials.map(testimonial => (
               <div
                 key={testimonial.id}
                 className="bg-slate-800 border border-slate-700 rounded-lg p-6 hover:border-cyan-400/50 transition-colors"
@@ -159,7 +173,9 @@ export default function TestimonialsPage() {
                 {/* Header */}
                 <div className="flex items-start justify-between mb-4">
                   <div>
-                    <div className="mb-2">{renderStars(testimonial.rating)}</div>
+                    <div className="mb-2">
+                      {renderStars(testimonial.rating)}
+                    </div>
                     <h3 className="text-xl font-semibold text-white">
                       {testimonial.title}
                     </h3>
@@ -174,7 +190,9 @@ export default function TestimonialsPage() {
                 {/* Footer */}
                 <div className="flex items-center justify-between pt-4 border-t border-slate-700">
                   <div>
-                    <p className="text-white font-medium">{testimonial.authorName}</p>
+                    <p className="text-white font-medium">
+                      {testimonial.authorName}
+                    </p>
                     {testimonial.specialty && (
                       <p className="text-gray-400 text-sm">
                         {currentContent.specialty}: {testimonial.specialty}
@@ -182,7 +200,9 @@ export default function TestimonialsPage() {
                     )}
                   </div>
                   <p className="text-slate-400 text-xs">
-                    {new Date(testimonial.createdAt).toLocaleDateString(language)}
+                    {new Date(testimonial.createdAt).toLocaleDateString(
+                      language
+                    )}
                   </p>
                 </div>
               </div>

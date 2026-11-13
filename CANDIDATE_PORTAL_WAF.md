@@ -6,12 +6,12 @@ Le portail applique déjà des limites persistantes par action, compte et emprei
 
 Dans **Security → WAF → Custom rules**, créer la règle suivante :
 
-| Paramètre | Valeur |
-|---|---|
-| Nom | `Hippocampus – protection accès candidat` |
-| Expression | `(http.request.uri.path starts_with "/api/candidate/") or (http.request.uri.path eq "/candidate/access")` |
-| Action | `Managed Challenge` |
-| Ciblage recommandé | Seulement après un seuil de requêtes inhabituel par IP, via la règle de rate limiting Cloudflare |
+| Paramètre          | Valeur                                                                                                    |
+| ------------------ | --------------------------------------------------------------------------------------------------------- |
+| Nom                | `Hippocampus – protection accès candidat`                                                                 |
+| Expression         | `(http.request.uri.path starts_with "/api/candidate/") or (http.request.uri.path eq "/candidate/access")` |
+| Action             | `Managed Challenge`                                                                                       |
+| Ciblage recommandé | Seulement après un seuil de requêtes inhabituel par IP, via la règle de rate limiting Cloudflare          |
 
 Créer ensuite une règle de **Rate limiting** : 20 requêtes sur 10 minutes par IP vers `/api/candidate/*`, action `Managed Challenge`, durée de mitigation 10 minutes.
 

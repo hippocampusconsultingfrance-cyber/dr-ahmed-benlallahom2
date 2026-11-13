@@ -1,4 +1,8 @@
-import { RECRUITMENT_CV_ACCEPTED_EXTENSIONS, RECRUITMENT_CV_ACCEPTED_MIME_TYPES, RECRUITMENT_CV_MAX_BYTES } from "../../shared/recruitmentCvLimits";
+import {
+  RECRUITMENT_CV_ACCEPTED_EXTENSIONS,
+  RECRUITMENT_CV_ACCEPTED_MIME_TYPES,
+  RECRUITMENT_CV_MAX_BYTES,
+} from "../../shared/recruitmentCvLimits";
 import type { Express } from "express";
 import multer from "multer";
 import { z } from "zod";
@@ -6,25 +10,47 @@ import { and, eq, sql } from "drizzle-orm";
 import { notifyOwner } from "../_core/notification";
 import { secureReference } from "../_core/secureReference";
 import { storageDelete, storagePut } from "../storage";
-import { RECRUITMENT_CV_FORMAT_MESSAGE, recruitmentCvValidationMessage, validateCvFile } from "../recruitmentFileValidation";
+import {
+  RECRUITMENT_CV_FORMAT_MESSAGE,
+  recruitmentCvValidationMessage,
+  validateCvFile,
+} from "../recruitmentFileValidation";
 import { cvApplications } from "../../drizzle/schema";
 import { createCandidateInvitationToken } from "../candidateAuth";
 import { SITE_LANGUAGES } from "../emailLanguage";
 import { isSameRecruitmentSubmission } from "../recruitmentSubmissionDeduplication";
 import { sendTrackedCvApplicationConfirmationEmail } from "../recruitmentEmailTrace";
-import { CV_APPLICATION_SUBMISSION_UNIQUE_INDEX, isUniqueViolation } from "../databaseConstraints";
-import { emailText, multiLineText, refusesTextInputCharacters, singleLineText, TEXT_INPUT_INVALID_CHARACTERS, TEXT_INPUT_INVALID_CHARACTERS_MESSAGE } from "../../shared/textInput";
+import {
+  CV_APPLICATION_SUBMISSION_UNIQUE_INDEX,
+  isUniqueViolation,
+} from "../databaseConstraints";
+import {
+  emailText,
+  multiLineText,
+  refusesTextInputCharacters,
+  singleLineText,
+  TEXT_INPUT_INVALID_CHARACTERS,
+  TEXT_INPUT_INVALID_CHARACTERS_MESSAGE,
+} from "../../shared/textInput";
 import { adminLink } from "../adminLinks";
 import { asciiFileName, displayFileName } from "../candidateDocumentValidation";
-import { countryCodeOf, countryLabel } from "../../client/src/lib/countrySubmission";
-import { recruitmentPathway, VVIP_PATHWAY_LABEL } from "../../shared/recruitmentPathway";
+import {
+  countryCodeOf,
+  countryLabel,
+} from "../../client/src/lib/countrySubmission";
+import {
+  recruitmentPathway,
+  VVIP_PATHWAY_LABEL,
+} from "../../shared/recruitmentPathway";
 import { PUBLIC_APP_ORIGIN, safeErrorName } from "./routeHelpers";
 
 function safeErrorMetadata(error: unknown) {
   if (!error || typeof error !== "object") return { name: "UnknownError" };
   const candidate = error as Record<string, unknown>;
-  const safeText = (value: unknown) => typeof value === "string" ? value.slice(0, 120) : undefined;
-  const safeNumber = (value: unknown) => typeof value === "number" ? value : undefined;
+  const safeText = (value: unknown) =>
+    typeof value === "string" ? value.slice(0, 120) : undefined;
+  const safeNumber = (value: unknown) =>
+    typeof value === "number" ? value : undefined;
   return {
     name: error instanceof Error ? error.name : "UnknownError",
     code: safeText(candidate.code),
@@ -36,7 +62,9 @@ function safeErrorMetadata(error: unknown) {
 // 4 MB (Vercel function bodies are limited to 4.5 MB); PDF or DOCX only.
 const RECRUITMENT_MAX_FILE_SIZE = RECRUITMENT_CV_MAX_BYTES;
 const RECRUITMENT_MAX_TARGET_COUNTRIES = 18;
-const RECRUITMENT_ALLOWED_MIME_TYPES = new Set<string>(RECRUITMENT_CV_ACCEPTED_MIME_TYPES);
+const RECRUITMENT_ALLOWED_MIME_TYPES = new Set<string>(
+  RECRUITMENT_CV_ACCEPTED_MIME_TYPES
+);
 
 const recruitmentUpload = multer({
   storage: multer.memoryStorage(),
@@ -46,8 +74,13 @@ const recruitmentUpload = multer({
   limits: { fileSize: RECRUITMENT_MAX_FILE_SIZE, files: 1, fields: 20 },
   fileFilter: (_req, file, callback) => {
     const extension = file.originalname.toLowerCase().split(".").pop() ?? "";
-    const allowedExtension = (RECRUITMENT_CV_ACCEPTED_EXTENSIONS as readonly string[]).includes(extension);
-    if (!allowedExtension || !RECRUITMENT_ALLOWED_MIME_TYPES.has(file.mimetype)) {
+    const allowedExtension = (
+      RECRUITMENT_CV_ACCEPTED_EXTENSIONS as readonly string[]
+    ).includes(extension);
+    if (
+      !allowedExtension ||
+      !RECRUITMENT_ALLOWED_MIME_TYPES.has(file.mimetype)
+    ) {
       callback(new Error(RECRUITMENT_CV_FORMAT_MESSAGE));
       return;
     }
@@ -63,11 +96,20 @@ const recruitmentApplicationSchema = z.object({
   phone: singleLineText(z.string().max(50)).optional().default(""),
   specialty: singleLineText(z.string().min(1).max(160)),
   diplomaCountry: singleLineText(z.string().min(1).max(100)),
-  targetCountries: z.array(singleLineText(z.string().min(1).max(80))).min(1).max(RECRUITMENT_MAX_TARGET_COUNTRIES),
-  languages: z.array(singleLineText(z.string().min(1).max(80))).max(12).default([]),
+  targetCountries: z
+    .array(singleLineText(z.string().min(1).max(80)))
+    .min(1)
+    .max(RECRUITMENT_MAX_TARGET_COUNTRIES),
+  languages: z
+    .array(singleLineText(z.string().min(1).max(80)))
+    .max(12)
+    .default([]),
   // Environments of a VVIP application, for the owner's email only: the form also writes them in the message.
   // Stored nowhere else, they are not part of what makes an application (isSameRecruitmentSubmission).
-  environments: z.array(singleLineText(z.string().min(1).max(80))).max(RECRUITMENT_MAX_TARGET_COUNTRIES).default([]),
+  environments: z
+    .array(singleLineText(z.string().min(1).max(80)))
+    .max(RECRUITMENT_MAX_TARGET_COUNTRIES)
+    .default([]),
   yearsExperience: z.number().int().min(0).max(70).optional(),
   availability: singleLineText(z.string().max(100)).optional().default(""),
   mobility: singleLineText(z.string().max(150)).optional().default(""),
@@ -86,7 +128,8 @@ function parseListField(value: unknown): string[] {
   if (typeof value !== "string") return [];
   try {
     const parsed = JSON.parse(value);
-    if (Array.isArray(parsed)) return parsed.filter(item => typeof item === "string");
+    if (Array.isArray(parsed))
+      return parsed.filter(item => typeof item === "string");
   } catch {
     // FormData callers must use JSON arrays; invalid values fail schema validation.
   }
@@ -98,12 +141,18 @@ export function registerRecruitmentApplyRoute(app: Express) {
   app.post("/api/recruitment/apply", (req, res) => {
     recruitmentUpload.single("cv")(req, res, async uploadError => {
       if (uploadError) {
-        const tooLarge = uploadError instanceof multer.MulterError && uploadError.code === "LIMIT_FILE_SIZE";
+        const tooLarge =
+          uploadError instanceof multer.MulterError &&
+          uploadError.code === "LIMIT_FILE_SIZE";
         const message = tooLarge
           ? "Le CV ne doit pas dépasser 4 Mo. Compressez-le ou enregistrez-le en PDF, puis réessayez."
           : uploadError.message || "Le fichier CV n’a pas pu être reçu.";
         // The forms translate these two refusals by their code; any other upload error stays generic there.
-        const code = tooLarge ? "recruitment_cv_too_large" : uploadError.message === RECRUITMENT_CV_FORMAT_MESSAGE ? "recruitment_cv_format_refused" : undefined;
+        const code = tooLarge
+          ? "recruitment_cv_too_large"
+          : uploadError.message === RECRUITMENT_CV_FORMAT_MESSAGE
+            ? "recruitment_cv_format_refused"
+            : undefined;
         res.status(400).json({ error: message, ...(code ? { code } : {}) });
         return;
       }
@@ -115,7 +164,10 @@ export function registerRecruitmentApplyRoute(app: Express) {
       try {
         const file = req.file;
         if (!file) {
-          res.status(400).json({ error: "Le CV est requis.", code: "recruitment_cv_required" });
+          res.status(400).json({
+            error: "Le CV est requis.",
+            code: "recruitment_cv_required",
+          });
           return;
         }
 
@@ -125,59 +177,119 @@ export function registerRecruitmentApplyRoute(app: Express) {
           targetCountries: parseListField(req.body.targetCountries),
           languages: parseListField(req.body.languages),
           environments: parseListField(req.body.environments),
-          yearsExperience: req.body.yearsExperience === "" || req.body.yearsExperience === undefined
-            ? undefined
-            : Number(req.body.yearsExperience),
+          yearsExperience:
+            req.body.yearsExperience === "" ||
+            req.body.yearsExperience === undefined
+              ? undefined
+              : Number(req.body.yearsExperience),
         });
 
         if (!parsed.success) {
           // Names of the refused fields and the kind of issue only, never the submitted values.
-          const rejectedFields = Array.from(new Set(parsed.error.issues.map(issue => `${issue.path.map(String).join(".")}:${issue.code}`)));
-          console.warn("Recruitment application rejected:", rejectedFields.join(", "));
+          const rejectedFields = Array.from(
+            new Set(
+              parsed.error.issues.map(
+                issue => `${issue.path.map(String).join(".")}:${issue.code}`
+              )
+            )
+          );
+          console.warn(
+            "Recruitment application rejected:",
+            rejectedFields.join(", ")
+          );
           if (refusesTextInputCharacters(parsed.error)) {
-            res.status(400).json({ error: TEXT_INPUT_INVALID_CHARACTERS_MESSAGE, code: TEXT_INPUT_INVALID_CHARACTERS });
+            res.status(400).json({
+              error: TEXT_INPUT_INVALID_CHARACTERS_MESSAGE,
+              code: TEXT_INPUT_INVALID_CHARACTERS,
+            });
             return;
           }
-          const targetCountriesTooMany = parsed.error.issues.some(issue => issue.path[0] === "targetCountries" && issue.code === "too_big");
+          const targetCountriesTooMany = parsed.error.issues.some(
+            issue =>
+              issue.path[0] === "targetCountries" && issue.code === "too_big"
+          );
           res.status(400).json({
             error: targetCountriesTooMany
               ? `Vous pouvez sélectionner jusqu’à ${RECRUITMENT_MAX_TARGET_COUNTRIES} pays ciblés.`
               : "Les informations de candidature sont invalides.",
-            code: targetCountriesTooMany ? "recruitment_target_countries_too_many" : "recruitment_application_invalid",
+            code: targetCountriesTooMany
+              ? "recruitment_target_countries_too_many"
+              : "recruitment_application_invalid",
           });
           return;
         }
 
         if (parsed.data.website.trim()) {
-          res.status(400).json({ error: "La candidature n’a pas pu être traitée." });
+          res
+            .status(400)
+            .json({ error: "La candidature n’a pas pu être traitée." });
           return;
         }
         // EN-11: the diploma country is stored as its code, also when a page loaded before EN-11 sends its
         // name; a value that names no country is kept as sent, and shown as it is.
-        const diplomaCountry = countryCodeOf(parsed.data.diplomaCountry) ?? parsed.data.diplomaCountry;
+        const diplomaCountry =
+          countryCodeOf(parsed.data.diplomaCountry) ??
+          parsed.data.diplomaCountry;
 
         recruitmentStage = "security-protection";
-        const { verifyCandidateTurnstile } = await import("../candidateTurnstile");
-        const { enforcePersistentRateLimit, hashSecurityValue, logSecurityEvent } = await import("../candidateSecurity");
-        const { countPublicFormDailyVolume, enforcePublicEmailIpRateLimit, releasePublicEmailIpRateLimit } = await import("../publicFormRateLimit");
+        const { verifyCandidateTurnstile } = await import(
+          "../candidateTurnstile"
+        );
+        const {
+          enforcePersistentRateLimit,
+          hashSecurityValue,
+          logSecurityEvent,
+        } = await import("../candidateSecurity");
+        const {
+          countPublicFormDailyVolume,
+          enforcePublicEmailIpRateLimit,
+          releasePublicEmailIpRateLimit,
+        } = await import("../publicFormRateLimit");
         const clientIp = req.ip || "unknown";
         const ipHash = hashSecurityValue(clientIp);
         const refuseProtection = async (protectionError: unknown) => {
           // RGPD-17: the candidate's email is pseudonymised, as in the other security events.
-          await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(parsed.data.email), category: "public_recruitment_apply_protection", outcome: "blocked", severity: "warning", ipHash })
-            .catch(securityLogError => console.error("Recruitment protection log error:", safeErrorName(securityLogError)));
-          console.warn("Recruitment protection rejected:", safeErrorName(protectionError));
-          const rateLimited = protectionError instanceof Error && protectionError.message === "candidate_security_rate_limited";
+          await logSecurityEvent({
+            actorKind: "anonymous",
+            actorReference: hashSecurityValue(parsed.data.email),
+            category: "public_recruitment_apply_protection",
+            outcome: "blocked",
+            severity: "warning",
+            ipHash,
+          }).catch(securityLogError =>
+            console.error(
+              "Recruitment protection log error:",
+              safeErrorName(securityLogError)
+            )
+          );
+          console.warn(
+            "Recruitment protection rejected:",
+            safeErrorName(protectionError)
+          );
+          const rateLimited =
+            protectionError instanceof Error &&
+            protectionError.message === "candidate_security_rate_limited";
           res.status(400).json({
             error: rateLimited
               ? "Trop de tentatives ont été effectuées. Patientez une heure avant de réessayer."
               : "La vérification de sécurité doit être renouvelée avant l’envoi.",
-            code: rateLimited ? "recruitment_rate_limited" : "recruitment_security_check_required",
+            code: rateLimited
+              ? "recruitment_rate_limited"
+              : "recruitment_security_check_required",
           });
         };
         try {
-          await verifyCandidateTurnstile({ token: parsed.data.turnstileToken, remoteIp: clientIp });
-          await enforcePersistentRateLimit({ action: "public_recruitment_apply", subject: `${clientIp}:${parsed.data.email}`, maxAttempts: 10, windowMs: 24 * 60 * 60 * 1000, blockMs: 60 * 60 * 1000 });
+          await verifyCandidateTurnstile({
+            token: parsed.data.turnstileToken,
+            remoteIp: clientIp,
+          });
+          await enforcePersistentRateLimit({
+            action: "public_recruitment_apply",
+            subject: `${clientIp}:${parsed.data.email}`,
+            maxAttempts: 10,
+            windowMs: 24 * 60 * 60 * 1000,
+            blockMs: 60 * 60 * 1000,
+          });
         } catch (protectionError) {
           await refuseProtection(protectionError);
           return;
@@ -196,14 +308,22 @@ export function registerRecruitmentApplyRoute(app: Express) {
             size: file.size,
           });
         } catch (validationError) {
-          const code = validationError instanceof Error ? validationError.message : "cv_validation_failed";
-          res.status(400).json({ error: recruitmentCvValidationMessage(code), code });
+          const code =
+            validationError instanceof Error
+              ? validationError.message
+              : "cv_validation_failed";
+          res
+            .status(400)
+            .json({ error: recruitmentCvValidationMessage(code), code });
           return;
         }
         recruitmentStage = "database-connect";
         const db = await (await import("../db")).getDb();
         if (!db) {
-          res.status(503).json({ error: "Le service de candidature est temporairement indisponible.", code: "recruitment_service_unavailable" });
+          res.status(503).json({
+            error: "Le service de candidature est temporairement indisponible.",
+            code: "recruitment_service_unavailable",
+          });
           return;
         }
 
@@ -214,26 +334,44 @@ export function registerRecruitmentApplyRoute(app: Express) {
         try {
           await enforcePublicEmailIpRateLimit("recruitmentApply", emailIpHash);
         } catch (protectionError) {
-          if (!(protectionError instanceof Error && protectionError.message === "candidate_security_rate_limited")) throw protectionError;
+          if (
+            !(
+              protectionError instanceof Error &&
+              protectionError.message === "candidate_security_rate_limited"
+            )
+          )
+            throw protectionError;
           await refuseProtection(protectionError);
           return;
         }
-        releaseIpAttempt = () => releasePublicEmailIpRateLimit("recruitmentApply", emailIpHash);
+        releaseIpAttempt = () =>
+          releasePublicEmailIpRateLimit("recruitmentApply", emailIpHash);
 
         // The application already received from this candidate for the same
         // pathway, target countries and CV file, if any.
         const findSameSubmission = async () => {
-          const sameFile = await db.select({
-            id: cvApplications.id,
-            trackingId: cvApplications.trackingId,
-            email: cvApplications.email,
-            specialty: cvApplications.specialty,
-            targetCountries: cvApplications.targetCountries,
-          }).from(cvApplications).where(eq(cvApplications.fileChecksum, fileValidation.checksum)).limit(20);
-          return sameFile.find(candidate => isSameRecruitmentSubmission(candidate, parsed.data)) ?? null;
+          const sameFile = await db
+            .select({
+              id: cvApplications.id,
+              trackingId: cvApplications.trackingId,
+              email: cvApplications.email,
+              specialty: cvApplications.specialty,
+              targetCountries: cvApplications.targetCountries,
+            })
+            .from(cvApplications)
+            .where(eq(cvApplications.fileChecksum, fileValidation.checksum))
+            .limit(20);
+          return (
+            sameFile.find(candidate =>
+              isSameRecruitmentSubmission(candidate, parsed.data)
+            ) ?? null
+          );
         };
         // A repeated sending stores nothing new: the candidate gets the stored application's reference and confirmation.
-        const answerAlreadyReceived = async (duplicate: { id: number; trackingId: string }) => {
+        const answerAlreadyReceived = async (duplicate: {
+          id: number;
+          trackingId: string;
+        }) => {
           const candidatePortalInviteUrl = `${PUBLIC_APP_ORIGIN}/candidate/access?invite=${encodeURIComponent(createCandidateInvitationToken(Number(duplicate.id)))}`;
           // ABUS-01: beyond the day's volume, no confirmation goes to the typed address.
           if (await countPublicFormDailyVolume("recruitmentApply")) {
@@ -248,8 +386,19 @@ export function registerRecruitmentApplyRoute(app: Express) {
           }
           // This application keeps its place in the per-IP cap (its confirmation may be skipped beyond the day's volume).
           releaseIpAttempt = null;
-          await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(parsed.data.email), category: "public_recruitment_apply_duplicate_file", outcome: "allowed", severity: "info", ipHash });
-          res.status(200).json({ success: true, duplicate: true, trackingId: duplicate.trackingId });
+          await logSecurityEvent({
+            actorKind: "anonymous",
+            actorReference: hashSecurityValue(parsed.data.email),
+            category: "public_recruitment_apply_duplicate_file",
+            outcome: "allowed",
+            severity: "info",
+            ipHash,
+          });
+          res.status(200).json({
+            success: true,
+            duplicate: true,
+            trackingId: duplicate.trackingId,
+          });
         };
 
         recruitmentStage = "duplicate-check";
@@ -262,19 +411,31 @@ export function registerRecruitmentApplyRoute(app: Express) {
         // stored and queued, and the owner is alerted (at most once a day).
         recruitmentStage = "queue-backlog-check";
         try {
-          const { countWaitingCvAnalyses, notifyOwnerOfAnalysisBacklog, RECRUITMENT_ANALYSIS_BACKLOG_ALERT_THRESHOLD } = await import("../recruitmentProcessingWorker");
-          const waitingAnalyses = await countWaitingCvAnalyses(RECRUITMENT_ANALYSIS_BACKLOG_ALERT_THRESHOLD);
+          const {
+            countWaitingCvAnalyses,
+            notifyOwnerOfAnalysisBacklog,
+            RECRUITMENT_ANALYSIS_BACKLOG_ALERT_THRESHOLD,
+          } = await import("../recruitmentProcessingWorker");
+          const waitingAnalyses = await countWaitingCvAnalyses(
+            RECRUITMENT_ANALYSIS_BACKLOG_ALERT_THRESHOLD
+          );
           // Counted up to the threshold only: the figure is a lower bound.
-          if (waitingAnalyses >= RECRUITMENT_ANALYSIS_BACKLOG_ALERT_THRESHOLD) await notifyOwnerOfAnalysisBacklog(waitingAnalyses, { atLeast: true });
+          if (waitingAnalyses >= RECRUITMENT_ANALYSIS_BACKLOG_ALERT_THRESHOLD)
+            await notifyOwnerOfAnalysisBacklog(waitingAnalyses, {
+              atLeast: true,
+            });
         } catch (backlogError) {
-          console.error("Recruitment backlog check error:", safeErrorName(backlogError));
+          console.error(
+            "Recruitment backlog check error:",
+            safeErrorName(backlogError)
+          );
         }
 
         recruitmentStage = "storage-upload";
         const storageResult = await storagePut(
           `recruitment/quarantine/${trackingId}-${asciiFileName(originalName, "cv")}`,
           file.buffer,
-          file.mimetype,
+          file.mimetype
         );
         // The CV is now stored: a later failure (e.g. a refused INSERT) no longer gives the attempt back,
         // otherwise each such request would leave a file in quarantine without using up the cap.
@@ -286,7 +447,9 @@ export function registerRecruitmentApplyRoute(app: Express) {
         // time with an offset PostgreSQL drops for a `timestamp` column.
 
         recruitmentStage = "application-insert";
-        const storedTargetCountries = JSON.stringify(parsed.data.targetCountries);
+        const storedTargetCountries = JSON.stringify(
+          parsed.data.targetCountries
+        );
         let insertResult: Awaited<ReturnType<typeof db.execute>>;
         try {
           insertResult = await db.execute(sql`INSERT INTO cv_applications (
@@ -308,23 +471,45 @@ export function registerRecruitmentApplyRoute(app: Express) {
           // DATA-11: a simultaneous sending of the same application was stored
           // first (unique index of drizzle/pg/0004). Answered like a repeated
           // sending; this request's copy of the CV is not kept.
-          if (!isUniqueViolation(insertError, CV_APPLICATION_SUBMISSION_UNIQUE_INDEX)) throw insertError;
+          if (
+            !isUniqueViolation(
+              insertError,
+              CV_APPLICATION_SUBMISSION_UNIQUE_INDEX
+            )
+          )
+            throw insertError;
           // Found with the index's own expressions: PostgreSQL's lower() and
           // isSameRecruitmentSubmission differ on a few letters (Turkish İ),
           // so the copy the index refused may not be the same for the latter.
-          const [stored] = await db.select({ id: cvApplications.id, trackingId: cvApplications.trackingId }).from(cvApplications).where(and(
-            sql`lower(${cvApplications.email}) = lower(${parsed.data.email})`,
-            sql`lower(${cvApplications.specialty}) = lower(${parsed.data.specialty})`,
-            eq(cvApplications.fileChecksum, fileValidation.checksum),
-            sql`md5(${cvApplications.targetCountries}) = md5(${storedTargetCountries})`,
-          )).limit(1);
+          const [stored] = await db
+            .select({
+              id: cvApplications.id,
+              trackingId: cvApplications.trackingId,
+            })
+            .from(cvApplications)
+            .where(
+              and(
+                sql`lower(${cvApplications.email}) = lower(${parsed.data.email})`,
+                sql`lower(${cvApplications.specialty}) = lower(${parsed.data.specialty})`,
+                eq(cvApplications.fileChecksum, fileValidation.checksum),
+                sql`md5(${cvApplications.targetCountries}) = md5(${storedTargetCountries})`
+              )
+            )
+            .limit(1);
           if (!stored) throw insertError;
-          await storageDelete([storageResult.key]).catch(deleteError => console.error("Recruitment duplicate CV cleanup error:", safeErrorName(deleteError)));
+          await storageDelete([storageResult.key]).catch(deleteError =>
+            console.error(
+              "Recruitment duplicate CV cleanup error:",
+              safeErrorName(deleteError)
+            )
+          );
           await answerAlreadyReceived(stored);
           return;
         }
 
-        const insertedId = Number((insertResult.rows[0] as { id?: number } | undefined)?.id || 0);
+        const insertedId = Number(
+          (insertResult.rows[0] as { id?: number } | undefined)?.id || 0
+        );
 
         recruitmentStage = "notifications";
         const candidateName = `${parsed.data.firstName} ${parsed.data.lastName}`;
@@ -336,7 +521,9 @@ export function registerRecruitmentApplyRoute(app: Express) {
           `**Email:** ${parsed.data.email}`,
           ...(pathway.vvip ? [`**Parcours:** ${VVIP_PATHWAY_LABEL}`] : []),
           `**Spécialité:** ${pathway.specialty}`,
-          ...(pathway.vvip && parsed.data.environments.length ? [`**Environnements:** ${parsed.data.environments.join(", ")}`] : []),
+          ...(pathway.vvip && parsed.data.environments.length
+            ? [`**Environnements:** ${parsed.data.environments.join(", ")}`]
+            : []),
           `**Pays du diplôme:** ${countryLabel(diplomaCountry, "fr")}`,
           `**Pays ciblés:** ${parsed.data.targetCountries.join(", ")}`,
           "**CV:** reçu et stocké de manière privée",
@@ -347,38 +534,48 @@ export function registerRecruitmentApplyRoute(app: Express) {
           : undefined;
         // ABUS-01: beyond the day's volume the application is kept without the
         // candidate's confirmation, the owner's email or the AI analysis.
-        const withinDailyVolume = await countPublicFormDailyVolume("recruitmentApply");
-        if (withinDailyVolume) await Promise.allSettled([
-          (async () => {
-            await sendTrackedCvApplicationConfirmationEmail({
-              applicationId: insertedId,
-              candidateEmail: parsed.data.email,
-              candidateFirstName: parsed.data.firstName,
-              trackingId,
-              candidatePortalInviteUrl,
-              language: parsed.data.language,
-            });
-          })(),
-          notifyOwner({
-            // INTL-11: « [CV…] Candidature – Prénom Nom », the reference first.
-            reference: trackingId,
-            title: "Candidature",
-            name: candidateName,
-            content: ownerNotificationLines.join("\n"),
-          }),
-        ]);
+        const withinDailyVolume =
+          await countPublicFormDailyVolume("recruitmentApply");
+        if (withinDailyVolume)
+          await Promise.allSettled([
+            (async () => {
+              await sendTrackedCvApplicationConfirmationEmail({
+                applicationId: insertedId,
+                candidateEmail: parsed.data.email,
+                candidateFirstName: parsed.data.firstName,
+                trackingId,
+                candidatePortalInviteUrl,
+                language: parsed.data.language,
+              });
+            })(),
+            notifyOwner({
+              // INTL-11: « [CV…] Candidature – Prénom Nom », the reference first.
+              reference: trackingId,
+              title: "Candidature",
+              name: candidateName,
+              content: ownerNotificationLines.join("\n"),
+            }),
+          ]);
 
         recruitmentStage = "follow-up-queues";
         if (insertedId) {
-          const { deferCvAnalysisForDailyVolume, enqueueCvAnalysis } = await import("../recruitmentProcessing");
-          const { enqueueCvGoogleDriveExport } = await import("../googleDriveExport");
+          const { deferCvAnalysisForDailyVolume, enqueueCvAnalysis } =
+            await import("../recruitmentProcessing");
+          const { enqueueCvGoogleDriveExport } = await import(
+            "../googleDriveExport"
+          );
           const queueResults = await Promise.allSettled([
-            withinDailyVolume ? enqueueCvAnalysis(Number(insertedId)) : deferCvAnalysisForDailyVolume(Number(insertedId)),
+            withinDailyVolume
+              ? enqueueCvAnalysis(Number(insertedId))
+              : deferCvAnalysisForDailyVolume(Number(insertedId)),
             enqueueCvGoogleDriveExport(Number(insertedId)),
           ]);
           for (const queueResult of queueResults) {
             if (queueResult.status === "rejected") {
-              console.error("Recruitment follow-up queue error:", safeErrorName(queueResult.reason));
+              console.error(
+                "Recruitment follow-up queue error:",
+                safeErrorName(queueResult.reason)
+              );
             }
           }
         }
@@ -391,9 +588,16 @@ export function registerRecruitmentApplyRoute(app: Express) {
           ...safeErrorMetadata(error),
         });
         if (releaseIpAttempt) {
-          await releaseIpAttempt().catch(releaseError => console.error("Recruitment rate limit release error:", safeErrorName(releaseError)));
+          await releaseIpAttempt().catch(releaseError =>
+            console.error(
+              "Recruitment rate limit release error:",
+              safeErrorName(releaseError)
+            )
+          );
         }
-        res.status(500).json({ error: "La candidature n’a pas pu être enregistrée." });
+        res
+          .status(500)
+          .json({ error: "La candidature n’a pas pu être enregistrée." });
       }
     });
   });

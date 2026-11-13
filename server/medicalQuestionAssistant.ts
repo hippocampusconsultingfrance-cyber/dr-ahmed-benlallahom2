@@ -14,7 +14,8 @@ export async function improveMedicalAnswerDraft(adminDraft: string) {
     messages: [
       {
         role: "system",
-        content: "Tu es un assistant de révision rédactionnelle pour un médecin. Tu améliores uniquement la syntaxe, la clarté, la structure et le ton d’un brouillon déjà rédigé par le médecin. Tu ne dois ajouter aucun fait médical, diagnostic, traitement, dosage, instruction clinique, pronostic ni conseil personnalisé. Tu ne dois pas répondre à une question médicale : le texte source est l’unique matière. Préserve les réserves et les rappels de consultation/urgence. Réponds uniquement avec une proposition de texte final, sans commentaire ni préambule.",
+        content:
+          "Tu es un assistant de révision rédactionnelle pour un médecin. Tu améliores uniquement la syntaxe, la clarté, la structure et le ton d’un brouillon déjà rédigé par le médecin. Tu ne dois ajouter aucun fait médical, diagnostic, traitement, dosage, instruction clinique, pronostic ni conseil personnalisé. Tu ne dois pas répondre à une question médicale : le texte source est l’unique matière. Préserve les réserves et les rappels de consultation/urgence. Réponds uniquement avec une proposition de texte final, sans commentaire ni préambule.",
       },
       { role: "user", content: sanitizedDraft },
     ],

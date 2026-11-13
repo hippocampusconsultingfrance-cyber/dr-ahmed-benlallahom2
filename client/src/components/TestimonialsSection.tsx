@@ -21,12 +21,25 @@ export function getTestimonialsCarouselIndex({
 }
 
 export function getTestimonialEmptyHeading(language: string) {
-  return ({ fr: "Les retours seront publiés ici", en: "Partner feedback will appear here", de: "Partnerfeedback wird hier angezeigt", zh: "合作伙伴反馈将在此显示" } as const)[language as "fr" | "en" | "de" | "zh"] ?? "Les retours seront publiés ici";
+  return (
+    (
+      {
+        fr: "Les retours seront publiés ici",
+        en: "Partner feedback will appear here",
+        de: "Partnerfeedback wird hier angezeigt",
+        zh: "合作伙伴反馈将在此显示",
+      } as const
+    )[language as "fr" | "en" | "de" | "zh"] ?? "Les retours seront publiés ici"
+  );
 }
 
 export default function TestimonialsSection() {
   const { language } = useLanguage();
-  const { data: testimonials = [], isLoading: loading, error } = trpc.testimonials.list.useQuery(
+  const {
+    data: testimonials = [],
+    isLoading: loading,
+    error,
+  } = trpc.testimonials.list.useQuery(
     {
       language,
       featured: 1,
@@ -49,7 +62,8 @@ export default function TestimonialsSection() {
       previous: "Témoignage précédent",
       next: "Témoignage suivant",
       goTo: "Aller au témoignage",
-      keyboardHelp: "Utilisez les flèches gauche et droite pour parcourir les témoignages, Début pour le premier et Fin pour le dernier.",
+      keyboardHelp:
+        "Utilisez les flèches gauche et droite pour parcourir les témoignages, Début pour le premier et Fin pour le dernier.",
     },
     en: {
       title: "Partner Testimonials",
@@ -60,7 +74,8 @@ export default function TestimonialsSection() {
       previous: "Previous testimonial",
       next: "Next testimonial",
       goTo: "Go to testimonial",
-      keyboardHelp: "Use the left and right arrow keys to browse testimonials, Home for the first and End for the last.",
+      keyboardHelp:
+        "Use the left and right arrow keys to browse testimonials, Home for the first and End for the last.",
     },
     de: {
       title: "Partnerbewertungen",
@@ -71,7 +86,8 @@ export default function TestimonialsSection() {
       previous: "Vorherige Bewertung",
       next: "Nächste Bewertung",
       goTo: "Zur Bewertung",
-      keyboardHelp: "Verwenden Sie die linke und rechte Pfeiltaste zum Durchsuchen, Pos1 für die erste und Ende für die letzte Bewertung.",
+      keyboardHelp:
+        "Verwenden Sie die linke und rechte Pfeiltaste zum Durchsuchen, Pos1 für die erste und Ende für die letzte Bewertung.",
     },
     zh: {
       title: "合作伙伴评价",
@@ -82,22 +98,26 @@ export default function TestimonialsSection() {
       previous: "上一条评价",
       next: "下一条评价",
       goTo: "前往评价",
-      keyboardHelp: "使用左右箭头浏览评价，按 Home 键跳至第一条，按 End 键跳至最后一条。",
+      keyboardHelp:
+        "使用左右箭头浏览评价，按 Home 键跳至第一条，按 End 键跳至最后一条。",
     },
   };
 
   const currentContent = content[language] || content.en;
 
-  const featuredTestimonials = testimonials.filter((t) => t.featured === 1);
+  const featuredTestimonials = testimonials.filter(t => t.featured === 1);
 
   const nextSlide = useCallback(() => {
     if (featuredTestimonials.length === 0) return;
-    setCurrentIndex((prev) => (prev + 1) % featuredTestimonials.length);
+    setCurrentIndex(prev => (prev + 1) % featuredTestimonials.length);
   }, [featuredTestimonials.length]);
 
   const prevSlide = useCallback(() => {
     if (featuredTestimonials.length === 0) return;
-    setCurrentIndex((prev) => (prev - 1 + featuredTestimonials.length) % featuredTestimonials.length);
+    setCurrentIndex(
+      prev =>
+        (prev - 1 + featuredTestimonials.length) % featuredTestimonials.length
+    );
   }, [featuredTestimonials.length]);
 
   // Auto-play
@@ -115,7 +135,11 @@ export default function TestimonialsSection() {
             key={i}
             size={18}
             aria-hidden="true"
-            className={i < rating ? "fill-primary text-primary" : "text-muted-foreground/40"}
+            className={
+              i < rating
+                ? "fill-primary text-primary"
+                : "text-muted-foreground/40"
+            }
           />
         ))}
       </div>
@@ -143,9 +167,21 @@ export default function TestimonialsSection() {
             <h2 className="font-display text-3xl md:text-5xl font-bold text-foreground mb-4">
               {currentContent.title}
             </h2>
-            <p className="text-muted-foreground text-lg">{currentContent.subtitle}</p>
+            <p className="text-muted-foreground text-lg">
+              {currentContent.subtitle}
+            </p>
           </div>
-          <PublicContentSkeleton label={language === "fr" ? "Chargement des témoignages" : language === "en" ? "Loading testimonials" : language === "de" ? "Bewertungen werden geladen" : "正在加载评价"} />
+          <PublicContentSkeleton
+            label={
+              language === "fr"
+                ? "Chargement des témoignages"
+                : language === "en"
+                  ? "Loading testimonials"
+                  : language === "de"
+                    ? "Bewertungen werden geladen"
+                    : "正在加载评价"
+            }
+          />
         </div>
       </section>
     );
@@ -159,8 +195,15 @@ export default function TestimonialsSection() {
             {currentContent.title}
           </h2>
           <div className="mx-auto mt-6 flex max-w-md flex-col items-center rounded-3xl border border-primary/15 bg-card/60 px-6 py-8 shadow-[0_18px_46px_-34px_hsl(var(--primary)/0.65)]">
-            <span className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl border border-primary/25 bg-primary/10 text-primary" aria-hidden="true"><Quote className="h-7 w-7" /></span>
-            <h3 className="font-display text-xl font-semibold text-foreground">{getTestimonialEmptyHeading(language)}</h3>
+            <span
+              className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl border border-primary/25 bg-primary/10 text-primary"
+              aria-hidden="true"
+            >
+              <Quote className="h-7 w-7" />
+            </span>
+            <h3 className="font-display text-xl font-semibold text-foreground">
+              {getTestimonialEmptyHeading(language)}
+            </h3>
             <p className="mt-2 text-muted-foreground">{currentContent.empty}</p>
           </div>
         </div>
@@ -180,16 +223,17 @@ export default function TestimonialsSection() {
   };
 
   return (
-          <section className="testimonials-section py-20 sm:py-28 px-4 bg-gradient-to-b from-background to-card/40">
-        <div className="max-w-6xl mx-auto">
-
+    <section className="testimonials-section py-20 sm:py-28 px-4 bg-gradient-to-b from-background to-card/40">
+      <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="section-heading text-center mb-12 mx-auto">
           <span className="eyebrow-label mb-5">Partner perspective</span>
           <h2 className="font-display text-3xl md:text-5xl font-bold text-foreground mb-4">
             {currentContent.title}
           </h2>
-          <p className="text-muted-foreground text-lg">{currentContent.subtitle}</p>
+          <p className="text-muted-foreground text-lg">
+            {currentContent.subtitle}
+          </p>
         </div>
 
         {/* Carousel */}
@@ -198,19 +242,23 @@ export default function TestimonialsSection() {
           onMouseEnter={() => setIsAutoPlaying(false)}
           onMouseLeave={() => setIsAutoPlaying(true)}
           onFocus={() => setIsAutoPlaying(false)}
-          onBlur={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget)) setIsAutoPlaying(true);
+          onBlur={event => {
+            if (!event.currentTarget.contains(event.relatedTarget))
+              setIsAutoPlaying(true);
           }}
-          onKeyDown={(event) => {
+          onKeyDown={event => {
             if (featuredTestimonials.length <= 1) return;
-            if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+            if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key))
+              return;
             event.preventDefault();
             setIsAutoPlaying(false);
-            setCurrentIndex(getTestimonialsCarouselIndex({
-              key: event.key as "ArrowLeft" | "ArrowRight" | "Home" | "End",
-              currentIndex,
-              length: featuredTestimonials.length,
-            }));
+            setCurrentIndex(
+              getTestimonialsCarouselIndex({
+                key: event.key as "ArrowLeft" | "ArrowRight" | "Home" | "End",
+                currentIndex,
+                length: featuredTestimonials.length,
+              })
+            );
           }}
           tabIndex={0}
           role="region"
@@ -218,7 +266,9 @@ export default function TestimonialsSection() {
           aria-label={currentContent.title}
           aria-describedby="testimonials-keyboard-help"
         >
-          <p id="testimonials-keyboard-help" className="sr-only">{currentContent.keyboardHelp}</p>
+          <p id="testimonials-keyboard-help" className="sr-only">
+            {currentContent.keyboardHelp}
+          </p>
           {/* Navigation Arrows */}
           {featuredTestimonials.length > 3 && (
             <>
@@ -262,9 +312,13 @@ export default function TestimonialsSection() {
                 {/* Author Info */}
                 <div className="flex items-center justify-between pt-4 border-t border-border/50">
                   <div>
-                    <p className="text-foreground font-medium">{testimonial.authorName}</p>
+                    <p className="text-foreground font-medium">
+                      {testimonial.authorName}
+                    </p>
                     {testimonial.specialty && (
-                      <p className="text-muted-foreground text-xs">{testimonial.specialty}</p>
+                      <p className="text-muted-foreground text-xs">
+                        {testimonial.specialty}
+                      </p>
                     )}
                   </div>
                 </div>
@@ -293,10 +347,7 @@ export default function TestimonialsSection() {
 
         {/* View All Button */}
         <div className="text-center mt-10">
-          <a
-            href="/testimonials"
-            className="cta-secondary"
-          >
+          <a href="/testimonials" className="cta-secondary">
             {currentContent.viewAll}
           </a>
         </div>

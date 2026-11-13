@@ -2,7 +2,11 @@ import type Stripe from "stripe";
 import { eq } from "drizzle-orm";
 import { appointments } from "../drizzle/schema";
 import { getDb } from "./db";
-import { IMMEDIATE_FULFILLMENT_TIMEOUT_MS, handleCheckoutSessionCompleted, processFulfillmentBestEffort } from "./appointmentPaymentWebhook";
+import {
+  IMMEDIATE_FULFILLMENT_TIMEOUT_MS,
+  handleCheckoutSessionCompleted,
+  processFulfillmentBestEffort,
+} from "./appointmentPaymentWebhook";
 import { hasDeliveriesLeftInQueue } from "./appointmentFulfillment";
 
 /**
@@ -15,13 +19,22 @@ import { hasDeliveriesLeftInQueue } from "./appointmentFulfillment";
  * - "not_paid": this session was not paid;
  * - "unknown": no appointment for this reference and session.
  */
-export type PublicPaymentState = "confirmed" | "processing" | "attention" | "not_paid" | "unknown";
+export type PublicPaymentState =
+  | "confirmed"
+  | "processing"
+  | "attention"
+  | "not_paid"
+  | "unknown";
 
 /**
  * What the confirmation page recalls once the appointment is confirmed, and
  * nothing more: start (exact UTC instant), duration and amount paid (RES-05).
  */
-export type PublicConfirmedAppointment = { appointmentDate: string; durationMinutes: number; amountEur: number };
+export type PublicConfirmedAppointment = {
+  appointmentDate: string;
+  durationMinutes: number;
+  amountEur: number;
+};
 
 export type PublicPaymentStatus =
   | { state: "confirmed"; appointment: PublicConfirmedAppointment }
@@ -40,7 +53,10 @@ type Database = NonNullable<Awaited<ReturnType<typeof getDb>>>;
  * « Renvoyer » or a later visit of this page (relaunchQueuedEmails, at most
  * once per appointment every relaunchEveryMs). Tests shorten them.
  */
-export const paymentStatusPageFulfillment = { timeoutMs: 3_000, relaunchEveryMs: 30_000 };
+export const paymentStatusPageFulfillment = {
+  timeoutMs: 3_000,
+  relaunchEveryMs: 30_000,
+};
 
 /** When this page last sent again the emails of each confirmed appointment, in this instance. */
 const lastRelaunchAt = new Map<number, number>();
@@ -60,36 +76,66 @@ const lastRelaunchAt = new Map<number, number>();
 async function relaunchQueuedEmails(appointmentId: number) {
   const now = Date.now();
   const last = lastRelaunchAt.get(appointmentId);
-  if (last !== undefined && now - last < paymentStatusPageFulfillment.relaunchEveryMs) return;
-  const leftInQueue = await hasDeliveriesLeftInQueue(appointmentId, IMMEDIATE_FULFILLMENT_TIMEOUT_MS, new Date(now)).catch(error => {
-    console.error("[AppointmentFulfillment] Queued emails check from the payment status page failed", error instanceof Error ? error.name : "UnknownError");
+  if (
+    last !== undefined &&
+    now - last < paymentStatusPageFulfillment.relaunchEveryMs
+  )
+    return;
+  const leftInQueue = await hasDeliveriesLeftInQueue(
+    appointmentId,
+    IMMEDIATE_FULFILLMENT_TIMEOUT_MS,
+    new Date(now)
+  ).catch(error => {
+    console.error(
+      "[AppointmentFulfillment] Queued emails check from the payment status page failed",
+      error instanceof Error ? error.name : "UnknownError"
+    );
     return false;
   });
   if (!leftInQueue) return;
   lastRelaunchAt.set(appointmentId, now);
   if (lastRelaunchAt.size > 1_000) {
-    lastRelaunchAt.forEach((at, id) => { if (now - at >= paymentStatusPageFulfillment.relaunchEveryMs) lastRelaunchAt.delete(id); });
+    lastRelaunchAt.forEach((at, id) => {
+      if (now - at >= paymentStatusPageFulfillment.relaunchEveryMs)
+        lastRelaunchAt.delete(id);
+    });
   }
-  await processFulfillmentBestEffort(appointmentId, paymentStatusPageFulfillment.timeoutMs);
+  await processFulfillmentBestEffort(
+    appointmentId,
+    paymentStatusPageFulfillment.timeoutMs
+  );
 }
 
 async function readAppointment(db: Database, trackingId: string) {
-  const [appointment] = await db.select({
-    id: appointments.id,
-    trackingId: appointments.trackingId,
-    paymentStatus: appointments.paymentStatus,
-    appointmentStatus: appointments.appointmentStatus,
-    stripeSessionId: appointments.stripeSessionId,
-    appointmentDate: appointments.appointmentDate,
-    duration: appointments.duration,
-    finalPrice: appointments.finalPrice,
-  }).from(appointments).where(eq(appointments.trackingId, trackingId)).limit(1);
+  const [appointment] = await db
+    .select({
+      id: appointments.id,
+      trackingId: appointments.trackingId,
+      paymentStatus: appointments.paymentStatus,
+      appointmentStatus: appointments.appointmentStatus,
+      stripeSessionId: appointments.stripeSessionId,
+      appointmentDate: appointments.appointmentDate,
+      duration: appointments.duration,
+      finalPrice: appointments.finalPrice,
+    })
+    .from(appointments)
+    .where(eq(appointments.trackingId, trackingId))
+    .limit(1);
   return appointment;
 }
 
-function confirmedStatus(appointment: Awaited<ReturnType<typeof readAppointment>>, sessionId: string): PublicPaymentStatus | null {
+function confirmedStatus(
+  appointment: Awaited<ReturnType<typeof readAppointment>>,
+  sessionId: string
+): PublicPaymentStatus | null {
   if (!appointment || appointment.stripeSessionId !== sessionId) return null;
-  if (appointment.paymentStatus !== "completed" || !["confirmed", "completed", "no_show"].includes(appointment.appointmentStatus)) return null;
+  if (
+    appointment.paymentStatus !== "completed" ||
+    !["confirmed", "completed", "no_show"].includes(
+      appointment.appointmentStatus
+    )
+  )
+    return null;
   return {
     state: "confirmed",
     appointment: {
@@ -107,7 +153,7 @@ function confirmedStatus(appointment: Awaited<ReturnType<typeof readAppointment>
  */
 export async function getPublicPaymentState(
   stripe: () => Stripe,
-  input: { trackingId: string; sessionId: string },
+  input: { trackingId: string; sessionId: string }
 ): Promise<PublicPaymentStatus> {
   const db = await getDb();
   if (!db) return { state: "unknown" };
@@ -127,12 +173,14 @@ export async function getPublicPaymentState(
   } catch {
     return { state: ownSession ? "processing" : "unknown" };
   }
-  if (session.metadata?.trackingId !== appointment.trackingId) return { state: "unknown" };
+  if (session.metadata?.trackingId !== appointment.trackingId)
+    return { state: "unknown" };
 
   if (session.payment_status === "paid") {
-    const stillHeld = appointment.paymentStatus === "pending"
-      && appointment.appointmentStatus === "held"
-      && (ownSession || !appointment.stripeSessionId);
+    const stillHeld =
+      appointment.paymentStatus === "pending" &&
+      appointment.appointmentStatus === "held" &&
+      (ownSession || !appointment.stripeSessionId);
     if (!stillHeld) return { state: "attention" };
     // Stripe has just said this session is paid: confirm the slot now instead
     // of waiting for the webhook (EXPL-01). Same conditional update as the
@@ -141,13 +189,23 @@ export async function getPublicPaymentState(
     // emails are tried. The page waits for them a few seconds only, not the
     // webhook's 15: whatever is left goes on with the webhook or the scheduled job.
     try {
-      const completion = await handleCheckoutSessionCompleted(session, { fulfillmentTimeoutMs: paymentStatusPageFulfillment.timeoutMs });
+      const completion = await handleCheckoutSessionCompleted(session, {
+        fulfillmentTimeoutMs: paymentStatusPageFulfillment.timeoutMs,
+      });
       if (completion.outcome === "unconfirmable") return { state: "attention" };
     } catch (error) {
-      console.error("Confirmation from the payment status page failed; left to the webhook", error instanceof Error ? error.name : "UnknownError");
+      console.error(
+        "Confirmation from the payment status page failed; left to the webhook",
+        error instanceof Error ? error.name : "UnknownError"
+      );
       return { state: "processing" };
     }
-    return confirmedStatus(await readAppointment(db, input.trackingId), input.sessionId) ?? { state: "processing" };
+    return (
+      confirmedStatus(
+        await readAppointment(db, input.trackingId),
+        input.sessionId
+      ) ?? { state: "processing" }
+    );
   }
   // Completed without funds yet (delayed payment methods): still processing.
   if (session.status === "complete") return { state: "processing" };

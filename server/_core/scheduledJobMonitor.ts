@@ -19,12 +19,19 @@ export const SCHEDULED_JOB_MONITOR_TIMEOUT_MS = 3_000;
 export type ScheduledJobOutcome = "success" | "fail";
 
 export function scheduledJobMonitorVariable(path: string) {
-  const job = path.replace(/^\/api\/scheduled\//, "").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  const job = path
+    .replace(/^\/api\/scheduled\//, "")
+    .replace(/[^A-Za-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
   return `HEALTHCHECK_URL_${job.toUpperCase()}`;
 }
 
 /** The URL to ping, or null when the job is not monitored (or its variable is not an https URL). */
-export function scheduledJobMonitorUrl(path: string, outcome: ScheduledJobOutcome, environment: NodeJS.ProcessEnv = process.env): URL | null {
+export function scheduledJobMonitorUrl(
+  path: string,
+  outcome: ScheduledJobOutcome,
+  environment: NodeJS.ProcessEnv = process.env
+): URL | null {
   const configured = environment[scheduledJobMonitorVariable(path)]?.trim();
   if (!configured) return null;
   let url: URL;
@@ -34,7 +41,8 @@ export function scheduledJobMonitorUrl(path: string, outcome: ScheduledJobOutcom
     return null;
   }
   if (url.protocol !== "https:") return null;
-  if (outcome === "fail") url.pathname = `${url.pathname.replace(/\/+$/, "")}/fail`;
+  if (outcome === "fail")
+    url.pathname = `${url.pathname.replace(/\/+$/, "")}/fail`;
   return url;
 }
 
@@ -42,19 +50,35 @@ export function scheduledJobMonitorUrl(path: string, outcome: ScheduledJobOutcom
 export async function pingScheduledJobMonitor(
   path: string,
   outcome: ScheduledJobOutcome,
-  options: { environment?: NodeJS.ProcessEnv; fetchImpl?: typeof fetch; timeoutMs?: number } = {},
+  options: {
+    environment?: NodeJS.ProcessEnv;
+    fetchImpl?: typeof fetch;
+    timeoutMs?: number;
+  } = {}
 ): Promise<boolean> {
   const url = scheduledJobMonitorUrl(path, outcome, options.environment);
   if (!url) return false;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? SCHEDULED_JOB_MONITOR_TIMEOUT_MS);
+  const timer = setTimeout(
+    () => controller.abort(),
+    options.timeoutMs ?? SCHEDULED_JOB_MONITOR_TIMEOUT_MS
+  );
   try {
-    const response = await (options.fetchImpl ?? fetch)(url, { method: "GET", signal: controller.signal });
-    if (!response.ok) console.warn(`[ScheduledJobMonitor] ${scheduledJobMonitorVariable(path)} ping refused: HTTP ${response.status}`);
+    const response = await (options.fetchImpl ?? fetch)(url, {
+      method: "GET",
+      signal: controller.signal,
+    });
+    if (!response.ok)
+      console.warn(
+        `[ScheduledJobMonitor] ${scheduledJobMonitorVariable(path)} ping refused: HTTP ${response.status}`
+      );
     return response.ok;
   } catch (error) {
     // The URL holds the check's secret: only the variable name is logged.
-    console.warn(`[ScheduledJobMonitor] ${scheduledJobMonitorVariable(path)} ping failed:`, error instanceof Error ? error.name : "UnknownError");
+    console.warn(
+      `[ScheduledJobMonitor] ${scheduledJobMonitorVariable(path)} ping failed:`,
+      error instanceof Error ? error.name : "UnknownError"
+    );
     return false;
   } finally {
     clearTimeout(timer);
@@ -63,8 +87,13 @@ export async function pingScheduledJobMonitor(
 
 /** A job answering an error status (e.g. 503, database unavailable) did not do its work. */
 export function scheduledJobOutcome(result: unknown): ScheduledJobOutcome {
-  const httpStatus = result && typeof result === "object" ? (result as { httpStatus?: unknown }).httpStatus : undefined;
-  return typeof httpStatus === "number" && httpStatus >= 400 ? "fail" : "success";
+  const httpStatus =
+    result && typeof result === "object"
+      ? (result as { httpStatus?: unknown }).httpStatus
+      : undefined;
+  return typeof httpStatus === "number" && httpStatus >= 400
+    ? "fail"
+    : "success";
 }
 
 /**
@@ -72,7 +101,11 @@ export function scheduledJobOutcome(result: unknown): ScheduledJobOutcome {
  * caller answers (a serverless function may be frozen once it has responded).
  * The job's error is rethrown unchanged.
  */
-export async function runMonitoredScheduledJob<T>(path: string, run: () => Promise<T>, options: Parameters<typeof pingScheduledJobMonitor>[2] = {}): Promise<T> {
+export async function runMonitoredScheduledJob<T>(
+  path: string,
+  run: () => Promise<T>,
+  options: Parameters<typeof pingScheduledJobMonitor>[2] = {}
+): Promise<T> {
   let result: T;
   try {
     result = await run();

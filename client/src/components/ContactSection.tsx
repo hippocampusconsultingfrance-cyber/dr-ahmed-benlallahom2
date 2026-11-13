@@ -1,10 +1,24 @@
 import { useLanguage } from "@/contexts/LanguageContext";
 import { siteConfig } from "@/data/site-config";
-import { getContactFormCopy, publicFormCopy, publicFormErrorMessage } from "@/lib/publicFormCopy";
+import {
+  getContactFormCopy,
+  publicFormCopy,
+  publicFormErrorMessage,
+} from "@/lib/publicFormCopy";
 import { trpc } from "@/lib/trpc";
-import { CONTACT_CATEGORIES, type ContactCategory } from "@shared/contactCategories";
+import {
+  CONTACT_CATEGORIES,
+  type ContactCategory,
+} from "@shared/contactCategories";
 import { cleanTextInput } from "@shared/textInputCleaning";
-import { Phone, Mail, Linkedin, Send, CheckCircle, Loader2 } from "lucide-react";
+import {
+  Phone,
+  Mail,
+  Linkedin,
+  Send,
+  CheckCircle,
+  Loader2,
+} from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Link } from "wouter";
@@ -13,14 +27,30 @@ import { TurnstileWidget } from "./TurnstileWidget";
 export const contactCopy = publicFormCopy.contact;
 
 /** The page made for each kind of visitor's request (PUB-22): the form points to it once the visitor says who they are. */
-const CONTACT_CATEGORY_LINKS: Record<ContactCategory, ReadonlyArray<{ href: string; label: keyof typeof contactCopy.fr.categoryLinks }>> = {
-  patient: [{ href: "/booking", label: "booking" }, { href: "/questions-anesthesie", label: "medicalQuestions" }],
+const CONTACT_CATEGORY_LINKS: Record<
+  ContactCategory,
+  ReadonlyArray<{
+    href: string;
+    label: keyof typeof contactCopy.fr.categoryLinks;
+  }>
+> = {
+  patient: [
+    { href: "/booking", label: "booking" },
+    { href: "/questions-anesthesie", label: "medicalQuestions" },
+  ],
   health_professional: [{ href: "/recruitment", label: "recruitment" }],
   institution: [{ href: "/employers", label: "employers" }],
   press_partner: [],
 };
 
-const emptyContactForm = { name: "", phone: "", email: "", message: "", gdprConsent: false, category: "" as ContactCategory | "" };
+const emptyContactForm = {
+  name: "",
+  phone: "",
+  email: "",
+  message: "",
+  gdprConsent: false,
+  category: "" as ContactCategory | "",
+};
 
 export default function ContactSection() {
   const { content, language } = useLanguage();
@@ -34,14 +64,14 @@ export default function ContactSection() {
   const [turnstileAttempt, setTurnstileAttempt] = useState(0);
 
   const submitMutation = trpc.contact.submit.useMutation({
-    onSuccess: (data) => {
+    onSuccess: data => {
       setSubmitted(true);
       setTrackingId(data.trackingId);
       setFormData(emptyContactForm);
       setTurnstileToken(null);
       toast.success(copy.sent);
     },
-    onError: (error) => {
+    onError: error => {
       setTurnstileToken(null);
       setTurnstileAttempt(value => value + 1);
       toast.error(publicFormErrorMessage(error, copy.refusals, copy.sendError));
@@ -71,7 +101,9 @@ export default function ContactSection() {
       language,
     });
   };
-  const categoryLinks = formData.category ? CONTACT_CATEGORY_LINKS[formData.category] : [];
+  const categoryLinks = formData.category
+    ? CONTACT_CATEGORY_LINKS[formData.category]
+    : [];
 
   return (
     <section id="contact" className="contact-section py-28 sm:py-36 relative">
@@ -111,8 +143,12 @@ export default function ContactSection() {
                   <Phone className="w-5 h-5 text-primary" />
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{copy.phone}</p>
-                  <p className="text-foreground font-medium">{siteConfig.phone}</p>
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">
+                    {copy.phone}
+                  </p>
+                  <p className="text-foreground font-medium">
+                    {siteConfig.phone}
+                  </p>
                 </div>
               </a>
 
@@ -124,8 +160,12 @@ export default function ContactSection() {
                   <Mail className="w-5 h-5 text-primary" />
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{copy.email}</p>
-                  <p className="text-foreground font-medium text-sm break-all">{siteConfig.email}</p>
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">
+                    {copy.email}
+                  </p>
+                  <p className="text-foreground font-medium text-sm break-all">
+                    {siteConfig.email}
+                  </p>
                 </div>
               </a>
 
@@ -139,8 +179,12 @@ export default function ContactSection() {
                   <Linkedin className="w-5 h-5 text-primary" />
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">LinkedIn</p>
-                  <p className="text-foreground font-medium">Dr. Ahmed Ben Lallahom</p>
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">
+                    LinkedIn
+                  </p>
+                  <p className="text-foreground font-medium">
+                    Dr. Ahmed Ben Lallahom
+                  </p>
                 </div>
               </a>
             </div>
@@ -160,7 +204,9 @@ export default function ContactSection() {
                 {trackingId && (
                   <p className="mb-8 text-sm text-muted-foreground">
                     {copy.reference}{" "}
-                    <span className="font-mono font-bold tracking-wide text-primary">{trackingId}</span>
+                    <span className="font-mono font-bold tracking-wide text-primary">
+                      {trackingId}
+                    </span>
                   </p>
                 )}
                 <button
@@ -171,18 +217,29 @@ export default function ContactSection() {
                 </button>
               </div>
             ) : (
-              <form onSubmit={handleSubmit} className="contact-form-card p-5 sm:p-8 rounded-2xl bg-card/60 backdrop-blur-sm border border-border/30 space-y-5" aria-busy={submitMutation.isPending}>
+              <form
+                onSubmit={handleSubmit}
+                className="contact-form-card p-5 sm:p-8 rounded-2xl bg-card/60 backdrop-blur-sm border border-border/30 space-y-5"
+                aria-busy={submitMutation.isPending}
+              >
                 <fieldset>
-                  <legend className="block text-sm font-medium text-foreground mb-2">{copy.categoryLegend}</legend>
+                  <legend className="block text-sm font-medium text-foreground mb-2">
+                    {copy.categoryLegend}
+                  </legend>
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     {CONTACT_CATEGORIES.map(category => (
-                      <label key={category} className="flex items-center gap-2 rounded-lg border border-border/50 px-3 py-2 text-sm text-foreground cursor-pointer has-[:checked]:border-primary/60">
+                      <label
+                        key={category}
+                        className="flex items-center gap-2 rounded-lg border border-border/50 px-3 py-2 text-sm text-foreground cursor-pointer has-[:checked]:border-primary/60"
+                      >
                         <input
                           type="radio"
                           name="category"
                           value={category}
                           checked={formData.category === category}
-                          onChange={() => setFormData({ ...formData, category })}
+                          onChange={() =>
+                            setFormData({ ...formData, category })
+                          }
                           className="accent-primary"
                         />
                         {copy.categories[category]}
@@ -190,23 +247,32 @@ export default function ContactSection() {
                     ))}
                   </div>
                   <div aria-live="polite">
-                    {formData.category && copy.categoryGuides[formData.category] && (
-                      <p className="mt-3 text-sm text-muted-foreground">
-                        {copy.categoryGuides[formData.category]}{" "}
-                        {categoryLinks.map((link, index) => (
-                          <span key={link.href}>
-                            {index > 0 && " · "}
-                            <Link href={link.href} className="font-medium text-primary underline underline-offset-2">{copy.categoryLinks[link.label]}</Link>
-                          </span>
-                        ))}
-                      </p>
-                    )}
+                    {formData.category &&
+                      copy.categoryGuides[formData.category] && (
+                        <p className="mt-3 text-sm text-muted-foreground">
+                          {copy.categoryGuides[formData.category]}{" "}
+                          {categoryLinks.map((link, index) => (
+                            <span key={link.href}>
+                              {index > 0 && " · "}
+                              <Link
+                                href={link.href}
+                                className="font-medium text-primary underline underline-offset-2"
+                              >
+                                {copy.categoryLinks[link.label]}
+                              </Link>
+                            </span>
+                          ))}
+                        </p>
+                      )}
                   </div>
                 </fieldset>
 
                 <div className="grid sm:grid-cols-2 gap-5">
                   <div>
-                    <label htmlFor="contact-name" className="block text-sm font-medium text-foreground mb-2">
+                    <label
+                      htmlFor="contact-name"
+                      className="block text-sm font-medium text-foreground mb-2"
+                    >
                       {content.contact.form.name}
                     </label>
                     <input
@@ -217,12 +283,17 @@ export default function ContactSection() {
                       required
                       placeholder={content.contact.form.namePlaceholder}
                       value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      onChange={e =>
+                        setFormData({ ...formData, name: e.target.value })
+                      }
                       className="form-field-premium w-full px-4 py-3 border"
                     />
                   </div>
                   <div>
-                    <label htmlFor="contact-phone" className="block text-sm font-medium text-foreground mb-2">
+                    <label
+                      htmlFor="contact-phone"
+                      className="block text-sm font-medium text-foreground mb-2"
+                    >
                       {content.contact.form.phone}
                     </label>
                     <input
@@ -232,74 +303,112 @@ export default function ContactSection() {
                       autoComplete="tel"
                       placeholder={content.contact.form.phonePlaceholder}
                       value={formData.phone}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      onChange={e =>
+                        setFormData({ ...formData, phone: e.target.value })
+                      }
                       className="form-field-premium w-full px-4 py-3 border"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label htmlFor="contact-email" className="block text-sm font-medium text-foreground mb-2">
-                      {content.contact.form.email}
-                    </label>
-                    <input
-                      id="contact-email"
-                      name="email"
-                      type="email"
-                      autoComplete="email"
-
+                  <label
+                    htmlFor="contact-email"
+                    className="block text-sm font-medium text-foreground mb-2"
+                  >
+                    {content.contact.form.email}
+                  </label>
+                  <input
+                    id="contact-email"
+                    name="email"
+                    type="email"
+                    autoComplete="email"
                     required
                     placeholder={content.contact.form.emailPlaceholder}
                     value={formData.email}
                     // Pasted address: without the spaces and direction marks left at either end, as the server reads it (INTL-05).
-                    onChange={(e) => setFormData({ ...formData, email: cleanTextInput(e.target.value) })}
+                    onChange={e =>
+                      setFormData({
+                        ...formData,
+                        email: cleanTextInput(e.target.value),
+                      })
+                    }
                     className="w-full px-4 py-3 rounded-lg bg-input/50 border border-border/50 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 transition-all"
                   />
                 </div>
 
                 <div>
-                  <label htmlFor="contact-message" className="block text-sm font-medium text-foreground mb-2">
-                      {content.contact.form.message}
-                    </label>
-                    <textarea
-                      id="contact-message"
-                      name="message"
-                      required
-
+                  <label
+                    htmlFor="contact-message"
+                    className="block text-sm font-medium text-foreground mb-2"
+                  >
+                    {content.contact.form.message}
+                  </label>
+                  <textarea
+                    id="contact-message"
+                    name="message"
+                    required
                     rows={5}
                     placeholder={content.contact.form.messagePlaceholder}
                     aria-describedby="contact-message-notice"
                     value={formData.message}
-                    onChange={(e) => setFormData({ ...formData, message: e.target.value })}
+                    onChange={e =>
+                      setFormData({ ...formData, message: e.target.value })
+                    }
                     className="form-field-premium w-full px-4 py-3 border resize-none"
                   />
                   {/* This channel is not meant for health data (PUB-22). */}
-                  <p id="contact-message-notice" className="mt-2 text-xs text-muted-foreground">{copy.medicalNotice}</p>
+                  <p
+                    id="contact-message-notice"
+                    className="mt-2 text-xs text-muted-foreground"
+                  >
+                    {copy.medicalNotice}
+                  </p>
                 </div>
 
-                <div className={`form-consent-item contact-consent flex items-start gap-3 rounded-lg p-4 ${consentAttempted && !formData.gdprConsent ? "form-consent-item-invalid" : ""}`}>
+                <div
+                  className={`form-consent-item contact-consent flex items-start gap-3 rounded-lg p-4 ${consentAttempted && !formData.gdprConsent ? "form-consent-item-invalid" : ""}`}
+                >
                   <input
                     type="checkbox"
                     id="gdprConsent"
                     required
                     checked={formData.gdprConsent}
                     aria-invalid={consentAttempted && !formData.gdprConsent}
-                    onChange={(e) => { const checked = e.target.checked; setFormData({ ...formData, gdprConsent: checked }); if (checked) setConsentAttempted(false); }}
+                    onChange={e => {
+                      const checked = e.target.checked;
+                      setFormData({ ...formData, gdprConsent: checked });
+                      if (checked) setConsentAttempted(false);
+                    }}
                     className="form-consent-checkbox mt-0.5"
                   />
-                  <label htmlFor="gdprConsent" className="text-sm text-foreground cursor-pointer flex-1">
+                  <label
+                    htmlFor="gdprConsent"
+                    className="text-sm text-foreground cursor-pointer flex-1"
+                  >
                     {content.contact.form.gdprConsent}
                   </label>
                 </div>
 
                 {submitMutation.error && (
-                  <p role="alert" className="form-alert text-sm text-destructive">
-                    {publicFormErrorMessage(submitMutation.error, copy.refusals, copy.sendError)}
+                  <p
+                    role="alert"
+                    className="form-alert text-sm text-destructive"
+                  >
+                    {publicFormErrorMessage(
+                      submitMutation.error,
+                      copy.refusals,
+                      copy.sendError
+                    )}
                   </p>
                 )}
 
                 {/* Cloudflare is loaded when the form comes near (PERF-04); a new challenge after a refusal is rendered at once. */}
-                <TurnstileWidget key={turnstileAttempt} onToken={setTurnstileToken} deferUntilVisible={turnstileAttempt === 0} />
+                <TurnstileWidget
+                  key={turnstileAttempt}
+                  onToken={setTurnstileToken}
+                  deferUntilVisible={turnstileAttempt === 0}
+                />
 
                 <button
                   type="submit"
@@ -308,7 +417,10 @@ export default function ContactSection() {
                 >
                   {submitMutation.isPending ? (
                     <>
-                      <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                      <Loader2
+                        className="w-4 h-4 animate-spin"
+                        aria-hidden="true"
+                      />
                       <span role="status">{copy.sending}</span>
                     </>
                   ) : (

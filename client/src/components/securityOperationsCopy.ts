@@ -2,42 +2,303 @@
 // The events' categories are named in shared/securityEventLabels.ts (ADM-15), shared with the owner's alert.
 export const securityOperationsCopy = {
   fr: {
-    loading: "Chargement du journal de sécurité", loadError: "Impossible de charger le journal de sécurité", title: "Observabilité de sécurité", subtitle: "Journal pseudonymisé des accès, blocages et actions sensibles. Actualisation toutes les 30 secondes.", noEvents: "Aucun événement de sécurité n’est encore enregistré.", highEvents: "événement(s) élevé(s) ou critique(s) à examiner sur les dernières 24 heures", noHighEvents: "Aucun événement élevé ou critique sur les dernières 24 heures",
-    filters: "Filtres du journal", adminOnly: "Admin seulement", warningsAndAbove: "Avertissements et plus", includeCandidateSignIns: "Connexions candidats réussies", noMatchingEvents: "Aucun événement ne correspond à ces filtres.", newerEvents: "Événements plus récents", olderEvents: "Événements plus anciens", pagination: "Pages du journal",
-    sessionsTitle: "Sessions administrateur actives", sessionsSubtitle: "Les appareils connectés à votre compte administrateur. Un appareil perdu ou inconnu : révoquez les autres sessions, puis changez votre mot de passe. Le bouton annule aussi les codes de sécurité encore valables des autres appareils, même absents de cette liste.", sessionsLoading: "Chargement des sessions", sessionsError: "Impossible de lire les sessions auprès de Clerk : révoquez-les au besoin dans le tableau de bord Clerk (Users, puis Sessions).", currentSession: "Cette session", unknownDevice: "Appareil non identifié", lastActive: "Dernière activité", noOtherSession: "Aucune autre session active.", revokeOthers: "Révoquer toutes les autres sessions", revoking: "Révocation…", revoked: "Sessions révoquées", securityCodesRevoked: "Codes de sécurité d’autres appareils annulés", clerkUnavailable: "Clerk n’a pas répondu : révoquez les sessions dans le tableau de bord Clerk (Users, puis Sessions).", notRevoked: "Certaines sessions n’ont pas pu être révoquées : révoquez-les dans le tableau de bord Clerk (Users, puis Sessions).", revokeError: "La révocation a échoué : réessayez, ou révoquez les sessions dans le tableau de bord Clerk (Users, puis Sessions).",
-    counts: { deleted: "Lignes supprimées", contactMessages: "Messages", medicalQuestions: "Questions santé", gdprRequests: "Demandes RGPD", appointments: "Rendez-vous", recruitmentApplications: "Candidatures", contactMessagesDeleted: "Messages supprimés", medicalQuestionsDeleted: "Questions santé supprimées", appointmentsAnonymised: "Rendez-vous anonymisés", upcomingAppointmentsKept: "Rendez-vous à venir conservés", recruitmentApplicationsLeft: "Dossiers candidat à effacer séparément" }, countSeparator: " : ",
-    outcomes: { blocked: "Bloqué", allowed: "Autorisé", succeeded: "Réussi", failed: "Échoué", alert: "Alerte" }, severities: { info: "Information", warning: "Avertissement", high: "Élevé", critical: "Critique" }, actors: { candidate: "Candidat", admin: "Administrateur", system: "Système", anonymous: "Visiteur anonyme" },
+    loading: "Chargement du journal de sécurité",
+    loadError: "Impossible de charger le journal de sécurité",
+    title: "Observabilité de sécurité",
+    subtitle:
+      "Journal pseudonymisé des accès, blocages et actions sensibles. Actualisation toutes les 30 secondes.",
+    noEvents: "Aucun événement de sécurité n’est encore enregistré.",
+    highEvents:
+      "événement(s) élevé(s) ou critique(s) à examiner sur les dernières 24 heures",
+    noHighEvents:
+      "Aucun événement élevé ou critique sur les dernières 24 heures",
+    filters: "Filtres du journal",
+    adminOnly: "Admin seulement",
+    warningsAndAbove: "Avertissements et plus",
+    includeCandidateSignIns: "Connexions candidats réussies",
+    noMatchingEvents: "Aucun événement ne correspond à ces filtres.",
+    newerEvents: "Événements plus récents",
+    olderEvents: "Événements plus anciens",
+    pagination: "Pages du journal",
+    sessionsTitle: "Sessions administrateur actives",
+    sessionsSubtitle:
+      "Les appareils connectés à votre compte administrateur. Un appareil perdu ou inconnu : révoquez les autres sessions, puis changez votre mot de passe. Le bouton annule aussi les codes de sécurité encore valables des autres appareils, même absents de cette liste.",
+    sessionsLoading: "Chargement des sessions",
+    sessionsError:
+      "Impossible de lire les sessions auprès de Clerk : révoquez-les au besoin dans le tableau de bord Clerk (Users, puis Sessions).",
+    currentSession: "Cette session",
+    unknownDevice: "Appareil non identifié",
+    lastActive: "Dernière activité",
+    noOtherSession: "Aucune autre session active.",
+    revokeOthers: "Révoquer toutes les autres sessions",
+    revoking: "Révocation…",
+    revoked: "Sessions révoquées",
+    securityCodesRevoked: "Codes de sécurité d’autres appareils annulés",
+    clerkUnavailable:
+      "Clerk n’a pas répondu : révoquez les sessions dans le tableau de bord Clerk (Users, puis Sessions).",
+    notRevoked:
+      "Certaines sessions n’ont pas pu être révoquées : révoquez-les dans le tableau de bord Clerk (Users, puis Sessions).",
+    revokeError:
+      "La révocation a échoué : réessayez, ou révoquez les sessions dans le tableau de bord Clerk (Users, puis Sessions).",
+    counts: {
+      deleted: "Lignes supprimées",
+      contactMessages: "Messages",
+      medicalQuestions: "Questions santé",
+      gdprRequests: "Demandes RGPD",
+      appointments: "Rendez-vous",
+      recruitmentApplications: "Candidatures",
+      contactMessagesDeleted: "Messages supprimés",
+      medicalQuestionsDeleted: "Questions santé supprimées",
+      appointmentsAnonymised: "Rendez-vous anonymisés",
+      upcomingAppointmentsKept: "Rendez-vous à venir conservés",
+      recruitmentApplicationsLeft: "Dossiers candidat à effacer séparément",
+    },
+    countSeparator: " : ",
+    outcomes: {
+      blocked: "Bloqué",
+      allowed: "Autorisé",
+      succeeded: "Réussi",
+      failed: "Échoué",
+      alert: "Alerte",
+    },
+    severities: {
+      info: "Information",
+      warning: "Avertissement",
+      high: "Élevé",
+      critical: "Critique",
+    },
+    actors: {
+      candidate: "Candidat",
+      admin: "Administrateur",
+      system: "Système",
+      anonymous: "Visiteur anonyme",
+    },
   },
   en: {
-    loading: "Loading security log", loadError: "Unable to load security log", title: "Security observability", subtitle: "Pseudonymised log of access, blocks and sensitive actions. Refreshed every 30 seconds.", noEvents: "No security event has been recorded yet.", highEvents: "high or critical event(s) to review in the last 24 hours", noHighEvents: "No high or critical event in the last 24 hours",
-    filters: "Log filters", adminOnly: "Admin only", warningsAndAbove: "Warnings and above", includeCandidateSignIns: "Successful candidate sign-ins", noMatchingEvents: "No event matches these filters.", newerEvents: "Newer events", olderEvents: "Older events", pagination: "Log pages",
-    sessionsTitle: "Active admin sessions", sessionsSubtitle: "The devices signed in to your admin account. A lost or unknown device: revoke the other sessions, then change your password. The button also cancels the security codes other devices still hold, even those missing from this list.", sessionsLoading: "Loading sessions", sessionsError: "Unable to read the sessions from Clerk: if needed, revoke them in the Clerk dashboard (Users, then Sessions).", currentSession: "This session", unknownDevice: "Unidentified device", lastActive: "Last activity", noOtherSession: "No other active session.", revokeOthers: "Revoke all other sessions", revoking: "Revoking…", revoked: "Sessions revoked", securityCodesRevoked: "Security codes of other devices cancelled", clerkUnavailable: "Clerk did not answer: revoke the sessions in the Clerk dashboard (Users, then Sessions).", notRevoked: "Some sessions could not be revoked: revoke them in the Clerk dashboard (Users, then Sessions).", revokeError: "The revocation failed: try again, or revoke the sessions in the Clerk dashboard (Users, then Sessions).",
-    counts: { deleted: "Rows deleted", contactMessages: "Messages", medicalQuestions: "Health questions", gdprRequests: "GDPR requests", appointments: "Appointments", recruitmentApplications: "Applications", contactMessagesDeleted: "Messages deleted", medicalQuestionsDeleted: "Health questions deleted", appointmentsAnonymised: "Appointments anonymised", upcomingAppointmentsKept: "Upcoming appointments kept", recruitmentApplicationsLeft: "Candidate files to erase separately" }, countSeparator: ": ",
-    outcomes: { blocked: "Blocked", allowed: "Allowed", succeeded: "Succeeded", failed: "Failed", alert: "Alert" }, severities: { info: "Information", warning: "Warning", high: "High", critical: "Critical" }, actors: { candidate: "Candidate", admin: "Administrator", system: "System", anonymous: "Anonymous visitor" },
+    loading: "Loading security log",
+    loadError: "Unable to load security log",
+    title: "Security observability",
+    subtitle:
+      "Pseudonymised log of access, blocks and sensitive actions. Refreshed every 30 seconds.",
+    noEvents: "No security event has been recorded yet.",
+    highEvents: "high or critical event(s) to review in the last 24 hours",
+    noHighEvents: "No high or critical event in the last 24 hours",
+    filters: "Log filters",
+    adminOnly: "Admin only",
+    warningsAndAbove: "Warnings and above",
+    includeCandidateSignIns: "Successful candidate sign-ins",
+    noMatchingEvents: "No event matches these filters.",
+    newerEvents: "Newer events",
+    olderEvents: "Older events",
+    pagination: "Log pages",
+    sessionsTitle: "Active admin sessions",
+    sessionsSubtitle:
+      "The devices signed in to your admin account. A lost or unknown device: revoke the other sessions, then change your password. The button also cancels the security codes other devices still hold, even those missing from this list.",
+    sessionsLoading: "Loading sessions",
+    sessionsError:
+      "Unable to read the sessions from Clerk: if needed, revoke them in the Clerk dashboard (Users, then Sessions).",
+    currentSession: "This session",
+    unknownDevice: "Unidentified device",
+    lastActive: "Last activity",
+    noOtherSession: "No other active session.",
+    revokeOthers: "Revoke all other sessions",
+    revoking: "Revoking…",
+    revoked: "Sessions revoked",
+    securityCodesRevoked: "Security codes of other devices cancelled",
+    clerkUnavailable:
+      "Clerk did not answer: revoke the sessions in the Clerk dashboard (Users, then Sessions).",
+    notRevoked:
+      "Some sessions could not be revoked: revoke them in the Clerk dashboard (Users, then Sessions).",
+    revokeError:
+      "The revocation failed: try again, or revoke the sessions in the Clerk dashboard (Users, then Sessions).",
+    counts: {
+      deleted: "Rows deleted",
+      contactMessages: "Messages",
+      medicalQuestions: "Health questions",
+      gdprRequests: "GDPR requests",
+      appointments: "Appointments",
+      recruitmentApplications: "Applications",
+      contactMessagesDeleted: "Messages deleted",
+      medicalQuestionsDeleted: "Health questions deleted",
+      appointmentsAnonymised: "Appointments anonymised",
+      upcomingAppointmentsKept: "Upcoming appointments kept",
+      recruitmentApplicationsLeft: "Candidate files to erase separately",
+    },
+    countSeparator: ": ",
+    outcomes: {
+      blocked: "Blocked",
+      allowed: "Allowed",
+      succeeded: "Succeeded",
+      failed: "Failed",
+      alert: "Alert",
+    },
+    severities: {
+      info: "Information",
+      warning: "Warning",
+      high: "High",
+      critical: "Critical",
+    },
+    actors: {
+      candidate: "Candidate",
+      admin: "Administrator",
+      system: "System",
+      anonymous: "Anonymous visitor",
+    },
   },
   de: {
-    loading: "Sicherheitsprotokoll wird geladen", loadError: "Sicherheitsprotokoll kann nicht geladen werden", title: "Sicherheitsbeobachtung", subtitle: "Pseudonymisiertes Protokoll von Zugriffen, Blockierungen und sensiblen Aktionen. Aktualisierung alle 30 Sekunden.", noEvents: "Es wurde noch kein Sicherheitsereignis erfasst.", highEvents: "Ereignis(se) hoher oder kritischer Schwere zur Prüfung in den letzten 24 Stunden", noHighEvents: "Kein Ereignis hoher oder kritischer Schwere in den letzten 24 Stunden",
-    filters: "Protokollfilter", adminOnly: "Nur Admin", warningsAndAbove: "Warnungen und höher", includeCandidateSignIns: "Erfolgreiche Kandidatenanmeldungen", noMatchingEvents: "Kein Ereignis entspricht diesen Filtern.", newerEvents: "Neuere Ereignisse", olderEvents: "Ältere Ereignisse", pagination: "Protokollseiten",
-    sessionsTitle: "Aktive Admin-Sitzungen", sessionsSubtitle: "Die bei Ihrem Admin-Konto angemeldeten Geräte. Bei einem verlorenen oder unbekannten Gerät: Widerrufen Sie die anderen Sitzungen und ändern Sie dann Ihr Passwort. Die Schaltfläche annulliert auch die noch gültigen Sicherheitscodes anderer Geräte, selbst wenn sie in dieser Liste fehlen.", sessionsLoading: "Sitzungen werden geladen", sessionsError: "Die Sitzungen können nicht von Clerk gelesen werden: Widerrufen Sie sie bei Bedarf im Clerk-Dashboard (Users, dann Sessions).", currentSession: "Diese Sitzung", unknownDevice: "Nicht erkanntes Gerät", lastActive: "Letzte Aktivität", noOtherSession: "Keine andere aktive Sitzung.", revokeOthers: "Alle anderen Sitzungen widerrufen", revoking: "Wird widerrufen…", revoked: "Widerrufene Sitzungen", securityCodesRevoked: "Annullierte Sicherheitscodes anderer Geräte", clerkUnavailable: "Clerk hat nicht geantwortet: Widerrufen Sie die Sitzungen im Clerk-Dashboard (Users, dann Sessions).", notRevoked: "Einige Sitzungen konnten nicht widerrufen werden: Widerrufen Sie sie im Clerk-Dashboard (Users, dann Sessions).", revokeError: "Der Widerruf ist fehlgeschlagen: Versuchen Sie es erneut oder widerrufen Sie die Sitzungen im Clerk-Dashboard (Users, dann Sessions).",
-    counts: { deleted: "Gelöschte Zeilen", contactMessages: "Nachrichten", medicalQuestions: "Gesundheitsfragen", gdprRequests: "DSGVO-Anfragen", appointments: "Termine", recruitmentApplications: "Bewerbungen", contactMessagesDeleted: "Gelöschte Nachrichten", medicalQuestionsDeleted: "Gelöschte Gesundheitsfragen", appointmentsAnonymised: "Anonymisierte Termine", upcomingAppointmentsKept: "Beibehaltene künftige Termine", recruitmentApplicationsLeft: "Separat zu löschende Bewerberakten" }, countSeparator: ": ",
-    outcomes: { blocked: "Blockiert", allowed: "Zugelassen", succeeded: "Erfolgreich", failed: "Fehlgeschlagen", alert: "Alarm" }, severities: { info: "Information", warning: "Warnung", high: "Hoch", critical: "Kritisch" }, actors: { candidate: "Kandidat", admin: "Administrator", system: "System", anonymous: "Anonymer Besucher" },
+    loading: "Sicherheitsprotokoll wird geladen",
+    loadError: "Sicherheitsprotokoll kann nicht geladen werden",
+    title: "Sicherheitsbeobachtung",
+    subtitle:
+      "Pseudonymisiertes Protokoll von Zugriffen, Blockierungen und sensiblen Aktionen. Aktualisierung alle 30 Sekunden.",
+    noEvents: "Es wurde noch kein Sicherheitsereignis erfasst.",
+    highEvents:
+      "Ereignis(se) hoher oder kritischer Schwere zur Prüfung in den letzten 24 Stunden",
+    noHighEvents:
+      "Kein Ereignis hoher oder kritischer Schwere in den letzten 24 Stunden",
+    filters: "Protokollfilter",
+    adminOnly: "Nur Admin",
+    warningsAndAbove: "Warnungen und höher",
+    includeCandidateSignIns: "Erfolgreiche Kandidatenanmeldungen",
+    noMatchingEvents: "Kein Ereignis entspricht diesen Filtern.",
+    newerEvents: "Neuere Ereignisse",
+    olderEvents: "Ältere Ereignisse",
+    pagination: "Protokollseiten",
+    sessionsTitle: "Aktive Admin-Sitzungen",
+    sessionsSubtitle:
+      "Die bei Ihrem Admin-Konto angemeldeten Geräte. Bei einem verlorenen oder unbekannten Gerät: Widerrufen Sie die anderen Sitzungen und ändern Sie dann Ihr Passwort. Die Schaltfläche annulliert auch die noch gültigen Sicherheitscodes anderer Geräte, selbst wenn sie in dieser Liste fehlen.",
+    sessionsLoading: "Sitzungen werden geladen",
+    sessionsError:
+      "Die Sitzungen können nicht von Clerk gelesen werden: Widerrufen Sie sie bei Bedarf im Clerk-Dashboard (Users, dann Sessions).",
+    currentSession: "Diese Sitzung",
+    unknownDevice: "Nicht erkanntes Gerät",
+    lastActive: "Letzte Aktivität",
+    noOtherSession: "Keine andere aktive Sitzung.",
+    revokeOthers: "Alle anderen Sitzungen widerrufen",
+    revoking: "Wird widerrufen…",
+    revoked: "Widerrufene Sitzungen",
+    securityCodesRevoked: "Annullierte Sicherheitscodes anderer Geräte",
+    clerkUnavailable:
+      "Clerk hat nicht geantwortet: Widerrufen Sie die Sitzungen im Clerk-Dashboard (Users, dann Sessions).",
+    notRevoked:
+      "Einige Sitzungen konnten nicht widerrufen werden: Widerrufen Sie sie im Clerk-Dashboard (Users, dann Sessions).",
+    revokeError:
+      "Der Widerruf ist fehlgeschlagen: Versuchen Sie es erneut oder widerrufen Sie die Sitzungen im Clerk-Dashboard (Users, dann Sessions).",
+    counts: {
+      deleted: "Gelöschte Zeilen",
+      contactMessages: "Nachrichten",
+      medicalQuestions: "Gesundheitsfragen",
+      gdprRequests: "DSGVO-Anfragen",
+      appointments: "Termine",
+      recruitmentApplications: "Bewerbungen",
+      contactMessagesDeleted: "Gelöschte Nachrichten",
+      medicalQuestionsDeleted: "Gelöschte Gesundheitsfragen",
+      appointmentsAnonymised: "Anonymisierte Termine",
+      upcomingAppointmentsKept: "Beibehaltene künftige Termine",
+      recruitmentApplicationsLeft: "Separat zu löschende Bewerberakten",
+    },
+    countSeparator: ": ",
+    outcomes: {
+      blocked: "Blockiert",
+      allowed: "Zugelassen",
+      succeeded: "Erfolgreich",
+      failed: "Fehlgeschlagen",
+      alert: "Alarm",
+    },
+    severities: {
+      info: "Information",
+      warning: "Warnung",
+      high: "Hoch",
+      critical: "Kritisch",
+    },
+    actors: {
+      candidate: "Kandidat",
+      admin: "Administrator",
+      system: "System",
+      anonymous: "Anonymer Besucher",
+    },
   },
   zh: {
-    loading: "正在加载安全日志", loadError: "无法加载安全日志", title: "安全可观测性", subtitle: "访问、拦截和敏感操作的去标识化日志。每 30 秒更新一次。", noEvents: "尚未记录任何安全事件。", highEvents: "个高或严重级别的事件待审查（过去 24 小时）", noHighEvents: "过去 24 小时内没有高或严重级别的事件",
-    filters: "日志筛选", adminOnly: "仅管理员", warningsAndAbove: "警告及以上", includeCandidateSignIns: "候选人成功登录", noMatchingEvents: "没有符合这些筛选条件的事件。", newerEvents: "较新的事件", olderEvents: "较早的事件", pagination: "日志分页",
-    sessionsTitle: "活跃的管理员会话", sessionsSubtitle: "已登录您管理员账户的设备。如有丢失或陌生的设备，请撤销其他会话，然后更改密码。该按钮也会取消其他设备仍然有效的安全码，即使它们不在此列表中。", sessionsLoading: "正在加载会话", sessionsError: "无法从 Clerk 读取会话：如有需要，请在 Clerk 控制台中撤销（Users，然后 Sessions）。", currentSession: "当前会话", unknownDevice: "未识别的设备", lastActive: "最近活动", noOtherSession: "没有其他活跃会话。", revokeOthers: "撤销所有其他会话", revoking: "正在撤销…", revoked: "已撤销的会话", securityCodesRevoked: "已取消的其他设备安全码", clerkUnavailable: "Clerk 没有响应：请在 Clerk 控制台中撤销会话（Users，然后 Sessions）。", notRevoked: "部分会话无法撤销：请在 Clerk 控制台中撤销（Users，然后 Sessions）。", revokeError: "撤销失败：请重试，或在 Clerk 控制台中撤销会话（Users，然后 Sessions）。",
-    counts: { deleted: "已删除行数", contactMessages: "消息", medicalQuestions: "健康问题", gdprRequests: "GDPR 请求", appointments: "预约", recruitmentApplications: "求职申请", contactMessagesDeleted: "已删除消息", medicalQuestionsDeleted: "已删除健康问题", appointmentsAnonymised: "已匿名化预约", upcomingAppointmentsKept: "保留的未来预约", recruitmentApplicationsLeft: "需单独删除的候选人档案" }, countSeparator: "：",
-    outcomes: { blocked: "已拦截", allowed: "已允许", succeeded: "成功", failed: "失败", alert: "警报" }, severities: { info: "信息", warning: "警告", high: "高", critical: "严重" }, actors: { candidate: "候选人", admin: "管理员", system: "系统", anonymous: "匿名访客" },
+    loading: "正在加载安全日志",
+    loadError: "无法加载安全日志",
+    title: "安全可观测性",
+    subtitle: "访问、拦截和敏感操作的去标识化日志。每 30 秒更新一次。",
+    noEvents: "尚未记录任何安全事件。",
+    highEvents: "个高或严重级别的事件待审查（过去 24 小时）",
+    noHighEvents: "过去 24 小时内没有高或严重级别的事件",
+    filters: "日志筛选",
+    adminOnly: "仅管理员",
+    warningsAndAbove: "警告及以上",
+    includeCandidateSignIns: "候选人成功登录",
+    noMatchingEvents: "没有符合这些筛选条件的事件。",
+    newerEvents: "较新的事件",
+    olderEvents: "较早的事件",
+    pagination: "日志分页",
+    sessionsTitle: "活跃的管理员会话",
+    sessionsSubtitle:
+      "已登录您管理员账户的设备。如有丢失或陌生的设备，请撤销其他会话，然后更改密码。该按钮也会取消其他设备仍然有效的安全码，即使它们不在此列表中。",
+    sessionsLoading: "正在加载会话",
+    sessionsError:
+      "无法从 Clerk 读取会话：如有需要，请在 Clerk 控制台中撤销（Users，然后 Sessions）。",
+    currentSession: "当前会话",
+    unknownDevice: "未识别的设备",
+    lastActive: "最近活动",
+    noOtherSession: "没有其他活跃会话。",
+    revokeOthers: "撤销所有其他会话",
+    revoking: "正在撤销…",
+    revoked: "已撤销的会话",
+    securityCodesRevoked: "已取消的其他设备安全码",
+    clerkUnavailable:
+      "Clerk 没有响应：请在 Clerk 控制台中撤销会话（Users，然后 Sessions）。",
+    notRevoked:
+      "部分会话无法撤销：请在 Clerk 控制台中撤销（Users，然后 Sessions）。",
+    revokeError:
+      "撤销失败：请重试，或在 Clerk 控制台中撤销会话（Users，然后 Sessions）。",
+    counts: {
+      deleted: "已删除行数",
+      contactMessages: "消息",
+      medicalQuestions: "健康问题",
+      gdprRequests: "GDPR 请求",
+      appointments: "预约",
+      recruitmentApplications: "求职申请",
+      contactMessagesDeleted: "已删除消息",
+      medicalQuestionsDeleted: "已删除健康问题",
+      appointmentsAnonymised: "已匿名化预约",
+      upcomingAppointmentsKept: "保留的未来预约",
+      recruitmentApplicationsLeft: "需单独删除的候选人档案",
+    },
+    countSeparator: "：",
+    outcomes: {
+      blocked: "已拦截",
+      allowed: "已允许",
+      succeeded: "成功",
+      failed: "失败",
+      alert: "警报",
+    },
+    severities: { info: "信息", warning: "警告", high: "高", critical: "严重" },
+    actors: {
+      candidate: "候选人",
+      admin: "管理员",
+      system: "系统",
+      anonymous: "匿名访客",
+    },
   },
 } as const;
 
-type SecurityOperationsCopy = (typeof securityOperationsCopy)[keyof typeof securityOperationsCopy];
+type SecurityOperationsCopy =
+  (typeof securityOperationsCopy)[keyof typeof securityOperationsCopy];
 
 /** "Messages supprimés : 2 · Rendez-vous anonymisés : 1": the counts a trace holds, in the copy's language; keys without a label are left out. */
-export function describeSecurityEventCounts(copy: SecurityOperationsCopy, counts: Record<string, number> | null | undefined) {
+export function describeSecurityEventCounts(
+  copy: SecurityOperationsCopy,
+  counts: Record<string, number> | null | undefined
+) {
   if (!counts) return "";
   return Object.entries(counts)
     .filter(([key]) => key in copy.counts)
-    .map(([key, value]) => `${copy.counts[key as keyof SecurityOperationsCopy["counts"]]}${copy.countSeparator}${value}`)
+    .map(
+      ([key, value]) =>
+        `${copy.counts[key as keyof SecurityOperationsCopy["counts"]]}${copy.countSeparator}${value}`
+    )
     .join(" · ");
 }

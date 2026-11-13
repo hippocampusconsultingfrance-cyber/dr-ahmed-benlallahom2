@@ -15,13 +15,22 @@
  * The case is ignored by ILIKE.
  */
 
-const range = (first: number, last: number) => Array.from({ length: last - first + 1 }, (_, index) => String.fromCharCode(first + index)).join("");
+const range = (first: number, last: number) =>
+  Array.from({ length: last - first + 1 }, (_, index) =>
+    String.fromCharCode(first + index)
+  ).join("");
 
 /**
  * Invisible characters a name can carry when pasted: soft hyphen, zero-width
  * spaces and joiners, direction marks and isolates, byte order mark.
  */
-const INVISIBLE_CHARACTERS = "\u00ad\u061c\u180e" + range(0x200b, 0x200f) + range(0x202a, 0x202e) + range(0x2060, 0x2064) + range(0x2066, 0x2069) + "\ufeff";
+const INVISIBLE_CHARACTERS =
+  "\u00ad\u061c\u180e" +
+  range(0x200b, 0x200f) +
+  range(0x202a, 0x202e) +
+  range(0x2060, 0x2064) +
+  range(0x2066, 0x2069) +
+  "\ufeff";
 
 /**
  * Removed after the decomposition: the accents of the Latin, Greek and
@@ -30,7 +39,8 @@ const INVISIBLE_CHARACTERS = "\u00ad\u061c\u180e" + range(0x200b, 0x200f) + rang
  * splits off أ إ آ (U+0653–U+0655), so these alefs are searched as ا; the
  * invisible characters.
  */
-export const ADMIN_SEARCH_IGNORED_CHARACTERS = range(0x300, 0x36f) + range(0x64b, 0x655) + "\u0670" + INVISIBLE_CHARACTERS;
+export const ADMIN_SEARCH_IGNORED_CHARACTERS =
+  range(0x300, 0x36f) + range(0x64b, 0x655) + "\u0670" + INVISIBLE_CHARACTERS;
 
 /**
  * Letters without decomposition, searched as their base letter (Ø, Ł, Đ,
@@ -38,22 +48,46 @@ export const ADMIN_SEARCH_IGNORED_CHARACTERS = range(0x300, 0x36f) + range(0x64b
  * the form's specialties, « Médecine d’urgence », ‘, the letter ʼ, the prime ′),
  * searched as the keyboard's ' (INTL-12), as the public specialty search does.
  */
-export const ADMIN_SEARCH_LETTER_FOLDS: ReadonlyArray<readonly [string, string]> = [
-  ["ø", "o"], ["Ø", "O"], ["ł", "l"], ["Ł", "L"], ["đ", "d"], ["Đ", "D"], ["ı", "i"], ["ٱ", "ا"],
-  ["\u2019", "'"], ["\u2018", "'"], ["\u02bc", "'"], ["\u2032", "'"],
+export const ADMIN_SEARCH_LETTER_FOLDS: ReadonlyArray<
+  readonly [string, string]
+> = [
+  ["ø", "o"],
+  ["Ø", "O"],
+  ["ł", "l"],
+  ["Ł", "L"],
+  ["đ", "d"],
+  ["Đ", "D"],
+  ["ı", "i"],
+  ["ٱ", "ا"],
+  ["\u2019", "'"],
+  ["\u2018", "'"],
+  ["\u02bc", "'"],
+  ["\u2032", "'"],
 ];
 
 /** Letters written as two (ß, Æ, Œ), searched as those two letters. */
-export const ADMIN_SEARCH_LIGATURE_FOLDS: ReadonlyArray<readonly [string, string]> = [
-  ["ß", "ss"], ["ẞ", "SS"], ["æ", "ae"], ["Æ", "AE"], ["œ", "oe"], ["Œ", "OE"],
+export const ADMIN_SEARCH_LIGATURE_FOLDS: ReadonlyArray<
+  readonly [string, string]
+> = [
+  ["ß", "ss"],
+  ["ẞ", "SS"],
+  ["æ", "ae"],
+  ["Æ", "AE"],
+  ["œ", "oe"],
+  ["Œ", "OE"],
 ];
 
 const IGNORED = new Set(ADMIN_SEARCH_IGNORED_CHARACTERS);
-const FOLDS = new Map<string, string>([...ADMIN_SEARCH_LETTER_FOLDS, ...ADMIN_SEARCH_LIGATURE_FOLDS]);
+const FOLDS = new Map<string, string>([
+  ...ADMIN_SEARCH_LETTER_FOLDS,
+  ...ADMIN_SEARCH_LIGATURE_FOLDS,
+]);
 
 /** A text as the search compares it (see above), case aside. */
 export function foldAdminSearchText(text: string): string {
-  return Array.from(text.normalize("NFD"), character => IGNORED.has(character) ? "" : FOLDS.get(character) ?? character).join("");
+  return Array.from(text.normalize("NFD"), character =>
+    IGNORED.has(character) ? "" : (FOLDS.get(character) ?? character)
+  ).join("");
 }
 
 const INVISIBLE = new Set(INVISIBLE_CHARACTERS);
@@ -68,7 +102,13 @@ const CONTROL_CHARACTER = /[\u0000-\u0008\u000e-\u001f\u007f-\u009f]/;
 export function adminSearchWords(search: string | undefined): string[] {
   return (search ?? "")
     .split(/\s+/)
-    .map(word => Array.from(word, character => INVISIBLE.has(character) || CONTROL_CHARACTER.test(character) ? "" : character).join(""))
+    .map(word =>
+      Array.from(word, character =>
+        INVISIBLE.has(character) || CONTROL_CHARACTER.test(character)
+          ? ""
+          : character
+      ).join("")
+    )
     .filter(word => foldAdminSearchText(word) !== "");
 }
 

@@ -5,7 +5,9 @@ import { afterEach, describe, expect, it } from "vitest";
 
 // Bouton WhatsApp monté par React à côté d'un formulaire de la page, comme celui de contact de
 // l'accueil : il s'efface pendant la saisie et revient ensuite (PUB-12).
-const { default: WhatsAppButton, whatsappCopy } = await import("./WhatsAppButton");
+const { default: WhatsAppButton, whatsappCopy } = await import(
+  "./WhatsAppButton"
+);
 const { LanguageProvider } = await import("@/contexts/LanguageContext");
 
 afterEach(() => {
@@ -16,14 +18,25 @@ afterEach(() => {
 describe("bouton WhatsApp pendant la saisie d'un formulaire (PUB-12)", () => {
   it("s'efface tant qu'un champ d'un formulaire a le focus, sans quitter la page", () => {
     localStorage.setItem("language", "fr");
-    render(createElement(LanguageProvider, null,
-      createElement("form", null, createElement("input", { "aria-label": "Nom" }), createElement("textarea", { "aria-label": "Message" }), createElement("button", { type: "submit" }, "Envoyer")),
-      createElement("input", { "aria-label": "Rechercher" }),
-      createElement(WhatsAppButton),
-    ));
+    render(
+      createElement(
+        LanguageProvider,
+        null,
+        createElement(
+          "form",
+          null,
+          createElement("input", { "aria-label": "Nom" }),
+          createElement("textarea", { "aria-label": "Message" }),
+          createElement("button", { type: "submit" }, "Envoyer")
+        ),
+        createElement("input", { "aria-label": "Rechercher" }),
+        createElement(WhatsAppButton)
+      )
+    );
     const whatsApp = screen.getByRole("link", { name: whatsappCopy.fr.label });
     const hidden = () => whatsApp.classList.contains("invisible");
-    const focus = (name: string, role = "textbox") => act(() => (screen.getByRole(role, { name }) as HTMLElement).focus());
+    const focus = (name: string, role = "textbox") =>
+      act(() => (screen.getByRole(role, { name }) as HTMLElement).focus());
     expect(hidden()).toBe(false);
 
     focus("Nom");

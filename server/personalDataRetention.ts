@@ -1,4 +1,18 @@
-import { and, asc, eq, gt, gte, inArray, isNotNull, isNull, lt, ne, or, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  gt,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  ne,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 import {
   adminMfaChallenges,
@@ -106,7 +120,10 @@ type RetentionRun = { db: Database; batchSize: number; hasTime: () => boolean };
 type RuleResult = { count: number; complete: boolean };
 
 /** Repeats one batch of a rule until it selects less than a full batch, or the run's time is up. */
-async function inBatches(run: RetentionRun, batch: (limit: number) => Promise<{ selected: number; count: number }>): Promise<RuleResult> {
+async function inBatches(
+  run: RetentionRun,
+  batch: (limit: number) => Promise<{ selected: number; count: number }>
+): Promise<RuleResult> {
   let count = 0;
   while (run.hasTime()) {
     const result = await batch(run.batchSize);
@@ -116,15 +133,40 @@ async function inBatches(run: RetentionRun, batch: (limit: number) => Promise<{ 
   return { count, complete: false };
 }
 
-async function deleteIds(db: Database, table: PgTable, id: PgColumn, ids: number[]) {
-  return ids.length ? mutationRowCount(await db.delete(table).where(inArray(id, ids))) : 0;
+async function deleteIds(
+  db: Database,
+  table: PgTable,
+  id: PgColumn,
+  ids: number[]
+) {
+  return ids.length
+    ? mutationRowCount(await db.delete(table).where(inArray(id, ids)))
+    : 0;
 }
 
 /** Deletes, batch after batch, the rows of `table` matching `where`. */
-function purgeRows(run: RetentionRun, table: PgTable, id: PgColumn, where: SQL | undefined) {
+function purgeRows(
+  run: RetentionRun,
+  table: PgTable,
+  id: PgColumn,
+  where: SQL | undefined
+) {
   return inBatches(run, async limit => {
-    const rows = await run.db.select({ id }).from(table).where(where).orderBy(asc(id)).limit(limit);
-    return { selected: rows.length, count: await deleteIds(run.db, table, id, rows.map(row => Number(row.id))) };
+    const rows = await run.db
+      .select({ id })
+      .from(table)
+      .where(where)
+      .orderBy(asc(id))
+      .limit(limit);
+    return {
+      selected: rows.length,
+      count: await deleteIds(
+        run.db,
+        table,
+        id,
+        rows.map(row => Number(row.id))
+      ),
+    };
   });
 }
 
@@ -136,18 +178,41 @@ function purgeRows(run: RetentionRun, table: PgTable, id: PgColumn, where: SQL |
 async function purgeContactMessages(run: RetentionRun, cutoff: Date) {
   let afterId = 0;
   return inBatches(run, async limit => {
-    const expired = await run.db.select({ id: contactMessages.id, email: contactMessages.email }).from(contactMessages)
-      .where(and(lt(contactMessages.createdAt, cutoff), gt(contactMessages.id, afterId)))
+    const expired = await run.db
+      .select({ id: contactMessages.id, email: contactMessages.email })
+      .from(contactMessages)
+      .where(
+        and(
+          lt(contactMessages.createdAt, cutoff),
+          gt(contactMessages.id, afterId)
+        )
+      )
       .orderBy(asc(contactMessages.id))
       .limit(limit);
     if (!expired.length) return { selected: 0, count: 0 };
     afterId = expired[expired.length - 1]!.id;
-    const emails = Array.from(new Set(expired.map(row => row.email.trim().toLowerCase())));
-    const recent = await run.db.select({ email: contactMessages.email }).from(contactMessages)
-      .where(and(gte(contactMessages.createdAt, cutoff), inArray(sql`lower(${contactMessages.email})`, emails)));
-    const stillInContact = new Set(recent.map(row => row.email.trim().toLowerCase()));
-    const ids = expired.filter(row => !stillInContact.has(row.email.trim().toLowerCase())).map(row => row.id);
-    return { selected: expired.length, count: await deleteIds(run.db, contactMessages, contactMessages.id, ids) };
+    const emails = Array.from(
+      new Set(expired.map(row => row.email.trim().toLowerCase()))
+    );
+    const recent = await run.db
+      .select({ email: contactMessages.email })
+      .from(contactMessages)
+      .where(
+        and(
+          gte(contactMessages.createdAt, cutoff),
+          inArray(sql`lower(${contactMessages.email})`, emails)
+        )
+      );
+    const stillInContact = new Set(
+      recent.map(row => row.email.trim().toLowerCase())
+    );
+    const ids = expired
+      .filter(row => !stillInContact.has(row.email.trim().toLowerCase()))
+      .map(row => row.id);
+    return {
+      selected: expired.length,
+      count: await deleteIds(run.db, contactMessages, contactMessages.id, ids),
+    };
   });
 }
 
@@ -156,48 +221,113 @@ async function purgeContactMessages(run: RetentionRun, cutoff: Date) {
  * than the period are deleted with their journal. A published question
  * (separate consent) keeps only its anonymised public version.
  */
-async function purgeMedicalQuestions(run: RetentionRun, cutoff: Date, now: Date) {
+async function purgeMedicalQuestions(
+  run: RetentionRun,
+  cutoff: Date,
+  now: Date
+) {
   return inBatches(run, async limit => {
-    const expired = await run.db.select({ id: medicalQuestions.id, status: medicalQuestions.status, publicationConsent: medicalQuestions.publicationConsent })
+    const expired = await run.db
+      .select({
+        id: medicalQuestions.id,
+        status: medicalQuestions.status,
+        publicationConsent: medicalQuestions.publicationConsent,
+      })
       .from(medicalQuestions)
-      .where(and(
-        lt(medicalQuestions.createdAt, cutoff),
-        lt(medicalQuestions.updatedAt, cutoff),
-        or(isNull(medicalQuestions.responseSentAt), lt(medicalQuestions.responseSentAt, cutoff)),
-        // Already reduced to its public version.
-        ne(medicalQuestions.email, ""),
-      ))
+      .where(
+        and(
+          lt(medicalQuestions.createdAt, cutoff),
+          lt(medicalQuestions.updatedAt, cutoff),
+          or(
+            isNull(medicalQuestions.responseSentAt),
+            lt(medicalQuestions.responseSentAt, cutoff)
+          ),
+          // Already reduced to its public version.
+          ne(medicalQuestions.email, "")
+        )
+      )
       .orderBy(asc(medicalQuestions.id))
       .limit(limit);
-    const published = expired.filter(row => row.status === "published" && row.publicationConsent === 1).map(row => row.id);
-    const deleted = expired.filter(row => !published.includes(row.id)).map(row => row.id);
-    if (expired.length) await run.db.delete(medicalQuestionAuditLogs).where(inArray(medicalQuestionAuditLogs.medicalQuestionId, expired.map(row => row.id)));
-    if (published.length) await run.db.update(medicalQuestions).set(anonymisedMedicalQuestionFields(now)).where(inArray(medicalQuestions.id, published));
-    return { selected: expired.length, count: await deleteIds(run.db, medicalQuestions, medicalQuestions.id, deleted) + published.length };
+    const published = expired
+      .filter(row => row.status === "published" && row.publicationConsent === 1)
+      .map(row => row.id);
+    const deleted = expired
+      .filter(row => !published.includes(row.id))
+      .map(row => row.id);
+    if (expired.length)
+      await run.db.delete(medicalQuestionAuditLogs).where(
+        inArray(
+          medicalQuestionAuditLogs.medicalQuestionId,
+          expired.map(row => row.id)
+        )
+      );
+    if (published.length)
+      await run.db
+        .update(medicalQuestions)
+        .set(anonymisedMedicalQuestionFields(now))
+        .where(inArray(medicalQuestions.id, published));
+    return {
+      selected: expired.length,
+      count:
+        (await deleteIds(
+          run.db,
+          medicalQuestions,
+          medicalQuestions.id,
+          deleted
+        )) + published.length,
+    };
   });
 }
 
 /** Bookings older than the period, not yet anonymised (their email is emptied). */
 function anonymiseOldAppointments(run: RetentionRun, cutoff: Date, now: Date) {
   return inBatches(run, async limit => {
-    const rows = await run.db.select({ id: appointments.id }).from(appointments)
-      .where(and(lt(appointments.appointmentDate, cutoff), ne(appointments.customerEmail, "")))
+    const rows = await run.db
+      .select({ id: appointments.id })
+      .from(appointments)
+      .where(
+        and(
+          lt(appointments.appointmentDate, cutoff),
+          ne(appointments.customerEmail, "")
+        )
+      )
       .orderBy(asc(appointments.id))
       .limit(limit);
     const ids = rows.map(row => row.id);
-    const count = ids.length ? mutationRowCount(await run.db.update(appointments).set(anonymisedAppointmentFields(now)).where(inArray(appointments.id, ids))) : 0;
+    const count = ids.length
+      ? mutationRowCount(
+          await run.db
+            .update(appointments)
+            .set(anonymisedAppointmentFields(now))
+            .where(inArray(appointments.id, ids))
+        )
+      : 0;
     return { selected: rows.length, count };
   });
 }
 
 function emptyOldRequestDetails(run: RetentionRun, cutoff: Date, now: Date) {
   return inBatches(run, async limit => {
-    const rows = await run.db.select({ id: appointments.id }).from(appointments)
-      .where(and(lt(appointments.appointmentDate, cutoff), ne(appointments.requestDetails, "")))
+    const rows = await run.db
+      .select({ id: appointments.id })
+      .from(appointments)
+      .where(
+        and(
+          lt(appointments.appointmentDate, cutoff),
+          ne(appointments.requestDetails, "")
+        )
+      )
       .orderBy(asc(appointments.id))
       .limit(limit);
     const ids = rows.map(row => row.id);
-    const count = ids.length ? mutationRowCount(await run.db.update(appointments).set({ requestDetails: "", updatedAt: now }).where(inArray(appointments.id, ids))) : 0;
+    const count = ids.length
+      ? mutationRowCount(
+          await run.db
+            .update(appointments)
+            .set({ requestDetails: "", updatedAt: now })
+            .where(inArray(appointments.id, ids))
+        )
+      : 0;
     return { selected: rows.length, count };
   });
 }
@@ -217,7 +347,9 @@ export type PersonalDataRetentionReport = {
   complete: boolean;
 };
 
-export async function runPersonalDataRetention(options: { now?: Date; batchSize?: number; budgetMs?: number } = {}): Promise<PersonalDataRetentionReport> {
+export async function runPersonalDataRetention(
+  options: { now?: Date; batchSize?: number; budgetMs?: number } = {}
+): Promise<PersonalDataRetentionReport> {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
   const now = options.now ?? new Date();
@@ -225,34 +357,101 @@ export async function runPersonalDataRetention(options: { now?: Date; batchSize?
   const budgetMs = options.budgetMs ?? PERSONAL_DATA_RETENTION_BUDGET_MS;
   const run: RetentionRun = {
     db,
-    batchSize: Math.max(1, options.batchSize ?? PERSONAL_DATA_RETENTION_BATCH_SIZE),
+    batchSize: Math.max(
+      1,
+      options.batchSize ?? PERSONAL_DATA_RETENTION_BATCH_SIZE
+    ),
     hasTime: () => Date.now() - startedAt < budgetMs,
   };
-  const accessLogCutoff = new Date(now.getTime() - ACCESS_LOG_RETENTION_DAYS * DAY_MS);
+  const accessLogCutoff = new Date(
+    now.getTime() - ACCESS_LOG_RETENTION_DAYS * DAY_MS
+  );
   const gdprCutoff = yearsBefore(now, GDPR_REQUEST_RETENTION_YEARS);
 
   // Oldest personal data first: health and identity, then the technical records.
   const results = {
-    medicalQuestions: await purgeMedicalQuestions(run, yearsBefore(now, MEDICAL_QUESTION_RETENTION_YEARS), now),
-    contactMessages: await purgeContactMessages(run, yearsBefore(now, CONTACT_MESSAGE_RETENTION_YEARS)),
-    appointmentsAnonymised: await anonymiseOldAppointments(run, yearsBefore(now, APPOINTMENT_RETENTION_YEARS), now),
-    requestDetailsEmptied: await emptyOldRequestDetails(run, new Date(now.getTime() - APPOINTMENT_REQUEST_DETAILS_RETENTION_DAYS * DAY_MS), now),
-    gdprRequests: await purgeRows(run, gdprRequests, gdprRequests.id, and(
-      inArray(gdprRequests.status, ["completed", "rejected"]),
-      // Closure date: the answer date, else the last change of the request.
-      or(
-        and(isNotNull(gdprRequests.responseDate), lt(gdprRequests.responseDate, gdprCutoff)),
-        and(isNull(gdprRequests.responseDate), lt(gdprRequests.updatedAt, gdprCutoff)),
+    medicalQuestions: await purgeMedicalQuestions(
+      run,
+      yearsBefore(now, MEDICAL_QUESTION_RETENTION_YEARS),
+      now
+    ),
+    contactMessages: await purgeContactMessages(
+      run,
+      yearsBefore(now, CONTACT_MESSAGE_RETENTION_YEARS)
+    ),
+    appointmentsAnonymised: await anonymiseOldAppointments(
+      run,
+      yearsBefore(now, APPOINTMENT_RETENTION_YEARS),
+      now
+    ),
+    requestDetailsEmptied: await emptyOldRequestDetails(
+      run,
+      new Date(
+        now.getTime() - APPOINTMENT_REQUEST_DETAILS_RETENTION_DAYS * DAY_MS
       ),
-    )),
-    securityEvents: await purgeRows(run, securityEvents, securityEvents.id, lt(securityEvents.createdAt, accessLogCutoff)),
-    adminMfaChallenges: await purgeRows(run, adminMfaChallenges, adminMfaChallenges.id, or(lt(adminMfaChallenges.expiresAt, now), lt(adminMfaChallenges.createdAt, accessLogCutoff))),
-    adminMfaSessions: await purgeRows(run, adminMfaSessions, adminMfaSessions.id, or(lt(adminMfaSessions.expiresAt, now), lt(adminMfaSessions.createdAt, accessLogCutoff))),
-    candidateSessions: await purgeRows(run, candidateSessions, candidateSessions.id, lt(candidateSessions.expiresAt, now)),
-    fulfillmentJobs: await purgeRows(run, appointmentFulfillmentJobs, appointmentFulfillmentJobs.id, and(
-      eq(appointmentFulfillmentJobs.status, "completed"),
-      lt(appointmentFulfillmentJobs.finishedAt, new Date(now.getTime() - FULFILLMENT_JOB_RETENTION_DAYS * DAY_MS)),
-    )),
+      now
+    ),
+    gdprRequests: await purgeRows(
+      run,
+      gdprRequests,
+      gdprRequests.id,
+      and(
+        inArray(gdprRequests.status, ["completed", "rejected"]),
+        // Closure date: the answer date, else the last change of the request.
+        or(
+          and(
+            isNotNull(gdprRequests.responseDate),
+            lt(gdprRequests.responseDate, gdprCutoff)
+          ),
+          and(
+            isNull(gdprRequests.responseDate),
+            lt(gdprRequests.updatedAt, gdprCutoff)
+          )
+        )
+      )
+    ),
+    securityEvents: await purgeRows(
+      run,
+      securityEvents,
+      securityEvents.id,
+      lt(securityEvents.createdAt, accessLogCutoff)
+    ),
+    adminMfaChallenges: await purgeRows(
+      run,
+      adminMfaChallenges,
+      adminMfaChallenges.id,
+      or(
+        lt(adminMfaChallenges.expiresAt, now),
+        lt(adminMfaChallenges.createdAt, accessLogCutoff)
+      )
+    ),
+    adminMfaSessions: await purgeRows(
+      run,
+      adminMfaSessions,
+      adminMfaSessions.id,
+      or(
+        lt(adminMfaSessions.expiresAt, now),
+        lt(adminMfaSessions.createdAt, accessLogCutoff)
+      )
+    ),
+    candidateSessions: await purgeRows(
+      run,
+      candidateSessions,
+      candidateSessions.id,
+      lt(candidateSessions.expiresAt, now)
+    ),
+    fulfillmentJobs: await purgeRows(
+      run,
+      appointmentFulfillmentJobs,
+      appointmentFulfillmentJobs.id,
+      and(
+        eq(appointmentFulfillmentJobs.status, "completed"),
+        lt(
+          appointmentFulfillmentJobs.finishedAt,
+          new Date(now.getTime() - FULFILLMENT_JOB_RETENTION_DAYS * DAY_MS)
+        )
+      )
+    ),
   };
   const report: PersonalDataRetentionReport = {
     securityEvents: results.securityEvents.count,

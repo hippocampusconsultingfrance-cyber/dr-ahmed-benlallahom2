@@ -1,6 +1,10 @@
 export type CvDownloadRecord = {
   cvFileKey: string;
-  fileValidationStatus: "quarantined" | "accepted" | "rejected" | "validation_failed";
+  fileValidationStatus:
+    | "quarantined"
+    | "accepted"
+    | "rejected"
+    | "validation_failed";
 };
 
 /**
@@ -9,8 +13,11 @@ export type CvDownloadRecord = {
  */
 export function canAdminDownloadCv(application: CvDownloadRecord): boolean {
   const fileWasExplicitlyRetired = application.cvFileKey.startsWith("retired/");
-  const fileWasRejected = application.fileValidationStatus === "rejected" || application.fileValidationStatus === "validation_failed";
+  const fileWasRejected =
+    application.fileValidationStatus === "rejected" ||
+    application.fileValidationStatus === "validation_failed";
   return !fileWasExplicitlyRetired && !fileWasRejected;
 }
 
-export const CV_DOWNLOAD_UNAVAILABLE_MESSAGE = "Le document n’est pas disponible car son contrôle de sécurité a échoué ou il a été supprimé à la demande de son titulaire.";
+export const CV_DOWNLOAD_UNAVAILABLE_MESSAGE =
+  "Le document n’est pas disponible car son contrôle de sécurité a échoué ou il a été supprimé à la demande de son titulaire.";

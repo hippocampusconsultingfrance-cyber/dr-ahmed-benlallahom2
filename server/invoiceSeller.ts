@@ -38,10 +38,14 @@ function envValue(env: Env, key: string): string | null {
 export function resolveInvoiceSeller(env: Env = process.env): InvoiceSeller {
   return {
     name: envValue(env, "INVOICE_SELLER_NAME") ?? HIPPOCAMPUS_LEGAL.name,
-    legalForm: envValue(env, "INVOICE_SELLER_LEGAL_FORM") ?? HIPPOCAMPUS_LEGAL.legalForm,
-    capital: envValue(env, "INVOICE_SELLER_CAPITAL") ?? HIPPOCAMPUS_LEGAL.capital,
+    legalForm:
+      envValue(env, "INVOICE_SELLER_LEGAL_FORM") ?? HIPPOCAMPUS_LEGAL.legalForm,
+    capital:
+      envValue(env, "INVOICE_SELLER_CAPITAL") ?? HIPPOCAMPUS_LEGAL.capital,
     rcs: envValue(env, "INVOICE_SELLER_RCS") ?? HIPPOCAMPUS_LEGAL.rcs,
-    address: envValue(env, "INVOICE_SELLER_ADDRESS") ?? HIPPOCAMPUS_LEGAL.registeredOffice,
+    address:
+      envValue(env, "INVOICE_SELLER_ADDRESS") ??
+      HIPPOCAMPUS_LEGAL.registeredOffice,
     email: envValue(env, "INVOICE_SELLER_EMAIL") ?? siteConfig.email,
     website: "www.drahmedbenlallahom.com",
     vatNumber: envValue(env, "INVOICE_SELLER_VAT_NUMBER"),

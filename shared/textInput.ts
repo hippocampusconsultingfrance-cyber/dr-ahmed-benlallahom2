@@ -28,21 +28,29 @@ export const TEXT_INPUT_INVALID_CHARACTERS = INVALID_CHARACTERS_REASON;
  * (client/src/lib/publicFormCopy.ts), for a client that does not translate
  * its reason.
  */
-export const TEXT_INPUT_INVALID_CHARACTERS_MESSAGE = "Un champ contient un saut de ligne ou un caractère invisible qui n’y est pas accepté, souvent laissé par un copier-coller : retapez ce texte au clavier, puis renvoyez le formulaire.";
+export const TEXT_INPUT_INVALID_CHARACTERS_MESSAGE =
+  "Un champ contient un saut de ligne ou un caractère invisible qui n’y est pas accepté, souvent laissé par un copier-coller : retapez ce texte au clavier, puis renvoyez le formulaire.";
 
 // Step 1, NFC without the spaces and invisible marks at either end, which the pages apply too.
 export { cleanTextInput };
 
 // Written as escapes: none of these characters appears as such in the source.
 // eslint-disable-next-line no-control-regex -- control characters are among those it refuses
-const SINGLE_LINE_REFUSED = new RegExp("[\\u0000-\\u001F\\u007F-\\u009F\\u2028\\u2029\\u202D\\u202E]");
+const SINGLE_LINE_REFUSED = new RegExp(
+  "[\\u0000-\\u001F\\u007F-\\u009F\\u2028\\u2029\\u202D\\u202E]"
+);
 // eslint-disable-next-line no-control-regex -- control characters are among those it refuses
-const MULTI_LINE_REFUSED = new RegExp("[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F-\\u009F\\u202D\\u202E]");
+const MULTI_LINE_REFUSED = new RegExp(
+  "[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F-\\u009F\\u202D\\u202E]"
+);
 
 function textInput(refused: RegExp, schema: z.ZodString) {
-  return z.string()
+  return z
+    .string()
     .transform(cleanTextInput)
-    .refine(text => !refused.test(text), { message: TEXT_INPUT_INVALID_CHARACTERS })
+    .refine(text => !refused.test(text), {
+      message: TEXT_INPUT_INVALID_CHARACTERS,
+    })
     .pipe(schema);
 }
 
@@ -73,6 +81,16 @@ export function emailText(schema: z.ZodString) {
 
 /** Whether a validation error (a ZodError) refuses a field for its characters. */
 export function refusesTextInputCharacters(error: unknown): boolean {
-  const issues = error && typeof error === "object" ? (error as { issues?: unknown }).issues : undefined;
-  return Array.isArray(issues) && issues.some(issue => (issue as { message?: unknown } | null)?.message === TEXT_INPUT_INVALID_CHARACTERS);
+  const issues =
+    error && typeof error === "object"
+      ? (error as { issues?: unknown }).issues
+      : undefined;
+  return (
+    Array.isArray(issues) &&
+    issues.some(
+      issue =>
+        (issue as { message?: unknown } | null)?.message ===
+        TEXT_INPUT_INVALID_CHARACTERS
+    )
+  );
 }

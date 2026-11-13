@@ -21,7 +21,7 @@ export const useDialogComposition = () =>
 
 export function shouldPreventDialogEscape(
   nativeIsComposing: boolean | undefined,
-  contextIsComposing: boolean,
+  contextIsComposing: boolean
 ) {
   return Boolean(nativeIsComposing) || contextIsComposing;
 }
@@ -113,7 +113,7 @@ function DialogContent({
       // This handles Safari's timing issues with composition events
       const isCurrentlyComposing = shouldPreventDialogEscape(
         e.isComposing,
-        isComposing(),
+        isComposing()
       );
 
       // If IME is composing, prevent dialog from closing
@@ -214,5 +214,5 @@ export {
   DialogOverlay,
   DialogPortal,
   DialogTitle,
-  DialogTrigger
+  DialogTrigger,
 };

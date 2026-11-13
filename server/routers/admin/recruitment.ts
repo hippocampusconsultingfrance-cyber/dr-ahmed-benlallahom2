@@ -16,12 +16,32 @@ import {
 } from "../../../drizzle/schema";
 import { storageGetSignedUrl } from "../../storage";
 import { logError } from "../../_core/logError";
-import { canAdminDownloadCv, CV_DOWNLOAD_UNAVAILABLE_MESSAGE } from "../../recruitmentDownloadPolicy";
+import {
+  canAdminDownloadCv,
+  CV_DOWNLOAD_UNAVAILABLE_MESSAGE,
+} from "../../recruitmentDownloadPolicy";
 import { eq, and, or, sql, desc, inArray, isNull, ne } from "drizzle-orm";
-import { buildRecruitmentTemplateEmail, sendRecruitmentTemplateEmail, type RecruitmentEmailLanguage, type RecruitmentEmailTemplate } from "../../_core/notifications";
-import { logRecruitmentAction, matchesRecruitmentProfile, parseRecruitmentJsonArray, RECRUITMENT_PROFILE_SCAN_LIMIT, recordWithRecruitmentAudit, recruitmentAuditInsert, traceRecruitmentActionDone } from "../../recruitmentAudit";
+import {
+  buildRecruitmentTemplateEmail,
+  sendRecruitmentTemplateEmail,
+  type RecruitmentEmailLanguage,
+  type RecruitmentEmailTemplate,
+} from "../../_core/notifications";
+import {
+  logRecruitmentAction,
+  matchesRecruitmentProfile,
+  parseRecruitmentJsonArray,
+  RECRUITMENT_PROFILE_SCAN_LIMIT,
+  recordWithRecruitmentAudit,
+  recruitmentAuditInsert,
+  traceRecruitmentActionDone,
+} from "../../recruitmentAudit";
 import { analysedLanguageNames } from "../../clientBriefMatching";
-import { certificationFactLabel, recruitmentFactLabel, type RecruitmentFact } from "../../../shared/recruitmentFactOrigins";
+import {
+  certificationFactLabel,
+  recruitmentFactLabel,
+  type RecruitmentFact,
+} from "../../../shared/recruitmentFactOrigins";
 import { recruitmentApplicationStatusLabel } from "../../../shared/recruitmentApplicationStatuses";
 import { PARIS_TIME_ZONE } from "../../../shared/parisTime";
 import { googleDriveExportStatus } from "../../googleDriveExport";
@@ -32,8 +52,16 @@ import {
   resolveCvConfirmationDelivery,
   retryCvConfirmationEmail,
 } from "../../recruitmentEmailTrace";
-import { AI_ANALYSIS_BILLING_UNAVAILABLE_ERROR, MANUAL_REVIEW_FALLBACK_MODEL, RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "../../recruitmentAnalysis";
-import { adminFilterContains, adminSearchCondition, adminSearchInput } from "../../adminSearch";
+import {
+  AI_ANALYSIS_BILLING_UNAVAILABLE_ERROR,
+  MANUAL_REVIEW_FALLBACK_MODEL,
+  RECRUITMENT_ANALYSIS_PROMPT_VERSION,
+} from "../../recruitmentAnalysis";
+import {
+  adminFilterContains,
+  adminSearchCondition,
+  adminSearchInput,
+} from "../../adminSearch";
 import {
   verifiedRecruitmentScore,
   scoreAtLeastOrUnavailable,
@@ -46,10 +74,23 @@ import {
   verifiedNormalizedLanguages,
 } from "./recruitmentShared";
 import { adminRecruitmentPoolRouter } from "./recruitmentPool";
-import { adminRecruitmentCampaignsRouter, adminRecruitmentOfferTemplatesRouter } from "./recruitmentCampaigns";
-import { adminRecruitmentCandidateRouter, adminRecruitmentFollowUpsRouter } from "./recruitmentCandidate";
+import {
+  adminRecruitmentCampaignsRouter,
+  adminRecruitmentOfferTemplatesRouter,
+} from "./recruitmentCampaigns";
+import {
+  adminRecruitmentCandidateRouter,
+  adminRecruitmentFollowUpsRouter,
+} from "./recruitmentCandidate";
 
-const CV_APPLICATION_STATUSES = ["new", "reviewing", "shortlisted", "placed", "rejected", "archived"] as const;
+const CV_APPLICATION_STATUSES = [
+  "new",
+  "reviewing",
+  "shortlisted",
+  "placed",
+  "rejected",
+  "archived",
+] as const;
 
 /** An individual email of the composer: its candidate, template, language and free request. */
 const templateEmailInput = z.object({
@@ -63,8 +104,19 @@ const templateEmailInput = z.object({
 async function templateEmailApplication(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  const [application] = await db.select({ firstName: cvApplications.firstName, trackingId: cvApplications.trackingId }).from(cvApplications).where(eq(cvApplications.id, id)).limit(1);
-  if (!application) throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable" });
+  const [application] = await db
+    .select({
+      firstName: cvApplications.firstName,
+      trackingId: cvApplications.trackingId,
+    })
+    .from(cvApplications)
+    .where(eq(cvApplications.id, id))
+    .limit(1);
+  if (!application)
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Candidature introuvable",
+    });
   return application;
 }
 
@@ -76,7 +128,9 @@ function csvCell(value: unknown): string {
 
 /** A list stored as JSON (target countries) as a CSV cell reads it: « Émirats arabes unis ; Qatar ». Free text stays as typed. */
 function csvListCell(value: string | null) {
-  return value?.trim().startsWith("[") ? parseRecruitmentJsonArray(value).join(" ; ") : value;
+  return value?.trim().startsWith("[")
+    ? parseRecruitmentJsonArray(value).join(" ; ")
+    : value;
 }
 
 /**
@@ -103,7 +157,10 @@ const SPREADSHEET_LOCALES = [
  * (« ,0612345678 »). A sign or a space just after the decimal sign makes text (« 0612345678, 913 »,
  * « 0612345678,,802 »).
  */
-function spreadsheetNumber({ decimal, group }: (typeof SPREADSHEET_LOCALES)[number]) {
+function spreadsheetNumber({
+  decimal,
+  group,
+}: (typeof SPREADSHEET_LOCALES)[number]) {
   return String.raw`(?:\d+(?:${group}\d{3})*(?:${decimal}(?:\d+(?:${group}\d{3})*)?)?|${decimal}\d+)`;
 }
 
@@ -112,10 +169,14 @@ function spreadsheetValue(body: string) {
   return new RegExp(String.raw`^(?:\(${body}\)|${body}[-+]?)$`);
 }
 
-const SPREADSHEET_NUMBERS = SPREADSHEET_LOCALES.map(locale => spreadsheetValue(spreadsheetNumber(locale)));
+const SPREADSHEET_NUMBERS = SPREADSHEET_LOCALES.map(locale =>
+  spreadsheetValue(spreadsheetNumber(locale))
+);
 
 /** After a sign in first place, which the export never writes as typed (csvCell puts it behind an apostrophe): a number, any signs around it. */
-const SPREADSHEET_SIGNED_NUMBERS = SPREADSHEET_LOCALES.map(locale => new RegExp(String.raw`^[+\-(]*${spreadsheetNumber(locale)}[+\-)]*$`));
+const SPREADSHEET_SIGNED_NUMBERS = SPREADSHEET_LOCALES.map(
+  locale => new RegExp(String.raw`^[+\-(]*${spreadsheetNumber(locale)}[+\-)]*$`)
+);
 
 /**
  * A fraction as Calc reads it: after an integer, spaces or no-break spaces between them, its denominator not zero
@@ -125,7 +186,9 @@ const SPREADSHEET_SIGNED_NUMBERS = SPREADSHEET_LOCALES.map(locale => new RegExp(
  */
 const SPREADSHEET_FRACTIONS = [
   spreadsheetValue(String.raw`\d+[ \u00a0\u202f]+\d+\s*\/\s*\d*[1-9]\d*`),
-  ...SPREADSHEET_LOCALES.map(({ group }) => spreadsheetValue(String.raw`\d+${group}\d{3}\s*\/\s*\d+`)),
+  ...SPREADSHEET_LOCALES.map(({ group }) =>
+    spreadsheetValue(String.raw`\d+${group}\d{3}\s*\/\s*\d+`)
+  ),
 ];
 
 /** The most digits of the year Excel reads after a month alone (« 5/2020 », « 2020-06 »). */
@@ -133,7 +196,13 @@ const SPREADSHEET_MONTH_YEAR_DIGITS = 4;
 
 /** Whether a month and a day, if any, of one or two digits each, could be those of a date. */
 function monthAndDay(month: string, day?: string) {
-  return month.length <= 2 && Number(month) >= 1 && Number(month) <= 12 && (day === undefined || (day.length <= 2 && Number(day) >= 1 && Number(day) <= 31));
+  return (
+    month.length <= 2 &&
+    Number(month) >= 1 &&
+    Number(month) <= 12 &&
+    (day === undefined ||
+      (day.length <= 2 && Number(day) >= 1 && Number(day) <= 31))
+  );
 }
 
 /**
@@ -143,24 +212,49 @@ function monthAndDay(month: string, day?: string) {
  * text). Measured in LibreOffice Calc 24.2 (1033, 1036, 1031, special numbers detected or not, ADM-26), Excel's
  * own forms added where they need neither sign nor space.
  */
-const SPREADSHEET_DATES: { date: RegExp; read: (parts: string[]) => boolean }[] = [
+const SPREADSHEET_DATES: {
+  date: RegExp;
+  read: (parts: string[]) => boolean;
+}[] = [
   // A day and a month in either order, then a year of six digits at most, negative or not, the same sign between them
   // (« 28.12.34 », « 28-12-34 », « 12/28/34 », « 6/8/-72 », « 12/06/002020 »).
-  { date: /^(\d{1,2})([-/.])(\d{1,2})\2-?\d{1,6}$/, read: ([first, , second]) => monthAndDay(first!, second) || monthAndDay(second!, first) },
+  {
+    date: /^(\d{1,2})([-/.])(\d{1,2})\2-?\d{1,6}$/,
+    read: ([first, , second]) =>
+      monthAndDay(first!, second) || monthAndDay(second!, first),
+  },
   // A year of two to six digits first, between « - » only (« 41-11-09 », « 2034-12-28 »; « 41.11.09 » and « 41/11/09 »
   // are text), a sign before a year of four digits or more (« -2034-12-28 »), and after it one of « - . / », a space
   // before it or not, a « , », or « .- » or « ,- » (« 41-11-09- », « 41-11-09 . », « 41-11-09, »).
-  { date: /^(?:[-+]\d{4,6}|\d{2,6})-(\d{1,2})-(\d{1,2})(?:\s*[-./]|,|[.,]-)?$/, read: ([month, day]) => monthAndDay(month!, day) },
+  {
+    date: /^(?:[-+]\d{4,6}|\d{2,6})-(\d{1,2})-(\d{1,2})(?:\s*[-./]|,|[.,]-)?$/,
+    read: ([month, day]) => monthAndDay(month!, day),
+  },
   // Excel's year of four digits first, between « / » or « . » (« 2034/12/28 »).
-  { date: /^\d{4}([/.])(\d{1,2})\1(\d{1,2})$/, read: ([, month, day]) => monthAndDay(month!, day) },
+  {
+    date: /^\d{4}([/.])(\d{1,2})\1(\d{1,2})$/,
+    read: ([, month, day]) => monthAndDay(month!, day),
+  },
   // A day and a month between « / », in either order, after a decimal sign or not (« 12/06 », « .12/06 », « ,28/12 »).
-  { date: /^[.,]?(\d{1,2})\/(\d{1,2})$/, read: ([first, second]) => monthAndDay(first!, second) || monthAndDay(second!, first) },
+  {
+    date: /^[.,]?(\d{1,2})\/(\d{1,2})$/,
+    read: ([first, second]) =>
+      monthAndDay(first!, second) || monthAndDay(second!, first),
+  },
   // A day and a month that a « . » ends, as German writes them, after a « , » or not (« 28.12. », « ,1.2. »).
-  { date: /^,?(\d{1,2})\.(\d{1,2})\.$/, read: ([day, month]) => monthAndDay(month!, day) },
+  {
+    date: /^,?(\d{1,2})\.(\d{1,2})\.$/,
+    read: ([day, month]) => monthAndDay(month!, day),
+  },
   // Excel's day and month alone (« 1-2 », « 12.06 ») and month and year of four digits at most (« 5/2020 », « 2020-06 »).
   {
     date: /^(\d{1,4})[-/.](\d{1,4})$/,
-    read: ([first, second]) => monthAndDay(first!, second) || monthAndDay(second!, first) || (monthAndDay(first!) && second!.length <= SPREADSHEET_MONTH_YEAR_DIGITS) || (first!.length <= SPREADSHEET_MONTH_YEAR_DIGITS && monthAndDay(second!)),
+    read: ([first, second]) =>
+      monthAndDay(first!, second) ||
+      monthAndDay(second!, first) ||
+      (monthAndDay(first!) &&
+        second!.length <= SPREADSHEET_MONTH_YEAR_DIGITS) ||
+      (first!.length <= SPREADSHEET_MONTH_YEAR_DIGITS && monthAndDay(second!)),
   },
 ];
 
@@ -183,15 +277,27 @@ const SPREADSHEET_SCIENTIFIC = /^\d+(?:[.,]\d+)?[eE][+-]?\d+$/;
 function spreadsheetMayReadAsNumberOrDate(typed: string) {
   if (!DIGITS_AND_PHONE_SIGNS.test(typed) || !/\d/.test(typed)) return false;
   // Calc ignores spaces between a number and the signs or parentheses around it, and reads U+2212 there as « - ».
-  const value = typed.trim().replace(/^[\s+\-\u2212(]+|[\s+\-\u2212)]+$/g, signs => signs.replace(/\s+/g, "").replace(/\u2212/g, "-"));
+  const value = typed
+    .trim()
+    .replace(/^[\s+\-\u2212(]+|[\s+\-\u2212)]+$/g, signs =>
+      signs.replace(/\s+/g, "").replace(/\u2212/g, "-")
+    );
   if (value.includes("\u2212")) return false;
   const signed = /^[-+]/.test(value);
-  if ((signed ? SPREADSHEET_SIGNED_NUMBERS : SPREADSHEET_NUMBERS).some(number => number.test(value))) return true;
+  if (
+    (signed ? SPREADSHEET_SIGNED_NUMBERS : SPREADSHEET_NUMBERS).some(number =>
+      number.test(value)
+    )
+  )
+    return true;
   // A date as typed: Calc reads none with a space between two of its parts, nor with U+2212 or parentheses around it.
-  if (SPREADSHEET_DATES.some(({ date, read }) => {
-    const parts = date.exec(typed.trim());
-    return parts !== null && read(parts.slice(1));
-  })) return true;
+  if (
+    SPREADSHEET_DATES.some(({ date, read }) => {
+      const parts = date.exec(typed.trim());
+      return parts !== null && read(parts.slice(1));
+    })
+  )
+    return true;
   const fraction = signed ? value.replace(/^[+\-(]+|[+\-)]+$/g, "") : value;
   return SPREADSHEET_FRACTIONS.some(read => read.test(fraction));
 }
@@ -214,7 +320,8 @@ function phoneDigits(written: string) {
 function phoneDigitsSetApart(written: string) {
   const digits = phoneDigits(written);
   // « 00 » before three digits would read as thousands in French (« 00 123 »).
-  if (digits.startsWith("00") && digits.length >= 6) return `00 ${digits.slice(2)}`;
+  if (digits.startsWith("00") && digits.length >= 6)
+    return `00 ${digits.slice(2)}`;
   if (digits.length >= 3) return digits.replace(BY_TWO_FROM_THE_END, " ");
   return `'${written}`;
 }
@@ -248,7 +355,9 @@ function phoneNumberDigits(written: string) {
  */
 function wholePhoneNumber(written: string, international: number) {
   const digits = phoneDigits(written);
-  return digits.startsWith("00") ? digits.length - 2 >= international : digits.length >= PHONE_NUMBER_DIGITS;
+  return digits.startsWith("00")
+    ? digits.length - 2 >= international
+    : digits.length >= PHONE_NUMBER_DIGITS;
 }
 
 /**
@@ -267,9 +376,24 @@ const INTERNATIONAL_WHOLE_PHONE_NUMBER_DIGITS = 10;
  * typed.
  */
 const PHONE_NUMBER_SEPARATORS = [
-  { separator: /\s*\/\s*/, joint: " / ", shorter: "variant", international: INTERNATIONAL_WHOLE_PHONE_NUMBER_DIGITS },
-  { separator: /\s*,\s*/, joint: ", ", shorter: "extension", international: PHONE_NUMBER_DIGITS },
-  { separator: /\s*\.\s*/, joint: ".", shorter: "extension", international: INTERNATIONAL_WHOLE_PHONE_NUMBER_DIGITS },
+  {
+    separator: /\s*\/\s*/,
+    joint: " / ",
+    shorter: "variant",
+    international: INTERNATIONAL_WHOLE_PHONE_NUMBER_DIGITS,
+  },
+  {
+    separator: /\s*,\s*/,
+    joint: ", ",
+    shorter: "extension",
+    international: PHONE_NUMBER_DIGITS,
+  },
+  {
+    separator: /\s*\.\s*/,
+    joint: ".",
+    shorter: "extension",
+    international: INTERNATIONAL_WHOLE_PHONE_NUMBER_DIGITS,
+  },
 ] as const;
 
 /**
@@ -287,20 +411,50 @@ const PHONE_NUMBER_SEPARATORS = [
  * number, each set apart (ADM-26).
  */
 function severalPhoneNumbersAsText(value: string): string | null {
-  for (const { separator, joint, shorter, international } of PHONE_NUMBER_SEPARATORS) {
+  for (const {
+    separator,
+    joint,
+    shorter,
+    international,
+  } of PHONE_NUMBER_SEPARATORS) {
     const parts = value.split(separator).filter(part => /\d/.test(part));
     if (parts.length < 2) continue;
     const whole = wholePhoneNumber(parts[0]!, international);
-    const variant = (part: string | undefined) => shorter === "variant" && whole && part !== undefined && phoneNumberDigits(part) < PHONE_NUMBER_DIGITS;
-    const extension = (part: string) => shorter === "extension" && whole && phoneNumberDigits(part) < PHONE_NUMBER_DIGITS;
-    if (!parts.every((part, index) => phoneNumberDigits(part) >= PHONE_NUMBER_DIGITS || (index > 0 && (variant(part) || extension(part))))) continue;
+    const variant = (part: string | undefined) =>
+      shorter === "variant" &&
+      whole &&
+      part !== undefined &&
+      phoneNumberDigits(part) < PHONE_NUMBER_DIGITS;
+    const extension = (part: string) =>
+      shorter === "extension" &&
+      whole &&
+      phoneNumberDigits(part) < PHONE_NUMBER_DIGITS;
+    if (
+      !parts.every(
+        (part, index) =>
+          phoneNumberDigits(part) >= PHONE_NUMBER_DIGITS ||
+          (index > 0 && (variant(part) || extension(part)))
+      )
+    )
+      continue;
     // A variant or an extension as typed: its digits and the signs between them, without the signs at its ends (« 91) » gives « 91 »).
     const shorterAsTyped = (part: string) => part.replace(/^\D+|\D+$/g, "");
-    const write = (beforeVariant: (part: string) => string, variantAsTyped: boolean) => parts.map((part, index) => {
-      if (variant(part)) return variantAsTyped ? shorterAsTyped(part) : part.replace(/\D/g, "").replace(BY_TWO_FROM_THE_END, " ");
-      if (extension(part)) return part;
-      return variant(parts[index + 1]) ? beforeVariant(part) : phoneAsText(part);
-    }).join(joint);
+    const write = (
+      beforeVariant: (part: string) => string,
+      variantAsTyped: boolean
+    ) =>
+      parts
+        .map((part, index) => {
+          if (variant(part))
+            return variantAsTyped
+              ? shorterAsTyped(part)
+              : part.replace(/\D/g, "").replace(BY_TWO_FROM_THE_END, " ");
+          if (extension(part)) return part;
+          return variant(parts[index + 1])
+            ? beforeVariant(part)
+            : phoneAsText(part);
+        })
+        .join(joint);
     // Before a variant, a number is set apart even if it is text on its own, and its « 00 » joined to it: either would make a fraction
     // (« 0661 234567 / 91 », « 00 33612345678 / 02 »). Groups after it make none (« 00 33471234567 802 / 03 »), and its variant keeps its digits as typed
     // (« 0048512345680 / 130 »). If that still makes a number, its « 00 » is kept apart, as a decimal sign after it makes no fraction
@@ -310,12 +464,29 @@ function severalPhoneNumbersAsText(value: string): string | null {
     // (« 0612345678 5/6 » and « +97444123712 55123456/7 » give « 06 12 34 56 78 5 / 6 » and « 0097444123712 55 12 34 56 / 7 »); the other signs
     // typed in it are kept (wholeRunsSetApart).
     const setApart = (part: string) => wholeRunsSetApart(part, true);
-    const alone = (part: string, zeros: string) => phoneNumberThenGroupsAsText(part) ?? (severalPhoneNumbersAsText(part) ?? setApart(part)).replace(/^00 /, zeros);
+    const alone = (part: string, zeros: string) =>
+      phoneNumberThenGroupsAsText(part) ??
+      (severalPhoneNumbersAsText(part) ?? setApart(part)).replace(
+        /^00 /,
+        zeros
+      );
     // Last, a number kept as typed because it is text on its own only by a sign typed around the whole value, which the parts so joined close again
     // (« (44123456.802) », « (0612345678.0698765432) »): every number is written as it would be alone and without those signs, as before a variant,
     // even if it is text on its own, its « 00 » kept apart, and a variant or an extension as typed (« 44 12 34 56.802 », « 06 12 34 56 78.06 98 76 54 32 »).
-    const everyNumberAlone = () => parts.map(part => (variant(part) || extension(part) ? shorterAsTyped(part) : alone(part, "00 "))).join(joint);
-    const writings = [() => write(part => alone(part, "00"), true), () => write(part => alone(part, "00 "), true), () => write(part => setApart(part).replace(/^00 /, "00"), false), everyNumberAlone];
+    const everyNumberAlone = () =>
+      parts
+        .map(part =>
+          variant(part) || extension(part)
+            ? shorterAsTyped(part)
+            : alone(part, "00 ")
+        )
+        .join(joint);
+    const writings = [
+      () => write(part => alone(part, "00"), true),
+      () => write(part => alone(part, "00 "), true),
+      () => write(part => setApart(part).replace(/^00 /, "00"), false),
+      everyNumberAlone,
+    ];
     for (const writing of writings) {
       const written = writing();
       if (!spreadsheetMayReadAsNumberOrDate(written)) return written;
@@ -334,7 +505,9 @@ function severalPhoneNumbersAsText(value: string): string | null {
 const INTERNATIONAL_WHOLE_PHONE_NUMBER_BEFORE_SPACE_DIGITS = 9;
 
 /** A number, then groups of three after a space or a no-break space, as French groups thousands (SPREADSHEET_LOCALES), signs around them. */
-const PHONE_NUMBER_THEN_GROUPS = new RegExp(String.raw`^(\D*\d+)((?:${SPREADSHEET_LOCALES[1].group}\d{3})+)\D*$`);
+const PHONE_NUMBER_THEN_GROUPS = new RegExp(
+  String.raw`^(\D*\d+)((?:${SPREADSHEET_LOCALES[1].group}\d{3})+)\D*$`
+);
 
 /**
  * A whole number (wholePhoneNumber) then groups of three after a space, which French reads as one number only because
@@ -349,7 +522,15 @@ const PHONE_NUMBER_THEN_GROUPS = new RegExp(String.raw`^(\D*\d+)((?:${SPREADSHEE
  */
 function phoneNumberThenGroupsAsText(value: string): string | null {
   const [, number, groups] = PHONE_NUMBER_THEN_GROUPS.exec(value) ?? [];
-  if (number === undefined || groups === undefined || !wholePhoneNumber(number, INTERNATIONAL_WHOLE_PHONE_NUMBER_BEFORE_SPACE_DIGITS)) return null;
+  if (
+    number === undefined ||
+    groups === undefined ||
+    !wholePhoneNumber(
+      number,
+      INTERNATIONAL_WHOLE_PHONE_NUMBER_BEFORE_SPACE_DIGITS
+    )
+  )
+    return null;
   const written = phoneDigitsSetApart(number) + groups;
   return spreadsheetMayReadAsNumberOrDate(written) ? null : written;
 }
@@ -367,13 +548,35 @@ function phoneNumberThenGroupsAsText(value: string): string | null {
  */
 function wholeRunsSetApart(value: string, spacesGroup: true): string;
 function wholeRunsSetApart(value: string, spacesGroup: false): string[];
-function wholeRunsSetApart(value: string, spacesGroup: boolean): string | string[] {
+function wholeRunsSetApart(
+  value: string,
+  spacesGroup: boolean
+): string | string[] {
   const before = /^\D*/.exec(value)![0];
-  const pieces = value.slice(before.length).replace(/\D+$/, "").split(spacesGroup ? /(\D*[^\d\s]\D*)/ : /(\D+)/);
+  const pieces = value
+    .slice(before.length)
+    .replace(/\D+$/, "")
+    .split(spacesGroup ? /(\D*[^\d\s]\D*)/ : /(\D+)/);
   pieces[0] = `${/\+/.test(before) ? "00" : ""}${pieces[0]}`;
-  const runs = pieces.flatMap((piece, index) => (spacesGroup && index % 2 === 0 && wholePhoneNumber(/^\d*/.exec(piece)![0], INTERNATIONAL_WHOLE_PHONE_NUMBER_BEFORE_SPACE_DIGITS) ? piece.split(/(\s+)/) : [piece]));
-  if (runs.length === 1) return spacesGroup ? phoneDigitsSetApart(value) : [phoneDigitsSetApart(value)];
-  const written = runs.map((run, index) => (index % 2 === 0 && phoneNumberDigits(run) >= PHONE_NUMBER_DIGITS ? phoneDigitsSetApart(run) : run));
+  const runs = pieces.flatMap((piece, index) =>
+    spacesGroup &&
+    index % 2 === 0 &&
+    wholePhoneNumber(
+      /^\d*/.exec(piece)![0],
+      INTERNATIONAL_WHOLE_PHONE_NUMBER_BEFORE_SPACE_DIGITS
+    )
+      ? piece.split(/(\s+)/)
+      : [piece]
+  );
+  if (runs.length === 1)
+    return spacesGroup
+      ? phoneDigitsSetApart(value)
+      : [phoneDigitsSetApart(value)];
+  const written = runs.map((run, index) =>
+    index % 2 === 0 && phoneNumberDigits(run) >= PHONE_NUMBER_DIGITS
+      ? phoneDigitsSetApart(run)
+      : run
+  );
   return spacesGroup ? written.join("") : written;
 }
 
@@ -393,24 +596,42 @@ function wholeRunsSetApart(value: string, spacesGroup: boolean): string | string
 function everySignKeptAsText(value: string): string {
   const pieces = wholeRunsSetApart(value, false);
   const written = pieces.join("");
-  if (pieces.length === 1 || !spreadsheetMayReadAsNumberOrDate(written)) return written;
-  const firstWhere = (sign: (piece: string) => boolean) => pieces.findIndex((piece, index) => index % 2 === 1 && sign(piece));
-  const withPiece = (index: number, piece: string) => pieces.map((other, at) => (at === index ? piece : other)).join("");
+  if (pieces.length === 1 || !spreadsheetMayReadAsNumberOrDate(written))
+    return written;
+  const firstWhere = (sign: (piece: string) => boolean) =>
+    pieces.findIndex((piece, index) => index % 2 === 1 && sign(piece));
+  const withPiece = (index: number, piece: string) =>
+    pieces.map((other, at) => (at === index ? piece : other)).join("");
   const space = firstWhere(piece => /^\s+$/.test(piece));
   const sign = firstWhere(piece => /\S/.test(piece));
   const writings = [
     space >= 0 ? withPiece(space, pieces[space]!.repeat(2)) : null,
-    sign >= 0 ? withPiece(sign, /\s$/.test(pieces[sign]!) ? ` ${pieces[sign]}` : `${pieces[sign]} `) : null,
-    /^\d{3,}$/.test(pieces[0]!) ? withPiece(0, pieces[0]!.replace(BY_TWO_FROM_THE_END, " ")) : null,
+    sign >= 0
+      ? withPiece(
+          sign,
+          /\s$/.test(pieces[sign]!) ? ` ${pieces[sign]}` : `${pieces[sign]} `
+        )
+      : null,
+    /^\d{3,}$/.test(pieces[0]!)
+      ? withPiece(0, pieces[0]!.replace(BY_TWO_FROM_THE_END, " "))
+      : null,
   ];
-  return writings.find(writing => writing !== null && !spreadsheetMayReadAsNumberOrDate(writing)) ?? `'${value}`;
+  return (
+    writings.find(
+      writing => writing !== null && !spreadsheetMayReadAsNumberOrDate(writing)
+    ) ?? `'${value}`
+  );
 }
 
 /** A phone number, « + » already written « 00 », as text for a spreadsheet: see csvPhoneValue. */
 function phoneAsText(written: string): string {
   if (SPREADSHEET_SCIENTIFIC.test(written)) return `'${written}`;
   if (!spreadsheetMayReadAsNumberOrDate(written)) return written;
-  return severalPhoneNumbersAsText(written) ?? phoneNumberThenGroupsAsText(written) ?? everySignKeptAsText(written);
+  return (
+    severalPhoneNumbersAsText(written) ??
+    phoneNumberThenGroupsAsText(written) ??
+    everySignKeptAsText(written)
+  );
 }
 
 /**
@@ -467,32 +688,93 @@ export function csvPhoneValue(phone: string | null) {
 /** What really happened to a manual CV re-analysis (ADM-REC-02). */
 export function reanalysisOutcome(
   queue: { alreadyRunning: boolean },
-  processing: { processed: number; results: Array<Record<string, unknown>> },
-): { outcome: "completed" | "needs_review" | "ai_unavailable" | "retry_scheduled" | "failed" | "already_running" | "queued"; error: string | null } {
+  processing: { processed: number; results: Array<Record<string, unknown>> }
+): {
+  outcome:
+    | "completed"
+    | "needs_review"
+    | "ai_unavailable"
+    | "retry_scheduled"
+    | "failed"
+    | "already_running"
+    | "queued";
+  error: string | null;
+} {
   const result = processing.results[0];
-  if (!processing.processed || !result) return { outcome: queue.alreadyRunning ? "already_running" : "queued", error: null };
-  if (result.completed === true && result.aiUnavailable === true) return { outcome: "ai_unavailable", error: AI_ANALYSIS_BILLING_UNAVAILABLE_ERROR };
-  if (result.completed === true) return { outcome: result.needsReview ? "needs_review" : "completed", error: null };
-  const error = typeof result.error === "string" ? result.error : typeof result.reason === "string" ? result.reason : null;
+  if (!processing.processed || !result)
+    return {
+      outcome: queue.alreadyRunning ? "already_running" : "queued",
+      error: null,
+    };
+  if (result.completed === true && result.aiUnavailable === true)
+    return {
+      outcome: "ai_unavailable",
+      error: AI_ANALYSIS_BILLING_UNAVAILABLE_ERROR,
+    };
+  if (result.completed === true)
+    return {
+      outcome: result.needsReview ? "needs_review" : "completed",
+      error: null,
+    };
+  const error =
+    typeof result.error === "string"
+      ? result.error
+      : typeof result.reason === "string"
+        ? result.reason
+        : null;
   return { outcome: result.retry ? "retry_scheduled" : "failed", error };
 }
 
 /** What really happened to a manual Google Drive copy (ADM-DRIVE-01). */
 export function driveRetryOutcome(
   queue: { alreadyCompleted: boolean; alreadyRunning: boolean },
-  processing: { processed: number; waitingForAuthorization?: boolean; reconnectRequired?: boolean; results: Array<Record<string, unknown>> },
-): { outcome: "completed" | "already_completed" | "already_running" | "not_connected" | "reconnect_required" | "waiting_validation" | "retry_scheduled" | "failed" | "queued"; error: string | null } {
-  if (queue.alreadyCompleted) return { outcome: "already_completed", error: null };
+  processing: {
+    processed: number;
+    waitingForAuthorization?: boolean;
+    reconnectRequired?: boolean;
+    results: Array<Record<string, unknown>>;
+  }
+): {
+  outcome:
+    | "completed"
+    | "already_completed"
+    | "already_running"
+    | "not_connected"
+    | "reconnect_required"
+    | "waiting_validation"
+    | "retry_scheduled"
+    | "failed"
+    | "queued";
+  error: string | null;
+} {
+  if (queue.alreadyCompleted)
+    return { outcome: "already_completed", error: null };
   if (queue.alreadyRunning) return { outcome: "already_running", error: null };
   // Revoked Google token: the copy waits for the reconnection (REC-09).
-  if (processing.reconnectRequired || processing.results[0]?.reconnectRequired === true) return { outcome: "reconnect_required", error: "google_drive_token_invalid_grant" };
-  if (processing.waitingForAuthorization) return { outcome: "not_connected", error: "google_drive_not_connected" };
+  if (
+    processing.reconnectRequired ||
+    processing.results[0]?.reconnectRequired === true
+  )
+    return {
+      outcome: "reconnect_required",
+      error: "google_drive_token_invalid_grant",
+    };
+  if (processing.waitingForAuthorization)
+    return { outcome: "not_connected", error: "google_drive_not_connected" };
   const result = processing.results[0];
-  if (!processing.processed || !result) return { outcome: "queued", error: null };
+  if (!processing.processed || !result)
+    return { outcome: "queued", error: null };
   if (result.completed === true) return { outcome: "completed", error: null };
-  if (result.reason === "cv_not_accepted") return { outcome: "waiting_validation", error: null };
-  if (result.reason === "connection_missing") return { outcome: "not_connected", error: "google_drive_not_connected" };
-  const error = typeof result.error === "string" ? result.error : typeof result.reason === "string" ? result.reason : null;
+  if (result.reason === "cv_not_accepted")
+    return { outcome: "waiting_validation", error: null };
+  if (result.reason === "connection_missing")
+    return { outcome: "not_connected", error: "google_drive_not_connected" };
+  const error =
+    typeof result.error === "string"
+      ? result.error
+      : typeof result.reason === "string"
+        ? result.reason
+        : null;
   return { outcome: result.retry ? "retry_scheduled" : "failed", error };
 }
 
@@ -500,97 +782,210 @@ export function driveRetryOutcome(
  * What a resent « accusé de dépôt » became, said when its audit line is refused
  * (DATA-01): sent, refused by Resend or of uncertain delivery, as the screen says it.
  */
-const CONFIRMATION_RETRY_DONE: Record<"sent" | "failed" | "delivery_unknown", string> = {
+const CONFIRMATION_RETRY_DONE: Record<
+  "sent" | "failed" | "delivery_unknown",
+  string
+> = {
   sent: "L’accusé de dépôt est renvoyé.",
   failed: "Resend a refusé l’e-mail. Vérifiez la configuration et le suivi.",
-  delivery_unknown: "La réponse de Resend est incertaine. Vérifiez le suivi avant tout nouvel envoi pour éviter un doublon.",
+  delivery_unknown:
+    "La réponse de Resend est incertaine. Vérifiez le suivi avant tout nouvel envoi pour éviter un doublon.",
 };
 
 /** The same for a re-analysis started: queued or run, and what came of it; « already running » changed nothing. */
-const REANALYSIS_DONE: Record<Exclude<ReturnType<typeof reanalysisOutcome>["outcome"], "already_running">, string> = {
+const REANALYSIS_DONE: Record<
+  Exclude<ReturnType<typeof reanalysisOutcome>["outcome"], "already_running">,
+  string
+> = {
   completed: "L’analyse est relancée et son résultat actualisé.",
-  needs_review: "L’analyse est relancée et son résultat actualisé : des points demandent une revue humaine.",
-  ai_unavailable: "L’analyse est relancée, mais le fournisseur d’IA la refuse : examinez le CV manuellement.",
-  queued: "L’analyse est remise en file : elle sera traitée au prochain passage.",
-  retry_scheduled: "L’analyse relancée a échoué ; une nouvelle tentative est programmée.",
+  needs_review:
+    "L’analyse est relancée et son résultat actualisé : des points demandent une revue humaine.",
+  ai_unavailable:
+    "L’analyse est relancée, mais le fournisseur d’IA la refuse : examinez le CV manuellement.",
+  queued:
+    "L’analyse est remise en file : elle sera traitée au prochain passage.",
+  retry_scheduled:
+    "L’analyse relancée a échoué ; une nouvelle tentative est programmée.",
   failed: "L’analyse relancée a échoué : examinez le CV manuellement.",
 };
 
 /** The same for a Drive copy requeued: copied, waiting or failed; one already done or running changed nothing. */
-const DRIVE_RETRY_DONE: Record<Exclude<ReturnType<typeof driveRetryOutcome>["outcome"], "already_completed" | "already_running">, string> = {
+const DRIVE_RETRY_DONE: Record<
+  Exclude<
+    ReturnType<typeof driveRetryOutcome>["outcome"],
+    "already_completed" | "already_running"
+  >,
+  string
+> = {
   completed: "Le CV est copié dans Google Drive.",
   queued: "La copie Google Drive est remise en file.",
-  waiting_validation: "La copie Google Drive est remise en file : elle suivra la validation du CV par le contrôle de sécurité.",
-  not_connected: "La copie Google Drive est remise en file, mais Google Drive n’est pas connecté : connectez-le depuis l’en-tête de l’onglet.",
-  reconnect_required: "La copie Google Drive est remise en file : elle repartira après la reconnexion de Google Drive.",
-  retry_scheduled: "La copie Google Drive a échoué ; une nouvelle tentative est prévue.",
+  waiting_validation:
+    "La copie Google Drive est remise en file : elle suivra la validation du CV par le contrôle de sécurité.",
+  not_connected:
+    "La copie Google Drive est remise en file, mais Google Drive n’est pas connecté : connectez-le depuis l’en-tête de l’onglet.",
+  reconnect_required:
+    "La copie Google Drive est remise en file : elle repartira après la reconnexion de Google Drive.",
+  retry_scheduled:
+    "La copie Google Drive a échoué ; une nouvelle tentative est prévue.",
   failed: "La copie Google Drive a échoué : consultez le détail du dossier.",
 };
 
 // International recruitment applications
 export const adminRecruitmentRouter = router({
   confirmationEmail: router({
-    retry: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ input, ctx }) => {
-      const result = await retryCvConfirmationEmail(input.id, { allowUntracked: true });
-      if (result.outcome === "not_found") throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable." });
-      if (result.outcome === "blocked") throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Cette adresse a rejeté ou bloqué l’e-mail. Vérifiez-la avant tout nouvel envoi." });
-      if (result.outcome === "exhausted") throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Les tentatives automatiques sont épuisées. Vérifiez la configuration Resend avant un nouvel essai." });
-      const record = { applicationId: input.id, adminOpenId: ctx.user.openId, action: "email" as const, metadata: { template: "application_confirmation_retry", outcome: result.outcome } };
-      // Sent, refused by Resend or of uncertain delivery, the email was tried. Otherwise (already sent,
-      // untracked) nothing was sent: a refused line leaves nothing changed, as the screen then says.
-      if (result.outcome === "sent" || result.outcome === "failed" || result.outcome === "delivery_unknown") await traceRecruitmentActionDone([record], CONFIRMATION_RETRY_DONE[result.outcome]);
-      else await logRecruitmentAction(record);
-      return result;
-    }),
+    retry: adminProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .mutation(async ({ input, ctx }) => {
+        const result = await retryCvConfirmationEmail(input.id, {
+          allowUntracked: true,
+        });
+        if (result.outcome === "not_found")
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Candidature introuvable.",
+          });
+        if (result.outcome === "blocked")
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message:
+              "Cette adresse a rejeté ou bloqué l’e-mail. Vérifiez-la avant tout nouvel envoi.",
+          });
+        if (result.outcome === "exhausted")
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message:
+              "Les tentatives automatiques sont épuisées. Vérifiez la configuration Resend avant un nouvel essai.",
+          });
+        const record = {
+          applicationId: input.id,
+          adminOpenId: ctx.user.openId,
+          action: "email" as const,
+          metadata: {
+            template: "application_confirmation_retry",
+            outcome: result.outcome,
+          },
+        };
+        // Sent, refused by Resend or of uncertain delivery, the email was tried. Otherwise (already sent,
+        // untracked) nothing was sent: a refused line leaves nothing changed, as the screen then says.
+        if (
+          result.outcome === "sent" ||
+          result.outcome === "failed" ||
+          result.outcome === "delivery_unknown"
+        )
+          await traceRecruitmentActionDone(
+            [record],
+            CONFIRMATION_RETRY_DONE[result.outcome]
+          );
+        else await logRecruitmentAction(record);
+        return result;
+      }),
   }),
   driveExport: router({
     status: adminProcedure.query(async () => googleDriveExportStatus()),
-    retry: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ input, ctx }) => {
-      const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Base de données indisponible." });
-      const [application] = await db.select({ id: cvApplications.id }).from(cvApplications).where(eq(cvApplications.id, input.id)).limit(1);
-      if (!application) throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable." });
-      const { processDueCvGoogleDriveExports, retryCvGoogleDriveExport } = await import("../../googleDriveExport");
-      const queue = await retryCvGoogleDriveExport(application.id);
-      const processing = queue.alreadyCompleted || queue.alreadyRunning
-        ? { processed: 0, waitingForAuthorization: false, reconnectRequired: false, results: [] as Array<Record<string, unknown>> }
-        : await processDueCvGoogleDriveExports(1, [application.id]);
-      const outcome = driveRetryOutcome(queue, processing);
-      const record = {
-        applicationId: application.id,
-        adminOpenId: ctx.user.openId,
-        action: "export" as const,
-        metadata: { event: "google_drive_retry", ...queue, processed: processing.processed, outcome: outcome.outcome },
-      };
-      // Already copied or being copied, nothing was requeued: a refused line leaves nothing changed.
-      if (outcome.outcome === "already_completed" || outcome.outcome === "already_running") await logRecruitmentAction(record);
-      else await traceRecruitmentActionDone([record], DRIVE_RETRY_DONE[outcome.outcome]);
-      return { success: true, ...queue, processed: processing.processed, ...outcome };
-    }),
+    retry: adminProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .mutation(async ({ input, ctx }) => {
+        const db = await getDb();
+        if (!db)
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Base de données indisponible.",
+          });
+        const [application] = await db
+          .select({ id: cvApplications.id })
+          .from(cvApplications)
+          .where(eq(cvApplications.id, input.id))
+          .limit(1);
+        if (!application)
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Candidature introuvable.",
+          });
+        const { processDueCvGoogleDriveExports, retryCvGoogleDriveExport } =
+          await import("../../googleDriveExport");
+        const queue = await retryCvGoogleDriveExport(application.id);
+        const processing =
+          queue.alreadyCompleted || queue.alreadyRunning
+            ? {
+                processed: 0,
+                waitingForAuthorization: false,
+                reconnectRequired: false,
+                results: [] as Array<Record<string, unknown>>,
+              }
+            : await processDueCvGoogleDriveExports(1, [application.id]);
+        const outcome = driveRetryOutcome(queue, processing);
+        const record = {
+          applicationId: application.id,
+          adminOpenId: ctx.user.openId,
+          action: "export" as const,
+          metadata: {
+            event: "google_drive_retry",
+            ...queue,
+            processed: processing.processed,
+            outcome: outcome.outcome,
+          },
+        };
+        // Already copied or being copied, nothing was requeued: a refused line leaves nothing changed.
+        if (
+          outcome.outcome === "already_completed" ||
+          outcome.outcome === "already_running"
+        )
+          await logRecruitmentAction(record);
+        else
+          await traceRecruitmentActionDone(
+            [record],
+            DRIVE_RETRY_DONE[outcome.outcome]
+          );
+        return {
+          success: true,
+          ...queue,
+          processed: processing.processed,
+          ...outcome,
+        };
+      }),
     // « Relancer toutes les copies échouées » (REC-09).
     retryAllFailed: adminProcedure.mutation(async ({ ctx }) => {
-      const { googleDriveConnectionWait, processDueCvGoogleDriveExports, retryAllFailedCvGoogleDriveExports } = await import("../../googleDriveExport");
+      const {
+        googleDriveConnectionWait,
+        processDueCvGoogleDriveExports,
+        retryAllFailedCvGoogleDriveExports,
+      } = await import("../../googleDriveExport");
       const queue = await retryAllFailedCvGoogleDriveExports();
       // Requeued already: their lines in one statement, all or none.
       await traceRecruitmentActionDone(
-        queue.applicationIds.map(applicationId => ({ applicationId, adminOpenId: ctx.user.openId, action: "export" as const, metadata: { event: "google_drive_retry", batch: true } })),
-        `${queue.requeued} copie(s) Google Drive remise(s) en file.`,
+        queue.applicationIds.map(applicationId => ({
+          applicationId,
+          adminOpenId: ctx.user.openId,
+          action: "export" as const,
+          metadata: { event: "google_drive_retry", batch: true },
+        })),
+        `${queue.requeued} copie(s) Google Drive remise(s) en file.`
       );
       // A few copies inline (each one downloads and uploads a CV); the cron copies the rest.
       // Nothing to copy: the connection's real state all the same (REC-09).
-      const processing = queue.requeued > 0
-        ? await processDueCvGoogleDriveExports(3, queue.applicationIds)
-        : { processed: 0, ...await googleDriveConnectionWait(), results: [] as Array<Record<string, unknown>> };
+      const processing =
+        queue.requeued > 0
+          ? await processDueCvGoogleDriveExports(3, queue.applicationIds)
+          : {
+              processed: 0,
+              ...(await googleDriveConnectionWait()),
+              results: [] as Array<Record<string, unknown>>,
+            };
       return {
         success: true,
         requeued: queue.requeued,
         processed: processing.processed,
-        copied: processing.results.filter(result => result.completed === true).length,
+        copied: processing.results.filter(result => result.completed === true)
+          .length,
         // A skipped copy (CV awaiting its security check, claim lost) is not a
         // failure, nor one waiting for the Drive reconnection (reconnectRequired).
-        failedAgain: processing.results.filter(result => result.completed === false && result.reconnectRequired !== true).length,
+        failedAgain: processing.results.filter(
+          result =>
+            result.completed === false && result.reconnectRequired !== true
+        ).length,
         reconnectRequired: processing.reconnectRequired,
-        notConnected: processing.waitingForAuthorization && !processing.reconnectRequired,
+        notConnected:
+          processing.waitingForAuthorization && !processing.reconnectRequired,
       };
     }),
   }),
@@ -615,39 +1010,103 @@ export const adminRecruitmentRouter = router({
       if (!db) return { items: [], total: 0 };
 
       const conditions = [];
-      if (input.status) conditions.push(eq(cvApplications.status, input.status));
-      const search = adminSearchCondition(input.search, [cvApplications.firstName, cvApplications.lastName, cvApplications.email, cvApplications.trackingId], { firstName: cvApplications.firstName, lastName: cvApplications.lastName });
+      if (input.status)
+        conditions.push(eq(cvApplications.status, input.status));
+      const search = adminSearchCondition(
+        input.search,
+        [
+          cvApplications.firstName,
+          cvApplications.lastName,
+          cvApplications.email,
+          cvApplications.trackingId,
+        ],
+        {
+          firstName: cvApplications.firstName,
+          lastName: cvApplications.lastName,
+        }
+      );
       if (search) conditions.push(search);
       // Specialty, country, language and certification, case and accents aside, like the pool and a
       // campaign's filtered audience: « anesthesie » finds « Anesthésie » (INTL-12), « dha » « Licence DHA »,
       // « emirats » « Émirats arabes unis »; a % or _ typed matches itself.
-      if (input.specialty) conditions.push(adminFilterContains(cvApplications.specialty, input.specialty));
-      if (input.country) conditions.push(adminFilterContains(cvApplications.targetCountries, input.country));
+      if (input.specialty)
+        conditions.push(
+          adminFilterContains(cvApplications.specialty, input.specialty)
+        );
+      if (input.country)
+        conditions.push(
+          adminFilterContains(cvApplications.targetCountries, input.country)
+        );
       // A language by any of its names (IA-02): « arabe » finds « Arabic » too.
-      if (input.language) conditions.push(await languageFilterCondition(db, input.language));
-      if (input.certification) conditions.push(await certificationFilterCondition(db, input.certification, sql`((${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND ${adminFilterContains(cvApplications.normalizedCertifications, input.certification)}) OR ${adminFilterContains(cvApplications.certifications, input.certification)})`));
+      if (input.language)
+        conditions.push(await languageFilterCondition(db, input.language));
+      if (input.certification)
+        conditions.push(
+          await certificationFilterCondition(
+            db,
+            input.certification,
+            sql`((${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND ${adminFilterContains(cvApplications.normalizedCertifications, input.certification)}) OR ${adminFilterContains(cvApplications.certifications, input.certification)})`
+          )
+        );
 
       let profile: typeof recruitmentMatchProfiles.$inferSelect | null = null;
       if (input.profileId) {
-        const [selectedProfile] = await db.select().from(recruitmentMatchProfiles)
-          .where(and(eq(recruitmentMatchProfiles.id, input.profileId), eq(recruitmentMatchProfiles.active, 1)))
+        const [selectedProfile] = await db
+          .select()
+          .from(recruitmentMatchProfiles)
+          .where(
+            and(
+              eq(recruitmentMatchProfiles.id, input.profileId),
+              eq(recruitmentMatchProfiles.active, 1)
+            )
+          )
           .limit(1);
-        if (!selectedProfile) throw new TRPCError({ code: "NOT_FOUND", message: "Profil de matching introuvable" });
+        if (!selectedProfile)
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Profil de matching introuvable",
+          });
         profile = selectedProfile;
-        if (selectedProfile.specialty) conditions.push(adminFilterContains(cvApplications.specialty, selectedProfile.specialty));
-        if (selectedProfile.targetCountry) conditions.push(adminFilterContains(cvApplications.targetCountries, selectedProfile.targetCountry));
+        if (selectedProfile.specialty)
+          conditions.push(
+            adminFilterContains(
+              cvApplications.specialty,
+              selectedProfile.specialty
+            )
+          );
+        if (selectedProfile.targetCountry)
+          conditions.push(
+            adminFilterContains(
+              cvApplications.targetCountries,
+              selectedProfile.targetCountry
+            )
+          );
       }
-      const minimumScore = Math.max(input.minimumScore ?? 0, profile?.minimumScore ?? 0);
-      if (minimumScore > 0) conditions.push(scoreAtLeastOrUnavailable(minimumScore));
-      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+      const minimumScore = Math.max(
+        input.minimumScore ?? 0,
+        profile?.minimumScore ?? 0
+      );
+      if (minimumScore > 0)
+        conditions.push(scoreAtLeastOrUnavailable(minimumScore));
+      const whereClause =
+        conditions.length > 0 ? and(...conditions) : undefined;
       // With a threshold, the dossiers without a score come after every scored one, not page by page.
-      const listOrder = [...(minimumScore > 0 ? [sql`(${verifiedRecruitmentScore} IS NULL)`] : []), desc(cvApplications.createdAt)];
+      const listOrder = [
+        ...(minimumScore > 0
+          ? [sql`(${verifiedRecruitmentScore} IS NULL)`]
+          : []),
+        desc(cvApplications.createdAt),
+      ];
 
       // A matching profile's languages and skills are checked here, not in SQL: every dossier the
       // other filters keep is checked on the few columns it needs (up to RECRUITMENT_PROFILE_SCAN_LIMIT,
       // said in the answer when reached), then only the page asked for is read in full. The total
       // counts every match, not only those among the first rows.
-      let profilePage: { ids: number[]; total: number; scanLimited: boolean } | null = null;
+      let profilePage: {
+        ids: number[];
+        total: number;
+        scanLimited: boolean;
+      } | null = null;
       if (profile) {
         const matchProfile = profile;
         const scanned = await db
@@ -660,31 +1119,58 @@ export const adminRecruitmentRouter = router({
             // The languages an analysis of the current version read in the CV too (IA-02), their names
             // only, those the Langue filter reads in cv_candidate_languages, written in the same batch;
             // only for a profile that requires some: this JSON carries the CV's quotes.
-            normalizedLanguages: parseRecruitmentJsonArray(matchProfile.requiredLanguages).length ? verifiedNormalizedLanguages : sql<string | null>`NULL`,
+            normalizedLanguages: parseRecruitmentJsonArray(
+              matchProfile.requiredLanguages
+            ).length
+              ? verifiedNormalizedLanguages
+              : sql<string | null>`NULL`,
             // The AI's skills, the largest of these columns, only for a profile that requires some.
-            aiExtractedSkills: parseRecruitmentJsonArray(matchProfile.requiredSkills).length ? cvApplications.aiExtractedSkills : sql<string | null>`NULL`,
+            aiExtractedSkills: parseRecruitmentJsonArray(
+              matchProfile.requiredSkills
+            ).length
+              ? cvApplications.aiExtractedSkills
+              : sql<string | null>`NULL`,
           })
           .from(cvApplications)
           .where(whereClause)
           // The id breaks ties, so that each page reads the matches in the same order.
           .orderBy(...listOrder, desc(cvApplications.id))
           .limit(RECRUITMENT_PROFILE_SCAN_LIMIT + 1);
-        const matchedIds = scanned.slice(0, RECRUITMENT_PROFILE_SCAN_LIMIT)
-          .filter(item => matchesRecruitmentProfile({
-            score: item.aiScore,
-            specialty: item.specialty,
-            targetCountries: parseRecruitmentJsonArray(item.targetCountries),
-            languages: [...parseRecruitmentJsonArray(item.languages), ...analysedLanguageNames(item.normalizedLanguages)],
-            extractedSkills: (() => {
-              try {
-                const parsed = item.aiExtractedSkills ? JSON.parse(item.aiExtractedSkills) : {};
-                return Array.isArray(parsed.verifiedSkills) ? parsed.verifiedSkills.filter((value: unknown): value is string => typeof value === "string") : [];
-              } catch { return []; }
-            })(),
-            profile: matchProfile,
-          }))
+        const matchedIds = scanned
+          .slice(0, RECRUITMENT_PROFILE_SCAN_LIMIT)
+          .filter(item =>
+            matchesRecruitmentProfile({
+              score: item.aiScore,
+              specialty: item.specialty,
+              targetCountries: parseRecruitmentJsonArray(item.targetCountries),
+              languages: [
+                ...parseRecruitmentJsonArray(item.languages),
+                ...analysedLanguageNames(item.normalizedLanguages),
+              ],
+              extractedSkills: (() => {
+                try {
+                  const parsed = item.aiExtractedSkills
+                    ? JSON.parse(item.aiExtractedSkills)
+                    : {};
+                  return Array.isArray(parsed.verifiedSkills)
+                    ? parsed.verifiedSkills.filter(
+                        (value: unknown): value is string =>
+                          typeof value === "string"
+                      )
+                    : [];
+                } catch {
+                  return [];
+                }
+              })(),
+              profile: matchProfile,
+            })
+          )
           .map(item => item.id);
-        profilePage = { ids: matchedIds.slice(input.offset, input.offset + input.limit), total: matchedIds.length, scanLimited: scanned.length > RECRUITMENT_PROFILE_SCAN_LIMIT };
+        profilePage = {
+          ids: matchedIds.slice(input.offset, input.offset + input.limit),
+          total: matchedIds.length,
+          scanLimited: scanned.length > RECRUITMENT_PROFILE_SCAN_LIMIT,
+        };
       }
 
       // ADM-20: what the card shows, folded or open, but not the CV analysis (its summary,
@@ -732,72 +1218,122 @@ export const adminRecruitmentRouter = router({
           createdAt: cvApplications.createdAt,
         })
         .from(cvApplications)
-        .where(profilePage ? inArray(cvApplications.id, profilePage.ids) : whereClause)
+        .where(
+          profilePage
+            ? inArray(cvApplications.id, profilePage.ids)
+            : whereClause
+        )
         .orderBy(...listOrder)
         .limit(profilePage ? profilePage.ids.length : input.limit)
         .offset(profilePage ? 0 : input.offset);
       // A profile's page in the order of its matches.
       if (profilePage) {
-        const position = new Map(profilePage.ids.map((id, index) => [id, index]));
-        rawItems.sort((left, right) => position.get(left.id)! - position.get(right.id)!);
+        const position = new Map(
+          profilePage.ids.map((id, index) => [id, index])
+        );
+        rawItems.sort(
+          (left, right) => position.get(left.id)! - position.get(right.id)!
+        );
       }
 
       const applicationIds = rawItems.map(item => item.id);
-      const applicationEmails = Array.from(new Set(rawItems.map(item => item.email.trim().toLowerCase())));
+      const applicationEmails = Array.from(
+        new Set(rawItems.map(item => item.email.trim().toLowerCase()))
+      );
       const portalAccounts = applicationIds.length
-        ? await db.select({ linkedApplicationId: candidateAccounts.linkedApplicationId, email: candidateAccounts.email, emailVerifiedAt: candidateAccounts.emailVerifiedAt })
-          .from(candidateAccounts)
-          .where(or(
-            inArray(candidateAccounts.linkedApplicationId, applicationIds),
-            inArray(candidateAccounts.email, applicationEmails),
-          ))
+        ? await db
+            .select({
+              linkedApplicationId: candidateAccounts.linkedApplicationId,
+              email: candidateAccounts.email,
+              emailVerifiedAt: candidateAccounts.emailVerifiedAt,
+            })
+            .from(candidateAccounts)
+            .where(
+              or(
+                inArray(candidateAccounts.linkedApplicationId, applicationIds),
+                inArray(candidateAccounts.email, applicationEmails)
+              )
+            )
         : [];
       const driveExportJobs = applicationIds.length
-        ? await db.select({
-            applicationId: cvGoogleDriveExportJobs.applicationId,
-            status: cvGoogleDriveExportJobs.status,
-            attempts: cvGoogleDriveExportJobs.attempts,
-            maxAttempts: cvGoogleDriveExportJobs.maxAttempts,
-            lastError: cvGoogleDriveExportJobs.lastError,
-            driveFileUrl: cvGoogleDriveExportJobs.driveFileUrl,
-            finishedAt: cvGoogleDriveExportJobs.finishedAt,
-            updatedAt: cvGoogleDriveExportJobs.updatedAt,
-          }).from(cvGoogleDriveExportJobs).where(inArray(cvGoogleDriveExportJobs.applicationId, applicationIds))
+        ? await db
+            .select({
+              applicationId: cvGoogleDriveExportJobs.applicationId,
+              status: cvGoogleDriveExportJobs.status,
+              attempts: cvGoogleDriveExportJobs.attempts,
+              maxAttempts: cvGoogleDriveExportJobs.maxAttempts,
+              lastError: cvGoogleDriveExportJobs.lastError,
+              driveFileUrl: cvGoogleDriveExportJobs.driveFileUrl,
+              finishedAt: cvGoogleDriveExportJobs.finishedAt,
+              updatedAt: cvGoogleDriveExportJobs.updatedAt,
+            })
+            .from(cvGoogleDriveExportJobs)
+            .where(
+              inArray(cvGoogleDriveExportJobs.applicationId, applicationIds)
+            )
         : [];
       const emailEvents = applicationIds.length
-        ? await db.select({
-            applicationId: recruitmentEmailEvents.applicationId,
-            eventType: recruitmentEmailEvents.eventType,
-            providerEmailId: recruitmentEmailEvents.providerEmailId,
-            payload: recruitmentEmailEvents.payload,
-            occurredAt: recruitmentEmailEvents.occurredAt,
-          }).from(recruitmentEmailEvents)
-            .where(inArray(recruitmentEmailEvents.applicationId, applicationIds))
+        ? await db
+            .select({
+              applicationId: recruitmentEmailEvents.applicationId,
+              eventType: recruitmentEmailEvents.eventType,
+              providerEmailId: recruitmentEmailEvents.providerEmailId,
+              payload: recruitmentEmailEvents.payload,
+              occurredAt: recruitmentEmailEvents.occurredAt,
+            })
+            .from(recruitmentEmailEvents)
+            .where(
+              inArray(recruitmentEmailEvents.applicationId, applicationIds)
+            )
             .orderBy(desc(recruitmentEmailEvents.occurredAt))
         : [];
       // With their origins, shown by the certification filter and the confirmation buttons (IA-02).
-      const certificationsByApplication = await certificationFactsByApplication(db, rawItems);
-      const driveExportByApplicationId = new Map(driveExportJobs.map(job => [job.applicationId, job]));
+      const certificationsByApplication = await certificationFactsByApplication(
+        db,
+        rawItems
+      );
+      const driveExportByApplicationId = new Map(
+        driveExportJobs.map(job => [job.applicationId, job])
+      );
       const emailEventsByApplicationId = new Map<number, typeof emailEvents>();
       for (const event of emailEvents) {
         if (!event.applicationId) continue;
-        const current = emailEventsByApplicationId.get(event.applicationId) || [];
+        const current =
+          emailEventsByApplicationId.get(event.applicationId) || [];
         current.push(event);
         emailEventsByApplicationId.set(event.applicationId, current);
       }
-      const items = rawItems
-        .map(({ aiSummary, ...item }) => ({
-          ...item,
-          hasAiSummary: Boolean(aiSummary),
-          candidatePortalActive: portalAccounts.some(account => candidatePortalAccountMatchesApplication(account, item)),
-          candidatePortalActivation: resolveCandidatePortalActivationDelivery(emailEventsByApplicationId.get(item.id) || []),
-          candidatePortalInvitation: resolveCandidatePortalInvitationDelivery(emailEventsByApplicationId.get(item.id) || []),
-          driveExport: driveExportByApplicationId.get(item.id) || null,
-          emailDelivery: resolveCvConfirmationDelivery(emailEventsByApplicationId.get(item.id) || []),
-          certificationFacts: certificationsByApplication.get(item.id) ?? [],
-        }));
-      const countResult = profilePage ? [{ count: profilePage.total }] : await db.select({ count: sql<number>`COUNT(*)` }).from(cvApplications).where(whereClause);
-      return { items, total: Number(countResult[0]?.count ?? 0), ...(profilePage?.scanLimited ? { profileScanLimit: RECRUITMENT_PROFILE_SCAN_LIMIT } : {}) };
+      const items = rawItems.map(({ aiSummary, ...item }) => ({
+        ...item,
+        hasAiSummary: Boolean(aiSummary),
+        candidatePortalActive: portalAccounts.some(account =>
+          candidatePortalAccountMatchesApplication(account, item)
+        ),
+        candidatePortalActivation: resolveCandidatePortalActivationDelivery(
+          emailEventsByApplicationId.get(item.id) || []
+        ),
+        candidatePortalInvitation: resolveCandidatePortalInvitationDelivery(
+          emailEventsByApplicationId.get(item.id) || []
+        ),
+        driveExport: driveExportByApplicationId.get(item.id) || null,
+        emailDelivery: resolveCvConfirmationDelivery(
+          emailEventsByApplicationId.get(item.id) || []
+        ),
+        certificationFacts: certificationsByApplication.get(item.id) ?? [],
+      }));
+      const countResult = profilePage
+        ? [{ count: profilePage.total }]
+        : await db
+            .select({ count: sql<number>`COUNT(*)` })
+            .from(cvApplications)
+            .where(whereClause);
+      return {
+        items,
+        total: Number(countResult[0]?.count ?? 0),
+        ...(profilePage?.scanLimited
+          ? { profileScanLimit: RECRUITMENT_PROFILE_SCAN_LIMIT }
+          : {}),
+      };
     }),
 
   /**
@@ -806,21 +1342,31 @@ export const adminRecruitmentRouter = router({
    * evidence and contradictions, the strengths, the points to check, the
    * score's reasoning and the extraction warnings.
    */
-  detail: adminProcedure.input(z.object({ id: z.number().int().positive() })).query(async ({ input }) => {
-    const db = await getDb();
-    if (!db) return null;
-    const [analysis] = await db.select({
-      id: cvApplications.id,
-      aiSummary: cvApplications.aiSummary,
-      aiStrengths: cvApplications.aiStrengths,
-      aiWeaknesses: cvApplications.aiWeaknesses,
-      aiExtractedSkills: cvApplications.aiExtractedSkills,
-      aiMatchReasoning: cvApplications.aiMatchReasoning,
-      extractionWarnings: cvApplications.extractionWarnings,
-    }).from(cvApplications).where(eq(cvApplications.id, input.id)).limit(1);
-    if (!analysis) throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable" });
-    return analysis;
-  }),
+  detail: adminProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return null;
+      const [analysis] = await db
+        .select({
+          id: cvApplications.id,
+          aiSummary: cvApplications.aiSummary,
+          aiStrengths: cvApplications.aiStrengths,
+          aiWeaknesses: cvApplications.aiWeaknesses,
+          aiExtractedSkills: cvApplications.aiExtractedSkills,
+          aiMatchReasoning: cvApplications.aiMatchReasoning,
+          extractionWarnings: cvApplications.extractionWarnings,
+        })
+        .from(cvApplications)
+        .where(eq(cvApplications.id, input.id))
+        .limit(1);
+      if (!analysis)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Candidature introuvable",
+        });
+      return analysis;
+    }),
 
   pool: adminRecruitmentPoolRouter,
 
@@ -829,38 +1375,54 @@ export const adminRecruitmentRouter = router({
   dashboard: adminProcedure.query(async () => {
     const db = await getDb();
     if (!db) return null;
-    const [candidateStats] = await db.select({
-      total: sql<number>`COUNT(*)`,
-      marketingEligible: sql<number>`SUM(CASE WHEN ${cvApplications.marketingConsent} = 1 AND ${cvApplications.marketingUnsubscribedAt} IS NULL AND ${cvApplications.marketingSuppressedAt} IS NULL THEN 1 ELSE 0 END)`,
-      analysesQueued: sql<number>`SUM(CASE WHEN ${cvApplications.analysisStatus} = 'queued' THEN 1 ELSE 0 END)`,
-      analysesInProgress: sql<number>`SUM(CASE WHEN ${cvApplications.analysisStatus} IN ('extracting', 'analyzing') THEN 1 ELSE 0 END)`,
-      analysesCompleted: sql<number>`SUM(CASE WHEN ${cvApplications.analysisStatus} = 'completed' THEN 1 ELSE 0 END)`,
-      // A dossier left without AI analysis (degraded) is read by a human too.
-      analysesNeedsReview: sql<number>`SUM(CASE WHEN ${cvApplications.analysisStatus} IN ('needs_review', 'degraded') THEN 1 ELSE 0 END)`,
-      analysesFailed: sql<number>`SUM(CASE WHEN ${cvApplications.analysisStatus} = 'failed' THEN 1 ELSE 0 END)`,
-      contacted: sql<number>`SUM(CASE WHEN ${cvApplications.lastContactedAt} IS NOT NULL THEN 1 ELSE 0 END)`,
-      // ADM-13: the answers of the contacted profiles only, so that the rate never goes past 100 %
-      // when « Le candidat a répondu » is recorded for a candidate no campaign has contacted.
-      responded: sql<number>`SUM(CASE WHEN ${cvApplications.lastContactedAt} IS NOT NULL AND ${cvApplications.lastCandidateResponseAt} IS NOT NULL THEN 1 ELSE 0 END)`,
-    }).from(cvApplications);
-    const [campaignStats] = await db.select({
-      total: sql<number>`COUNT(*)`,
-      sent: sql<number>`SUM(CASE WHEN ${recruitmentCampaigns.status} IN ('sent', 'partially_sent') THEN 1 ELSE 0 END)`,
-    }).from(recruitmentCampaigns);
-    const [deliveryStats] = await db.select({
-      delivered: sql<number>`SUM(CASE WHEN ${recruitmentCampaignRecipients.deliveryStatus} = 'delivered' THEN 1 ELSE 0 END)`,
-      failed: sql<number>`SUM(CASE WHEN ${recruitmentCampaignRecipients.deliveryStatus} IN ('failed', 'bounced', 'complained', 'suppressed') THEN 1 ELSE 0 END)`,
-      delayed: sql<number>`SUM(CASE WHEN ${recruitmentCampaignRecipients.deliveryStatus} = 'delayed' THEN 1 ELSE 0 END)`,
-    }).from(recruitmentCampaignRecipients);
-    const [followUpStats] = await db.select({
-      pending: sql<number>`SUM(CASE WHEN ${recruitmentFollowUpTasks.status} = 'suggested' THEN 1 ELSE 0 END)`,
-      due: sql<number>`SUM(CASE WHEN ${recruitmentFollowUpTasks.status} = 'suggested' AND ${recruitmentFollowUpTasks.dueAt} <= NOW() THEN 1 ELSE 0 END)`,
-    }).from(recruitmentFollowUpTasks);
-    const [briefStats] = await db.select({
-      total: sql<number>`COUNT(*)`,
-      active: sql<number>`SUM(CASE WHEN ${clientBriefs.status} IN ('new', 'reviewing', 'shortlist_sent') THEN 1 ELSE 0 END)`,
-    }).from(clientBriefs);
-    return { candidateStats, campaignStats, deliveryStats, followUpStats, briefStats };
+    const [candidateStats] = await db
+      .select({
+        total: sql<number>`COUNT(*)`,
+        marketingEligible: sql<number>`SUM(CASE WHEN ${cvApplications.marketingConsent} = 1 AND ${cvApplications.marketingUnsubscribedAt} IS NULL AND ${cvApplications.marketingSuppressedAt} IS NULL THEN 1 ELSE 0 END)`,
+        analysesQueued: sql<number>`SUM(CASE WHEN ${cvApplications.analysisStatus} = 'queued' THEN 1 ELSE 0 END)`,
+        analysesInProgress: sql<number>`SUM(CASE WHEN ${cvApplications.analysisStatus} IN ('extracting', 'analyzing') THEN 1 ELSE 0 END)`,
+        analysesCompleted: sql<number>`SUM(CASE WHEN ${cvApplications.analysisStatus} = 'completed' THEN 1 ELSE 0 END)`,
+        // A dossier left without AI analysis (degraded) is read by a human too.
+        analysesNeedsReview: sql<number>`SUM(CASE WHEN ${cvApplications.analysisStatus} IN ('needs_review', 'degraded') THEN 1 ELSE 0 END)`,
+        analysesFailed: sql<number>`SUM(CASE WHEN ${cvApplications.analysisStatus} = 'failed' THEN 1 ELSE 0 END)`,
+        contacted: sql<number>`SUM(CASE WHEN ${cvApplications.lastContactedAt} IS NOT NULL THEN 1 ELSE 0 END)`,
+        // ADM-13: the answers of the contacted profiles only, so that the rate never goes past 100 %
+        // when « Le candidat a répondu » is recorded for a candidate no campaign has contacted.
+        responded: sql<number>`SUM(CASE WHEN ${cvApplications.lastContactedAt} IS NOT NULL AND ${cvApplications.lastCandidateResponseAt} IS NOT NULL THEN 1 ELSE 0 END)`,
+      })
+      .from(cvApplications);
+    const [campaignStats] = await db
+      .select({
+        total: sql<number>`COUNT(*)`,
+        sent: sql<number>`SUM(CASE WHEN ${recruitmentCampaigns.status} IN ('sent', 'partially_sent') THEN 1 ELSE 0 END)`,
+      })
+      .from(recruitmentCampaigns);
+    const [deliveryStats] = await db
+      .select({
+        delivered: sql<number>`SUM(CASE WHEN ${recruitmentCampaignRecipients.deliveryStatus} = 'delivered' THEN 1 ELSE 0 END)`,
+        failed: sql<number>`SUM(CASE WHEN ${recruitmentCampaignRecipients.deliveryStatus} IN ('failed', 'bounced', 'complained', 'suppressed') THEN 1 ELSE 0 END)`,
+        delayed: sql<number>`SUM(CASE WHEN ${recruitmentCampaignRecipients.deliveryStatus} = 'delayed' THEN 1 ELSE 0 END)`,
+      })
+      .from(recruitmentCampaignRecipients);
+    const [followUpStats] = await db
+      .select({
+        pending: sql<number>`SUM(CASE WHEN ${recruitmentFollowUpTasks.status} = 'suggested' THEN 1 ELSE 0 END)`,
+        due: sql<number>`SUM(CASE WHEN ${recruitmentFollowUpTasks.status} = 'suggested' AND ${recruitmentFollowUpTasks.dueAt} <= NOW() THEN 1 ELSE 0 END)`,
+      })
+      .from(recruitmentFollowUpTasks);
+    const [briefStats] = await db
+      .select({
+        total: sql<number>`COUNT(*)`,
+        active: sql<number>`SUM(CASE WHEN ${clientBriefs.status} IN ('new', 'reviewing', 'shortlist_sent') THEN 1 ELSE 0 END)`,
+      })
+      .from(clientBriefs);
+    return {
+      candidateStats,
+      campaignStats,
+      deliveryStats,
+      followUpStats,
+      briefStats,
+    };
   }),
 
   candidate: adminRecruitmentCandidateRouter,
@@ -869,94 +1431,283 @@ export const adminRecruitmentRouter = router({
 
   offerTemplates: adminRecruitmentOfferTemplatesRouter,
 
-  exportCsv: adminProcedure.input(z.object({ type: z.enum(["pool", "shortlist"]), briefId: z.number().int().positive().optional(), candidateIds: z.array(z.number().int().positive()).max(RECRUITMENT_EXPORT_MAX_CANDIDATES).optional().default([]) })).mutation(async ({ input, ctx }) => {
-    const db = await getDb();
-    if (!db) throw new Error("Database connection failed");
-    let candidateIds = input.candidateIds;
-    let consentByApplication = new Map<number, Date>();
-    let excludedWithoutConsent = 0;
-    if (input.type === "shortlist") {
-      if (!input.briefId) throw new TRPCError({ code: "BAD_REQUEST", message: "Une mission est requise pour exporter une shortlist." });
-      // Ids sent by the client never widen or replace a mission's shortlist.
-      const shortlist = await openShortlist(db, input.briefId);
-      if (!shortlist.length) throw new TRPCError({ code: "BAD_REQUEST", message: "Aucun candidat présélectionné pour cette mission." });
-      // A profile leaves for an employer only with the candidate's agreement for this mission (RGPD-03).
-      const consented = shortlist.filter((candidate): candidate is { applicationId: number; candidateConsentAt: Date } => candidate.candidateConsentAt !== null);
-      excludedWithoutConsent = shortlist.length - consented.length;
-      if (!consented.length) throw new TRPCError({ code: "BAD_REQUEST", message: `Aucun des ${shortlist.length} candidat(s) de la shortlist n’a d’accord noté pour cette mission. Obtenez l’accord de chaque candidat et notez-en la date (« Accord du candidat reçu ») avant d’exporter.` });
-      consentByApplication = new Map(consented.map(candidate => [candidate.applicationId, candidate.candidateConsentAt]));
-      candidateIds = consented.map(candidate => candidate.applicationId);
-      // Refused rather than cut short: the file must match the count on the button.
-      if (candidateIds.length > RECRUITMENT_EXPORT_MAX_CANDIDATES) throw new TRPCError({ code: "BAD_REQUEST", message: `La shortlist compte ${candidateIds.length} candidats avec accord ; ${RECRUITMENT_EXPORT_MAX_CANDIDATES} au maximum par export. Retirez des candidats de la shortlist avant de l’exporter.` });
-    }
-    // An empty selection is refused, never read as "every candidate" (REC-01).
-    if (!candidateIds.length) throw new TRPCError({ code: "BAD_REQUEST", message: "Sélectionnez au moins un candidat à exporter." });
-    const conditions = [sql`${cvApplications.status} NOT IN ('rejected', 'archived')`, inArray(cvApplications.id, candidateIds)];
-    if (input.type === "pool") {
-      conditions.push(eq(cvApplications.marketingConsent, 1), isNull(cvApplications.marketingUnsubscribedAt), isNull(cvApplications.marketingSuppressedAt));
-    }
-    const rows = await db.select({ id: cvApplications.id, firstName: cvApplications.firstName, lastName: cvApplications.lastName, email: cvApplications.email, phone: cvApplications.phone, specialty: cvApplications.specialty, targetCountries: cvApplications.targetCountries, languages: cvApplications.languages, yearsExperience: cvApplications.yearsExperience, availability: cvApplications.availability, mobility: cvApplications.mobility, certifications: cvApplications.certifications, aiScore: verifiedRecruitmentScore, status: cvApplications.status }).from(cvApplications).where(and(...conditions)).orderBy(verifiedScoreFirst, desc(cvApplications.createdAt)).limit(RECRUITMENT_EXPORT_MAX_CANDIDATES);
-    // Selected candidates may have been refused or unsubscribed meanwhile: no header-only file, no "logged" export of nobody.
-    if (!rows.length) throw new TRPCError({ code: "BAD_REQUEST", message: "Aucun des candidats sélectionnés ne peut plus être exporté (refusé, archivé ou désinscrit)." });
-    // A shortlist is meant for a client employer: it never carries the AI
-    // score, an internal reading aid that must not become a third party's
-    // selection criterion (LEGAL-22). The internal pool export keeps it.
-    let csv: string;
-    if (input.type === "shortlist") {
-      // Each certification and language says where it comes from (IA-02),
-      // and each candidate the date of their agreement (RGPD-03).
-      const [certificationsByApplication, languagesByApplication] = await Promise.all([certificationFactsByApplication(db, rows), languageFactsByApplication(db, rows)]);
-      // The employer reads every cell as written: the countries listed, a
-      // certification's expiry, the application's status in words.
-      const facts = <T extends RecruitmentFact>(list: T[] | undefined, label: (fact: T) => string = recruitmentFactLabel) => (list ?? []).map(label).join(" ; ");
-      const header = ["Prénom", "Nom", "Email", "Téléphone", "Spécialité", "Pays ciblés", "Langues (origine)", "Expérience (ans)", "Disponibilité", "Mobilité", "Certifications (origine)", "Accord du candidat", "Statut"];
-      csv = [header.map(csvCell).join(";"), ...rows.map(row => [row.firstName, row.lastName, row.email, csvPhoneValue(row.phone), row.specialty, csvListCell(row.targetCountries), facts(languagesByApplication.get(row.id)), row.yearsExperience, row.availability, row.mobility, facts(certificationsByApplication.get(row.id), certificationFactLabel), consentByApplication.get(row.id)?.toLocaleDateString("fr-FR", { timeZone: PARIS_TIME_ZONE }), recruitmentApplicationStatusLabel(row.status)].map(csvCell).join(";"))].join("\n");
-    } else {
-      // The countries and languages listed, the status in words, as in the shortlist (INTL-10).
-      const header = ["Prénom", "Nom", "Email", "Téléphone", "Spécialité", "Pays ciblés", "Langues", "Expérience (ans)", "Disponibilité", "Mobilité", "Certifications", "Score IA", "Statut"];
-      csv = [header.map(csvCell).join(";"), ...rows.map(row => [row.firstName, row.lastName, row.email, csvPhoneValue(row.phone), row.specialty, csvListCell(row.targetCountries), csvListCell(row.languages), row.yearsExperience, row.availability, row.mobility, row.certifications, row.aiScore, recruitmentApplicationStatusLabel(row.status)].map(csvCell).join(";"))].join("\n");
-    }
-    // One audit line per candidate, in one statement: all of them or, when
-    // the database refuses one, none and no file (DATA-01).
-    await recruitmentAuditInsert(db, rows.map(row => ({ applicationId: row.id, adminOpenId: ctx.user.openId, action: "export" as const, metadata: { type: input.type, briefId: input.briefId || null } })));
-    // excludedWithoutConsent: shortlisted candidates left out for lack of agreement (RGPD-03).
-    return { filename: `${input.type}-${new Date().toISOString().slice(0, 10)}.csv`, csv, count: rows.length, excludedWithoutConsent };
-  }),
+  exportCsv: adminProcedure
+    .input(
+      z.object({
+        type: z.enum(["pool", "shortlist"]),
+        briefId: z.number().int().positive().optional(),
+        candidateIds: z
+          .array(z.number().int().positive())
+          .max(RECRUITMENT_EXPORT_MAX_CANDIDATES)
+          .optional()
+          .default([]),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database connection failed");
+      let candidateIds = input.candidateIds;
+      let consentByApplication = new Map<number, Date>();
+      let excludedWithoutConsent = 0;
+      if (input.type === "shortlist") {
+        if (!input.briefId)
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Une mission est requise pour exporter une shortlist.",
+          });
+        // Ids sent by the client never widen or replace a mission's shortlist.
+        const shortlist = await openShortlist(db, input.briefId);
+        if (!shortlist.length)
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Aucun candidat présélectionné pour cette mission.",
+          });
+        // A profile leaves for an employer only with the candidate's agreement for this mission (RGPD-03).
+        const consented = shortlist.filter(
+          (
+            candidate
+          ): candidate is { applicationId: number; candidateConsentAt: Date } =>
+            candidate.candidateConsentAt !== null
+        );
+        excludedWithoutConsent = shortlist.length - consented.length;
+        if (!consented.length)
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `Aucun des ${shortlist.length} candidat(s) de la shortlist n’a d’accord noté pour cette mission. Obtenez l’accord de chaque candidat et notez-en la date (« Accord du candidat reçu ») avant d’exporter.`,
+          });
+        consentByApplication = new Map(
+          consented.map(candidate => [
+            candidate.applicationId,
+            candidate.candidateConsentAt,
+          ])
+        );
+        candidateIds = consented.map(candidate => candidate.applicationId);
+        // Refused rather than cut short: the file must match the count on the button.
+        if (candidateIds.length > RECRUITMENT_EXPORT_MAX_CANDIDATES)
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `La shortlist compte ${candidateIds.length} candidats avec accord ; ${RECRUITMENT_EXPORT_MAX_CANDIDATES} au maximum par export. Retirez des candidats de la shortlist avant de l’exporter.`,
+          });
+      }
+      // An empty selection is refused, never read as "every candidate" (REC-01).
+      if (!candidateIds.length)
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Sélectionnez au moins un candidat à exporter.",
+        });
+      const conditions = [
+        sql`${cvApplications.status} NOT IN ('rejected', 'archived')`,
+        inArray(cvApplications.id, candidateIds),
+      ];
+      if (input.type === "pool") {
+        conditions.push(
+          eq(cvApplications.marketingConsent, 1),
+          isNull(cvApplications.marketingUnsubscribedAt),
+          isNull(cvApplications.marketingSuppressedAt)
+        );
+      }
+      const rows = await db
+        .select({
+          id: cvApplications.id,
+          firstName: cvApplications.firstName,
+          lastName: cvApplications.lastName,
+          email: cvApplications.email,
+          phone: cvApplications.phone,
+          specialty: cvApplications.specialty,
+          targetCountries: cvApplications.targetCountries,
+          languages: cvApplications.languages,
+          yearsExperience: cvApplications.yearsExperience,
+          availability: cvApplications.availability,
+          mobility: cvApplications.mobility,
+          certifications: cvApplications.certifications,
+          aiScore: verifiedRecruitmentScore,
+          status: cvApplications.status,
+        })
+        .from(cvApplications)
+        .where(and(...conditions))
+        .orderBy(verifiedScoreFirst, desc(cvApplications.createdAt))
+        .limit(RECRUITMENT_EXPORT_MAX_CANDIDATES);
+      // Selected candidates may have been refused or unsubscribed meanwhile: no header-only file, no "logged" export of nobody.
+      if (!rows.length)
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "Aucun des candidats sélectionnés ne peut plus être exporté (refusé, archivé ou désinscrit).",
+        });
+      // A shortlist is meant for a client employer: it never carries the AI
+      // score, an internal reading aid that must not become a third party's
+      // selection criterion (LEGAL-22). The internal pool export keeps it.
+      let csv: string;
+      if (input.type === "shortlist") {
+        // Each certification and language says where it comes from (IA-02),
+        // and each candidate the date of their agreement (RGPD-03).
+        const [certificationsByApplication, languagesByApplication] =
+          await Promise.all([
+            certificationFactsByApplication(db, rows),
+            languageFactsByApplication(db, rows),
+          ]);
+        // The employer reads every cell as written: the countries listed, a
+        // certification's expiry, the application's status in words.
+        const facts = <T extends RecruitmentFact>(
+          list: T[] | undefined,
+          label: (fact: T) => string = recruitmentFactLabel
+        ) => (list ?? []).map(label).join(" ; ");
+        const header = [
+          "Prénom",
+          "Nom",
+          "Email",
+          "Téléphone",
+          "Spécialité",
+          "Pays ciblés",
+          "Langues (origine)",
+          "Expérience (ans)",
+          "Disponibilité",
+          "Mobilité",
+          "Certifications (origine)",
+          "Accord du candidat",
+          "Statut",
+        ];
+        csv = [
+          header.map(csvCell).join(";"),
+          ...rows.map(row =>
+            [
+              row.firstName,
+              row.lastName,
+              row.email,
+              csvPhoneValue(row.phone),
+              row.specialty,
+              csvListCell(row.targetCountries),
+              facts(languagesByApplication.get(row.id)),
+              row.yearsExperience,
+              row.availability,
+              row.mobility,
+              facts(
+                certificationsByApplication.get(row.id),
+                certificationFactLabel
+              ),
+              consentByApplication
+                .get(row.id)
+                ?.toLocaleDateString("fr-FR", { timeZone: PARIS_TIME_ZONE }),
+              recruitmentApplicationStatusLabel(row.status),
+            ]
+              .map(csvCell)
+              .join(";")
+          ),
+        ].join("\n");
+      } else {
+        // The countries and languages listed, the status in words, as in the shortlist (INTL-10).
+        const header = [
+          "Prénom",
+          "Nom",
+          "Email",
+          "Téléphone",
+          "Spécialité",
+          "Pays ciblés",
+          "Langues",
+          "Expérience (ans)",
+          "Disponibilité",
+          "Mobilité",
+          "Certifications",
+          "Score IA",
+          "Statut",
+        ];
+        csv = [
+          header.map(csvCell).join(";"),
+          ...rows.map(row =>
+            [
+              row.firstName,
+              row.lastName,
+              row.email,
+              csvPhoneValue(row.phone),
+              row.specialty,
+              csvListCell(row.targetCountries),
+              csvListCell(row.languages),
+              row.yearsExperience,
+              row.availability,
+              row.mobility,
+              row.certifications,
+              row.aiScore,
+              recruitmentApplicationStatusLabel(row.status),
+            ]
+              .map(csvCell)
+              .join(";")
+          ),
+        ].join("\n");
+      }
+      // One audit line per candidate, in one statement: all of them or, when
+      // the database refuses one, none and no file (DATA-01).
+      await recruitmentAuditInsert(
+        db,
+        rows.map(row => ({
+          applicationId: row.id,
+          adminOpenId: ctx.user.openId,
+          action: "export" as const,
+          metadata: { type: input.type, briefId: input.briefId || null },
+        }))
+      );
+      // excludedWithoutConsent: shortlisted candidates left out for lack of agreement (RGPD-03).
+      return {
+        filename: `${input.type}-${new Date().toISOString().slice(0, 10)}.csv`,
+        csv,
+        count: rows.length,
+        excludedWithoutConsent,
+      };
+    }),
 
   profiles: router({
     list: adminProcedure.query(async () => {
       const db = await getDb();
       if (!db) return [];
-      return db.select().from(recruitmentMatchProfiles).where(eq(recruitmentMatchProfiles.active, 1)).orderBy(desc(recruitmentMatchProfiles.updatedAt));
+      return db
+        .select()
+        .from(recruitmentMatchProfiles)
+        .where(eq(recruitmentMatchProfiles.active, 1))
+        .orderBy(desc(recruitmentMatchProfiles.updatedAt));
     }),
     create: adminProcedure
-      .input(z.object({
-        name: z.string().trim().min(1).max(160),
-        targetCountry: z.string().trim().max(120).optional(),
-        specialty: z.string().trim().max(160).optional(),
-        minimumScore: z.number().int().min(0).max(100).default(0),
-        requiredLanguages: z.array(z.string().trim().min(1).max(80)).max(12).default([]),
-        requiredSkills: z.array(z.string().trim().min(1).max(120)).max(30).default([]),
-      }))
+      .input(
+        z.object({
+          name: z.string().trim().min(1).max(160),
+          targetCountry: z.string().trim().max(120).optional(),
+          specialty: z.string().trim().max(160).optional(),
+          minimumScore: z.number().int().min(0).max(100).default(0),
+          requiredLanguages: z
+            .array(z.string().trim().min(1).max(80))
+            .max(12)
+            .default([]),
+          requiredSkills: z
+            .array(z.string().trim().min(1).max(120))
+            .max(30)
+            .default([]),
+        })
+      )
       .mutation(async ({ input }) => {
         const db = await getDb();
         if (!db) throw new Error("Database connection failed");
-        const result = await db.insert(recruitmentMatchProfiles).values({
-          name: input.name,
-          targetCountry: input.targetCountry || null,
-          specialty: input.specialty || null,
-          minimumScore: input.minimumScore,
-          requiredLanguages: JSON.stringify(input.requiredLanguages),
-          requiredSkills: JSON.stringify(input.requiredSkills),
-        }).returning({ id: recruitmentMatchProfiles.id });
+        const result = await db
+          .insert(recruitmentMatchProfiles)
+          .values({
+            name: input.name,
+            targetCountry: input.targetCountry || null,
+            specialty: input.specialty || null,
+            minimumScore: input.minimumScore,
+            requiredLanguages: JSON.stringify(input.requiredLanguages),
+            requiredSkills: JSON.stringify(input.requiredSkills),
+          })
+          .returning({ id: recruitmentMatchProfiles.id });
         return { success: true, id: Number(result[0]?.id || 0) };
       }),
-    delete: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ input }) => {
-      const db = await getDb();
-      if (!db) throw new Error("Database connection failed");
-      await db.update(recruitmentMatchProfiles).set({ active: 0, updatedAt: new Date() }).where(eq(recruitmentMatchProfiles.id, input.id));
-      return { success: true };
-    }),
+    delete: adminProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database connection failed");
+        await db
+          .update(recruitmentMatchProfiles)
+          .set({ active: 0, updatedAt: new Date() })
+          .where(eq(recruitmentMatchProfiles.id, input.id));
+        return { success: true };
+      }),
   }),
 
   updateStatus: adminProcedure
@@ -974,14 +1725,27 @@ export const adminRecruitmentRouter = router({
       // A status change alone must never erase the recruiter's note: the
       // note is only written when the client sends it (empty clears it).
       // With its audit line, both or neither (DATA-01).
-      await recordWithRecruitmentAudit(db, db
-        .update(cvApplications)
-        .set({
-          status: input.status,
-          ...(input.adminNotes !== undefined ? { adminNotes: input.adminNotes || null } : {}),
-          updatedAt: new Date(),
-        })
-        .where(eq(cvApplications.id, input.id)), [{ applicationId: input.id, adminOpenId: ctx.user.openId, action: "status_update", metadata: { status: input.status } }]);
+      await recordWithRecruitmentAudit(
+        db,
+        db
+          .update(cvApplications)
+          .set({
+            status: input.status,
+            ...(input.adminNotes !== undefined
+              ? { adminNotes: input.adminNotes || null }
+              : {}),
+            updatedAt: new Date(),
+          })
+          .where(eq(cvApplications.id, input.id)),
+        [
+          {
+            applicationId: input.id,
+            adminOpenId: ctx.user.openId,
+            action: "status_update",
+            metadata: { status: input.status },
+          },
+        ]
+      );
 
       return { success: true };
     }),
@@ -992,16 +1756,33 @@ export const adminRecruitmentRouter = router({
       const db = await getDb();
       if (!db) throw new Error("Database connection failed");
       const [application] = await db
-        .select({ cvFileKey: cvApplications.cvFileKey, cvOriginalName: cvApplications.cvOriginalName, status: cvApplications.status, fileValidationStatus: cvApplications.fileValidationStatus })
+        .select({
+          cvFileKey: cvApplications.cvFileKey,
+          cvOriginalName: cvApplications.cvOriginalName,
+          status: cvApplications.status,
+          fileValidationStatus: cvApplications.fileValidationStatus,
+        })
         .from(cvApplications)
         .where(eq(cvApplications.id, input.id))
         .limit(1);
-      if (!application) throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable" });
+      if (!application)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Candidature introuvable",
+        });
       if (!canAdminDownloadCv(application)) {
-        throw new TRPCError({ code: "NOT_FOUND", message: CV_DOWNLOAD_UNAVAILABLE_MESSAGE });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: CV_DOWNLOAD_UNAVAILABLE_MESSAGE,
+        });
       }
       // Traced before the link is made: refused, nothing was downloaded (DATA-01).
-      await logRecruitmentAction({ applicationId: input.id, adminOpenId: ctx.user.openId, action: "download", metadata: { fileName: application.cvOriginalName } });
+      await logRecruitmentAction({
+        applicationId: input.id,
+        adminOpenId: ctx.user.openId,
+        action: "download",
+        metadata: { fileName: application.cvOriginalName },
+      });
       const signedUrl = await storageGetSignedUrl(application.cvFileKey);
       return { url: signedUrl, fileName: application.cvOriginalName };
     }),
@@ -1027,9 +1808,15 @@ export const adminRecruitmentRouter = router({
         .from(cvApplications)
         .where(eq(cvApplications.id, input.id))
         .limit(1);
-      if (!application) throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable" });
+      if (!application)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Candidature introuvable",
+        });
 
-      const { enqueueCvAnalysis, processDueCvAnalysisJobs } = await import("../../recruitmentProcessing");
+      const { enqueueCvAnalysis, processDueCvAnalysisJobs } = await import(
+        "../../recruitmentProcessing"
+      );
       const queue = await enqueueCvAnalysis(application.id);
       const processing = await processDueCvAnalysisJobs(1, [application.id]);
       const outcome = reanalysisOutcome(queue, processing);
@@ -1037,53 +1824,121 @@ export const adminRecruitmentRouter = router({
         applicationId: application.id,
         adminOpenId: ctx.user.openId,
         action: "reanalyze" as const,
-        metadata: { queued: queue.queued, accelerated: queue.accelerated, alreadyRunning: queue.alreadyRunning, processed: processing.processed, outcome: outcome.outcome },
+        metadata: {
+          queued: queue.queued,
+          accelerated: queue.accelerated,
+          alreadyRunning: queue.alreadyRunning,
+          processed: processing.processed,
+          outcome: outcome.outcome,
+        },
       };
       // Already running, nothing was queued: a refused line leaves nothing changed.
-      if (outcome.outcome === "already_running") await logRecruitmentAction(record);
-      else await traceRecruitmentActionDone([record], REANALYSIS_DONE[outcome.outcome]);
-      return { success: true, queued: queue.queued || queue.accelerated, processed: processing.processed, ...outcome };
+      if (outcome.outcome === "already_running")
+        await logRecruitmentAction(record);
+      else
+        await traceRecruitmentActionDone(
+          [record],
+          REANALYSIS_DONE[outcome.outcome]
+        );
+      return {
+        success: true,
+        queued: queue.queued || queue.accelerated,
+        processed: processing.processed,
+        ...outcome,
+      };
     }),
 
   reanalyzeFailed: adminProcedure
-    .input(z.object({ limit: z.number().int().min(1).max(25).default(10) }).optional())
+    .input(
+      z
+        .object({ limit: z.number().int().min(1).max(25).default(10) })
+        .optional()
+    )
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new Error("Database connection failed");
-      const { CV_ANALYSIS_DEFERRED_DAILY_VOLUME, enqueueCvAnalysis, processDueCvAnalysisJobs } = await import("../../recruitmentProcessing");
+      const {
+        CV_ANALYSIS_DEFERRED_DAILY_VOLUME,
+        enqueueCvAnalysis,
+        processDueCvAnalysisJobs,
+      } = await import("../../recruitmentProcessing");
       // Les candidatures reçues au-delà du volume du jour (ABUS-01), jamais
       // analysées, restent à l’écart comme pour le rattrapage automatique :
       // seule l’action « Analyser le CV » d’un dossier les met en file.
       const resumableApplications = await db
-        .select({ id: cvApplications.id, trackingId: cvApplications.trackingId })
+        .select({
+          id: cvApplications.id,
+          trackingId: cvApplications.trackingId,
+        })
         .from(cvApplications)
         // degraded, or saved as needs_review by the billing fallback before
         // that status existed: the AI provider refused, the CV was never analysed (REC-08).
-        .where(and(
-          or(inArray(cvApplications.analysisStatus, ["failed", "queued", "degraded"]), eq(cvApplications.analysisModel, MANUAL_REVIEW_FALLBACK_MODEL), ne(cvApplications.analysisPromptVersion, RECRUITMENT_ANALYSIS_PROMPT_VERSION), isNull(cvApplications.analysisPromptVersion)),
-          ne(cvApplications.status, "rejected"),
-          ne(cvApplications.status, "archived"),
-          or(isNull(cvApplications.analysisLastError), ne(cvApplications.analysisLastError, CV_ANALYSIS_DEFERRED_DAILY_VOLUME)),
-        ))
+        .where(
+          and(
+            or(
+              inArray(cvApplications.analysisStatus, [
+                "failed",
+                "queued",
+                "degraded",
+              ]),
+              eq(cvApplications.analysisModel, MANUAL_REVIEW_FALLBACK_MODEL),
+              ne(
+                cvApplications.analysisPromptVersion,
+                RECRUITMENT_ANALYSIS_PROMPT_VERSION
+              ),
+              isNull(cvApplications.analysisPromptVersion)
+            ),
+            ne(cvApplications.status, "rejected"),
+            ne(cvApplications.status, "archived"),
+            or(
+              isNull(cvApplications.analysisLastError),
+              ne(
+                cvApplications.analysisLastError,
+                CV_ANALYSIS_DEFERRED_DAILY_VOLUME
+              )
+            )
+          )
+        )
         .orderBy(cvApplications.updatedAt)
         .limit(input?.limit ?? 10);
 
-      let processing: { processed: number; results: Array<Record<string, unknown>> } = { processed: 0, results: [] };
+      let processing: {
+        processed: number;
+        results: Array<Record<string, unknown>>;
+      } = { processed: 0, results: [] };
       let queued = 0;
       let aiUnavailable = false;
       for (const application of resumableApplications) {
         await enqueueCvAnalysis(application.id);
-        await traceRecruitmentActionDone([{ applicationId: application.id, adminOpenId: ctx.user.openId, action: "reanalyze", metadata: { queued: true, batch: true } }], `L’analyse de ${queued + 1} dossier(s) est relancée.`);
+        await traceRecruitmentActionDone(
+          [
+            {
+              applicationId: application.id,
+              adminOpenId: ctx.user.openId,
+              action: "reanalyze",
+              metadata: { queued: true, batch: true },
+            },
+          ],
+          `L’analyse de ${queued + 1} dossier(s) est relancée.`
+        );
         queued += 1;
         // One analysis inline at most (an AI call can take ~35 s): the rest is
         // queued for the cron, so the admin request stays under the 60 s limit.
-        if (processing.processed === 0) processing = await processDueCvAnalysisJobs(1, [application.id]);
+        if (processing.processed === 0)
+          processing = await processDueCvAnalysisJobs(1, [application.id]);
         // The AI provider still refuses for billing: the other dossiers keep
         // their state (each would be refused too) until the credit is restored (REC-08).
-        aiUnavailable = processing.results.some(result => result.aiUnavailable === true);
+        aiUnavailable = processing.results.some(
+          result => result.aiUnavailable === true
+        );
         if (aiUnavailable) break;
       }
-      return { success: true, queued, processed: processing.processed, aiUnavailable };
+      return {
+        success: true,
+        queued,
+        processed: processing.processed,
+        aiUnavailable,
+      };
     }),
 
   /** The exact email the composer would send this candidate, rendered by its real builder (MAIL-13); nothing is sent nor recorded. */
@@ -1091,7 +1946,12 @@ export const adminRecruitmentRouter = router({
     .input(templateEmailInput)
     .query(async ({ input }) => {
       const application = await templateEmailApplication(input.id);
-      const email = buildRecruitmentTemplateEmail(application.firstName, application.trackingId, input.template, { language: input.language, customRequest: input.customRequest });
+      const email = buildRecruitmentTemplateEmail(
+        application.firstName,
+        application.trackingId,
+        input.template,
+        { language: input.language, customRequest: input.customRequest }
+      );
       return { subject: email.subject, html: email.html };
     }),
 
@@ -1103,9 +1963,20 @@ export const adminRecruitmentRouter = router({
   sendTemplateTest: adminProcedure
     .input(templateEmailInput)
     .mutation(async ({ input, ctx }) => {
-      if (!ctx.user.email) throw new TRPCError({ code: "BAD_REQUEST", message: "Aucune adresse email vérifiée n’est associée à votre compte administrateur." });
+      if (!ctx.user.email)
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "Aucune adresse email vérifiée n’est associée à votre compte administrateur.",
+        });
       const application = await templateEmailApplication(input.id);
-      await sendRecruitmentTemplateEmail(ctx.user.email, application.firstName, application.trackingId, input.template, { language: input.language, customRequest: input.customRequest });
+      await sendRecruitmentTemplateEmail(
+        ctx.user.email,
+        application.firstName,
+        application.trackingId,
+        input.template,
+        { language: input.language, customRequest: input.customRequest }
+      );
       return { success: true, to: ctx.user.email };
     }),
 
@@ -1115,40 +1986,87 @@ export const adminRecruitmentRouter = router({
       const db = await getDb();
       if (!db) throw new Error("Database connection failed");
       const [application] = await db
-        .select({ id: cvApplications.id, firstName: cvApplications.firstName, lastName: cvApplications.lastName, email: cvApplications.email, trackingId: cvApplications.trackingId })
+        .select({
+          id: cvApplications.id,
+          firstName: cvApplications.firstName,
+          lastName: cvApplications.lastName,
+          email: cvApplications.email,
+          trackingId: cvApplications.trackingId,
+        })
         .from(cvApplications)
         .where(eq(cvApplications.id, input.id))
         .limit(1);
-      if (!application) throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable" });
+      if (!application)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Candidature introuvable",
+        });
       const result = await sendRecruitmentTemplateEmail(
         application.email,
         application.firstName,
         application.trackingId,
         input.template as RecruitmentEmailTemplate,
-        { language: input.language as RecruitmentEmailLanguage, customRequest: input.customRequest },
+        {
+          language: input.language as RecruitmentEmailLanguage,
+          customRequest: input.customRequest,
+        }
       );
-      await traceRecruitmentActionDone([{ applicationId: input.id, adminOpenId: ctx.user.openId, action: "email", metadata: { template: input.template, language: input.language, customRequest: input.customRequest || null, resendId: result.id } }], "L’email est envoyé.");
+      await traceRecruitmentActionDone(
+        [
+          {
+            applicationId: input.id,
+            adminOpenId: ctx.user.openId,
+            action: "email",
+            metadata: {
+              template: input.template,
+              language: input.language,
+              customRequest: input.customRequest || null,
+              resendId: result.id,
+            },
+          },
+        ],
+        "L’email est envoyé."
+      );
       return { success: true };
     }),
 
   erase: adminProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input, ctx }) => {
-      const { eraseCandidateApplication, CandidateErasureBusyError, CandidateErasureInterruptedError, CandidateErasureNotFoundError } = await import("../../recruitmentErasure");
+      const {
+        eraseCandidateApplication,
+        CandidateErasureBusyError,
+        CandidateErasureInterruptedError,
+        CandidateErasureNotFoundError,
+      } = await import("../../recruitmentErasure");
       try {
-        const report = await eraseCandidateApplication({ applicationId: input.id, actorOpenId: ctx.user.openId, reason: "admin_gdpr_request" });
+        const report = await eraseCandidateApplication({
+          applicationId: input.id,
+          actorOpenId: ctx.user.openId,
+          reason: "admin_gdpr_request",
+        });
         return { success: true as const, ...report };
       } catch (error) {
-        if (error instanceof CandidateErasureNotFoundError) throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable" });
-        if (error instanceof CandidateErasureBusyError) throw new TRPCError({ code: "CONFLICT", message: "Une analyse ou une copie Google Drive de ce dossier est en cours. Réessayez l’effacement dans quelques minutes." });
+        if (error instanceof CandidateErasureNotFoundError)
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Candidature introuvable",
+          });
+        if (error instanceof CandidateErasureBusyError)
+          throw new TRPCError({
+            code: "CONFLICT",
+            message:
+              "Une analyse ou une copie Google Drive de ce dossier est en cours. Réessayez l’effacement dans quelques minutes.",
+          });
         // DATA-08: the files may be gone while the dossier is still listed; the retention run finishes it.
         if (error instanceof CandidateErasureInterruptedError) {
           logError("[Recruitment] erasure interrupted", error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
-            message: error.stage === "storage"
-              ? "Effacement partiel, reprise automatique au prochain passage : les fichiers stockés n’ont pas tous pu être supprimés et rien n’a été effacé en base. Le dossier reste listé jusqu’à la fin de l’effacement par la tâche de conservation."
-              : "Effacement partiel, reprise automatique au prochain passage : les fichiers stockés du dossier sont supprimés, mais rien n’a été effacé en base. Le dossier reste listé, sans CV, jusqu’à la fin de l’effacement par la tâche de conservation.",
+            message:
+              error.stage === "storage"
+                ? "Effacement partiel, reprise automatique au prochain passage : les fichiers stockés n’ont pas tous pu être supprimés et rien n’a été effacé en base. Le dossier reste listé jusqu’à la fin de l’effacement par la tâche de conservation."
+                : "Effacement partiel, reprise automatique au prochain passage : les fichiers stockés du dossier sont supprimés, mais rien n’a été effacé en base. Le dossier reste listé, sans CV, jusqu’à la fin de l’effacement par la tâche de conservation.",
           });
         }
         throw error;

@@ -6,20 +6,23 @@ import { getTurnstileWidgetCopy } from "@/lib/publicFormCopy";
 declare global {
   interface Window {
     turnstile?: {
-      render: (element: HTMLElement, options: {
-        sitekey: string;
-        callback: (token: string) => void;
-        "expired-callback": () => void;
-        "timeout-callback": () => void;
-        "unsupported-callback": () => void;
-        "error-callback": (errorCode?: string) => boolean | void;
-        theme?: "light" | "dark" | "auto";
-        language?: "auto" | string;
-        size?: "normal" | "flexible" | "compact";
-        retry?: "auto" | "never";
-        "retry-interval"?: number;
-        tabindex?: number;
-      }) => string;
+      render: (
+        element: HTMLElement,
+        options: {
+          sitekey: string;
+          callback: (token: string) => void;
+          "expired-callback": () => void;
+          "timeout-callback": () => void;
+          "unsupported-callback": () => void;
+          "error-callback": (errorCode?: string) => boolean | void;
+          theme?: "light" | "dark" | "auto";
+          language?: "auto" | string;
+          size?: "normal" | "flexible" | "compact";
+          retry?: "auto" | "never";
+          "retry-interval"?: number;
+          tabindex?: number;
+        }
+      ) => string;
       remove: (widgetId: string) => void;
       reset: (widgetId?: string) => void;
     };
@@ -40,18 +43,55 @@ type TurnstileWidgetCopy = ReturnType<typeof getTurnstileWidgetCopy>;
 function TurnstileFallbackContact({ copy }: { copy: TurnstileWidgetCopy }) {
   const linkClass = "font-medium underline underline-offset-2";
   const links: Record<string, ReactNode> = {
-    "{email}": <a key="email" href={`mailto:${siteConfig.email}`} className={`${linkClass} break-all`}>{siteConfig.email}</a>,
-    "{phone}": <a key="phone" href={`tel:${siteConfig.phone.replace(/\s/g, "")}`} className={`${linkClass} whitespace-nowrap`}>{siteConfig.phone}</a>,
+    "{email}": (
+      <a
+        key="email"
+        href={`mailto:${siteConfig.email}`}
+        className={`${linkClass} break-all`}
+      >
+        {siteConfig.email}
+      </a>
+    ),
+    "{phone}": (
+      <a
+        key="phone"
+        href={`tel:${siteConfig.phone.replace(/\s/g, "")}`}
+        className={`${linkClass} whitespace-nowrap`}
+      >
+        {siteConfig.phone}
+      </a>
+    ),
   };
-  return <>{copy.fallback.split(/(\{email\}|\{phone\})/).map(part => links[part] ?? part)}</>;
+  return (
+    <>
+      {copy.fallback
+        .split(/(\{email\}|\{phone\})/)
+        .map(part => links[part] ?? part)}
+    </>
+  );
 }
 
 /** Shown when the challenge cannot load or no longer holds a token: sending stays blocked until a new one arrives. */
-export function TurnstileLoadError({ copy, onRetry }: { copy: TurnstileWidgetCopy; onRetry: () => void }) {
+export function TurnstileLoadError({
+  copy,
+  onRetry,
+}: {
+  copy: TurnstileWidgetCopy;
+  onRetry: () => void;
+}) {
   return (
-    <div className="flex flex-col items-start gap-2 rounded-md border border-amber-500/50 bg-amber-950/30 p-3 text-xs text-amber-100 sm:flex-row sm:items-center sm:justify-between" role="alert">
-      <span>{copy.loadError} <TurnstileFallbackContact copy={copy} /></span>
-      <button type="button" onClick={onRetry} className="shrink-0 rounded border border-amber-300/70 px-2.5 py-1 font-medium text-amber-50 transition hover:bg-amber-100/10">
+    <div
+      className="flex flex-col items-start gap-2 rounded-md border border-amber-500/50 bg-amber-950/30 p-3 text-xs text-amber-100 sm:flex-row sm:items-center sm:justify-between"
+      role="alert"
+    >
+      <span>
+        {copy.loadError} <TurnstileFallbackContact copy={copy} />
+      </span>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="shrink-0 rounded border border-amber-300/70 px-2.5 py-1 font-medium text-amber-50 transition hover:bg-amber-100/10"
+      >
         {copy.retry}
       </button>
     </div>
@@ -67,7 +107,13 @@ export function TurnstileLoadError({ copy, onRetry }: { copy: TurnstileWidgetCop
  * formulaire approche du viewport ou reçoit le focus, et non dès l'ouverture de la page
  * (formulaire de contact en bas de l'accueil). Le bouton d'envoi reste bloqué sans jeton.
  */
-export function TurnstileWidget({ onToken, deferUntilVisible = false }: { onToken: (token: string | null) => void; deferUntilVisible?: boolean }) {
+export function TurnstileWidget({
+  onToken,
+  deferUntilVisible = false,
+}: {
+  onToken: (token: string | null) => void;
+  deferUntilVisible?: boolean;
+}) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const widgetIdRef = useRef<string | null>(null);
   const onTokenRef = useRef(onToken);
@@ -91,9 +137,12 @@ export function TurnstileWidget({ onToken, deferUntilVisible = false }: { onToke
       arm();
       return;
     }
-    const observer = new IntersectionObserver(entries => {
-      if (entries.some(entry => entry.isIntersecting)) arm();
-    }, { rootMargin: TURNSTILE_DEFER_ROOT_MARGIN });
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries.some(entry => entry.isIntersecting)) arm();
+      },
+      { rootMargin: TURNSTILE_DEFER_ROOT_MARGIN }
+    );
     observer.observe(container);
     form?.addEventListener("focusin", arm);
     return () => {
@@ -146,7 +195,6 @@ export function TurnstileWidget({ onToken, deferUntilVisible = false }: { onToke
           return false;
         },
       });
-
     };
 
     const reportScriptLoadError = () => reportError("script_load_failed");
@@ -158,7 +206,8 @@ export function TurnstileWidget({ onToken, deferUntilVisible = false }: { onToke
     } else {
       script = document.createElement("script");
       script.id = SCRIPT_ID;
-      script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+      script.src =
+        "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
       script.async = true;
       script.defer = true;
       script.addEventListener("load", render);
@@ -170,19 +219,35 @@ export function TurnstileWidget({ onToken, deferUntilVisible = false }: { onToke
       form?.removeEventListener("submit", blockSubmitWithoutToken, true);
       script?.removeEventListener("load", render);
       script?.removeEventListener("error", reportScriptLoadError);
-      if (widgetIdRef.current && window.turnstile) window.turnstile.remove(widgetIdRef.current);
+      if (widgetIdRef.current && window.turnstile)
+        window.turnstile.remove(widgetIdRef.current);
       widgetIdRef.current = null;
       onTokenRef.current(null);
     };
   }, [armed, siteKey, retryNonce]);
 
-  if (!siteKey) return <p className="text-xs text-amber-200" role="alert">{copy.unavailable} <TurnstileFallbackContact copy={copy} /></p>;
+  if (!siteKey)
+    return (
+      <p className="text-xs text-amber-200" role="alert">
+        {copy.unavailable} <TurnstileFallbackContact copy={copy} />
+      </p>
+    );
 
   return (
     <div className="space-y-2" aria-live="polite">
       {/* A name needs a role: on a plain div, aria-label is not allowed (axe aria-prohibited-attr, A11Y-09). */}
-      <div ref={containerRef} className="min-h-[65px] w-full overflow-hidden" role="group" aria-label={copy.label} />
-      {errorCode && <TurnstileLoadError copy={copy} onRetry={() => setRetryNonce(value => value + 1)} />}
+      <div
+        ref={containerRef}
+        className="min-h-[65px] w-full overflow-hidden"
+        role="group"
+        aria-label={copy.label}
+      />
+      {errorCode && (
+        <TurnstileLoadError
+          copy={copy}
+          onRetry={() => setRetryNonce(value => value + 1)}
+        />
+      )}
     </div>
   );
 }

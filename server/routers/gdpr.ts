@@ -6,12 +6,28 @@ import { getDb } from "../db";
 import { notifyOwner } from "../_core/notification";
 import { and, eq, sql } from "drizzle-orm";
 import { gdprRequests, securityEvents } from "../../drizzle/schema";
-import { countPublicFormDailyVolume, releasePublicEmailIpRateLimit } from "../publicFormRateLimit";
-import { enforcePublicFormRateLimit, verifyPublicFormTurnstile, enforcePublicFormIpLimit, createPublicTrackingId } from "./publicForms";
-import { emailText, multiLineText, singleLineText } from "../../shared/textInput";
+import {
+  countPublicFormDailyVolume,
+  releasePublicEmailIpRateLimit,
+} from "../publicFormRateLimit";
+import {
+  enforcePublicFormRateLimit,
+  verifyPublicFormTurnstile,
+  enforcePublicFormIpLimit,
+  createPublicTrackingId,
+} from "./publicForms";
+import {
+  emailText,
+  multiLineText,
+  singleLineText,
+} from "../../shared/textInput";
 import { logError } from "../_core/logError";
 import { requestIpHash, securityEventInsert } from "../candidateSecurity";
-import { emailLanguageFor, SITE_LANGUAGES, withEmailLanguage } from "../emailLanguage";
+import {
+  emailLanguageFor,
+  SITE_LANGUAGES,
+  withEmailLanguage,
+} from "../emailLanguage";
 import { sendPublicFormAcknowledgement } from "../publicFormAcknowledgements";
 import { DEFAULT_PUBLIC_ORIGIN } from "./publicOrigin";
 import { GDPR_REQUEST_TYPES } from "../../shared/gdprRequestTypes";
@@ -21,7 +37,9 @@ import { buildGdprRequestOwnerNotification } from "../gdprRequestNotification";
 export const GDPR_REQUEST_EMAIL_CONFIRMED = "gdpr_request_email_confirmed";
 
 /** Refusal of a confirmation link (RGPD-13), translated by the page. */
-export type GdprConfirmationRefusal = "gdpr_confirmation_invalid" | "gdpr_confirmation_used";
+export type GdprConfirmationRefusal =
+  | "gdpr_confirmation_invalid"
+  | "gdpr_confirmation_used";
 
 function confirmationKey(): string {
   const secret = process.env.JWT_SECRET;
@@ -30,7 +48,9 @@ function confirmationKey(): string {
 }
 
 function confirmationSignature(payload: string) {
-  return createHmac("sha256", confirmationKey()).update(`gdpr_request_confirmation:${payload}`, "utf8").digest("base64url");
+  return createHmac("sha256", confirmationKey())
+    .update(`gdpr_request_confirmation:${payload}`, "utf8")
+    .digest("base64url");
 }
 
 /**
@@ -38,23 +58,43 @@ function confirmationSignature(payload: string) {
  * confirming proves that the person holds that mailbox. It names the request's
  * reference only, and stays valid one month, the time the answer is due in.
  */
-export function createGdprConfirmationToken(reference: string, issuedAt = new Date()): string {
+export function createGdprConfirmationToken(
+  reference: string,
+  issuedAt = new Date()
+): string {
   const expiresAt = new Date(issuedAt);
   expiresAt.setMonth(expiresAt.getMonth() + 1);
-  const payload = Buffer.from(JSON.stringify({ reference, expiresAt: expiresAt.getTime() }), "utf8").toString("base64url");
+  const payload = Buffer.from(
+    JSON.stringify({ reference, expiresAt: expiresAt.getTime() }),
+    "utf8"
+  ).toString("base64url");
   return `${payload}.${confirmationSignature(payload)}`;
 }
 
 /** The request's reference of an authentic link not yet expired, null otherwise. */
-export function verifyGdprConfirmationToken(token: string, now = Date.now()): string | null {
+export function verifyGdprConfirmationToken(
+  token: string,
+  now = Date.now()
+): string | null {
   const [payload, signature, extra] = token.split(".");
   if (!payload || !signature || extra) return null;
   const supplied = Buffer.from(signature, "utf8");
   const expected = Buffer.from(confirmationSignature(payload), "utf8");
-  if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) return null;
+  if (
+    supplied.length !== expected.length ||
+    !timingSafeEqual(supplied, expected)
+  )
+    return null;
   try {
-    const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { reference?: unknown; expiresAt?: unknown };
-    if (typeof parsed.reference !== "string" || typeof parsed.expiresAt !== "number" || parsed.expiresAt <= now) return null;
+    const parsed = JSON.parse(
+      Buffer.from(payload, "base64url").toString("utf8")
+    ) as { reference?: unknown; expiresAt?: unknown };
+    if (
+      typeof parsed.reference !== "string" ||
+      typeof parsed.expiresAt !== "number" ||
+      parsed.expiresAt <= now
+    )
+      return null;
     return parsed.reference;
   } catch {
     return null;
@@ -64,7 +104,10 @@ export function verifyGdprConfirmationToken(token: string, now = Date.now()): st
 /** The page that confirms the address, in the language of the email; none without a signing key, the request being stored already. */
 function gdprConfirmationUrl(reference: string, language: string | undefined) {
   try {
-    return withEmailLanguage(`${DEFAULT_PUBLIC_ORIGIN}/gdpr?confirm=${createGdprConfirmationToken(reference)}`, emailLanguageFor(language));
+    return withEmailLanguage(
+      `${DEFAULT_PUBLIC_ORIGIN}/gdpr?confirm=${createGdprConfirmationToken(reference)}`,
+      emailLanguageFor(language)
+    );
   } catch (error) {
     logError("[GDPR] Confirmation link unavailable", error, { ref: reference });
     return undefined;
@@ -73,8 +116,17 @@ function gdprConfirmationUrl(reference: string, language: string | undefined) {
 
 function confirmationRefusal(reason: GdprConfirmationRefusal) {
   return reason === "gdpr_confirmation_used"
-    ? new TRPCError({ code: "CONFLICT", message: "Ce lien a déjà servi : l’adresse de cette demande est confirmée.", cause: new PublicErrorReason(reason) })
-    : new TRPCError({ code: "BAD_REQUEST", message: "Ce lien de confirmation est invalide ou expiré.", cause: new PublicErrorReason(reason) });
+    ? new TRPCError({
+        code: "CONFLICT",
+        message:
+          "Ce lien a déjà servi : l’adresse de cette demande est confirmée.",
+        cause: new PublicErrorReason(reason),
+      })
+    : new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Ce lien de confirmation est invalide ou expiré.",
+        cause: new PublicErrorReason(reason),
+      });
 }
 
 export const gdprRouter = router({
@@ -109,10 +161,12 @@ export const gdprRouter = router({
       if (db) {
         try {
           await db.execute(
-            sql`INSERT INTO gdpr_requests (tracking_id, name, email, phone, request_type, description, status) VALUES (${trackingId}, ${input.name}, ${input.email}, ${input.phone || null}, ${input.requestType}, ${input.description || null}, ${'pending'})`
+            sql`INSERT INTO gdpr_requests (tracking_id, name, email, phone, request_type, description, status) VALUES (${trackingId}, ${input.name}, ${input.email}, ${input.phone || null}, ${input.requestType}, ${input.description || null}, ${"pending"})`
           );
         } catch (error) {
-          await releasePublicEmailIpRateLimit("gdpr", ipHash).catch(() => undefined);
+          await releasePublicEmailIpRateLimit("gdpr", ipHash).catch(
+            () => undefined
+          );
           throw error;
         }
       }
@@ -122,9 +176,25 @@ export const gdprRouter = router({
       if (await countPublicFormDailyVolume("gdpr")) {
         // RGPD-13 : la référence, le délai et le lien de confirmation, sans recopier la description.
         const confirmationUrl = gdprConfirmationUrl(trackingId, input.language);
-        const acknowledged = await sendPublicFormAcknowledgement({ kind: "gdprRequest", email: input.email, reference: trackingId, language: input.language, confirmationUrl });
+        const acknowledged = await sendPublicFormAcknowledgement({
+          kind: "gdprRequest",
+          email: input.email,
+          reference: trackingId,
+          language: input.language,
+          confirmationUrl,
+        });
         // RGPD-13 : la description, qui peut parler de santé, reste dans l’administration.
-        await notifyOwner(buildGdprRequestOwnerNotification({ trackingId, requestType: input.requestType, name: input.name, email: input.email, phone: input.phone, hasDescription: Boolean(input.description), acknowledged }));
+        await notifyOwner(
+          buildGdprRequestOwnerNotification({
+            trackingId,
+            requestType: input.requestType,
+            name: input.name,
+            email: input.email,
+            phone: input.phone,
+            hasDescription: Boolean(input.description),
+            acknowledged,
+          })
+        );
       }
 
       return { success: true, trackingId } as const;
@@ -144,12 +214,30 @@ export const gdprRouter = router({
       if (!reference) throw confirmationRefusal("gdpr_confirmation_invalid");
       const db = await getDb();
       if (!db) throw new Error("Database connection failed");
-      const [request] = await db.select({ trackingId: gdprRequests.trackingId }).from(gdprRequests).where(eq(gdprRequests.trackingId, reference)).limit(1);
+      const [request] = await db
+        .select({ trackingId: gdprRequests.trackingId })
+        .from(gdprRequests)
+        .where(eq(gdprRequests.trackingId, reference))
+        .limit(1);
       if (!request) throw confirmationRefusal("gdpr_confirmation_invalid");
-      const [confirmed] = await db.select({ id: securityEvents.id }).from(securityEvents)
-        .where(and(eq(securityEvents.category, GDPR_REQUEST_EMAIL_CONFIRMED), eq(securityEvents.actorReference, reference))).limit(1);
+      const [confirmed] = await db
+        .select({ id: securityEvents.id })
+        .from(securityEvents)
+        .where(
+          and(
+            eq(securityEvents.category, GDPR_REQUEST_EMAIL_CONFIRMED),
+            eq(securityEvents.actorReference, reference)
+          )
+        )
+        .limit(1);
       if (confirmed) throw confirmationRefusal("gdpr_confirmation_used");
-      await securityEventInsert(db, { actorKind: "anonymous", actorReference: reference, category: GDPR_REQUEST_EMAIL_CONFIRMED, outcome: "allowed", ipHash: requestIpHash(ctx.req.headers as Record<string, unknown>) });
+      await securityEventInsert(db, {
+        actorKind: "anonymous",
+        actorReference: reference,
+        category: GDPR_REQUEST_EMAIL_CONFIRMED,
+        outcome: "allowed",
+        ipHash: requestIpHash(ctx.req.headers as Record<string, unknown>),
+      });
       return { success: true, reference } as const;
     }),
 });

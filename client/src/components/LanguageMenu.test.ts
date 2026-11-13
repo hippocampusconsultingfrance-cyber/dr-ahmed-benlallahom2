@@ -6,7 +6,10 @@ import { Router } from "wouter";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { trpc } from "@/lib/trpc";
 import { LanguageProvider } from "@/contexts/LanguageContext";
-import LanguageMenu, { englishSuggestionCopy, languageOptions } from "./LanguageMenu";
+import LanguageMenu, {
+  englishSuggestionCopy,
+  languageOptions,
+} from "./LanguageMenu";
 import BookingPage from "@/pages/BookingPage";
 import BookingConfirmationPage from "@/pages/BookingConfirmationPage";
 import CandidateAccessPage from "@/pages/CandidateAccessPage";
@@ -18,24 +21,43 @@ import ServiceStatusPage from "@/pages/ServiceStatusPage";
 import RecruitmentUnsubscribePage from "@/pages/RecruitmentUnsubscribePage";
 
 /** Browser globals read while rendering: the address, the stored language and an English browser. */
-function stubBrowser({ path = "/", search = "", storedLanguage = null as string | null } = {}) {
+function stubBrowser({
+  path = "/",
+  search = "",
+  storedLanguage = null as string | null,
+} = {}) {
   const storage = { getItem: vi.fn(() => storedLanguage), setItem: vi.fn() };
   const location = { pathname: path, search, hash: "", reload: vi.fn() };
   vi.stubGlobal("localStorage", storage);
-  vi.stubGlobal("window", { location, localStorage: storage, sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} } });
+  vi.stubGlobal("window", {
+    location,
+    localStorage: storage,
+    sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
+  });
   vi.stubGlobal("navigator", { language: "en-US", languages: ["en-US", "en"] });
   return { storage, location };
 }
 
 // Aucune requête ne part pendant un rendu serveur ; ce lien ne répond jamais.
-const trpcClient = trpc.createClient({ links: [() => () => observable(() => () => {})] });
+const trpcClient = trpc.createClient({
+  links: [() => () => observable(() => () => {})],
+});
 
 function render(children: ReactNode, path = "/") {
   const queryClient = new QueryClient();
   return renderToStaticMarkup(
-    createElement(trpc.Provider, { client: trpcClient, queryClient, children:
-      createElement(QueryClientProvider, { client: queryClient },
-        createElement(Router, { ssrPath: path, children: createElement(LanguageProvider, null, children) })) }),
+    createElement(trpc.Provider, {
+      client: trpcClient,
+      queryClient,
+      children: createElement(
+        QueryClientProvider,
+        { client: queryClient },
+        createElement(Router, {
+          ssrPath: path,
+          children: createElement(LanguageProvider, null, children),
+        })
+      ),
+    })
   );
 }
 
@@ -54,9 +76,13 @@ describe("menu de langue réutilisable (EN-03)", () => {
 
   it("accepte ?lang= en majuscules et ignore une langue inconnue", () => {
     stubBrowser({ search: "?lang=ZH" });
-    expect(render(createElement(LanguageMenu))).toContain('aria-label="ZH — 切换语言"');
+    expect(render(createElement(LanguageMenu))).toContain(
+      'aria-label="ZH — 切换语言"'
+    );
     stubBrowser({ search: "?lang=it", storedLanguage: "de" });
-    expect(render(createElement(LanguageMenu))).toContain('aria-label="DE — Sprache ändern"');
+    expect(render(createElement(LanguageMenu))).toContain(
+      'aria-label="DE — Sprache ändern"'
+    );
   });
 
   it("ne suit jamais la langue du navigateur : il propose l'anglais, la page reste en français (EN-08)", () => {
@@ -70,29 +96,64 @@ describe("menu de langue réutilisable (EN-03)", () => {
 
   it("ne propose rien quand la langue vient d'un choix mémorisé ou d'un lien ?lang= (EN-08)", () => {
     stubBrowser({ storedLanguage: "fr" });
-    expect(render(createElement(LanguageMenu))).not.toContain(englishSuggestionCopy.message);
+    expect(render(createElement(LanguageMenu))).not.toContain(
+      englishSuggestionCopy.message
+    );
     stubBrowser({ search: "?lang=fr" });
-    expect(render(createElement(LanguageMenu))).not.toContain(englishSuggestionCopy.message);
-    expect(languageOptions.map((option) => option.code)).toEqual(["fr", "en", "de", "zh"]);
+    expect(render(createElement(LanguageMenu))).not.toContain(
+      englishSuggestionCopy.message
+    );
+    expect(languageOptions.map(option => option.code)).toEqual([
+      "fr",
+      "en",
+      "de",
+      "zh",
+    ]);
   });
 
   const pages: Array<[string, ComponentType, string?]> = [
     ["/booking", BookingPage],
-    ["/booking/confirmation", BookingConfirmationPage, "?status=success&trackingId=APTTEST2026&session_id=cs_test_123456"],
+    [
+      "/booking/confirmation",
+      BookingConfirmationPage,
+      "?status=success&trackingId=APTTEST2026&session_id=cs_test_123456",
+    ],
     ["/candidate/access", CandidateAccessPage],
-    ["/candidate/verify", CandidateVerifyPage, "?email=a%40example.com&token=abc"],
-    ["/candidate/reset-password", CandidateResetPasswordPage, "?email=a%40example.com&token=abc"],
+    [
+      "/candidate/verify",
+      CandidateVerifyPage,
+      "?email=a%40example.com&token=abc",
+    ],
+    [
+      "/candidate/reset-password",
+      CandidateResetPasswordPage,
+      "?email=a%40example.com&token=abc",
+    ],
     ["/candidate/portal", CandidatePortalPage],
-    ["/recruitment/unsubscribe", RecruitmentUnsubscribePage, "?token=abcdefghijklmnopqrstuvwxyz012345"],
+    [
+      "/recruitment/unsubscribe",
+      RecruitmentUnsubscribePage,
+      "?token=abcdefghijklmnopqrstuvwxyz012345",
+    ],
     ["/page-inconnue", NotFound],
-    ["/maintenance", () => createElement(ServiceStatusPage, { kind: "maintenance" })],
+    [
+      "/maintenance",
+      () => createElement(ServiceStatusPage, { kind: "maintenance" }),
+    ],
     ["/error", () => createElement(ServiceStatusPage, { kind: "error" })],
   ];
 
-  it.each(pages)("est présent sur %s, dans la langue du lien", (path, Page, search = "") => {
-    stubBrowser({ path, search: `${search}${search ? "&" : "?"}lang=en`, storedLanguage: "fr" });
-    const html = render(createElement(Page), path);
-    expect(html).toContain('aria-label="EN — Change language"');
-    expect(html).toContain('aria-haspopup="menu"');
-  });
+  it.each(pages)(
+    "est présent sur %s, dans la langue du lien",
+    (path, Page, search = "") => {
+      stubBrowser({
+        path,
+        search: `${search}${search ? "&" : "?"}lang=en`,
+        storedLanguage: "fr",
+      });
+      const html = render(createElement(Page), path);
+      expect(html).toContain('aria-label="EN — Change language"');
+      expect(html).toContain('aria-haspopup="menu"');
+    }
+  );
 });

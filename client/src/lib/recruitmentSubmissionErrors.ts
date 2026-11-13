@@ -8,35 +8,52 @@ type Language = "fr" | "en" | "de" | "zh";
 const serverErrorCopy = {
   en: {
     securityCheck: "The security check must be renewed before sending.",
-    rateLimited: "Too many attempts have been made. Wait one hour before trying again.",
+    rateLimited:
+      "Too many attempts have been made. Wait one hour before trying again.",
     invalidInformation: "The application details are invalid.",
-    tooManyTargetCountries: "Too many target countries are selected. Remove some and try again.",
+    tooManyTargetCountries:
+      "Too many target countries are selected. Remove some and try again.",
     invalidCharacters: publicFormCopy.invalidCharacters.en,
     unavailable: "The application service is temporarily unavailable.",
     cvRequired: "The CV is required.",
-    cvTooLarge: "The CV must not exceed 4 MB. Compress it or save it as a PDF, then try again.",
-    legacyFormat: "CV format not accepted. Use a PDF or a DOCX (the legacy Word .doc format is no longer accepted).",
-    tooLargeWhenOpened: "The CV is too large once opened. Save it again as a PDF (for example “File > Export to PDF”) and try again.",
+    cvTooLarge:
+      "The CV must not exceed 4 MB. Compress it or save it as a PDF, then try again.",
+    legacyFormat:
+      "CV format not accepted. Use a PDF or a DOCX (the legacy Word .doc format is no longer accepted).",
+    tooLargeWhenOpened:
+      "The CV is too large once opened. Save it again as a PDF (for example “File > Export to PDF”) and try again.",
     pageLimit: "The CV must not exceed 25 pages.",
-    passwordProtected: "The CV is password-protected. Send a version without a password.",
-    activeContent: "The CV contains macros, JavaScript, a launch command or embedded files. Save your CV again as a DOCX or print it to PDF from your browser, then try again.",
-    invalidContent: "The CV content does not match a valid PDF or DOCX document. Save your CV again as a DOCX or print it to PDF from your browser, then try again.",
+    passwordProtected:
+      "The CV is password-protected. Send a version without a password.",
+    activeContent:
+      "The CV contains macros, JavaScript, a launch command or embedded files. Save your CV again as a DOCX or print it to PDF from your browser, then try again.",
+    invalidContent:
+      "The CV content does not match a valid PDF or DOCX document. Save your CV again as a DOCX or print it to PDF from your browser, then try again.",
   },
   de: {
-    securityCheck: "Die Sicherheitsprüfung muss vor dem Absenden erneuert werden.",
-    rateLimited: "Es wurden zu viele Versuche unternommen. Warten Sie eine Stunde, bevor Sie es erneut versuchen.",
+    securityCheck:
+      "Die Sicherheitsprüfung muss vor dem Absenden erneuert werden.",
+    rateLimited:
+      "Es wurden zu viele Versuche unternommen. Warten Sie eine Stunde, bevor Sie es erneut versuchen.",
     invalidInformation: "Die Bewerbungsangaben sind ungültig.",
-    tooManyTargetCountries: "Es sind zu viele Zielländer ausgewählt. Entfernen Sie einige und versuchen Sie es erneut.",
+    tooManyTargetCountries:
+      "Es sind zu viele Zielländer ausgewählt. Entfernen Sie einige und versuchen Sie es erneut.",
     invalidCharacters: publicFormCopy.invalidCharacters.de,
     unavailable: "Der Bewerbungsdienst ist vorübergehend nicht verfügbar.",
     cvRequired: "Der Lebenslauf ist erforderlich.",
-    cvTooLarge: "Der Lebenslauf darf höchstens 4 MB groß sein. Komprimieren Sie ihn oder speichern Sie ihn als PDF und versuchen Sie es erneut.",
-    legacyFormat: "CV-Format nicht akzeptiert. Verwenden Sie ein PDF oder DOCX (das alte Word-Format .doc wird nicht mehr akzeptiert).",
-    tooLargeWhenOpened: "Der Lebenslauf ist nach dem Öffnen zu groß. Speichern Sie ihn erneut als PDF (zum Beispiel „Datei > Als PDF exportieren“) und versuchen Sie es erneut.",
+    cvTooLarge:
+      "Der Lebenslauf darf höchstens 4 MB groß sein. Komprimieren Sie ihn oder speichern Sie ihn als PDF und versuchen Sie es erneut.",
+    legacyFormat:
+      "CV-Format nicht akzeptiert. Verwenden Sie ein PDF oder DOCX (das alte Word-Format .doc wird nicht mehr akzeptiert).",
+    tooLargeWhenOpened:
+      "Der Lebenslauf ist nach dem Öffnen zu groß. Speichern Sie ihn erneut als PDF (zum Beispiel „Datei > Als PDF exportieren“) und versuchen Sie es erneut.",
     pageLimit: "Der Lebenslauf darf höchstens 25 Seiten umfassen.",
-    passwordProtected: "Der Lebenslauf ist passwortgeschützt. Senden Sie eine Version ohne Passwort.",
-    activeContent: "Der Lebenslauf enthält Makros, JavaScript, einen Startbefehl oder eingebettete Dateien. Speichern Sie Ihren Lebenslauf erneut als DOCX oder drucken Sie ihn in Ihrem Browser als PDF und versuchen Sie es dann erneut.",
-    invalidContent: "Der Inhalt des Lebenslaufs entspricht keinem gültigen PDF- oder DOCX-Dokument. Speichern Sie Ihren Lebenslauf erneut als DOCX oder drucken Sie ihn in Ihrem Browser als PDF und versuchen Sie es dann erneut.",
+    passwordProtected:
+      "Der Lebenslauf ist passwortgeschützt. Senden Sie eine Version ohne Passwort.",
+    activeContent:
+      "Der Lebenslauf enthält Makros, JavaScript, einen Startbefehl oder eingebettete Dateien. Speichern Sie Ihren Lebenslauf erneut als DOCX oder drucken Sie ihn in Ihrem Browser als PDF und versuchen Sie es dann erneut.",
+    invalidContent:
+      "Der Inhalt des Lebenslaufs entspricht keinem gültigen PDF- oder DOCX-Dokument. Speichern Sie Ihren Lebenslauf erneut als DOCX oder drucken Sie ihn in Ihrem Browser als PDF und versuchen Sie es dann erneut.",
   },
   zh: {
     securityCheck: "发送前必须重新完成安全验证。",
@@ -47,12 +64,16 @@ const serverErrorCopy = {
     unavailable: "申请服务暂时不可用。",
     cvRequired: "必须提供简历。",
     cvTooLarge: "简历不得超过 4 MB。请压缩或另存为 PDF 后重试。",
-    legacyFormat: "不接受该简历格式。请使用 PDF 或 DOCX（不再接受旧版 Word .doc 格式）。",
-    tooLargeWhenOpened: "简历打开后体积过大。请重新另存为 PDF（例如“文件 > 导出为 PDF”）后重试。",
+    legacyFormat:
+      "不接受该简历格式。请使用 PDF 或 DOCX（不再接受旧版 Word .doc 格式）。",
+    tooLargeWhenOpened:
+      "简历打开后体积过大。请重新另存为 PDF（例如“文件 > 导出为 PDF”）后重试。",
     pageLimit: "简历不得超过 25 页。",
     passwordProtected: "简历受密码保护。请发送未设密码的版本。",
-    activeContent: "简历包含宏、JavaScript、启动命令或嵌入文件。请将简历重新另存为 DOCX，或在浏览器中打印为 PDF，然后重试。",
-    invalidContent: "简历内容与有效的 PDF 或 DOCX 文档不符。请将简历重新另存为 DOCX，或在浏览器中打印为 PDF，然后重试。",
+    activeContent:
+      "简历包含宏、JavaScript、启动命令或嵌入文件。请将简历重新另存为 DOCX，或在浏览器中打印为 PDF，然后重试。",
+    invalidContent:
+      "简历内容与有效的 PDF 或 DOCX 文档不符。请将简历重新另存为 DOCX，或在浏览器中打印为 PDF，然后重试。",
   },
 } as const;
 type ServerErrorCause = keyof typeof serverErrorCopy.en;
@@ -98,14 +119,22 @@ export function recruitmentSubmissionErrorMessage(
   payload: { error?: unknown; code?: unknown } | null | undefined,
   language: Language,
   pageCopy: { genericError: string; fileError: string },
-  status?: number,
+  status?: number
 ): string {
-  const serverMessage = typeof payload?.error === "string" ? payload.error.trim() : "";
+  const serverMessage =
+    typeof payload?.error === "string" ? payload.error.trim() : "";
   const code = typeof payload?.code === "string" ? payload.code : "";
-  const cause = !serverMessage ? undefined : code.startsWith("cv_validation_") ? recruitmentCvRefusalReason(code) : serverErrorCauses.get(code);
-  if (cause) return language === "fr" ? serverMessage : serverErrorCopy[language][cause];
-  if (status !== undefined && status >= 500) return recruitmentServiceFailureMessage(language);
+  const cause = !serverMessage
+    ? undefined
+    : code.startsWith("cv_validation_")
+      ? recruitmentCvRefusalReason(code)
+      : serverErrorCauses.get(code);
+  if (cause)
+    return language === "fr" ? serverMessage : serverErrorCopy[language][cause];
+  if (status !== undefined && status >= 500)
+    return recruitmentServiceFailureMessage(language);
   // A CV refusal without a known code (size, format or missing file, which had none before): the page's CV hint.
-  if (serverMessage.includes("CV")) return language === "fr" ? serverMessage : pageCopy.fileError;
+  if (serverMessage.includes("CV"))
+    return language === "fr" ? serverMessage : pageCopy.fileError;
   return pageCopy.genericError;
 }

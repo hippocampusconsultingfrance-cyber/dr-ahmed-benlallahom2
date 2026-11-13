@@ -20,18 +20,26 @@ export default function AdminRoot() {
   // ADM-09: a sign-in returns to the section and element the address named
   // (/admin?tab=…&ref=…), as the dashboard's « Se connecter » does. Clerk
   // reads these options when it loads, from the address opened.
-  const { tab, reference } = adminLocationOf(typeof window === "undefined" ? "" : window.location.search);
+  const { tab, reference } = adminLocationOf(
+    typeof window === "undefined" ? "" : window.location.search
+  );
   const returnAddress = adminPath(tab, reference);
 
   if (!publishableKey) {
     // Variable de build : sans elle, seul l'espace admin est indisponible, le site public reste en ligne.
     return (
-      <main lang="fr" className="min-h-screen bg-background flex items-center justify-center px-4">
+      <main
+        lang="fr"
+        className="min-h-screen bg-background flex items-center justify-center px-4"
+      >
         <div role="alert" className="max-w-md text-center">
-          <h1 className="text-2xl font-bold text-foreground mb-4">Administration indisponible</h1>
+          <h1 className="text-2xl font-bold text-foreground mb-4">
+            Administration indisponible
+          </h1>
           <p className="text-muted-foreground">
-            La clé publique Clerk (NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) n’est pas configurée pour ce déploiement.
-            Ajoutez-la dans Vercel puis redéployez le site.
+            La clé publique Clerk (NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) n’est pas
+            configurée pour ce déploiement. Ajoutez-la dans Vercel puis
+            redéployez le site.
           </p>
         </div>
       </main>
@@ -49,7 +57,10 @@ export default function AdminRoot() {
         fallback={
           <div lang="fr" className="min-h-screen bg-background px-4 py-16">
             <div className="mx-auto max-w-3xl">
-              <PublicContentSkeleton cards={1} label="Chargement de l’accès administrateur" />
+              <PublicContentSkeleton
+                cards={1}
+                label="Chargement de l’accès administrateur"
+              />
             </div>
           </div>
         }

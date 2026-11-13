@@ -5,9 +5,17 @@ import { ManageCookiesButton } from "@/components/CookieConsent";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { AlertTriangle, Home, RefreshCw, Wrench } from "lucide-react";
 import { Link } from "wouter";
-import { getServiceStatusContent, type ServiceStatusKind, type ServiceStatusLocale } from "./serviceStatusContent";
+import {
+  getServiceStatusContent,
+  type ServiceStatusKind,
+  type ServiceStatusLocale,
+} from "./serviceStatusContent";
 
-export default function ServiceStatusPage({ kind }: { kind: ServiceStatusKind }) {
+export default function ServiceStatusPage({
+  kind,
+}: {
+  kind: ServiceStatusKind;
+}) {
   const { language } = useLanguage();
   const copy = getServiceStatusContent(kind, language as ServiceStatusLocale);
   const Icon = kind === "maintenance" ? Wrench : AlertTriangle;
@@ -15,19 +23,54 @@ export default function ServiceStatusPage({ kind }: { kind: ServiceStatusKind })
 
   return (
     <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-background px-4 py-12 text-center">
-      <SEOHead title={`${copy.title} | Dr. Ahmed Ben Lallahom`} description={copy.description} noIndex />
-      <div className="diagnostic-grid absolute inset-0 opacity-30" aria-hidden="true" />
+      <SEOHead
+        title={`${copy.title} | Dr. Ahmed Ben Lallahom`}
+        description={copy.description}
+        noIndex
+      />
+      <div
+        className="diagnostic-grid absolute inset-0 opacity-30"
+        aria-hidden="true"
+      />
       <LanguageMenu className="absolute right-4 top-4 z-10 sm:right-6 sm:top-6" />
-      <section className="relative w-full max-w-xl rounded-3xl border border-primary/25 bg-card/95 p-7 shadow-2xl backdrop-blur sm:p-10" role={kind === "error" ? "alert" : "status"} aria-live="polite">
-        <span className="mx-auto mb-5 grid h-14 w-14 place-items-center rounded-2xl bg-primary/10 text-primary"><Icon className="h-7 w-7" aria-hidden="true" /></span>
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">ABL / HIPPOCAMPUS · {copy.eyebrow}</p>
+      <section
+        className="relative w-full max-w-xl rounded-3xl border border-primary/25 bg-card/95 p-7 shadow-2xl backdrop-blur sm:p-10"
+        role={kind === "error" ? "alert" : "status"}
+        aria-live="polite"
+      >
+        <span className="mx-auto mb-5 grid h-14 w-14 place-items-center rounded-2xl bg-primary/10 text-primary">
+          <Icon className="h-7 w-7" aria-hidden="true" />
+        </span>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+          ABL / HIPPOCAMPUS · {copy.eyebrow}
+        </p>
         {/* « MAINTENANCE » tient dans la carte dès 320 px, « 500 » garde sa taille ; break-words reste un filet si le texte est agrandi (PUB-17). */}
-        <p className={`mt-4 break-words font-bold tracking-tight text-foreground sm:text-6xl ${kind === "maintenance" ? "text-3xl" : "text-5xl"}`}>{code}</p>
-        <h1 className="mt-4 font-display text-2xl font-semibold text-foreground sm:text-3xl">{copy.title}</h1>
-        <p className="mx-auto mt-4 max-w-md text-base leading-relaxed text-muted-foreground">{copy.description}</p>
+        <p
+          className={`mt-4 break-words font-bold tracking-tight text-foreground sm:text-6xl ${kind === "maintenance" ? "text-3xl" : "text-5xl"}`}
+        >
+          {code}
+        </p>
+        <h1 className="mt-4 font-display text-2xl font-semibold text-foreground sm:text-3xl">
+          {copy.title}
+        </h1>
+        <p className="mx-auto mt-4 max-w-md text-base leading-relaxed text-muted-foreground">
+          {copy.description}
+        </p>
         <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
-          <Button asChild className="min-h-11"><Link href="/"><Home className="mr-2 h-4 w-4" />{copy.home}</Link></Button>
-          <Button className="min-h-11" variant="outline" onClick={() => window.location.reload()}><RefreshCw className="mr-2 h-4 w-4" />{copy.retry}</Button>
+          <Button asChild className="min-h-11">
+            <Link href="/">
+              <Home className="mr-2 h-4 w-4" />
+              {copy.home}
+            </Link>
+          </Button>
+          <Button
+            className="min-h-11"
+            variant="outline"
+            onClick={() => window.location.reload()}
+          >
+            <RefreshCw className="mr-2 h-4 w-4" />
+            {copy.retry}
+          </Button>
         </div>
       </section>
       {/* Page sans pied de page : « Gérer les cookies » sous la carte, hors de la zone annoncée (PUB-12). */}

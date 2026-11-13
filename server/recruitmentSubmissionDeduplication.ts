@@ -12,8 +12,11 @@ function normalizeSubmissionValue(value: string): string {
 }
 
 function normalizedTargetCountries(value: string | string[]): string {
-  const countries = typeof value === "string" ? parseRecruitmentJsonArray(value) : value;
-  return Array.from(new Set(countries.map(normalizeSubmissionValue))).sort().join("\n");
+  const countries =
+    typeof value === "string" ? parseRecruitmentJsonArray(value) : value;
+  return Array.from(new Set(countries.map(normalizeSubmissionValue)))
+    .sort()
+    .join("\n");
 }
 
 /**
@@ -29,9 +32,14 @@ function normalizedTargetCountries(value: string | string[]): string {
  */
 export function isSameRecruitmentSubmission(
   existing: RecruitmentSubmissionIdentity,
-  incoming: RecruitmentSubmissionIdentity,
+  incoming: RecruitmentSubmissionIdentity
 ): boolean {
-  return normalizeSubmissionValue(existing.email) === normalizeSubmissionValue(incoming.email)
-    && normalizeSubmissionValue(existing.specialty) === normalizeSubmissionValue(incoming.specialty)
-    && normalizedTargetCountries(existing.targetCountries) === normalizedTargetCountries(incoming.targetCountries);
+  return (
+    normalizeSubmissionValue(existing.email) ===
+      normalizeSubmissionValue(incoming.email) &&
+    normalizeSubmissionValue(existing.specialty) ===
+      normalizeSubmissionValue(incoming.specialty) &&
+    normalizedTargetCountries(existing.targetCountries) ===
+      normalizedTargetCountries(incoming.targetCountries)
+  );
 }

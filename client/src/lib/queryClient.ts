@@ -1,4 +1,8 @@
-import { MutationCache, QueryClient, type Mutation } from "@tanstack/react-query";
+import {
+  MutationCache,
+  QueryClient,
+  type Mutation,
+} from "@tanstack/react-query";
 import { toast } from "sonner";
 
 /**
@@ -9,7 +13,11 @@ function isAdminMutation(mutation: Mutation<unknown, unknown, unknown>) {
   const path = mutation.options.mutationKey?.[0];
   if (!Array.isArray(path)) return false;
   const [root, child] = path as string[];
-  return root === "admin" || root === "adminSecurity" || (root === "medicalQuestions" && child === "admin");
+  return (
+    root === "admin" ||
+    root === "adminSecurity" ||
+    (root === "medicalQuestions" && child === "admin")
+  );
 }
 
 /**

@@ -18,8 +18,14 @@ const imageBearingComponents = [
 describe("image alternatives", () => {
   it("gives every rendered image an explicit alternative text policy", async () => {
     const sourceRoot = resolve(import.meta.dirname);
-    const sourceFiles = await Promise.all(imageBearingComponents.map(file => readFile(resolve(sourceRoot, file), "utf8")));
-    const imageTags = sourceFiles.flatMap(source => source.match(/<img\b[\s\S]*?\/>/g) ?? []);
+    const sourceFiles = await Promise.all(
+      imageBearingComponents.map(file =>
+        readFile(resolve(sourceRoot, file), "utf8")
+      )
+    );
+    const imageTags = sourceFiles.flatMap(
+      source => source.match(/<img\b[\s\S]*?\/>/g) ?? []
+    );
 
     expect(imageTags.length).toBeGreaterThan(0);
     for (const tag of imageTags) {

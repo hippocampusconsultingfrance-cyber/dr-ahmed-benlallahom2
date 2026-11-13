@@ -38,7 +38,11 @@ const MAX_NESTING = 64;
 /** pdf.js cannot read this object either (illegal `)`, end of file): it leads to no stream. */
 const UNREADABLE_OBJECT = Symbol("unreadable_object");
 
-type Token = { kind: "eof" | "name" | "string" | "<<" | ">>" | "[" | "]" | "other"; start: number; end: number };
+type Token = {
+  kind: "eof" | "name" | "string" | "<<" | ">>" | "[" | "]" | "other";
+  start: number;
+  end: number;
+};
 
 function isRegular(code: number) {
   return code > 255 || CHAR_CLASS[code] === 0;
@@ -60,7 +64,12 @@ function nextToken(source: string, from: number, work: PdfScanWork): Token {
   for (; index < length; index += 1) {
     const code = source.charCodeAt(index);
     if (code === 0x25) {
-      while (index + 1 < length && source.charCodeAt(index + 1) !== 0x0a && source.charCodeAt(index + 1) !== 0x0d) index += 1;
+      while (
+        index + 1 < length &&
+        source.charCodeAt(index + 1) !== 0x0a &&
+        source.charCodeAt(index + 1) !== 0x0d
+      )
+        index += 1;
     } else if (!isWhitespace(code)) break;
   }
   const start = index;
@@ -106,16 +115,26 @@ function nextToken(source: string, from: number, work: PdfScanWork): Token {
 }
 
 function isKeyword(source: string, token: Token, keyword: string) {
-  return token.kind === "other" && token.end - token.start === keyword.length && source.startsWith(keyword, token.start);
+  return (
+    token.kind === "other" &&
+    token.end - token.start === keyword.length &&
+    source.startsWith(keyword, token.start)
+  );
 }
 
 type Value = { end: number; stream?: number };
 
 /** The object that starts with `token` (pdf.js Parser.getObj); `stream` is the keyword after a dictionary, if any. */
-function readValue(source: string, token: Token, work: PdfScanWork, depth: number): Value {
+function readValue(
+  source: string,
+  token: Token,
+  work: PdfScanWork,
+  depth: number
+): Value {
   if (depth > MAX_NESTING) throw UNCLEAR_PDF_STRUCTURE;
   if (token.kind === "eof") throw UNREADABLE_OBJECT;
-  if (token.kind === "<<") return readDictionary(source, token.end, work, depth + 1);
+  if (token.kind === "<<")
+    return readDictionary(source, token.end, work, depth + 1);
   if (token.kind === "[") {
     let next = nextToken(source, token.end, work);
     while (next.kind !== "]") {
@@ -130,18 +149,30 @@ function readValue(source: string, token: Token, work: PdfScanWork, depth: numbe
   return { end: token.end };
 }
 
-function readDictionary(source: string, from: number, work: PdfScanWork, depth: number): Value {
-  for (let index = from; ;) {
+function readDictionary(
+  source: string,
+  from: number,
+  work: PdfScanWork,
+  depth: number
+): Value {
+  for (let index = from; ; ) {
     const token = nextToken(source, index, work);
     if (token.kind === "eof") throw UNREADABLE_OBJECT;
     if (token.kind === ">>") {
       const after = nextToken(source, token.end, work);
-      return isKeyword(source, after, "stream") ? { end: token.end, stream: after.start } : { end: token.end };
+      return isKeyword(source, after, "stream")
+        ? { end: token.end, stream: after.start }
+        : { end: token.end };
     }
     index = token.end;
     // Where a key is expected, pdf.js skips any token that is not a name ("<<", "[", a number…).
     if (token.kind !== "name") continue;
-    const value = readValue(source, nextToken(source, index, work), work, depth);
+    const value = readValue(
+      source,
+      nextToken(source, index, work),
+      work,
+      depth
+    );
     if (value.stream !== undefined) throw UNCLEAR_PDF_STRUCTURE;
     index = value.end;
   }
@@ -153,7 +184,14 @@ function isDigit(code: number) {
 
 /** Characters a number of pdf.js may hold (Lexer.getNumber): digits, point, signs, exponent. */
 function isNumberPart(code: number) {
-  return isDigit(code) || code === 0x2e || code === 0x2b || code === 0x2d || code === 0x45 || code === 0x65;
+  return (
+    isDigit(code) ||
+    code === 0x2e ||
+    code === 0x2b ||
+    code === 0x2d ||
+    code === 0x45 ||
+    code === 0x65
+  );
 }
 
 /**
@@ -189,7 +227,15 @@ export function mayEndObjectHeader(source: string, index: number) {
   for (let at = index - 1; at > start; at -= 1) {
     const code = source.charCodeAt(at);
     const previous = source.charCodeAt(at - 1);
-    if (digit && code === 0x2b && (isDigit(previous) || previous === 0x2e || previous === 0x2d || previous === 0x2b)) return true;
+    if (
+      digit &&
+      code === 0x2b &&
+      (isDigit(previous) ||
+        previous === 0x2e ||
+        previous === 0x2d ||
+        previous === 0x2b)
+    )
+      return true;
     if (digit && code === 0x2e && firstPoint < at) return true;
     if (isDigit(code)) digit = true;
   }
@@ -211,7 +257,10 @@ export type PdfStreamDictionaries = {
 };
 
 /** Parses the object after every object header of the raw file, as pdf.js does from an xref offset, and the dictionary after every `trailer`. */
-export function readPdfStreamDictionaries(source: string, work: PdfScanWork): PdfStreamDictionaries {
+export function readPdfStreamDictionaries(
+  source: string,
+  work: PdfScanWork
+): PdfStreamDictionaries {
   const byKeyword = new Map<number, { start: number; end: number }>();
   const values: Array<{ start: number; end: number }> = [];
   const objKeyword = /obj/g;
@@ -220,7 +269,10 @@ export function readPdfStreamDictionaries(source: string, work: PdfScanWork): Pd
   try {
     while ((match = objKeyword.exec(source))) {
       // Not "object", not "obj12".
-      const after = match.index + 3 < source.length ? source.charCodeAt(match.index + 3) : 0x20;
+      const after =
+        match.index + 3 < source.length
+          ? source.charCodeAt(match.index + 3)
+          : 0x20;
       if (isRegular(after)) continue;
       // Not "endobj", nor an "obj" in the data of an image. Read as a value, the bytes after it ran
       // into the next stream and made a scanned CV of 12 pages unclear, or made an image's data
@@ -228,7 +280,12 @@ export function readPdfStreamDictionaries(source: string, work: PdfScanWork): Pd
       if (!mayEndObjectHeader(source, match.index)) continue;
       let value: Value;
       try {
-        value = readValue(source, nextToken(source, match.index + 3, work), work, 0);
+        value = readValue(
+          source,
+          nextToken(source, match.index + 3, work),
+          work,
+          0
+        );
       } catch (error) {
         if (error === UNREADABLE_OBJECT) continue;
         throw error;
@@ -237,21 +294,32 @@ export function readPdfStreamDictionaries(source: string, work: PdfScanWork): Pd
       if (value.stream === undefined) continue;
       const start = nextToken(source, match.index + 3, work).start;
       const known = byKeyword.get(value.stream);
-      if (!known || start < known.start) byKeyword.set(value.stream, { start, end: value.end });
+      if (!known || start < known.start)
+        byKeyword.set(value.stream, { start, end: value.end });
     }
     // pdf.js reads a trailer from these bytes whatever precedes them (XRef.indexObjects finds "trailer" anywhere after "xref").
     while ((match = trailerKeyword.exec(source))) {
-      if (match.index + 7 < source.length && isRegular(source.charCodeAt(match.index + 7))) continue;
+      if (
+        match.index + 7 < source.length &&
+        isRegular(source.charCodeAt(match.index + 7))
+      )
+        continue;
       let end = source.length;
       try {
-        end = readValue(source, nextToken(source, match.index + 7, work), work, 0).end;
+        end = readValue(
+          source,
+          nextToken(source, match.index + 7, work),
+          work,
+          0
+        ).end;
       } catch (error) {
         if (error !== UNREADABLE_OBJECT) throw error;
       }
       values.push({ start: match.index, end });
     }
   } catch (error) {
-    if (error === UNCLEAR_PDF_STRUCTURE) return { byKeyword, values, unclear: true };
+    if (error === UNCLEAR_PDF_STRUCTURE)
+      return { byKeyword, values, unclear: true };
     throw error;
   }
   values.sort((left, right) => left.start - right.start);
@@ -267,7 +335,8 @@ function whitespaceStart(source: string, index: number, work: PdfScanWork) {
 
 function lineStart(source: string, index: number, work: PdfScanWork) {
   let start = index;
-  while (start > 0 && source[start - 1] !== "\n" && source[start - 1] !== "\r") start -= 1;
+  while (start > 0 && source[start - 1] !== "\n" && source[start - 1] !== "\r")
+    start -= 1;
   spend(work, index - start + 1);
   return start;
 }
@@ -279,7 +348,11 @@ function lineStart(source: string, index: number, work: PdfScanWork) {
  * comments in between, which can hide or fake a `>>`: when more than one
  * reading remains, the answer is unclear.
  */
-export function dictionaryEndBefore(source: string, keyword: number, work: PdfScanWork): number | null | typeof UNCLEAR_PDF_STRUCTURE {
+export function dictionaryEndBefore(
+  source: string,
+  keyword: number,
+  work: PdfScanWork
+): number | null | typeof UNCLEAR_PDF_STRUCTURE {
   try {
     // "upstream", "/Bitstream": not the keyword.
     if (keyword > 0 && isRegular(source.charCodeAt(keyword - 1))) return null;
@@ -293,9 +366,14 @@ export function dictionaryEndBefore(source: string, keyword: number, work: PdfSc
       const start = lineStart(source, at, work);
       const text = source.slice(start, at);
       if (!text.includes("%")) break;
-      for (let percent = text.indexOf("%"); percent !== -1; percent = text.indexOf("%", percent + 1)) {
+      for (
+        let percent = text.indexOf("%");
+        percent !== -1;
+        percent = text.indexOf("%", percent + 1)
+      ) {
         const end = whitespaceStart(source, start + percent, work);
-        if (end - 2 >= start && source.startsWith(">>", end - 2)) ends.push(end);
+        if (end - 2 >= start && source.startsWith(">>", end - 2))
+          ends.push(end);
       }
       // A line that is only a comment: the dictionary may end on the line before.
       if (!/^[\0\t\f ]*%/.test(text)) break;
@@ -315,14 +393,25 @@ export function dictionaryEndBefore(source: string, keyword: number, work: PdfSc
  * share the same data), null when none is a stream, unclear when the
  * forward and backward readings disagree.
  */
-export function streamDictionaryText(source: string, keywords: number[], dictionaries: PdfStreamDictionaries, work: PdfScanWork): string | null | typeof UNCLEAR_PDF_STRUCTURE {
+export function streamDictionaryText(
+  source: string,
+  keywords: number[],
+  dictionaries: PdfStreamDictionaries,
+  work: PdfScanWork
+): string | null | typeof UNCLEAR_PDF_STRUCTURE {
   if (dictionaries.unclear) return UNCLEAR_PDF_STRUCTURE;
   let text: string | null = null;
   for (const keyword of keywords) {
     const end = dictionaryEndBefore(source, keyword, work);
     const parsed = dictionaries.byKeyword.get(keyword);
     if (end === null && !parsed) continue;
-    if (end === UNCLEAR_PDF_STRUCTURE || !parsed || parsed.end !== end || text !== null) return UNCLEAR_PDF_STRUCTURE;
+    if (
+      end === UNCLEAR_PDF_STRUCTURE ||
+      !parsed ||
+      parsed.end !== end ||
+      text !== null
+    )
+      return UNCLEAR_PDF_STRUCTURE;
     text = source.slice(parsed.start, parsed.end);
   }
   return text;
@@ -334,7 +423,11 @@ export function streamDictionaryText(source: string, keywords: number[], diction
  * checks: such an object stream counts as unreadable.
  */
 export function containsStream(content: string, work: PdfScanWork) {
-  for (let keyword = content.indexOf("stream"); keyword !== -1; keyword = content.indexOf("stream", keyword + 6)) {
+  for (
+    let keyword = content.indexOf("stream");
+    keyword !== -1;
+    keyword = content.indexOf("stream", keyword + 6)
+  ) {
     if (dictionaryEndBefore(content, keyword, work) !== null) return true;
   }
   return false;

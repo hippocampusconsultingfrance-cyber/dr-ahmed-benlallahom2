@@ -32,33 +32,51 @@ export const PRODUCTION_REQUIRED_ENVIRONMENT_VARIABLES = [
   "RESEND_WEBHOOK_SECRET",
 ] as const;
 
-export type ProductionRequiredEnvironmentVariable = (typeof PRODUCTION_REQUIRED_ENVIRONMENT_VARIABLES)[number];
+export type ProductionRequiredEnvironmentVariable =
+  (typeof PRODUCTION_REQUIRED_ENVIRONMENT_VARIABLES)[number];
 
 /**
  * Clé publique Clerk du serveur. @clerk/express ne lit que CLERK_PUBLISHABLE_KEY ;
  * sans elle, chaque requête passant par clerkMiddleware répondait 500. La clé
  * publique du navigateur (NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY, même valeur) suffit.
  */
-export function clerkPublishableKey(environment: NodeJS.ProcessEnv = process.env): string | undefined {
-  return environment.CLERK_PUBLISHABLE_KEY?.trim() || environment.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim() || undefined;
-}
-
-/** Anciens noms encore acceptés à la place d'une variable requise. */
-const PRODUCTION_ENVIRONMENT_ALIASES: Partial<Record<ProductionRequiredEnvironmentVariable, readonly string[]>> = {
-  CLERK_OWNER_USER_ID: ["OWNER_OPEN_ID"],
-};
-
-export function getMissingCriticalProductionEnvironment(environment: NodeJS.ProcessEnv = process.env): ProductionRequiredEnvironmentVariable[] {
-  return PRODUCTION_REQUIRED_ENVIRONMENT_VARIABLES.filter(name =>
-    ![name, ...(PRODUCTION_ENVIRONMENT_ALIASES[name] ?? [])].some(candidate => environment[candidate]?.trim())
+export function clerkPublishableKey(
+  environment: NodeJS.ProcessEnv = process.env
+): string | undefined {
+  return (
+    environment.CLERK_PUBLISHABLE_KEY?.trim() ||
+    environment.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim() ||
+    undefined
   );
 }
 
-export function assertCriticalProductionEnvironment(environment: NodeJS.ProcessEnv = process.env) {
+/** Anciens noms encore acceptés à la place d'une variable requise. */
+const PRODUCTION_ENVIRONMENT_ALIASES: Partial<
+  Record<ProductionRequiredEnvironmentVariable, readonly string[]>
+> = {
+  CLERK_OWNER_USER_ID: ["OWNER_OPEN_ID"],
+};
+
+export function getMissingCriticalProductionEnvironment(
+  environment: NodeJS.ProcessEnv = process.env
+): ProductionRequiredEnvironmentVariable[] {
+  return PRODUCTION_REQUIRED_ENVIRONMENT_VARIABLES.filter(
+    name =>
+      ![name, ...(PRODUCTION_ENVIRONMENT_ALIASES[name] ?? [])].some(candidate =>
+        environment[candidate]?.trim()
+      )
+  );
+}
+
+export function assertCriticalProductionEnvironment(
+  environment: NodeJS.ProcessEnv = process.env
+) {
   if (environment.NODE_ENV !== "production") return;
   const missing = getMissingCriticalProductionEnvironment(environment);
   if (missing.length > 0) {
-    throw new Error(`Missing critical production configuration: ${missing.join(", ")}`);
+    throw new Error(
+      `Missing critical production configuration: ${missing.join(", ")}`
+    );
   }
 }
 
@@ -101,21 +119,50 @@ const TURNSTILE_TEST_SITE_KEYS = new Set([
   "3x00000000000000000000FF",
 ]);
 
-const keyPrefixed = (value: string | undefined, prefixes: readonly string[]) => prefixes.some(prefix => value?.trim().startsWith(prefix));
-const clerkKeys = (environment: NodeJS.ProcessEnv) => [environment.CLERK_SECRET_KEY, environment.CLERK_PUBLISHABLE_KEY, environment.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY];
+const keyPrefixed = (value: string | undefined, prefixes: readonly string[]) =>
+  prefixes.some(prefix => value?.trim().startsWith(prefix));
+const clerkKeys = (environment: NodeJS.ProcessEnv) => [
+  environment.CLERK_SECRET_KEY,
+  environment.CLERK_PUBLISHABLE_KEY,
+  environment.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
+];
 
-export function getConfigurationWarnings(environment: NodeJS.ProcessEnv = process.env): ConfigurationWarning[] {
+export function getConfigurationWarnings(
+  environment: NodeJS.ProcessEnv = process.env
+): ConfigurationWarning[] {
   const warnings: ConfigurationWarning[] = [];
   if (environment.VERCEL_ENV === "production") {
-    if (keyPrefixed(environment.STRIPE_SECRET_KEY, ["sk_test_", "rk_test_"])) warnings.push("stripe_test_key_in_production");
-    if (clerkKeys(environment).some(key => keyPrefixed(key, ["sk_test_", "pk_test_"]))) warnings.push("clerk_test_key_in_production");
-    if (TURNSTILE_TEST_SECRETS.has(environment.TURNSTILE_SECRET_KEY?.trim() ?? "") || TURNSTILE_TEST_SITE_KEYS.has(environment.VITE_TURNSTILE_SITE_KEY?.trim() ?? "")) {
+    if (keyPrefixed(environment.STRIPE_SECRET_KEY, ["sk_test_", "rk_test_"]))
+      warnings.push("stripe_test_key_in_production");
+    if (
+      clerkKeys(environment).some(key =>
+        keyPrefixed(key, ["sk_test_", "pk_test_"])
+      )
+    )
+      warnings.push("clerk_test_key_in_production");
+    if (
+      TURNSTILE_TEST_SECRETS.has(
+        environment.TURNSTILE_SECRET_KEY?.trim() ?? ""
+      ) ||
+      TURNSTILE_TEST_SITE_KEYS.has(
+        environment.VITE_TURNSTILE_SITE_KEY?.trim() ?? ""
+      )
+    ) {
       warnings.push("turnstile_test_key");
     }
     // Lue telle quelle par les liens envoyés (`process.env.PUBLIC_APP_ORIGIN || …`) : vide, l'adresse du site s'applique.
-    if (environment.PUBLIC_APP_ORIGIN && environment.PUBLIC_APP_ORIGIN !== SITE_ORIGIN) warnings.push("public_origin_mismatch");
+    if (
+      environment.PUBLIC_APP_ORIGIN &&
+      environment.PUBLIC_APP_ORIGIN !== SITE_ORIGIN
+    )
+      warnings.push("public_origin_mismatch");
   } else if (environment.VERCEL_ENV === "preview") {
-    if (keyPrefixed(environment.STRIPE_SECRET_KEY, ["sk_live_", "rk_live_"]) || clerkKeys(environment).some(key => keyPrefixed(key, ["sk_live_", "pk_live_"]))) {
+    if (
+      keyPrefixed(environment.STRIPE_SECRET_KEY, ["sk_live_", "rk_live_"]) ||
+      clerkKeys(environment).some(key =>
+        keyPrefixed(key, ["sk_live_", "pk_live_"])
+      )
+    ) {
       warnings.push("live_key_in_preview");
     }
   }
@@ -133,10 +180,19 @@ export type EnvironmentConfigurationStatus = {
   warnings: ConfigurationWarning[];
 };
 
-export function getEnvironmentConfigurationStatus(environment: NodeJS.ProcessEnv = process.env): EnvironmentConfigurationStatus {
+export function getEnvironmentConfigurationStatus(
+  environment: NodeJS.ProcessEnv = process.env
+): EnvironmentConfigurationStatus {
   const enforced = environment.NODE_ENV === "production";
-  const missing = enforced ? getMissingCriticalProductionEnvironment(environment) : [];
-  return { ok: missing.length === 0, missing, enforced, warnings: getConfigurationWarnings(environment) };
+  const missing = enforced
+    ? getMissingCriticalProductionEnvironment(environment)
+    : [];
+  return {
+    ok: missing.length === 0,
+    missing,
+    enforced,
+    warnings: getConfigurationWarnings(environment),
+  };
 }
 
 /**
@@ -146,7 +202,7 @@ export function getEnvironmentConfigurationStatus(environment: NodeJS.ProcessEnv
  */
 export function reportCriticalProductionEnvironment(
   environment: NodeJS.ProcessEnv = process.env,
-  log: (message: string) => void = message => console.error(message),
+  log: (message: string) => void = message => console.error(message)
 ): EnvironmentConfigurationStatus {
   const status = getEnvironmentConfigurationStatus(environment);
   if (!status.ok) {
@@ -156,7 +212,9 @@ export function reportCriticalProductionEnvironment(
     );
   }
   if (status.warnings.length > 0) {
-    log(`[Config] WARNING: configuration inconsistent with VERCEL_ENV=${environment.VERCEL_ENV}: ${status.warnings.join(", ")}. The /admin banner says what to change.`);
+    log(
+      `[Config] WARNING: configuration inconsistent with VERCEL_ENV=${environment.VERCEL_ENV}: ${status.warnings.join(", ")}. The /admin banner says what to change.`
+    );
   }
   return status;
 }
@@ -174,12 +232,24 @@ export function reportCriticalProductionEnvironment(
  *  - console_payments : sans STRIPE_SECRET_KEY, un paiement de test écrit dans la
  *    console remplace Stripe Checkout (server/_core/localServices.ts).
  */
-export const LOCAL_DEVELOPMENT_SHORTCUTS = ["local_database", "clerk_optional", "console_emails", "console_payments"] as const;
+export const LOCAL_DEVELOPMENT_SHORTCUTS = [
+  "local_database",
+  "clerk_optional",
+  "console_emails",
+  "console_payments",
+] as const;
 
-export type LocalDevelopmentShortcut = (typeof LOCAL_DEVELOPMENT_SHORTCUTS)[number];
+export type LocalDevelopmentShortcut =
+  (typeof LOCAL_DEVELOPMENT_SHORTCUTS)[number];
 
-export function isLocalDevelopment(environment: NodeJS.ProcessEnv = process.env): boolean {
-  return environment.NODE_ENV === "development" && !environment.VERCEL?.trim() && !environment.VERCEL_ENV?.trim();
+export function isLocalDevelopment(
+  environment: NodeJS.ProcessEnv = process.env
+): boolean {
+  return (
+    environment.NODE_ENV === "development" &&
+    !environment.VERCEL?.trim() &&
+    !environment.VERCEL_ENV?.trim()
+  );
 }
 
 /** Machine locale, par son nom ou son adresse de bouclage, telle que l'écrit une URL. */
@@ -193,11 +263,15 @@ export function isLoopbackUrl(url: string | undefined): boolean {
   }
 }
 
-export function localDevelopmentShortcuts(environment: NodeJS.ProcessEnv = process.env): LocalDevelopmentShortcut[] {
+export function localDevelopmentShortcuts(
+  environment: NodeJS.ProcessEnv = process.env
+): LocalDevelopmentShortcut[] {
   if (!isLocalDevelopment(environment)) return [];
   const active: Record<LocalDevelopmentShortcut, boolean> = {
     local_database: isLoopbackUrl(environment.DATABASE_URL),
-    clerk_optional: !clerkPublishableKey(environment) || !environment.CLERK_SECRET_KEY?.trim(),
+    clerk_optional:
+      !clerkPublishableKey(environment) ||
+      !environment.CLERK_SECRET_KEY?.trim(),
     console_emails: !environment.RESEND_API_KEY?.trim(),
     console_payments: !environment.STRIPE_SECRET_KEY?.trim(),
   };
@@ -211,25 +285,35 @@ export function localDevelopmentShortcuts(environment: NodeJS.ProcessEnv = proce
  */
 export const LOCAL_STRIPE_API_URL_VARIABLE = "LOCAL_STRIPE_API_URL";
 
-export function localStripeApiOptions(environment: NodeJS.ProcessEnv = process.env): { host: string; port: number; protocol: "http" } | undefined {
+export function localStripeApiOptions(
+  environment: NodeJS.ProcessEnv = process.env
+): { host: string; port: number; protocol: "http" } | undefined {
   const url = environment[LOCAL_STRIPE_API_URL_VARIABLE]?.trim();
-  if (!isLocalDevelopment(environment) || !url || !isLoopbackUrl(url)) return undefined;
+  if (!isLocalDevelopment(environment) || !url || !isLoopbackUrl(url))
+    return undefined;
   const { hostname, port, protocol } = new URL(url);
   if (protocol !== "http:" || !port) return undefined;
-  return { host: hostname.replace(/^\[|\]$/g, ""), port: Number(port), protocol: "http" };
+  return {
+    host: hostname.replace(/^\[|\]$/g, ""),
+    port: Number(port),
+    protocol: "http",
+  };
 }
 
 export function isConfiguredAdminOpenId(
   openId: string,
-  environment: NodeJS.ProcessEnv = process.env,
+  environment: NodeJS.ProcessEnv = process.env
 ) {
-  const ownerOpenId = environment.CLERK_OWNER_USER_ID?.trim() || environment.OWNER_OPEN_ID?.trim();
+  const ownerOpenId =
+    environment.CLERK_OWNER_USER_ID?.trim() ||
+    environment.OWNER_OPEN_ID?.trim();
   return Boolean(ownerOpenId && openId === ownerOpenId);
 }
 
 export const ENV = {
   databaseUrl: process.env.DATABASE_URL ?? "",
-  ownerOpenId: process.env.CLERK_OWNER_USER_ID ?? process.env.OWNER_OPEN_ID ?? "",
+  ownerOpenId:
+    process.env.CLERK_OWNER_USER_ID ?? process.env.OWNER_OPEN_ID ?? "",
   isProduction: process.env.NODE_ENV === "production",
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",

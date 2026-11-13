@@ -33,11 +33,15 @@ const findFont = name => {
     const candidate = path.join(dir, name);
     if (fs.existsSync(candidate)) return candidate;
   }
-  throw new Error(`Police introuvable : ${name} (dossiers : ${fontDirs.join(", ")})`);
+  throw new Error(
+    `Police introuvable : ${name} (dossiers : ${fontDirs.join(", ")})`
+  );
 };
-const fontUrl = name => `data:font/woff2;base64,${fs.readFileSync(findFont(name)).toString("base64")}`;
+const fontUrl = name =>
+  `data:font/woff2;base64,${fs.readFileSync(findFont(name)).toString("base64")}`;
 
-const logoSvg = fs.readFileSync(path.join(root, "client/public/assets/abl-logo.svg"), "utf8")
+const logoSvg = fs
+  .readFileSync(path.join(root, "client/public/assets/abl-logo.svg"), "utf8")
   // Le monogramme demande Georgia/Arial : on fige le rendu avec les polices de la marque.
   .replace(/font-family="Georgia,serif"/g, 'font-family="Playfair Display"')
   .replace(/font-family="Arial,sans-serif"/g, 'font-family="DM Sans"');
@@ -75,7 +79,11 @@ const shareCard = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><s
   <p class="url">drahmedbenlallahom.com</p>
 </body></html>`;
 
-const iconPage = ({ size, opaque, padding }) => `<!doctype html><html><head><meta charset="utf-8"><style>
+const iconPage = ({
+  size,
+  opaque,
+  padding,
+}) => `<!doctype html><html><head><meta charset="utf-8"><style>
   ${fontFaces}
   html, body { margin: 0; width: ${size}px; height: ${size}px; overflow: hidden; background: ${opaque ? "#071521" : "transparent"}; }
   .logo { position: absolute; inset: ${padding}px; }
@@ -83,12 +91,37 @@ const iconPage = ({ size, opaque, padding }) => `<!doctype html><html><head><met
 </style></head><body><div class="logo">${logoSvg}</div></body></html>`;
 
 const outputs = [
-  { file: "client/public/assets/og/og-default.png", html: shareCard, width: 1200, height: 630 },
-  { file: "client/public/icon-512.png", html: iconPage({ size: 512, opaque: false, padding: 0 }), width: 512, height: 512 },
-  { file: "client/public/icon-192.png", html: iconPage({ size: 192, opaque: false, padding: 0 }), width: 192, height: 192 },
+  {
+    file: "client/public/assets/og/og-default.png",
+    html: shareCard,
+    width: 1200,
+    height: 630,
+  },
+  {
+    file: "client/public/icon-512.png",
+    html: iconPage({ size: 512, opaque: false, padding: 0 }),
+    width: 512,
+    height: 512,
+  },
+  {
+    file: "client/public/icon-192.png",
+    html: iconPage({ size: 192, opaque: false, padding: 0 }),
+    width: 192,
+    height: 192,
+  },
   // Zone sûre des icônes « maskable » : contenu dans les 80 % centraux.
-  { file: "client/public/icon-maskable-512.png", html: iconPage({ size: 512, opaque: true, padding: 52 }), width: 512, height: 512 },
-  { file: "client/public/apple-touch-icon.png", html: iconPage({ size: 180, opaque: true, padding: 8 }), width: 180, height: 180 },
+  {
+    file: "client/public/icon-maskable-512.png",
+    html: iconPage({ size: 512, opaque: true, padding: 52 }),
+    width: 512,
+    height: 512,
+  },
+  {
+    file: "client/public/apple-touch-icon.png",
+    html: iconPage({ size: 180, opaque: true, padding: 8 }),
+    width: 180,
+    height: 180,
+  },
 ];
 
 /** Fichier .ico contenant des images PNG (format accepté par tous les navigateurs actuels). */
@@ -114,16 +147,25 @@ function buildIco(pngs) {
 }
 
 async function render(browser, { html, width, height, transparent }) {
-  const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1 });
+  const page = await browser.newPage({
+    viewport: { width, height },
+    deviceScaleFactor: 1,
+  });
   await page.setContent(html, { waitUntil: "load" });
   // eslint-disable-next-line no-undef -- runs in the page, where document is the page's
   await page.evaluate(() => document.fonts.ready);
-  const data = await page.screenshot({ omitBackground: transparent, type: "png" });
+  const data = await page.screenshot({
+    omitBackground: transparent,
+    type: "png",
+  });
   await page.close();
   return data;
 }
 
-const browser = await chromium.launch({ executablePath: process.env.CHROMIUM || undefined, args: ["--no-sandbox"] });
+const browser = await chromium.launch({
+  executablePath: process.env.CHROMIUM || undefined,
+  args: ["--no-sandbox"],
+});
 try {
   for (const output of outputs) {
     const transparent = !/apple-touch|maskable|og-default/.test(output.file);
@@ -131,11 +173,21 @@ try {
     const target = path.join(root, output.file);
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.writeFileSync(target, data);
-    console.log(`${output.file} ${output.width}x${output.height} ${data.length} o`);
+    console.log(
+      `${output.file} ${output.width}x${output.height} ${data.length} o`
+    );
   }
   const favicons = [];
   for (const size of [16, 32, 48]) {
-    favicons.push({ size, data: await render(browser, { html: iconPage({ size, opaque: false, padding: 0 }), width: size, height: size, transparent: true }) });
+    favicons.push({
+      size,
+      data: await render(browser, {
+        html: iconPage({ size, opaque: false, padding: 0 }),
+        width: size,
+        height: size,
+        transparent: true,
+      }),
+    });
   }
   const ico = buildIco(favicons);
   fs.writeFileSync(path.join(root, "client/public/favicon.ico"), ico);

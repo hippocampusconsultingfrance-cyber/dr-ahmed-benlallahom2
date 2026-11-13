@@ -7,7 +7,13 @@ import {
   ventureNarrativesZh,
 } from "@/data/ventureNarratives";
 import { useParams, Link } from "wouter";
-import { ArrowLeft, ArrowUpRight, ExternalLink, Linkedin, User } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowUpRight,
+  ExternalLink,
+  Linkedin,
+  User,
+} from "lucide-react";
 import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import { SEOHead } from "@/components/SEOHead";

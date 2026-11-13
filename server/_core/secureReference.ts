@@ -8,6 +8,7 @@ const REFERENCE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 export function secureReference(prefix: string, randomLength: number): string {
   const bytes = randomBytes(randomLength);
   let suffix = "";
-  for (let index = 0; index < bytes.length; index++) suffix += REFERENCE_ALPHABET[bytes[index] & 31];
+  for (let index = 0; index < bytes.length; index++)
+    suffix += REFERENCE_ALPHABET[bytes[index] & 31];
   return `${prefix}${suffix}`;
 }

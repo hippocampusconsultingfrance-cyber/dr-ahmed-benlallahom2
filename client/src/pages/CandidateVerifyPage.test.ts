@@ -1,7 +1,11 @@
 import { createElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { elementsOf, renderStateful, resetStatefulHooks } from "@/testing/statefulRender";
+import {
+  elementsOf,
+  renderStateful,
+  resetStatefulHooks,
+} from "@/testing/statefulRender";
 
 // Page d’activation ouverte depuis le lien envoyé par email : contrôle du lien
 // en cours, formulaire occupé pendant l’activation, lien absent ou refusé avec
@@ -9,10 +13,21 @@ import { elementsOf, renderStateful, resetStatefulHooks } from "@/testing/statef
 // lien expiré pendant la saisie qui mène au renvoi d’un nouveau lien ; ces
 // retours sont de vrais liens, et non des boutons (A11Y-17).
 
-vi.mock("react", async importOriginal => (await import("@/testing/statefulRender")).withStatefulHooks(await importOriginal()));
+vi.mock("react", async importOriginal =>
+  (await import("@/testing/statefulRender")).withStatefulHooks(
+    await importOriginal()
+  )
+);
 
-type Details = { data?: { email: string; firstName: string; lastName: string }; isLoading: boolean; isError: boolean };
-type MutationOptions = { onSuccess?: () => Promise<void>; onError?: (error: { message: string; data?: { reason?: string } }) => void };
+type Details = {
+  data?: { email: string; firstName: string; lastName: string };
+  isLoading: boolean;
+  isError: boolean;
+};
+type MutationOptions = {
+  onSuccess?: () => Promise<void>;
+  onError?: (error: { message: string; data?: { reason?: string } }) => void;
+};
 const view = vi.hoisted(() => ({
   language: "fr" as "fr" | "en" | "de" | "zh",
   details: { isLoading: false, isError: false } as Details,
@@ -25,21 +40,50 @@ const view = vi.hoisted(() => ({
   focused: [] as string[],
 }));
 
-vi.mock("@/contexts/LanguageContext", () => ({ useLanguage: () => ({ language: view.language }) }));
+vi.mock("@/contexts/LanguageContext", () => ({
+  useLanguage: () => ({ language: view.language }),
+}));
 vi.mock("wouter", async () => {
   const { createElement } = await import("react");
   return {
-    useLocation: () => ["/candidate/verify", (path: string) => view.navigations.push(path)],
-    Link: function Link({ href, children, className }: { href: string; children: unknown; className?: string }) { return createElement("a", { href, className }, children as never); },
+    useLocation: () => [
+      "/candidate/verify",
+      (path: string) => view.navigations.push(path),
+    ],
+    Link: function Link({
+      href,
+      children,
+      className,
+    }: {
+      href: string;
+      children: unknown;
+      className?: string;
+    }) {
+      return createElement("a", { href, className }, children as never);
+    },
   };
 });
 vi.mock("@/lib/trpc", () => ({
   trpc: {
-    useUtils: () => ({ candidatePortal: { me: { invalidate: async () => undefined } } }),
+    useUtils: () => ({
+      candidatePortal: { me: { invalidate: async () => undefined } },
+    }),
     candidatePortal: {
       // A disabled query has no data, as in React Query.
-      activationDetails: { useQuery: (input: unknown, options: { enabled: boolean }) => { view.detailsInputs.push({ input, options }); return options.enabled ? view.details : { isLoading: false, isError: false }; } },
-      verifyEmail: { useMutation: (options: MutationOptions) => { view.options = options; return { ...view.verification, mutate: view.mutate }; } },
+      activationDetails: {
+        useQuery: (input: unknown, options: { enabled: boolean }) => {
+          view.detailsInputs.push({ input, options });
+          return options.enabled
+            ? view.details
+            : { isLoading: false, isError: false };
+        },
+      },
+      verifyEmail: {
+        useMutation: (options: MutationOptions) => {
+          view.options = options;
+          return { ...view.verification, mutate: view.mutate };
+        },
+      },
     },
   },
 }));
@@ -53,17 +97,38 @@ const { Button } = await import("@/components/ui/button");
 const { Link } = await import("wouter");
 
 const LINK = "?email=vera%40example.test&token=activation-token-0123456789";
-const READY: Details = { data: { email: "vera@example.test", firstName: "Vera", lastName: "Rossi" }, isLoading: false, isError: false };
+const READY: Details = {
+  data: { email: "vera@example.test", firstName: "Vera", lastName: "Rossi" },
+  isLoading: false,
+  isError: false,
+};
 
 function openLink(search: string) {
-  vi.stubGlobal("window", { location: { search }, setTimeout: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn(), requestAnimationFrame: (frame: () => void) => view.frames.push(frame) });
-  vi.stubGlobal("document", { getElementById: (id: string) => ({ focus: () => view.focused.push(id) }) });
+  vi.stubGlobal("window", {
+    location: { search },
+    setTimeout: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    requestAnimationFrame: (frame: () => void) => view.frames.push(frame),
+  });
+  vi.stubGlobal("document", {
+    getElementById: (id: string) => ({ focus: () => view.focused.push(id) }),
+  });
 }
 const html = () => renderToStaticMarkup(createElement(CandidateVerifyPage));
 const render = () => renderStateful(CandidateVerifyPage) as ReactElement;
-const byId = (tree: ReactElement, id: string) => elementsOf(tree).find(element => element.props.id === id)!;
-const submitButton = (tree: ReactElement) => elementsOf(tree).find(element => element.type === Button && element.props.type === "submit");
-const type = (id: string, value: string) => (byId(render(), id).props.onChange as (event: { target: { value: string } }) => void)({ target: { value } });
+const byId = (tree: ReactElement, id: string) =>
+  elementsOf(tree).find(element => element.props.id === id)!;
+const submitButton = (tree: ReactElement) =>
+  elementsOf(tree).find(
+    element => element.type === Button && element.props.type === "submit"
+  );
+const type = (id: string, value: string) =>
+  (
+    byId(render(), id).props.onChange as (event: {
+      target: { value: string };
+    }) => void
+  )({ target: { value } });
 
 beforeEach(() => {
   view.language = "fr";
@@ -88,8 +153,16 @@ describe("activation de l’espace candidat", () => {
     const page = html();
     const copy = candidateAccountCopy.fr;
 
-    expect(view.detailsInputs.at(-1)).toEqual({ input: { email: "vera@example.test", token: "activation-token-0123456789" }, options: expect.objectContaining({ enabled: true }) });
-    expect(page).toContain(`role="status" aria-live="polite" aria-label="${copy.verifyingTitle}"`);
+    expect(view.detailsInputs.at(-1)).toEqual({
+      input: {
+        email: "vera@example.test",
+        token: "activation-token-0123456789",
+      },
+      options: expect.objectContaining({ enabled: true }),
+    });
+    expect(page).toContain(
+      `role="status" aria-live="polite" aria-label="${copy.verifyingTitle}"`
+    );
     expect(page).toContain(copy.verifyingDescription);
     expect(page).not.toContain("<form");
     expect(page).not.toContain(copy.invalidTitle);
@@ -104,113 +177,250 @@ describe("activation de l’espace candidat", () => {
     expect(submitButton(render())!.props.disabled).toBe(true);
   });
 
-  it.each(["fr", "en", "de", "zh"] as const)("refuse un lien incomplet ou refusé et ramène vers la connexion (%s)", language => {
-    view.language = language;
-    const copy = candidateAccountCopy[language];
-    for (const [search, details] of [["?email=vera%40example.test", READY], [LINK, { isLoading: false, isError: true }]] as const) {
-      resetStatefulHooks();
-      openLink(search);
-      view.details = details;
-      const page = html();
-      expect(page, search).toContain(copy.invalidTitle);
-      expect(page, search).toContain(copy.invalidDescription);
-      expect(page, search).not.toContain("<form");
+  it.each(["fr", "en", "de", "zh"] as const)(
+    "refuse un lien incomplet ou refusé et ramène vers la connexion (%s)",
+    language => {
+      view.language = language;
+      const copy = candidateAccountCopy[language];
+      for (const [search, details] of [
+        ["?email=vera%40example.test", READY],
+        [LINK, { isLoading: false, isError: true }],
+      ] as const) {
+        resetStatefulHooks();
+        openLink(search);
+        view.details = details;
+        const page = html();
+        expect(page, search).toContain(copy.invalidTitle);
+        expect(page, search).toContain(copy.invalidDescription);
+        expect(page, search).not.toContain("<form");
 
-      expect(page, search).toContain('href="/candidate/access"');
-      const tree = render();
-      expect(elementsOf(tree).find(element => element.props.children === copy.backToAccess)?.props, search).toMatchObject({ href: "/candidate/access" });
-      expect(elementsOf(tree).find(element => element.props.children === copy.backToAccess)?.type, search).toBe(Link);
-      expect(elementsOf(tree).some(element => element.type === "button"), search).toBe(false);
+        expect(page, search).toContain('href="/candidate/access"');
+        const tree = render();
+        expect(
+          elementsOf(tree).find(
+            element => element.props.children === copy.backToAccess
+          )?.props,
+          search
+        ).toMatchObject({ href: "/candidate/access" });
+        expect(
+          elementsOf(tree).find(
+            element => element.props.children === copy.backToAccess
+          )?.type,
+          search
+        ).toBe(Link);
+        expect(
+          elementsOf(tree).some(element => element.type === "button"),
+          search
+        ).toBe(false);
+      }
+      // Without the token, the link is not even checked.
+      expect(
+        view.detailsInputs.some(
+          call =>
+            call.options.enabled && !(call.input as { token: string }).token
+        )
+      ).toBe(false);
     }
-    // Without the token, the link is not even checked.
-    expect(view.detailsInputs.some(call => call.options.enabled && !(call.input as { token: string }).token)).toBe(false);
-  });
+  );
 
-  it.each(["fr", "en", "de", "zh"] as const)("propose un nouveau lien d’activation, l’adresse du lien refusé déjà saisie (%s, REC-17)", language => {
-    view.language = language;
-    const copy = candidateAccountCopy[language];
-    const requestNewLink = () => elementsOf(render()).find(element => element.type === Link && element.props.children === copy.requestNewLink);
-    for (const [search, details, destination] of [
-      [LINK, { isLoading: false, isError: true }, "/candidate/access?mode=activation&email=vera%40example.test"],
-      ["?email=vera%40example.test", READY, "/candidate/access?mode=activation&email=vera%40example.test"],
-      ["?token=activation-token-0123456789", READY, "/candidate/access?mode=activation"],
-    ] as const) {
+  it.each(["fr", "en", "de", "zh"] as const)(
+    "propose un nouveau lien d’activation, l’adresse du lien refusé déjà saisie (%s, REC-17)",
+    language => {
+      view.language = language;
+      const copy = candidateAccountCopy[language];
+      const requestNewLink = () =>
+        elementsOf(render()).find(
+          element =>
+            element.type === Link &&
+            element.props.children === copy.requestNewLink
+        );
+      for (const [search, details, destination] of [
+        [
+          LINK,
+          { isLoading: false, isError: true },
+          "/candidate/access?mode=activation&email=vera%40example.test",
+        ],
+        [
+          "?email=vera%40example.test",
+          READY,
+          "/candidate/access?mode=activation&email=vera%40example.test",
+        ],
+        [
+          "?token=activation-token-0123456789",
+          READY,
+          "/candidate/access?mode=activation",
+        ],
+      ] as const) {
+        resetStatefulHooks();
+        openLink(search);
+        view.details = details;
+        expect(html(), search).toContain(
+          `href="${destination.replace("&", "&amp;")}"`
+        );
+        expect(requestNewLink()!.props.href, search).toBe(destination);
+        // Shown as the button of the card, but a link.
+        expect(
+          elementsOf(render()).find(element => element.type === Button)!.props
+            .asChild,
+          search
+        ).toBe(true);
+      }
+
+      // A valid link shows the activation form, not the button.
       resetStatefulHooks();
-      openLink(search);
-      view.details = details;
-      expect(html(), search).toContain(`href="${destination.replace("&", "&amp;")}"`);
-      expect(requestNewLink()!.props.href, search).toBe(destination);
-      // Shown as the button of the card, but a link.
-      expect(elementsOf(render()).find(element => element.type === Button)!.props.asChild, search).toBe(true);
+      openLink(LINK);
+      view.details = READY;
+      expect(requestNewLink()).toBeUndefined();
     }
-
-    // A valid link shows the activation form, not the button.
-    resetStatefulHooks();
-    openLink(LINK);
-    view.details = READY;
-    expect(requestNewLink()).toBeUndefined();
-  });
+  );
 
   it("n’envoie rien si les deux mots de passe diffèrent, puis annonce le refus du serveur sur la page", () => {
     const copy = candidateAccountCopy.fr;
     render();
     type("candidate-activation-password", "correct horse battery staple");
-    type("candidate-activation-password-confirmation", "correct horse battery stapel");
-    (elementsOf(render()).find(element => element.type === "form")!.props.onSubmit as (event: { preventDefault: () => void }) => void)({ preventDefault: vi.fn() });
+    type(
+      "candidate-activation-password-confirmation",
+      "correct horse battery stapel"
+    );
+    (
+      elementsOf(render()).find(element => element.type === "form")!.props
+        .onSubmit as (event: { preventDefault: () => void }) => void
+    )({ preventDefault: vi.fn() });
     expect(view.mutate).not.toHaveBeenCalled();
-    expect(elementsOf(render()).find(element => element.props.role === "status")!.props.children).toBe(copy.passwordMismatch);
+    expect(
+      elementsOf(render()).find(element => element.props.role === "status")!
+        .props.children
+    ).toBe(copy.passwordMismatch);
 
-    type("candidate-activation-password-confirmation", "correct horse battery staple");
-    (elementsOf(render()).find(element => element.type === "form")!.props.onSubmit as (event: { preventDefault: () => void }) => void)({ preventDefault: vi.fn() });
-    expect(view.mutate).toHaveBeenCalledWith({ email: "vera@example.test", token: "activation-token-0123456789", password: "correct horse battery staple", firstName: "Vera", lastName: "Rossi" });
+    type(
+      "candidate-activation-password-confirmation",
+      "correct horse battery staple"
+    );
+    (
+      elementsOf(render()).find(element => element.type === "form")!.props
+        .onSubmit as (event: { preventDefault: () => void }) => void
+    )({ preventDefault: vi.fn() });
+    expect(view.mutate).toHaveBeenCalledWith({
+      email: "vera@example.test",
+      token: "activation-token-0123456789",
+      password: "correct horse battery staple",
+      firstName: "Vera",
+      lastName: "Rossi",
+    });
 
-    view.options.onError!({ message: "TRPCError", data: { reason: "candidate_password_compromised" } });
+    view.options.onError!({
+      message: "TRPCError",
+      data: { reason: "candidate_password_compromised" },
+    });
     const tree = render();
-    expect(elementsOf(tree).find(element => element.props.role === "status")!.props.children).toBe(copy.passwordCompromised);
-    expect(elementsOf(tree).some(element => element.type === "form")).toBe(true);
+    expect(
+      elementsOf(tree).find(element => element.props.role === "status")!.props
+        .children
+    ).toBe(copy.passwordCompromised);
+    expect(elementsOf(tree).some(element => element.type === "form")).toBe(
+      true
+    );
     expect(view.navigations).toEqual([]);
   });
 
   it.each([
-    ["fr", "Un champ contient un saut de ligne ou un caractère invisible qui n’y est pas accepté, souvent laissé par un copier-coller : retapez ce texte au clavier, puis renvoyez le formulaire."],
-    ["en", "A field contains a line break or an invisible character that is not accepted there, often left by copying and pasting: type that text again on the keyboard, then send the form again."],
-    ["zh", "某个字段包含此处不允许的换行符或不可见字符，通常由复制粘贴带入：请用键盘重新输入该内容，然后重新提交表单。"],
-  ] as const)("dit de retaper un nom refusé pour ses caractères, sans quitter le formulaire (%s, INTL-05)", (language, expected) => {
-    view.language = language;
-    render();
-    type("candidate-activation-password", "correct horse battery staple");
-    type("candidate-activation-password-confirmation", "correct horse battery staple");
-    (elementsOf(render()).find(element => element.type === "form")!.props.onSubmit as (event: { preventDefault: () => void }) => void)({ preventDefault: vi.fn() });
+    [
+      "fr",
+      "Un champ contient un saut de ligne ou un caractère invisible qui n’y est pas accepté, souvent laissé par un copier-coller : retapez ce texte au clavier, puis renvoyez le formulaire.",
+    ],
+    [
+      "en",
+      "A field contains a line break or an invisible character that is not accepted there, often left by copying and pasting: type that text again on the keyboard, then send the form again.",
+    ],
+    [
+      "zh",
+      "某个字段包含此处不允许的换行符或不可见字符，通常由复制粘贴带入：请用键盘重新输入该内容，然后重新提交表单。",
+    ],
+  ] as const)(
+    "dit de retaper un nom refusé pour ses caractères, sans quitter le formulaire (%s, INTL-05)",
+    (language, expected) => {
+      view.language = language;
+      render();
+      type("candidate-activation-password", "correct horse battery staple");
+      type(
+        "candidate-activation-password-confirmation",
+        "correct horse battery staple"
+      );
+      (
+        elementsOf(render()).find(element => element.type === "form")!.props
+          .onSubmit as (event: { preventDefault: () => void }) => void
+      )({ preventDefault: vi.fn() });
 
-    view.options.onError!({ message: "Texte français écrit par le serveur.", data: { reason: "invalid_characters" } });
-    const tree = render();
-    expect(elementsOf(tree).find(element => element.props.role === "status")!.props.children).toBe(expected);
-    expect(elementsOf(tree).some(element => element.type === "form")).toBe(true);
-  });
+      view.options.onError!({
+        message: "Texte français écrit par le serveur.",
+        data: { reason: "invalid_characters" },
+      });
+      const tree = render();
+      expect(
+        elementsOf(tree).find(element => element.props.role === "status")!.props
+          .children
+      ).toBe(expected);
+      expect(elementsOf(tree).some(element => element.type === "form")).toBe(
+        true
+      );
+    }
+  );
 
-  it.each(["fr", "en", "de", "zh"] as const)("propose un nouveau lien quand le lien expire pendant la saisie du formulaire (%s, REC-17)", language => {
-    view.language = language;
-    const copy = candidateAccountCopy[language];
-    render();
-    type("candidate-activation-password", "correct horse battery staple");
-    type("candidate-activation-password-confirmation", "correct horse battery staple");
-    (elementsOf(render()).find(element => element.type === "form")!.props.onSubmit as (event: { preventDefault: () => void }) => void)({ preventDefault: vi.fn() });
-    expect(view.mutate).toHaveBeenCalledTimes(1);
+  it.each(["fr", "en", "de", "zh"] as const)(
+    "propose un nouveau lien quand le lien expire pendant la saisie du formulaire (%s, REC-17)",
+    language => {
+      view.language = language;
+      const copy = candidateAccountCopy[language];
+      render();
+      type("candidate-activation-password", "correct horse battery staple");
+      type(
+        "candidate-activation-password-confirmation",
+        "correct horse battery staple"
+      );
+      (
+        elementsOf(render()).find(element => element.type === "form")!.props
+          .onSubmit as (event: { preventDefault: () => void }) => void
+      )({ preventDefault: vi.fn() });
+      expect(view.mutate).toHaveBeenCalledTimes(1);
 
-    // The link was valid on opening, then the server refuses it on sending.
-    view.options.onError!({ message: "Ce lien est invalide ou a expiré.", data: { reason: "candidate_activation_link_invalid" } });
-    const tree = render();
-    expect(elementsOf(tree).some(element => element.type === "form")).toBe(false);
-    expect(elementsOf(tree).find(element => element.type === "h1")!.props.children).toBe(copy.invalidTitle);
-    expect(elementsOf(tree).some(element => element.type === "p" && element.props.children === copy.invalidDescription)).toBe(true);
-    expect(elementsOf(tree).some(element => element.props.role === "status")).toBe(false);
+      // The link was valid on opening, then the server refuses it on sending.
+      view.options.onError!({
+        message: "Ce lien est invalide ou a expiré.",
+        data: { reason: "candidate_activation_link_invalid" },
+      });
+      const tree = render();
+      expect(elementsOf(tree).some(element => element.type === "form")).toBe(
+        false
+      );
+      expect(
+        elementsOf(tree).find(element => element.type === "h1")!.props.children
+      ).toBe(copy.invalidTitle);
+      expect(
+        elementsOf(tree).some(
+          element =>
+            element.type === "p" &&
+            element.props.children === copy.invalidDescription
+        )
+      ).toBe(true);
+      expect(
+        elementsOf(tree).some(element => element.props.role === "status")
+      ).toBe(false);
 
-    // Focus moves from the vanished submit button to the page's new heading.
-    view.frames.forEach(frame => frame());
-    expect(view.focused).toEqual(["candidate-activation-unavailable-title"]);
-    expect(byId(tree, "candidate-activation-unavailable-title").props.tabIndex).toBe(-1);
+      // Focus moves from the vanished submit button to the page's new heading.
+      view.frames.forEach(frame => frame());
+      expect(view.focused).toEqual(["candidate-activation-unavailable-title"]);
+      expect(
+        byId(tree, "candidate-activation-unavailable-title").props.tabIndex
+      ).toBe(-1);
 
-    const requestNewLink = elementsOf(tree).find(element => element.type === Link && element.props.children === copy.requestNewLink)!;
-    expect(requestNewLink.props.href).toBe("/candidate/access?mode=activation&email=vera%40example.test");
-  });
+      const requestNewLink = elementsOf(tree).find(
+        element =>
+          element.type === Link &&
+          element.props.children === copy.requestNewLink
+      )!;
+      expect(requestNewLink.props.href).toBe(
+        "/candidate/access?mode=activation&email=vera%40example.test"
+      );
+    }
+  );
 });

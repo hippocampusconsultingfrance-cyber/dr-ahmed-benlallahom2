@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { nonNegativeCount, percentageLabel } from "./recruitmentDashboardMetrics";
+import {
+  nonNegativeCount,
+  percentageLabel,
+} from "./recruitmentDashboardMetrics";
 
 describe("indicateurs du tableau de bord recrutement", () => {
   it("calcule les ratios sans inventer de pourcentage lorsqu’il n’y a pas de base", () => {

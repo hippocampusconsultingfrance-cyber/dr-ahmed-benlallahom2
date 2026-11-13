@@ -16,7 +16,9 @@ function loadVercelBlob(): Promise<typeof import("@vercel/blob")> {
 function getBlobToken(): string {
   const token = process.env.BLOB_READ_WRITE_TOKEN?.trim();
   if (!token) {
-    throw new Error("Private storage config missing: set BLOB_READ_WRITE_TOKEN");
+    throw new Error(
+      "Private storage config missing: set BLOB_READ_WRITE_TOKEN"
+    );
   }
   return token;
 }
@@ -34,21 +36,70 @@ function appendHashSuffix(relKey: string): string {
 
 export function classifyStorageError(error: unknown): string {
   if (!error || typeof error !== "object") return "storage_unknown";
-  const candidate = error as { constructor?: { name?: string }; message?: unknown; code?: unknown };
+  const candidate = error as {
+    constructor?: { name?: string };
+    message?: unknown;
+    code?: unknown;
+  };
   const constructorName = candidate.constructor?.name || "";
-  const message = typeof candidate.message === "string" ? candidate.message.toLowerCase() : "";
-  const code = typeof candidate.code === "string" ? candidate.code.toLowerCase() : "";
+  const message =
+    typeof candidate.message === "string"
+      ? candidate.message.toLowerCase()
+      : "";
+  const code =
+    typeof candidate.code === "string" ? candidate.code.toLowerCase() : "";
 
-  if (constructorName === "BlobAccessError" || message.includes("access denied") || message.includes("invalid token")) return "storage_access_denied";
-  if (constructorName === "BlobStoreNotFoundError" || message.includes("store does not exist")) return "storage_store_not_found";
-  if (constructorName === "BlobStoreSuspendedError" || message.includes("store has been suspended")) return "storage_store_suspended";
-  if (constructorName === "BlobServiceRateLimited" || message.includes("too many requests")) return "storage_rate_limited";
-  if (constructorName === "BlobServiceNotAvailable" || message.includes("service is currently not available")) return "storage_service_unavailable";
-  if (constructorName === "BlobFileTooLargeError" || message.includes("file is too large")) return "storage_file_too_large";
-  if (constructorName === "BlobContentTypeNotAllowedError" || message.includes("content type mismatch")) return "storage_content_type_rejected";
-  if (message.includes("no blob credentials") || message.includes("no read-write token") || message.includes("config missing")) return "storage_config_missing";
-  if (constructorName === "TypeError" || code.startsWith("econn") || code === "fetch_failed" || message.includes("fetch failed")) return "storage_network_error";
-  if (constructorName.startsWith("Blob") || message.startsWith("vercel blob:")) return "storage_blob_error";
+  if (
+    constructorName === "BlobAccessError" ||
+    message.includes("access denied") ||
+    message.includes("invalid token")
+  )
+    return "storage_access_denied";
+  if (
+    constructorName === "BlobStoreNotFoundError" ||
+    message.includes("store does not exist")
+  )
+    return "storage_store_not_found";
+  if (
+    constructorName === "BlobStoreSuspendedError" ||
+    message.includes("store has been suspended")
+  )
+    return "storage_store_suspended";
+  if (
+    constructorName === "BlobServiceRateLimited" ||
+    message.includes("too many requests")
+  )
+    return "storage_rate_limited";
+  if (
+    constructorName === "BlobServiceNotAvailable" ||
+    message.includes("service is currently not available")
+  )
+    return "storage_service_unavailable";
+  if (
+    constructorName === "BlobFileTooLargeError" ||
+    message.includes("file is too large")
+  )
+    return "storage_file_too_large";
+  if (
+    constructorName === "BlobContentTypeNotAllowedError" ||
+    message.includes("content type mismatch")
+  )
+    return "storage_content_type_rejected";
+  if (
+    message.includes("no blob credentials") ||
+    message.includes("no read-write token") ||
+    message.includes("config missing")
+  )
+    return "storage_config_missing";
+  if (
+    constructorName === "TypeError" ||
+    code.startsWith("econn") ||
+    code === "fetch_failed" ||
+    message.includes("fetch failed")
+  )
+    return "storage_network_error";
+  if (constructorName.startsWith("Blob") || message.startsWith("vercel blob:"))
+    return "storage_blob_error";
   return "storage_unknown";
 }
 
@@ -58,16 +109,27 @@ export function classifyStorageError(error: unknown): string {
  * no token).
  */
 export function isLastingStorageError(code: unknown): boolean {
-  return typeof code === "string" && ["storage_access_denied", "storage_store_not_found", "storage_store_suspended", "storage_config_missing"].includes(code);
+  return (
+    typeof code === "string" &&
+    [
+      "storage_access_denied",
+      "storage_store_not_found",
+      "storage_store_suspended",
+      "storage_config_missing",
+    ].includes(code)
+  );
 }
 
 export async function storagePut(
   relKey: string,
   data: Buffer | Uint8Array | string,
-  contentType = "application/octet-stream",
+  contentType = "application/octet-stream"
 ): Promise<{ key: string; url: string }> {
   const key = appendHashSuffix(normalizeKey(relKey));
-  const body = typeof data === "string" || Buffer.isBuffer(data) ? data : Buffer.from(data);
+  const body =
+    typeof data === "string" || Buffer.isBuffer(data)
+      ? data
+      : Buffer.from(data);
   let uploaded;
   try {
     const token = getBlobToken();
@@ -81,7 +143,9 @@ export async function storagePut(
       token,
     });
   } catch (error) {
-    const wrapped = new Error("storage_upload_failed", { cause: error }) as Error & { code: string };
+    const wrapped = new Error("storage_upload_failed", {
+      cause: error,
+    }) as Error & { code: string };
     wrapped.code = classifyStorageError(error);
     throw wrapped;
   }
@@ -103,10 +167,13 @@ export async function storagePut(
 export async function storagePutOnce(
   relKey: string,
   data: Buffer | Uint8Array | string,
-  contentType = "application/octet-stream",
+  contentType = "application/octet-stream"
 ): Promise<{ key: string; url: string; uploaded: boolean }> {
   const key = normalizeKey(relKey);
-  const body = typeof data === "string" || Buffer.isBuffer(data) ? data : Buffer.from(data);
+  const body =
+    typeof data === "string" || Buffer.isBuffer(data)
+      ? data
+      : Buffer.from(data);
   let uploaded;
   let checking = false;
   try {
@@ -129,7 +196,10 @@ export async function storagePutOnce(
       token,
     });
   } catch (error) {
-    const wrapped = new Error(checking ? "storage_check_failed" : "storage_upload_failed", { cause: error }) as Error & { code: string };
+    const wrapped = new Error(
+      checking ? "storage_check_failed" : "storage_upload_failed",
+      { cause: error }
+    ) as Error & { code: string };
     wrapped.code = classifyStorageError(error);
     throw wrapped;
   }
@@ -137,7 +207,9 @@ export async function storagePutOnce(
   return { key: uploaded.pathname, url: uploaded.url, uploaded: true };
 }
 
-export async function storageGet(relKey: string): Promise<{ key: string; url: string }> {
+export async function storageGet(
+  relKey: string
+): Promise<{ key: string; url: string }> {
   const key = normalizeKey(relKey);
   return { key, url: await storageGetSignedUrl(key) };
 }
@@ -175,7 +247,9 @@ export async function storageGetBuffer(relKey: string): Promise<Buffer> {
  * ignores pathnames that no longer exist, so a retried erasure is idempotent.
  */
 export async function storageDelete(relKeys: string[]): Promise<number> {
-  const keys = Array.from(new Set(relKeys.map(normalizeKey).filter(key => key.length > 0)));
+  const keys = Array.from(
+    new Set(relKeys.map(normalizeKey).filter(key => key.length > 0))
+  );
   const token = getBlobToken();
   const { del } = await loadVercelBlob();
   for (let index = 0; index < keys.length; index += 100) {
@@ -185,22 +259,39 @@ export async function storageDelete(relKeys: string[]): Promise<number> {
 }
 
 /** Lists the objects under a prefix with their upload date. */
-export async function storageListObjects(prefix: string, maxKeys = 500): Promise<Array<{ key: string; uploadedAt: Date }>> {
+export async function storageListObjects(
+  prefix: string,
+  maxKeys = 500
+): Promise<Array<{ key: string; uploadedAt: Date }>> {
   const normalized = normalizeKey(prefix);
-  if (!normalized.includes("/")) throw new Error("storage_list_prefix_too_broad");
+  if (!normalized.includes("/"))
+    throw new Error("storage_list_prefix_too_broad");
   const token = getBlobToken();
   const { list } = await loadVercelBlob();
   const objects: Array<{ key: string; uploadedAt: Date }> = [];
   let cursor: string | undefined;
   do {
-    const page = await list({ prefix: normalized, cursor, limit: Math.min(1000, maxKeys - objects.length), token });
-    objects.push(...page.blobs.map(blob => ({ key: blob.pathname, uploadedAt: new Date(blob.uploadedAt) })));
+    const page = await list({
+      prefix: normalized,
+      cursor,
+      limit: Math.min(1000, maxKeys - objects.length),
+      token,
+    });
+    objects.push(
+      ...page.blobs.map(blob => ({
+        key: blob.pathname,
+        uploadedAt: new Date(blob.uploadedAt),
+      }))
+    );
     cursor = page.hasMore ? page.cursor : undefined;
   } while (cursor && objects.length < maxKeys);
   return objects;
 }
 
 /** Lists object pathnames under a prefix (for copies of one dossier). */
-export async function storageListKeys(prefix: string, maxKeys = 500): Promise<string[]> {
+export async function storageListKeys(
+  prefix: string,
+  maxKeys = 500
+): Promise<string[]> {
   return (await storageListObjects(prefix, maxKeys)).map(object => object.key);
 }

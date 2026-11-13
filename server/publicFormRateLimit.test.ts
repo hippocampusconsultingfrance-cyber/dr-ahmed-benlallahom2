@@ -36,9 +36,15 @@ describe("public form rate limits", () => {
       windowMs: 60 * 60 * 1000,
       blockMs: 60 * 60 * 1000,
     });
-    expect(PUBLIC_FORM_RATE_LIMITS.bookingIp.blockedMessage).toBe(BOOKING_RATE_LIMIT_MESSAGE);
-    expect(PUBLIC_FORM_RATE_LIMITS.bookingEmail.blockedMessage).toBe(BOOKING_RATE_LIMIT_MESSAGE);
-    expect(BOOKING_RATE_LIMIT_MESSAGE).toMatch(/^Trop de tentatives de réservation/);
+    expect(PUBLIC_FORM_RATE_LIMITS.bookingIp.blockedMessage).toBe(
+      BOOKING_RATE_LIMIT_MESSAGE
+    );
+    expect(PUBLIC_FORM_RATE_LIMITS.bookingEmail.blockedMessage).toBe(
+      BOOKING_RATE_LIMIT_MESSAGE
+    );
+    expect(BOOKING_RATE_LIMIT_MESSAGE).toMatch(
+      /^Trop de tentatives de réservation/
+    );
     // Motif traduit par la page de réservation (EN-06), et par le contact et le RGPD (ABUS-01).
     expect(PUBLIC_FORM_RATE_LIMITS.bookingIp.reason).toBe("rate_limited");
     expect(PUBLIC_FORM_RATE_LIMITS.bookingEmail.reason).toBe("rate_limited");
@@ -49,13 +55,21 @@ describe("public form rate limits", () => {
   it("keeps the historical IP + email key for contact and GDPR forms", () => {
     expect(PUBLIC_FORM_RATE_LIMITS.contact.scope).toBe("ip_email");
     expect(PUBLIC_FORM_RATE_LIMITS.gdpr.scope).toBe("ip_email");
-    expect(publicFormRateLimitSubject("ip_email", "abc", "a@example.com")).toBe("abc:a@example.com");
-    expect(publicFormRateLimitSubject("ip_email", null, "a@example.com")).toBe("unknown:a@example.com");
+    expect(publicFormRateLimitSubject("ip_email", "abc", "a@example.com")).toBe(
+      "abc:a@example.com"
+    );
+    expect(publicFormRateLimitSubject("ip_email", null, "a@example.com")).toBe(
+      "unknown:a@example.com"
+    );
   });
 
   it("never pools every visitor without an IP into one shared booking counter", () => {
-    expect(publicFormRateLimitSubject("ip", "abc", "a@example.com")).toBe("ip:abc");
+    expect(publicFormRateLimitSubject("ip", "abc", "a@example.com")).toBe(
+      "ip:abc"
+    );
     expect(publicFormRateLimitSubject("ip", null, "a@example.com")).toBeNull();
-    expect(publicFormRateLimitSubject("email", null, "a@example.com")).toBe("email:a@example.com");
+    expect(publicFormRateLimitSubject("email", null, "a@example.com")).toBe(
+      "email:a@example.com"
+    );
   });
 });

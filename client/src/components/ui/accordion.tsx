@@ -29,7 +29,9 @@ function AccordionTrigger({
   children,
   headingLevel = 3,
   ...props
-}: React.ComponentProps<typeof AccordionPrimitive.Trigger> & { headingLevel?: 2 | 3 | 4 }) {
+}: React.ComponentProps<typeof AccordionPrimitive.Trigger> & {
+  headingLevel?: 2 | 3 | 4;
+}) {
   const Heading = `h${headingLevel}` as const;
   return (
     <AccordionPrimitive.Header asChild>

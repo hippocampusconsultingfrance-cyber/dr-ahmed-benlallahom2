@@ -23,7 +23,13 @@ vi.mock("resend", () => ({
 }));
 const database = vi.hoisted(() => ({ getDb: vi.fn() }));
 vi.mock("./db", () => ({ getDb: database.getDb }));
-vi.mock("./storage.js", () => ({ storagePutOnce: vi.fn(async (key: string) => ({ key, url: "https://storage.test/invoice.pdf", uploaded: true })) }));
+vi.mock("./storage.js", () => ({
+  storagePutOnce: vi.fn(async (key: string) => ({
+    key,
+    url: "https://storage.test/invoice.pdf",
+    uploaded: true,
+  })),
+}));
 vi.mock("./invoiceNumbering", () => ({
   allocateAppointmentInvoice: vi.fn(async () => ({
     invoiceNumber: "FAC-2026-000001",
@@ -33,9 +39,13 @@ vi.mock("./invoiceNumbering", () => ({
 }));
 
 import { processDueAppointmentFulfillmentJobs } from "./appointmentFulfillment";
-import { sendDueAppointmentReminders, DAILY_REMINDER_WINDOW } from "./scheduledJobs";
+import {
+  sendDueAppointmentReminders,
+  DAILY_REMINDER_WINDOW,
+} from "./scheduledJobs";
 
-const HEALTH_DETAILS = "Je suis diabétique de type 2 et j’ai une chirurgie du genou prévue";
+const HEALTH_DETAILS =
+  "Je suis diabétique de type 2 et j’ai une chirurgie du genou prévue";
 
 function appointmentRow(overrides: Record<string, unknown> = {}) {
   return {
@@ -61,7 +71,10 @@ function appointmentRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function fakeDatabase(input: { jobs?: unknown[][]; appointments?: unknown[][] }) {
+function fakeDatabase(input: {
+  jobs?: unknown[][];
+  appointments?: unknown[][];
+}) {
   const queues = new Map<unknown, unknown[][]>([
     [appointmentFulfillmentJobs, [...(input.jobs ?? [])]],
     [appointments, [...(input.appointments ?? [])]],
@@ -74,13 +87,23 @@ function fakeDatabase(input: { jobs?: unknown[][]; appointments?: unknown[][] })
           where: () => chain,
           orderBy: () => chain,
           limit: async () => next(),
-          then: (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) => Promise.resolve(next()).then(resolve, reject),
+          then: (
+            resolve: (value: unknown) => unknown,
+            reject: (reason: unknown) => unknown
+          ) => Promise.resolve(next()).then(resolve, reject),
         };
         return chain;
       },
     })),
-    update: vi.fn(() => ({ set: () => ({ where: async () => ({ rowCount: 1 }) }) })),
-    insert: vi.fn(() => ({ values: () => ({ onConflictDoUpdate: async () => ({ rowCount: 1 }), onConflictDoNothing: async () => ({ rowCount: 0 }) }) })),
+    update: vi.fn(() => ({
+      set: () => ({ where: async () => ({ rowCount: 1 }) }),
+    })),
+    insert: vi.fn(() => ({
+      values: () => ({
+        onConflictDoUpdate: async () => ({ rowCount: 1 }),
+        onConflictDoNothing: async () => ({ rowCount: 0 }),
+      }),
+    })),
   };
   database.getDb.mockResolvedValue(db);
   return db;
@@ -109,10 +132,30 @@ beforeEach(() => {
 
 describe("minimisation des données de santé à la réservation", () => {
   it("n’envoie l’objet de la demande ni au patient ni au propriétaire lors de la confirmation", async () => {
-    const ownerJob = { id: 6, appointmentId: 42, jobType: "owner", status: "queued", attempts: 0, maxAttempts: 3, scheduledFor: new Date(0) };
-    const job = { id: 7, appointmentId: 42, jobType: "confirmation", status: "queued", attempts: 0, maxAttempts: 3, scheduledFor: new Date(0) };
+    const ownerJob = {
+      id: 6,
+      appointmentId: 42,
+      jobType: "owner",
+      status: "queued",
+      attempts: 0,
+      maxAttempts: 3,
+      scheduledFor: new Date(0),
+    };
+    const job = {
+      id: 7,
+      appointmentId: 42,
+      jobType: "confirmation",
+      status: "queued",
+      attempts: 0,
+      maxAttempts: 3,
+      scheduledFor: new Date(0),
+    };
     fakeDatabase({
-      jobs: [[ownerJob, job], [{ ...ownerJob, status: "running", attempts: 1 }], [{ ...job, status: "running", attempts: 1 }]],
+      jobs: [
+        [ownerJob, job],
+        [{ ...ownerJob, status: "running", attempts: 1 }],
+        [{ ...job, status: "running", attempts: 1 }],
+      ],
       appointments: [[appointmentRow()], [appointmentRow()]],
     });
 
@@ -120,25 +163,43 @@ describe("minimisation des données de santé à la réservation", () => {
 
     expect(result.results).toEqual([{ completed: true }, { completed: true }]);
     const recipients = sent.emails.map(message => (message.to as string[])[0]);
-    expect(recipients).toEqual(expect.arrayContaining(["patient@example.test", "owner@example.test"]));
+    expect(recipients).toEqual(
+      expect.arrayContaining(["patient@example.test", "owner@example.test"])
+    );
     for (const message of sent.emails) {
       expect(serialized(message)).not.toContain("diabétique");
       expect(serialized(message)).not.toContain("genou");
     }
-    const ownerMessage = sent.emails.find(message => (message.to as string[])[0] === "owner@example.test");
+    const ownerMessage = sent.emails.find(
+      message => (message.to as string[])[0] === "owner@example.test"
+    );
     expect(String(ownerMessage?.text)).toContain("tableau de bord");
   });
 
   it("n’imprime pas l’objet de la demande sur la facture PDF ni dans son email", async () => {
-    const job = { id: 8, appointmentId: 42, jobType: "invoice", status: "queued", attempts: 0, maxAttempts: 3, scheduledFor: new Date(0), createdAt: new Date("2026-10-12T07:59:00Z") };
-    fakeDatabase({ jobs: [[job], [{ ...job, status: "running", attempts: 1 }]], appointments: [[appointmentRow()]] });
+    const job = {
+      id: 8,
+      appointmentId: 42,
+      jobType: "invoice",
+      status: "queued",
+      attempts: 0,
+      maxAttempts: 3,
+      scheduledFor: new Date(0),
+      createdAt: new Date("2026-10-12T07:59:00Z"),
+    };
+    fakeDatabase({
+      jobs: [[job], [{ ...job, status: "running", attempts: 1 }]],
+      appointments: [[appointmentRow()]],
+    });
 
     const result = await processDueAppointmentFulfillmentJobs();
 
     expect(result.results).toEqual([{ completed: true }]);
     expect(sent.emails).toHaveLength(1);
     expect(serialized(sent.emails[0])).not.toContain("diabétique");
-    const [attachment] = sent.emails[0].attachments as Array<{ content: string }>;
+    const [attachment] = sent.emails[0].attachments as Array<{
+      content: string;
+    }>;
     const text = await pdfText(attachment.content);
     expect(text).toContain("FAC-2026-000001");
     expect(text).not.toContain("diabétique");
@@ -146,7 +207,15 @@ describe("minimisation des données de santé à la réservation", () => {
   });
 
   it("n’inclut pas l’objet de la demande dans le rappel", async () => {
-    fakeDatabase({ appointments: [[appointmentRow({ appointmentDate: new Date(Date.now() + 20 * 60 * 60 * 1000) })]] });
+    fakeDatabase({
+      appointments: [
+        [
+          appointmentRow({
+            appointmentDate: new Date(Date.now() + 20 * 60 * 60 * 1000),
+          }),
+        ],
+      ],
+    });
 
     const result = await sendDueAppointmentReminders(DAILY_REMINDER_WINDOW);
 
@@ -157,11 +226,17 @@ describe("minimisation des données de santé à la réservation", () => {
 
   it("présente le champ comme un objet sans information médicale, avec un avertissement explicite", async () => {
     const { bookingContent } = await import("../client/src/pages/BookingPage");
-    expect(bookingContent.fr.form.details).toBe("Objet de la demande (sans information médicale)");
-    expect(bookingContent.fr.form.detailsWarning).toMatch(/aucune information de santé/);
+    expect(bookingContent.fr.form.details).toBe(
+      "Objet de la demande (sans information médicale)"
+    );
+    expect(bookingContent.fr.form.detailsWarning).toMatch(
+      /aucune information de santé/
+    );
     for (const language of ["en", "de", "zh"] as const) {
       expect(bookingContent[language].form.details).toBeTruthy();
-      expect(bookingContent[language].form.detailsWarning.length).toBeGreaterThan(20);
+      expect(
+        bookingContent[language].form.detailsWarning.length
+      ).toBeGreaterThan(20);
     }
     // The field is bound to its warning and length limit on the page: BookingPage.render.test.ts.
   });

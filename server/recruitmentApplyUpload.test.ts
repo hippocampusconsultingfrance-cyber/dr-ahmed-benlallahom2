@@ -1,9 +1,20 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { RECRUITMENT_CV_MAX_BYTES } from "../shared/recruitmentCvLimits";
 import { RECRUITMENT_CV_FORMAT_MESSAGE } from "./recruitmentFileValidation";
 import { safeCandidateDocumentName } from "./candidateDocumentValidation";
 import { listen, validPdfBuffer } from "./testSupport/candidateUploadApp";
-import { libreOfficeCvPdf, packPdfIntoObjectStream } from "./testing/pdfFixture";
+import {
+  libreOfficeCvPdf,
+  packPdfIntoObjectStream,
+} from "./testing/pdfFixture";
 import { recruitmentSubmissionErrorMessage } from "../client/src/lib/recruitmentSubmissionErrors";
 
 const state = vi.hoisted(() => {
@@ -12,23 +23,34 @@ const state = vi.hoisted(() => {
 });
 
 // No database: an application that passes the upload and every check stops at 503.
-vi.mock("./db", () => ({ getDb: async () => { state.databaseRequests += 1; return null; } }));
-vi.mock("./_core/notification", () => ({ notifyOwner: vi.fn(async () => true) }));
+vi.mock("./db", () => ({
+  getDb: async () => {
+    state.databaseRequests += 1;
+    return null;
+  },
+}));
+vi.mock("./_core/notification", () => ({
+  notifyOwner: vi.fn(async () => true),
+}));
 // The anti-robot check and the rate limits have their own tests (recruitmentApplyProtection).
-vi.mock("./candidateTurnstile", () => ({ verifyCandidateTurnstile: vi.fn(async () => undefined) }));
+vi.mock("./candidateTurnstile", () => ({
+  verifyCandidateTurnstile: vi.fn(async () => undefined),
+}));
 vi.mock("./candidateSecurity", async importOriginal => ({
-  ...await importOriginal<typeof import("./candidateSecurity")>(),
+  ...(await importOriginal<typeof import("./candidateSecurity")>()),
   enforcePersistentRateLimit: vi.fn(async () => undefined),
   logSecurityEvent: vi.fn(async () => undefined),
 }));
 vi.mock("@clerk/express", () => ({
-  clerkMiddleware: () => (_req: unknown, _res: unknown, next: () => void) => next(),
+  clerkMiddleware: () => (_req: unknown, _res: unknown, next: () => void) =>
+    next(),
   getAuth: () => ({ userId: null }),
   clerkClient: { users: { getUser: vi.fn() } },
 }));
 // The real check, watched for the file name the route keeps.
 vi.mock("./recruitmentFileValidation", async importOriginal => {
-  const original = await importOriginal<typeof import("./recruitmentFileValidation")>();
+  const original =
+    await importOriginal<typeof import("./recruitmentFileValidation")>();
   return { ...original, validateCvFile: vi.fn(original.validateCvFile) };
 });
 
@@ -44,12 +66,19 @@ beforeAll(async () => {
   baseUrl = listening.baseUrl;
   close = () => new Promise(resolve => listening.server.close(() => resolve()));
 });
-afterAll(async () => { await close(); });
-beforeEach(() => { state.databaseRequests = 0; });
+afterAll(async () => {
+  await close();
+});
+beforeEach(() => {
+  state.databaseRequests = 0;
+});
 
 type CvPart = { buffer: Buffer; name?: string; type?: string };
 
-async function apply(input: { cvs: CvPart[]; fields?: Record<string, string> }) {
+async function apply(input: {
+  cvs: CvPart[];
+  fields?: Record<string, string>;
+}) {
   const form = new FormData();
   const fields = {
     firstName: "Amina",
@@ -64,33 +93,81 @@ async function apply(input: { cvs: CvPart[]; fields?: Record<string, string> }) 
   };
   for (const [name, value] of Object.entries(fields)) form.set(name, value);
   for (const cv of input.cvs) {
-    form.append("cv", new Blob([new Uint8Array(cv.buffer)], { type: cv.type ?? "application/pdf" }), cv.name ?? "cv.pdf");
+    form.append(
+      "cv",
+      new Blob([new Uint8Array(cv.buffer)], {
+        type: cv.type ?? "application/pdf",
+      }),
+      cv.name ?? "cv.pdf"
+    );
   }
-  const response = await fetch(`${baseUrl}/api/recruitment/apply`, { method: "POST", body: form });
-  return { status: response.status, body: await response.json() as Record<string, unknown> };
+  const response = await fetch(`${baseUrl}/api/recruitment/apply`, {
+    method: "POST",
+    body: form,
+  });
+  return {
+    status: response.status,
+    body: (await response.json()) as Record<string, unknown>,
+  };
 }
 
 describe("POST /api/recruitment/apply — réception du CV (multer) et validation (zod)", () => {
   it("accepte un CV d'exactement 4 Mo et le conduit jusqu'à l'enregistrement", async () => {
-    const result = await apply({ cvs: [{ buffer: validPdfBuffer(RECRUITMENT_CV_MAX_BYTES) }] });
-    expect(result).toEqual({ status: 503, body: { error: "Le service de candidature est temporairement indisponible.", code: "recruitment_service_unavailable" } });
+    const result = await apply({
+      cvs: [{ buffer: validPdfBuffer(RECRUITMENT_CV_MAX_BYTES) }],
+    });
+    expect(result).toEqual({
+      status: 503,
+      body: {
+        error: "Le service de candidature est temporairement indisponible.",
+        code: "recruitment_service_unavailable",
+      },
+    });
     expect(state.databaseRequests).toBe(1);
   });
 
   it("refuse un CV de plus de 4 Mo avec le message dédié, sans rien enregistrer", async () => {
-    const result = await apply({ cvs: [{ buffer: validPdfBuffer(RECRUITMENT_CV_MAX_BYTES + 1) }] });
-    expect(result).toEqual({ status: 400, body: { error: "Le CV ne doit pas dépasser 4 Mo. Compressez-le ou enregistrez-le en PDF, puis réessayez.", code: "recruitment_cv_too_large" } });
+    const result = await apply({
+      cvs: [{ buffer: validPdfBuffer(RECRUITMENT_CV_MAX_BYTES + 1) }],
+    });
+    expect(result).toEqual({
+      status: 400,
+      body: {
+        error:
+          "Le CV ne doit pas dépasser 4 Mo. Compressez-le ou enregistrez-le en PDF, puis réessayez.",
+        code: "recruitment_cv_too_large",
+      },
+    });
     expect(state.databaseRequests).toBe(0);
   });
 
   it("refuse un fichier qui n'est ni un PDF ni un DOCX", async () => {
-    const result = await apply({ cvs: [{ buffer: Buffer.from("Curriculum vitae"), name: "cv.txt", type: "text/plain" }] });
-    expect(result).toEqual({ status: 400, body: { error: RECRUITMENT_CV_FORMAT_MESSAGE, code: "recruitment_cv_format_refused" } });
+    const result = await apply({
+      cvs: [
+        {
+          buffer: Buffer.from("Curriculum vitae"),
+          name: "cv.txt",
+          type: "text/plain",
+        },
+      ],
+    });
+    expect(result).toEqual({
+      status: 400,
+      body: {
+        error: RECRUITMENT_CV_FORMAT_MESSAGE,
+        code: "recruitment_cv_format_refused",
+      },
+    });
     expect(state.databaseRequests).toBe(0);
   });
 
   it("refuse une candidature qui joint deux CV", async () => {
-    const result = await apply({ cvs: [{ buffer: validPdfBuffer() }, { buffer: validPdfBuffer(), name: "cv-2.pdf" }] });
+    const result = await apply({
+      cvs: [
+        { buffer: validPdfBuffer() },
+        { buffer: validPdfBuffer(), name: "cv-2.pdf" },
+      ],
+    });
     expect(result.status).toBe(400);
     expect(result.body).toEqual({ error: expect.stringMatching(/\S/) });
     expect(state.databaseRequests).toBe(0);
@@ -100,42 +177,81 @@ describe("POST /api/recruitment/apply — réception du CV (multer) et validatio
     const name = `${"Curriculum_Vitae_Amina_Haddad_anesthesie_reanimation_".repeat(4)}2026.pdf`;
     expect(name.length).toBeGreaterThan(180);
     const result = await apply({ cvs: [{ buffer: validPdfBuffer(), name }] });
-    expect(result).toEqual({ status: 503, body: { error: "Le service de candidature est temporairement indisponible.", code: "recruitment_service_unavailable" } });
+    expect(result).toEqual({
+      status: 503,
+      body: {
+        error: "Le service de candidature est temporairement indisponible.",
+        code: "recruitment_service_unavailable",
+      },
+    });
     expect(state.databaseRequests).toBe(1);
   });
 
   it("lit le nom du CV envoyé en UTF-8 par le navigateur et le garde tel quel, accents compris (INTL-07)", async () => {
     vi.mocked(validateCvFile).mockClear();
-    const result = await apply({ cvs: [{ buffer: validPdfBuffer(), name: "Diplôme d’État.pdf" }] });
+    const result = await apply({
+      cvs: [{ buffer: validPdfBuffer(), name: "Diplôme d’État.pdf" }],
+    });
     expect(result.status).toBe(503);
-    expect(vi.mocked(validateCvFile).mock.calls.map(([file]) => file.originalName)).toEqual(["Diplôme d’État.pdf"]);
+    expect(
+      vi.mocked(validateCvFile).mock.calls.map(([file]) => file.originalName)
+    ).toEqual(["Diplôme d’État.pdf"]);
   });
 
   it("garde le même nom pour un CV au nom décomposé (NFD, macOS) que pour le même nom composé, comme le coffre", async () => {
     vi.mocked(validateCvFile).mockClear();
     const name = "Diplôme_médecine_été.pdf";
     for (const form of ["NFC", "NFD"] as const) {
-      const result = await apply({ cvs: [{ buffer: validPdfBuffer(), name: name.normalize(form) }] });
+      const result = await apply({
+        cvs: [{ buffer: validPdfBuffer(), name: name.normalize(form) }],
+      });
       expect(result.status).toBe(503);
     }
     // Composed (NFC): « ô », not « o » followed by its accent.
-    expect(vi.mocked(validateCvFile).mock.calls.map(([file]) => file.originalName)).toEqual([name, name]);
+    expect(
+      vi.mocked(validateCvFile).mock.calls.map(([file]) => file.originalName)
+    ).toEqual([name, name]);
     expect(safeCandidateDocumentName(name.normalize("NFD"))).toBe(name);
   });
 
   it("exige le CV", async () => {
     const result = await apply({ cvs: [] });
-    expect(result).toEqual({ status: 400, body: { error: "Le CV est requis.", code: "recruitment_cv_required" } });
+    expect(result).toEqual({
+      status: 400,
+      body: { error: "Le CV est requis.", code: "recruitment_cv_required" },
+    });
   });
 
   it("signale le nombre maximal de pays ciblés et refuse les autres champs invalides", async () => {
-    const tooManyCountries = Array.from({ length: 19 }, (_, index) => `Pays ${index + 1}`);
-    const countries = await apply({ cvs: [{ buffer: validPdfBuffer() }], fields: { targetCountries: JSON.stringify(tooManyCountries) } });
-    expect(countries).toEqual({ status: 400, body: { error: "Vous pouvez sélectionner jusqu’à 18 pays ciblés.", code: "recruitment_target_countries_too_many" } });
+    const tooManyCountries = Array.from(
+      { length: 19 },
+      (_, index) => `Pays ${index + 1}`
+    );
+    const countries = await apply({
+      cvs: [{ buffer: validPdfBuffer() }],
+      fields: { targetCountries: JSON.stringify(tooManyCountries) },
+    });
+    expect(countries).toEqual({
+      status: 400,
+      body: {
+        error: "Vous pouvez sélectionner jusqu’à 18 pays ciblés.",
+        code: "recruitment_target_countries_too_many",
+      },
+    });
 
-    for (const fields of [{ email: "pas-une-adresse" }, { gdprConsent: "0" }, { targetCountries: "[]" }] as Array<Record<string, string>>) {
-      const invalid = await apply({ cvs: [{ buffer: validPdfBuffer() }], fields });
-      expect(invalid, JSON.stringify(fields)).toMatchObject({ status: 400, body: { error: "Les informations de candidature sont invalides." } });
+    for (const fields of [
+      { email: "pas-une-adresse" },
+      { gdprConsent: "0" },
+      { targetCountries: "[]" },
+    ] as Array<Record<string, string>>) {
+      const invalid = await apply({
+        cvs: [{ buffer: validPdfBuffer() }],
+        fields,
+      });
+      expect(invalid, JSON.stringify(fields)).toMatchObject({
+        status: 400,
+        body: { error: "Les informations de candidature sont invalides." },
+      });
     }
     expect(state.databaseRequests).toBe(0);
   });
@@ -143,7 +259,10 @@ describe("POST /api/recruitment/apply — réception du CV (multer) et validatio
 
 describe("REC-02 — PDF réels et PDF piégés reçus par /api/recruitment/apply", () => {
   it("conduit un CV LibreOffice et un CV à flux d’objets jusqu’à l’enregistrement", async () => {
-    for (const buffer of [libreOfficeCvPdf(), packPdfIntoObjectStream(libreOfficeCvPdf())]) {
+    for (const buffer of [
+      libreOfficeCvPdf(),
+      packPdfIntoObjectStream(libreOfficeCvPdf()),
+    ]) {
       const result = await apply({ cvs: [{ buffer }] });
       expect(result.body.code).toBe("recruitment_service_unavailable");
     }
@@ -152,14 +271,22 @@ describe("REC-02 — PDF réels et PDF piégés reçus par /api/recruitment/appl
 
   it("refuse un JavaScript caché dans un flux d’objets et dit au candidat quoi faire, en français et traduit", async () => {
     const trapped = packPdfIntoObjectStream(libreOfficeCvPdf(), {
-      edit: source => source.replace("/OpenAction[1 0 R /XYZ null null 0]", "/OpenAction <</S/JavaScript/JS(app.alert\\(1\\))>>"),
+      edit: source =>
+        source.replace(
+          "/OpenAction[1 0 R /XYZ null null 0]",
+          "/OpenAction <</S/JavaScript/JS(app.alert\\(1\\))>>"
+        ),
     });
     const result = await apply({ cvs: [{ buffer: trapped }] });
     expect(result.status).toBe(400);
     expect(result.body.code).toBe("cv_validation_pdf_active_content");
-    expect(result.body.error).toContain("Réenregistrez votre CV en DOCX ou imprimez-le en PDF depuis votre navigateur");
+    expect(result.body.error).toContain(
+      "Réenregistrez votre CV en DOCX ou imprimez-le en PDF depuis votre navigateur"
+    );
     const pageCopy = { genericError: "generic", fileError: "file" };
-    expect(recruitmentSubmissionErrorMessage(result.body, "en", pageCopy)).toContain("print it to PDF from your browser");
+    expect(
+      recruitmentSubmissionErrorMessage(result.body, "en", pageCopy)
+    ).toContain("print it to PDF from your browser");
     expect(state.databaseRequests).toBe(0);
   });
 });

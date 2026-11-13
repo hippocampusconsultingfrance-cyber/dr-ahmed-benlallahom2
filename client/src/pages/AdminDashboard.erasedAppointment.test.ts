@@ -1,15 +1,26 @@
 import { isValidElement, type ReactElement, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { elementsOf, renderStateful, resetStatefulHooks } from "@/testing/statefulRender";
+import {
+  elementsOf,
+  renderStateful,
+  resetStatefulHooks,
+} from "@/testing/statefulRender";
 
 // RGPD-12 — un rendez-vous réduit au minimum comptable (effacement ou
 // conservation de 3 ans écoulée) n’a plus d’adresse : l’onglet Réservations le
 // signale, ne propose plus « Remettre en confirmé » et, pour un remboursement,
 // dit que le patient n’est plus joignable au lieu de « prévenez-le ».
 
-vi.mock("react", async importOriginal => (await import("@/testing/statefulRender")).withStatefulHooks(await importOriginal()));
+vi.mock("react", async importOriginal =>
+  (await import("@/testing/statefulRender")).withStatefulHooks(
+    await importOriginal()
+  )
+);
 
-type MutationOptions = { onSuccess?: (result: never) => unknown; onError?: (error: Error) => unknown };
+type MutationOptions = {
+  onSuccess?: (result: never) => unknown;
+  onError?: (error: Error) => unknown;
+};
 
 const view = vi.hoisted(() => ({
   page: { items: [] as Array<Record<string, unknown>>, total: 0 },
@@ -19,7 +30,12 @@ const view = vi.hoisted(() => ({
 }));
 
 vi.mock("sonner", () => ({
-  toast: Object.fromEntries(["success", "error", "info", "warning"].map(kind => [kind, (message: string) => view.toasts.push([kind, message])])),
+  toast: Object.fromEntries(
+    ["success", "error", "info", "warning"].map(kind => [
+      kind,
+      (message: string) => view.toasts.push([kind, message]),
+    ])
+  ),
 }));
 vi.mock("@/lib/trpc", () => {
   const mutation = (name: string) => ({
@@ -32,44 +48,98 @@ vi.mock("@/lib/trpc", () => {
   const invalidate = { invalidate: vi.fn() };
   return {
     trpc: {
-      useUtils: () => ({ admin: { appointments: { list: invalidate, agenda: invalidate }, stats: invalidate, attention: invalidate } }),
-      useQueries: (build: (t: unknown) => unknown[]) => build({ admin: { appointments: { list: () => "appointments" } } }).map(() => ({ data: view.page, isLoading: false, error: null })),
-      admin: { appointments: { updateStatus: mutation("updateStatus"), refund: mutation("refund"), refundUnconfirmedSession: mutation("refundUnconfirmedSession") } },
+      useUtils: () => ({
+        admin: {
+          appointments: { list: invalidate, agenda: invalidate },
+          stats: invalidate,
+          attention: invalidate,
+        },
+      }),
+      useQueries: (build: (t: unknown) => unknown[]) =>
+        build({ admin: { appointments: { list: () => "appointments" } } }).map(
+          () => ({ data: view.page, isLoading: false, error: null })
+        ),
+      admin: {
+        appointments: {
+          updateStatus: mutation("updateStatus"),
+          refund: mutation("refund"),
+          refundUnconfirmedSession: mutation("refundUnconfirmedSession"),
+        },
+      },
     },
   };
 });
 
-const { default: AppointmentsTab } = await import("@/components/AppointmentsTab");
-const { default: AppointmentDeliveries } = await import("@/components/AppointmentDeliveries");
-const { PATIENT_DATA_ERASED_REASON_PROMPT, PATIENT_DATA_ERASED_REFUND_NOTICE } = await import("./appointmentAdminActions");
+const { default: AppointmentsTab } = await import(
+  "@/components/AppointmentsTab"
+);
+const { default: AppointmentDeliveries } = await import(
+  "@/components/AppointmentDeliveries"
+);
+const { PATIENT_DATA_ERASED_REASON_PROMPT, PATIENT_DATA_ERASED_REFUND_NOTICE } =
+  await import("./appointmentAdminActions");
 
 const DAY = 24 * 60 * 60 * 1000;
 const booking = (id: number, extra: Record<string, unknown> = {}) => ({
-  id, trackingId: `APTERASE${id}`, customerName: "Jeanne Martin", customerEmail: "jeanne@test.local", customerPhone: "+33600000000",
-  appointmentDate: new Date(Date.now() - 400 * DAY), finalPrice: "100.00", paymentStatus: "completed", appointmentStatus: "completed",
-  stripePaymentIntentId: `pi_${id}`, language: "fr", requestDetails: "", deliveries: [], invoiceNumber: `FAC-2025-00000${id}`, ...extra,
+  id,
+  trackingId: `APTERASE${id}`,
+  customerName: "Jeanne Martin",
+  customerEmail: "jeanne@test.local",
+  customerPhone: "+33600000000",
+  appointmentDate: new Date(Date.now() - 400 * DAY),
+  finalPrice: "100.00",
+  paymentStatus: "completed",
+  appointmentStatus: "completed",
+  stripePaymentIntentId: `pi_${id}`,
+  language: "fr",
+  requestDetails: "",
+  deliveries: [],
+  invoiceNumber: `FAC-2025-00000${id}`,
+  ...extra,
 });
-const ERASED = { customerName: "Anonymisé", customerEmail: "", customerPhone: "" };
+const ERASED = {
+  customerName: "Anonymisé",
+  customerEmail: "",
+  customerPhone: "",
+};
 
-const textOf = (node: ReactNode): string => Array.isArray(node) ? node.map(textOf).join("")
-  : typeof node === "string" || typeof node === "number" ? String(node)
-  : isValidElement<{ children?: ReactNode }>(node) ? textOf(node.props.children) : "";
+const textOf = (node: ReactNode): string =>
+  Array.isArray(node)
+    ? node.map(textOf).join("")
+    : typeof node === "string" || typeof node === "number"
+      ? String(node)
+      : isValidElement<{ children?: ReactNode }>(node)
+        ? textOf(node.props.children)
+        : "";
 
 /** The elements of one booking's card, found by its key. */
 function card(tree: ReactElement, id: number) {
-  const found = elementsOf(tree).find(element => (element as unknown as { key: string | null }).key === String(id));
+  const found = elementsOf(tree).find(
+    element => (element as unknown as { key: string | null }).key === String(id)
+  );
   if (!found) throw new Error(`no card ${id}`);
   return elementsOf(found.props.children);
 }
-const withText = (elements: ReturnType<typeof card>, text: string) => elements.filter(element => textOf(element.props.children as ReactNode) === text);
-const clickable = (elements: ReturnType<typeof card>, label: string) => elements.find(element => typeof element.props.onClick === "function" && textOf(element.props.children as ReactNode).includes(label));
+const withText = (elements: ReturnType<typeof card>, text: string) =>
+  elements.filter(
+    element => textOf(element.props.children as ReactNode) === text
+  );
+const clickable = (elements: ReturnType<typeof card>, label: string) =>
+  elements.find(
+    element =>
+      typeof element.props.onClick === "function" &&
+      textOf(element.props.children as ReactNode).includes(label)
+  );
 
 beforeEach(() => {
   view.page = { items: [booking(1, ERASED), booking(2)], total: 2 };
   view.mutate = {};
   view.options = {};
   view.toasts = [];
-  vi.stubGlobal("window", { prompt: vi.fn(() => "Geste commercial"), confirm: vi.fn(() => true) });
+  vi.stubGlobal("window", {
+    prompt: vi.fn(() => "Geste commercial"),
+    confirm: vi.fn(() => true),
+  });
 });
 afterEach(() => {
   resetStatefulHooks();
@@ -88,31 +158,67 @@ describe("RGPD-12 — rendez-vous dont les données sont effacées", () => {
     expect(clickable(kept, "Remettre en confirmé")).toBeDefined();
 
     // Its emails to the patient are no longer offered to « Renvoyer ».
-    const deliveriesOf = (elements: ReturnType<typeof card>) => elements.find(element => element.type === AppointmentDeliveries)!.props.patientDataErased;
+    const deliveriesOf = (elements: ReturnType<typeof card>) =>
+      elements.find(element => element.type === AppointmentDeliveries)!.props
+        .patientDataErased;
     expect([deliveriesOf(erased), deliveriesOf(kept)]).toEqual([true, false]);
   });
 
   it("garde le remboursement, en disant avant et après que le patient ne sera pas prévenu", () => {
     const tree = renderStateful(AppointmentsTab) as ReactElement;
     (clickable(card(tree, 1), "Rembourser")!.props.onClick as () => void)();
-    expect(window.prompt).toHaveBeenLastCalledWith(expect.stringContaining(PATIENT_DATA_ERASED_REFUND_NOTICE));
+    expect(window.prompt).toHaveBeenLastCalledWith(
+      expect.stringContaining(PATIENT_DATA_ERASED_REFUND_NOTICE)
+    );
     // The reason is stored on the anonymised row: asked without personal data.
-    expect(window.prompt).toHaveBeenLastCalledWith(expect.stringMatching(/Motif \(obligatoire, sans donnée personnelle[^)]*\) :$/));
-    expect(view.mutate.refund).toHaveBeenLastCalledWith({ trackingId: "APTERASE1", reason: "Geste commercial", initiator: "practitioner" });
+    expect(window.prompt).toHaveBeenLastCalledWith(
+      expect.stringMatching(
+        /Motif \(obligatoire, sans donnée personnelle[^)]*\) :$/
+      )
+    );
+    expect(view.mutate.refund).toHaveBeenLastCalledWith({
+      trackingId: "APTERASE1",
+      reason: "Geste commercial",
+      initiator: "practitioner",
+    });
 
-    view.options.refund!.onSuccess!({ success: true, refundAmount: "100.00", patientNotified: false, patientDataErased: true } as never);
-    expect(view.toasts).toEqual([["success", "Remboursement confirmé : 100,00 €"], ["warning", PATIENT_DATA_ERASED_REFUND_NOTICE]]);
-    expect(view.toasts.map(([, message]) => message).join(" ")).not.toContain("prévenez-le");
+    view.options.refund!.onSuccess!({
+      success: true,
+      refundAmount: "100.00",
+      patientNotified: false,
+      patientDataErased: true,
+    } as never);
+    expect(view.toasts).toEqual([
+      ["success", "Remboursement confirmé : 100,00 €"],
+      ["warning", PATIENT_DATA_ERASED_REFUND_NOTICE],
+    ]);
+    expect(view.toasts.map(([, message]) => message).join(" ")).not.toContain(
+      "prévenez-le"
+    );
   });
 
   it("ne change rien pour un rendez-vous qui a encore son adresse", () => {
     const tree = renderStateful(AppointmentsTab) as ReactElement;
     (clickable(card(tree, 2), "Rembourser")!.props.onClick as () => void)();
-    expect(window.prompt).toHaveBeenLastCalledWith(expect.not.stringContaining(PATIENT_DATA_ERASED_REFUND_NOTICE));
-    expect(window.prompt).toHaveBeenLastCalledWith(expect.not.stringContaining(PATIENT_DATA_ERASED_REASON_PROMPT));
-    expect(window.prompt).toHaveBeenLastCalledWith(expect.stringMatching(/\nMotif \(obligatoire\) :$/));
+    expect(window.prompt).toHaveBeenLastCalledWith(
+      expect.not.stringContaining(PATIENT_DATA_ERASED_REFUND_NOTICE)
+    );
+    expect(window.prompt).toHaveBeenLastCalledWith(
+      expect.not.stringContaining(PATIENT_DATA_ERASED_REASON_PROMPT)
+    );
+    expect(window.prompt).toHaveBeenLastCalledWith(
+      expect.stringMatching(/\nMotif \(obligatoire\) :$/)
+    );
 
-    view.options.refund!.onSuccess!({ success: true, refundAmount: "100.00", patientNotified: false, patientDataErased: false } as never);
-    expect(view.toasts.at(-1)).toEqual(["warning", "L’email au patient n’a pas pu être envoyé : prévenez-le directement."]);
+    view.options.refund!.onSuccess!({
+      success: true,
+      refundAmount: "100.00",
+      patientNotified: false,
+      patientDataErased: false,
+    } as never);
+    expect(view.toasts.at(-1)).toEqual([
+      "warning",
+      "L’email au patient n’a pas pu être envoyé : prévenez-le directement.",
+    ]);
   });
 });

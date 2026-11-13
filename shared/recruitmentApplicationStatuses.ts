@@ -12,8 +12,10 @@ export const RECRUITMENT_APPLICATION_STATUS_OPTIONS = [
   { value: "archived", label: "Archivée" },
 ] as const;
 
-export type RecruitmentApplicationStatus = (typeof RECRUITMENT_APPLICATION_STATUS_OPTIONS)[number]["value"];
+export type RecruitmentApplicationStatus =
+  (typeof RECRUITMENT_APPLICATION_STATUS_OPTIONS)[number]["value"];
 
 /** « En revue » for "reviewing"; the code itself for a status this list does not know. */
 export const recruitmentApplicationStatusLabel = (status: string) =>
-  RECRUITMENT_APPLICATION_STATUS_OPTIONS.find(option => option.value === status)?.label ?? status;
+  RECRUITMENT_APPLICATION_STATUS_OPTIONS.find(option => option.value === status)
+    ?.label ?? status;

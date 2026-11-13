@@ -16,5 +16,10 @@ export function routePath(pathname: string): string {
  */
 export function isPrivateAreaPath(pathname: string): boolean {
   const path = routePath(pathname);
-  return path === "/admin" || path.startsWith("/admin/") || path === "/candidate" || path.startsWith("/candidate/");
+  return (
+    path === "/admin" ||
+    path.startsWith("/admin/") ||
+    path === "/candidate" ||
+    path.startsWith("/candidate/")
+  );
 }

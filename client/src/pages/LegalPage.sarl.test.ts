@@ -5,7 +5,10 @@ import { resolve } from "node:path";
 // L’identité légale vit dans shared/legalIdentity.ts (source unique partagée avec la facture) :
 // la page publiée = la page + cette configuration.
 const legalPageSource = [
-  readFileSync(resolve(process.cwd(), "client/src/pages/LegalPage.tsx"), "utf8"),
+  readFileSync(
+    resolve(process.cwd(), "client/src/pages/LegalPage.tsx"),
+    "utf8"
+  ),
   readFileSync(resolve(process.cwd(), "shared/legalIdentity.ts"), "utf8"),
 ].join("\n");
 
@@ -21,10 +24,19 @@ describe("mentions légales Hippocampus Consulting SARL", () => {
 
   it("qualifie les prestataires de données et la revue humaine de l’IA", () => {
     expect(legalPageSource).toContain("Google Drive");
-    for (const provider of ["Vercel", "Neon", "Clerk", "Cloudflare Turnstile", "Resend", "Stripe"]) {
+    for (const provider of [
+      "Vercel",
+      "Neon",
+      "Clerk",
+      "Cloudflare Turnstile",
+      "Resend",
+      "Stripe",
+    ]) {
       expect(legalPageSource).toContain(provider);
     }
     expect(legalPageSource).not.toContain("Butterfly Effect Pte. Ltd.");
-    expect(legalPageSource).toContain("aucune décision d’embauche ou de rejet sans revue humaine");
+    expect(legalPageSource).toContain(
+      "aucune décision d’embauche ou de rejet sans revue humaine"
+    );
   });
 });

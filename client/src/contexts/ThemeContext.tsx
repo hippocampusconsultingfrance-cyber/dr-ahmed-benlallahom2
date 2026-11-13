@@ -1,8 +1,17 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { HIGH_READABILITY_STORAGE_KEY, readHighReadabilityPreference } from "./readabilityPreference";
-import { OLED_DARK_STORAGE_KEY, readOledDarkPreference } from "./oledPreference";
+import {
+  HIGH_READABILITY_STORAGE_KEY,
+  readHighReadabilityPreference,
+} from "./readabilityPreference";
+import {
+  OLED_DARK_STORAGE_KEY,
+  readOledDarkPreference,
+} from "./oledPreference";
 import { readThemePreference, type UserTheme } from "./userPreferences";
-import { readStoredPreference, writeStoredPreference } from "@/lib/browserStorage";
+import {
+  readStoredPreference,
+  writeStoredPreference,
+} from "@/lib/browserStorage";
 
 type Theme = UserTheme;
 
@@ -36,8 +45,14 @@ export function ThemeProvider({
     return defaultTheme;
   });
   // Storage blocked by the browser: the defaults, and the choices of this visit only (browserStorage).
-  const [highReadability, setHighReadability] = useState(() => readHighReadabilityPreference(readStoredPreference(HIGH_READABILITY_STORAGE_KEY)));
-  const [oledDark, setOledDark] = useState(() => readOledDarkPreference(readStoredPreference(OLED_DARK_STORAGE_KEY)));
+  const [highReadability, setHighReadability] = useState(() =>
+    readHighReadabilityPreference(
+      readStoredPreference(HIGH_READABILITY_STORAGE_KEY)
+    )
+  );
+  const [oledDark, setOledDark] = useState(() =>
+    readOledDarkPreference(readStoredPreference(OLED_DARK_STORAGE_KEY))
+  );
 
   useEffect(() => {
     const root = document.documentElement;
@@ -53,8 +68,14 @@ export function ThemeProvider({
   }, [theme, switchable]);
 
   useEffect(() => {
-    document.documentElement.classList.toggle("high-readability", highReadability);
-    writeStoredPreference(HIGH_READABILITY_STORAGE_KEY, String(highReadability));
+    document.documentElement.classList.toggle(
+      "high-readability",
+      highReadability
+    );
+    writeStoredPreference(
+      HIGH_READABILITY_STORAGE_KEY,
+      String(highReadability)
+    );
   }, [highReadability]);
 
   useEffect(() => {
@@ -71,7 +92,17 @@ export function ThemeProvider({
   const toggleOledDark = () => setOledDark(current => !current);
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme, highReadability, toggleHighReadability, oledDark, toggleOledDark, switchable }}>
+    <ThemeContext.Provider
+      value={{
+        theme,
+        toggleTheme,
+        highReadability,
+        toggleHighReadability,
+        oledDark,
+        toggleOledDark,
+        switchable,
+      }}
+    >
       {children}
     </ThemeContext.Provider>
   );
