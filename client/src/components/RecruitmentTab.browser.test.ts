@@ -37,7 +37,7 @@ export const useAuth = () => ({ isLoaded: true, isSignedIn: true });
 export const useClerk = () => ({ signOut: async () => undefined });
 `;
 
-/** A stored CV name as safeFileName leaves it: accented letters turned into _, no space, 180 characters with the extension. */
+/** A CV name as stored before INTL-07: accented letters turned into _, no space, 180 characters with the extension. */
 const STORED_CV_NAME = `${"CV_Dr_H_l_ne_B_r_nice_Lef_vre_Anesth_sie_R_animation_".repeat(4).slice(0, 176)}.pdf`;
 
 const application = {

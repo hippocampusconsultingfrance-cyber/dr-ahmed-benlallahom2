@@ -262,11 +262,26 @@ describe("nom de fichier très long déposé dans le coffre", () => {
     expect(name.startsWith(stored.slice(0, -".pdf".length))).toBe(true);
   });
 
-  it("lit le nom envoyé en UTF-8 par le navigateur : une lettre accentuée devient un seul « _ », pas deux", async () => {
+  it("lit le nom envoyé en UTF-8 par le navigateur et le garde tel quel, accents compris (INTL-07)", async () => {
     const result = await uploadDocument(baseUrl, sessionToken, { category: "diploma", buffer: validPdfBuffer(), name: "Diplôme d’État.pdf" });
 
     expect(result.status, JSON.stringify(result.body)).toBe(201);
-    expect(db().rows(candidateDocuments)[0]!.originalName).toBe("Dipl_me d__tat.pdf");
+    expect(db().rows(candidateDocuments)[0]!.originalName).toBe("Diplôme d’État.pdf");
+  });
+
+  it("garde un nom chinois, range le fichier sous une clé ASCII et le rend sous son nom, sans erreur 500 (INTL-07)", async () => {
+    const name = "执业证书.pdf";
+    const source = validPdfBuffer(4096);
+    const upload = await uploadDocument(baseUrl, sessionToken, { category: "diploma", buffer: source, name });
+    expect(upload.status, JSON.stringify(upload.body)).toBe(201);
+    const [document] = db().rows(candidateDocuments);
+    expect(document!.originalName).toBe(name);
+    expect(String(document!.storageKey)).toMatch(/^candidate-documents\/quarantine\/\d+\/\d+-document\.pdf\.enc$/);
+
+    const download = await fetch(`${baseUrl}/api/candidate/documents/${upload.body.documentId}/download`, { headers: { cookie: `candidate_portal_session=${sessionToken}` } });
+    expect(download.status).toBe(200);
+    expect(download.headers.get("content-disposition")).toBe(`attachment; filename="document.pdf"; filename*=UTF-8''${encodeURIComponent(name)}`);
+    expect(Buffer.from(await download.arrayBuffer()).equals(source)).toBe(true);
   });
 });
 

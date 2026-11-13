@@ -1,6 +1,7 @@
 import { createCipheriv, createDecipheriv, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { and, eq, gte, inArray, isNull, like, lt, lte, ne, notInArray, notLike, or, sql } from "drizzle-orm";
 import { cvApplications, cvGoogleDriveExportJobs, googleDriveConnections } from "../drizzle/schema";
+import { displayFileName } from "./candidateDocumentValidation";
 import { hashSecurityValue, sendOwnerAlertOncePerWindow } from "./candidateSecurity";
 import { getDb } from "./db";
 import { logRecruitmentActionsDone } from "./recruitmentAudit";
@@ -166,9 +167,13 @@ export function googleDriveRetryDelayMs(attempt: number) {
   return Math.min(60 * 60 * 1000, 60_000 * 2 ** Math.max(0, attempt - 1));
 }
 
+/**
+ * Name of the CV copied to Drive: its reference, then its name as sent
+ * (displayFileName), whose Arabic, Chinese or accented letters stay
+ * (INTL-07); the format itself is the owner's to choose (REC-24).
+ */
 export function googleDriveCvFileName(trackingId: string, originalName: string) {
-  const safeName = originalName.replace(/[^a-zA-Z0-9._ -]/g, "_").replace(/_+/g, "_").slice(-180) || "cv";
-  return `${trackingId}-${safeName}`;
+  return `${trackingId}-${displayFileName(originalName, "cv").replace(/_+/g, "_")}`;
 }
 
 function escapeGoogleDriveQueryValue(value: string) {

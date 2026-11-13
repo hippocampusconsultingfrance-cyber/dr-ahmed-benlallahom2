@@ -104,11 +104,11 @@ describe("POST /api/recruitment/apply — réception du CV (multer) et validatio
     expect(state.databaseRequests).toBe(1);
   });
 
-  it("lit le nom du CV envoyé en UTF-8 par le navigateur : une lettre accentuée devient un seul « _ », pas deux", async () => {
+  it("lit le nom du CV envoyé en UTF-8 par le navigateur et le garde tel quel, accents compris (INTL-07)", async () => {
     vi.mocked(validateCvFile).mockClear();
     const result = await apply({ cvs: [{ buffer: validPdfBuffer(), name: "Diplôme d’État.pdf" }] });
     expect(result.status).toBe(503);
-    expect(vi.mocked(validateCvFile).mock.calls.map(([file]) => file.originalName)).toEqual(["Dipl_me_d__tat.pdf"]);
+    expect(vi.mocked(validateCvFile).mock.calls.map(([file]) => file.originalName)).toEqual(["Diplôme d’État.pdf"]);
   });
 
   it("garde le même nom pour un CV au nom décomposé (NFD, macOS) que pour le même nom composé, comme le coffre", async () => {
@@ -118,9 +118,9 @@ describe("POST /api/recruitment/apply — réception du CV (multer) et validatio
       const result = await apply({ cvs: [{ buffer: validPdfBuffer(), name: name.normalize(form) }] });
       expect(result.status).toBe(503);
     }
-    // One « _ » per accented letter, not its base letter followed by a « _ » (« Diplo_me »).
-    expect(vi.mocked(validateCvFile).mock.calls.map(([file]) => file.originalName)).toEqual(["Dipl_me_m_decine__t_.pdf", "Dipl_me_m_decine__t_.pdf"]);
-    expect(safeCandidateDocumentName(name.normalize("NFD"))).toBe("Dipl_me_m_decine__t_.pdf");
+    // Composed (NFC): « ô », not « o » followed by its accent.
+    expect(vi.mocked(validateCvFile).mock.calls.map(([file]) => file.originalName)).toEqual([name, name]);
+    expect(safeCandidateDocumentName(name.normalize("NFD"))).toBe(name);
   });
 
   it("exige le CV", async () => {

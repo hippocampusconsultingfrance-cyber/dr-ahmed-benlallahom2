@@ -4,6 +4,7 @@ import { getDb } from "./db";
 import { AI_ANALYSIS_BILLING_UNAVAILABLE_ERROR, extractCvDocument, analyzeCvText, isVisibilityCheckWarning, MANUAL_REVIEW_FALLBACK_MODEL, RECRUITMENT_ANALYSIS_PROMPT_VERSION, saveCvAnalysis, visibilityRequiresReview } from "./recruitmentAnalysis";
 import { storageGetSignedUrl, storagePut } from "./storage";
 import { validateCvFile } from "./recruitmentFileValidation";
+import { asciiFileName } from "./candidateDocumentValidation";
 import { isProcessingDeadlineError } from "./processingDeadline";
 import { notifyOwner } from "./_core/notification";
 import { dailyOwnerAlertIdempotencyKey, sendOwnerAlertOncePerWindow } from "./candidateSecurity";
@@ -128,7 +129,8 @@ export async function executeCvExternalPipeline(
     throw new Error("cv_validation_checksum_mismatch");
   }
   const promotedStorage = input.fileValidationStatus === "quarantined"
-    ? await steps.promote(`recruitment/cv/${input.trackingId}-${input.cvOriginalName}`, buffer, input.cvMimeType)
+    // INTL-07: the stored name may hold any letter; the storage key keeps its ASCII form.
+    ? await steps.promote(`recruitment/cv/${input.trackingId}-${asciiFileName(input.cvOriginalName, "cv")}`, buffer, input.cvMimeType)
     : null;
   await onValidated?.({ validation, promotedStorage });
   const extraction = await steps.extract(buffer, input.cvMimeType);

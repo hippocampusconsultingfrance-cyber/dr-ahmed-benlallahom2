@@ -15,7 +15,8 @@ import { sendTrackedCvApplicationConfirmationEmail } from "../recruitmentEmailTr
 import { CV_APPLICATION_SUBMISSION_UNIQUE_INDEX, isUniqueViolation } from "../databaseConstraints";
 import { emailText, multiLineText, refusesTextInputCharacters, singleLineText, TEXT_INPUT_INVALID_CHARACTERS, TEXT_INPUT_INVALID_CHARACTERS_MESSAGE } from "../../shared/textInput";
 import { adminLink } from "../adminLinks";
-import { PUBLIC_APP_ORIGIN, safeErrorName, safeFileName } from "./routeHelpers";
+import { asciiFileName, displayFileName } from "../candidateDocumentValidation";
+import { PUBLIC_APP_ORIGIN, safeErrorName } from "./routeHelpers";
 
 function safeErrorMetadata(error: unknown) {
   if (!error || typeof error !== "object") return { name: "UnknownError" };
@@ -175,7 +176,8 @@ export function registerRecruitmentApplyRoute(app: Express) {
 
         recruitmentStage = "file-validation";
         const trackingId = secureReference("CV", 16);
-        const originalName = safeFileName(file.originalname);
+        // INTL-07: the name as sent (Arabic, Chinese, accented letters) is stored and shown; the storage key keeps its ASCII form.
+        const originalName = displayFileName(file.originalname, "cv");
         let fileValidation;
         try {
           fileValidation = validateCvFile({
@@ -261,7 +263,7 @@ export function registerRecruitmentApplyRoute(app: Express) {
 
         recruitmentStage = "storage-upload";
         const storageResult = await storagePut(
-          `recruitment/quarantine/${trackingId}-${originalName}`,
+          `recruitment/quarantine/${trackingId}-${asciiFileName(originalName, "cv")}`,
           file.buffer,
           file.mimetype,
         );
