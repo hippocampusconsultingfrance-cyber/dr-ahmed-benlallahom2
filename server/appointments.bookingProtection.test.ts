@@ -138,9 +138,10 @@ describe("appointments.create — plafond de créneaux retenus par email", () =>
     expect(result).toMatchObject({ success: true, checkoutUrl: "https://checkout.stripe.test/session" });
     expect(db.execute).toHaveBeenCalledTimes(1);
     const [stripeParams] = mocks.stripeCreate.mock.calls[0];
+    // RES-14 : la date et l’heure de Paris du créneau (10:00), dans la langue de la page.
     expect(stripeParams.line_items[0].price_data.product_data).toEqual({
       name: "Consultation de conseil santé – 30 minutes",
-      description: `Rendez-vous : ${result.trackingId}`,
+      description: expect.stringMatching(new RegExp(`^Rendez-vous : ${result.trackingId} – .+ \\d{4}, 10:00, heure de Paris$`)),
     });
   });
 });
@@ -171,7 +172,8 @@ describe("appointments.create — maintien avant paiement et session Checkout (P
 
   it("reprend le paiement avec le même libellé, la même expiration et le même retour", async () => {
     const holdExpiresAt = new Date(Date.now() + 45 * 60 * 1000 + 789);
-    const held = { trackingId: "APTRESUME0001", customerEmail: "patient@example.com", customerName: "Patient Synthétique", finalPrice: "150.00", paymentStatus: "pending", appointmentStatus: "held", stripeSessionId: null, holdExpiresAt };
+    // Réservé depuis la page en anglais pour le jeudi 29 octobre 2026 à 19:00, heure de Paris.
+    const held = { trackingId: "APTRESUME0001", customerEmail: "patient@example.com", customerName: "Patient Synthétique", finalPrice: "150.00", appointmentDate: new Date("2026-10-29T18:00:00.000Z"), language: "en", paymentStatus: "pending", appointmentStatus: "held", stripeSessionId: null, holdExpiresAt };
     const update = vi.fn(() => ({ set: () => ({ where: async () => ({ rowCount: 1 }) }) }));
     mocks.getDb.mockResolvedValue({ select: () => ({ from: () => ({ where: () => ({ limit: async () => [held] }) }) }), update });
 
@@ -180,7 +182,7 @@ describe("appointments.create — maintien avant paiement et session Checkout (P
     });
 
     const [stripeParams] = mocks.stripeCreate.mock.calls[0];
-    expect(stripeParams.line_items[0].price_data).toMatchObject({ unit_amount: 15000, product_data: { name: "Consultation de conseil santé – 30 minutes", description: "Rendez-vous : APTRESUME0001" } });
+    expect(stripeParams.line_items[0].price_data).toMatchObject({ unit_amount: 15000, product_data: { name: "Consultation de conseil santé – 30 minutes", description: "Appointment: APTRESUME0001 – Thu, 29 Oct 2026, 19:00, Paris time" } });
     expect(stripeParams.expires_at).toBe(Math.floor(holdExpiresAt.getTime() / 1000));
     expect(stripeParams).not.toHaveProperty("allow_promotion_codes");
     expect(stripeParams.success_url).toBe(confirmationUrl("success", held.trackingId));
