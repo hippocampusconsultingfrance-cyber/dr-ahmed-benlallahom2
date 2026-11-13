@@ -83,10 +83,27 @@ describe("recruitment matching profiles", () => {
     for (const required of [["Anglais – lu", "écrit", "parlé"], ["English – UAE", "Qatar"], ["Anglais – C1", "C2"], ["obligatoire", "Anglais"]]) {
       expect(matchesRecruitmentProfile({ ...candidate, profile: profile(required) }), required.join(", ")).toBe(true);
     }
-    for (const required of [["Anglais", "arabe"], ["Anglais", "Wolof serait un atout"], ["Anglais – Wolof", "Dakar"]]) {
+    for (const required of [["Anglais", "arabe"], ["Anglais", "Wolof serait un atout"], ["Anglais – Wolof", "Darija"]]) {
       expect(matchesRecruitmentProfile({ ...candidate, profile: profile(required) }), required.join(", ")).toBe(false);
     }
-    expect(matchesRecruitmentProfile({ ...candidate, languages: ["English", "Wolof"], profile: profile(["Anglais – Wolof", "Dakar"]) })).toBe(true);
+    expect(matchesRecruitmentProfile({ ...candidate, languages: ["English", "Wolof", "Darija"], profile: profile(["Anglais – Wolof", "Darija"]) })).toBe(true);
+  });
+
+  it("garde comme exigence un nom de langue qu’aucune liste ne connaît, saisi après une virgule, et lit les noms courts chinois des langues de la table (IA02-R5-LISTE-NOM-INCONNU)", () => {
+    const candidate = { score: 70, specialty: "Anesthésie-réanimation", targetCountries: ["Émirats arabes unis"], extractedSkills: [] };
+    const profile = (requiredLanguages: string[]) => ({ targetCountry: null, specialty: null, minimumScore: 0, requiredLanguages: JSON.stringify(requiredLanguages), requiredSkills: null });
+    // Before (c97413e): Darija, Somalisch or 阿语 qualified the language before them, and the candidate who had only it was in the profile.
+    for (const [required, lead, all] of [
+      [["Français", "Darija"], ["French"], ["French", "Darija"]],
+      [["Deutsch", "Arabisch", "Somalisch", "Tigrinisch"], ["Deutsch", "Arabisch"], ["Deutsch", "Arabisch", "Somalisch", "Tigrinisch"]],
+      [["英语", "阿语"], ["English"], ["English", "Arabic"]],
+      [["Anglais", "Castillan"], ["English"], ["English", "Spanish"]],
+    ] as const) {
+      expect(matchesRecruitmentProfile({ ...candidate, languages: [...lead], profile: profile([...required]) }), required.join(", ")).toBe(false);
+      expect(matchesRecruitmentProfile({ ...candidate, languages: [...all], profile: profile([...required]) }), required.join(", ")).toBe(true);
+    }
+    // The places a dash opened go on after a comma: « Anglais – Riyad », « Dubaï » is one requirement, met by English.
+    expect(matchesRecruitmentProfile({ ...candidate, languages: ["English"], profile: profile(["Anglais – Riyad", "Dubaï"]) })).toBe(true);
   });
 
   it("handles malformed JSON safely", () => {

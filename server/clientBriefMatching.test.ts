@@ -133,6 +133,21 @@ describe("matching mission–candidat", () => {
     expect(match("Anglais, Wolof serait un atout", ["English"]).breakdown.languages).toBe(8);
   });
 
+  it("garde comme exigence un nom de langue qu’aucune liste ne connaît, écrit après une virgule dans le texte de la mission (IA02-R5-LISTE-NOM-INCONNU)", () => {
+    const candidate = { specialty: "Anesthésie-réanimation", targetCountries: '["Émirats arabes unis"]' };
+    const match = (requiredLanguages: string, declared: string[]) =>
+      computeBriefCandidateMatch({ specialtyNeeded: "Anesthésie-réanimation", country: "Émirats arabes unis", requiredCertifications: null, requiredLanguages }, { ...candidate, languageFacts: languageFacts(JSON.stringify(declared), []) });
+    // Before (c97413e): « Français, Darija » was one requirement met by French alone (15 language points of 15).
+    expect(match("Français, Darija", ["French"]).breakdown.languages).toBe(8);
+    expect(match("Français, Darija", ["French"]).matchedLanguages).toEqual(["Français"]);
+    expect(match("Français, Darija", ["French", "Darija"]).breakdown.languages).toBe(15);
+    expect(match("Deutsch, Arabisch, Somalisch, Tigrinisch", ["German", "Arabic"]).breakdown.languages).toBe(8);
+    expect(match("英语，阿语", ["English"]).breakdown.languages).toBe(8);
+    expect(match("英语，阿语", ["English", "Arabic"]).breakdown.languages).toBe(15);
+    // The places a dash opened, written after a comma, still qualify the language: one requirement.
+    expect(match("Anglais – Riyad, Dubaï", ["English"]).breakdown.languages).toBe(15);
+  });
+
   it("une certification déclarée par le candidat compte, elle aussi, une fois confirmée", () => {
     const declaredOnly = computeBriefCandidateMatch(brief, { ...anaesthetist, certificationFacts: certificationFacts("ACLS, ATLS", []) });
     expect(declaredOnly.breakdown.certifications).toBe(0);
