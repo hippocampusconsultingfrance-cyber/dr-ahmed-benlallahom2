@@ -13,6 +13,7 @@ const state = vi.hoisted(() => ({
   invalidated: [] as unknown[],
   toasts: [] as string[],
   errors: [] as string[],
+  specialty: "Anesthésie",
 }));
 
 vi.mock("sonner", () => ({ toast: { success: (message: string) => state.toasts.push(message), error: (message: string) => state.errors.push(message), warning: vi.fn(), info: vi.fn() } }));
@@ -34,7 +35,7 @@ vi.mock("@/lib/trpc", () => ({
           detail: {
             useQuery: () => ({
               data: {
-                candidate: { id: 5, firstName: "Amal", lastName: "Haddad", specialty: "Anesthésie", trackingId: "CV5", status: "new", createdAt: new Date("2026-10-20T10:00:00Z"), lastCandidateResponseAt: null, adminNotes: null },
+                candidate: { id: 5, firstName: "Amal", lastName: "Haddad", specialty: state.specialty, trackingId: "CV5", status: "new", createdAt: new Date("2026-10-20T10:00:00Z"), lastCandidateResponseAt: null, adminNotes: null },
                 audits: [], campaignRecipients: [], followUps: [], certifications: [],
               },
               isLoading: false,
@@ -63,6 +64,7 @@ beforeEach(() => {
   state.invalidated = [];
   state.toasts = [];
   state.errors = [];
+  state.specialty = "Anesthésie";
 });
 
 describe("ADM-07 — statut et dates de la fiche 360°", () => {
@@ -72,6 +74,21 @@ describe("ADM-07 — statut et dates de la fiche 360°", () => {
     expect(html).not.toContain("Statut : new");
     // 10:00 UTC on 20 October 2026: 12:00 in Paris.
     expect(html).toContain("20/10/2026 12:00 (heure de Paris)");
+  });
+});
+
+describe("REC-11 — parcours de la candidature dans la fiche 360°", () => {
+  const header = () => sheet().filter(element => element.type === "p").map(element => renderToStaticMarkup(element)).find(html => html.includes("CV5"))!;
+
+  it("nomme le parcours VVIP & Offshore et donne la spécialité sans le préfixe qui le marque", () => {
+    state.specialty = "[VVIP / Offshore] Médecin urgentiste (ATLS / ACLS)";
+    expect(header()).toContain(">VVIP &amp; Offshore</span>Médecin urgentiste (ATLS / ACLS) · CV5");
+    expect(header()).not.toContain("[VVIP / Offshore]");
+  });
+
+  it("ne donne aucun parcours à une candidature standard", () => {
+    expect(header()).not.toContain("VVIP");
+    expect(header()).toContain("Anesthésie · CV5");
   });
 });
 

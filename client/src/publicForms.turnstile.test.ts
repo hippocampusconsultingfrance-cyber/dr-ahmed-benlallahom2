@@ -140,7 +140,8 @@ describe("garde-fous Turnstile des parcours publics", () => {
     change("vvip-email", { target: { value: "karim@example.org" } });
     change("vvip-specialty", { target: { value: "Médecin urgentiste (ATLS / ACLS)" } });
     change("vvip-environment-0", {});
-    change("vvip-diploma-country", { target: { value: "Tunisie" } });
+    change("vvip-target-country-0", {});
+    change("vvip-diploma-country", { target: { value: "TN" } });
     change("vvip-cv", { target: { files: [new File(["%PDF-1.7\n"], "cv.pdf", { type: "application/pdf" })] } });
     change("vvip-gdpr-consent", { target: { checked: true } });
     widget(page)!.props.onToken("single-use-token");

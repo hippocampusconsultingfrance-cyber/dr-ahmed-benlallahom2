@@ -1,5 +1,6 @@
 import { FormEvent, useMemo, useRef, useState } from "react";
 import { isAcceptedRecruitmentCvFile, RECRUITMENT_CV_ACCEPT_ATTRIBUTE } from "@shared/recruitmentCvLimits";
+import { VVIP_SPECIALTY_PREFIX } from "@shared/recruitmentPathway";
 import { cleanTextInput } from "@shared/textInputCleaning";
 import { CheckCircle2, Clock3, FileUp, Loader2, ShieldCheck, UserCheck, Award, Compass, Lock } from "lucide-react";
 import { Link } from "wouter";
@@ -7,7 +8,7 @@ import { SEOHead } from "@/components/SEOHead";
 import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { getWorldwideCountries } from "./RecruitmentPage";
+import { countryOptions, getWorldwideCountries, OTHER_TARGET_COUNTRY, otherLanguageLabel, otherLanguagePlaceholder, otherTargetCountryLabel, professionalLanguageOptions, submittedProfessionalLanguages, submittedTargetCountries } from "./RecruitmentPage";
 import { resolveCountryForSubmission } from "@/lib/countrySubmission";
 import { recruitmentServiceFailureMessage, recruitmentSubmissionErrorMessage } from "@/lib/recruitmentSubmissionErrors";
 import { fieldsToCorrectMessage, reportFieldsToCorrect, type FieldToCorrect } from "@/lib/formFieldsToCorrect";
@@ -29,7 +30,10 @@ export const vvipOffshoreCopy = {
     email: "Email",
     phone: "Téléphone",
     specialty: "Profil recherché / Spécialité",
+    selectSpecialty: "Sélectionner un profil",
     environment: "Environnement de prédilection",
+    countries: "Pays ciblés",
+    languages: "Langues professionnelles",
     env1: "Moyen-Orient (Gouvernement / VVIP)",
     env2: "Plateformes pétrolières & gazières (Onshore / Offshore)",
     env3: "Sociétés minières & industrielles isolées",
@@ -65,7 +69,7 @@ export const vvipOffshoreCopy = {
     p1Title: "Excellence & discrétion",
     p1Desc: "Protocoles de confidentialité stricts, habilitations et discrétion absolue exigés pour chaque intervention.",
     p2Title: "Zones d’intervention",
-    p2Desc: "Golfe Persique, Moyen-Orient, plateformes en mer du Nord, Afrique de l’Ouest et chantiers isolés.",
+    p2Desc: "Pays du Golfe, Moyen-Orient, plateformes en mer du Nord, Afrique de l’Ouest et chantiers isolés.",
     p3Title: "Standards internationaux",
     p3Desc: "Accompagnement sur les normes médicales rigoureuses (OGP, Oil & Gas UK, AHA).",
     section2Kicker: "Expertise & domaines",
@@ -101,7 +105,10 @@ export const vvipOffshoreCopy = {
     email: "Professional email",
     phone: "Phone",
     specialty: "Target Profile / Specialty",
+    selectSpecialty: "Select a profile",
     environment: "Preferred Environment",
+    countries: "Target countries",
+    languages: "Professional languages",
     env1: "Middle East (Government / VVIP)",
     env2: "Oil & Gas Rigs (Onshore / Offshore)",
     env3: "Remote Mining & Industrial Sites",
@@ -137,7 +144,7 @@ export const vvipOffshoreCopy = {
     p1Title: "Excellence & Discretion",
     p1Desc: "Strict confidentiality protocols, clearances, and absolute discretion required for every deployment.",
     p2Title: "Deployment Zones",
-    p2Desc: "Persian Gulf, Middle East, North Sea platforms, West Africa, and remote industrial sites.",
+    p2Desc: "Gulf region, Middle East, North Sea platforms, West Africa, and remote industrial sites.",
     p3Title: "International Standards",
     p3Desc: "Compliance with rigorous medical standards (OGP, Oil & Gas UK, AHA).",
     section2Kicker: "Expertise & Fields",
@@ -173,7 +180,10 @@ export const vvipOffshoreCopy = {
     email: "Berufliche E-Mail",
     phone: "Telefon",
     specialty: "Gesuchtes Profil / Fachgebiet",
+    selectSpecialty: "Profil auswählen",
     environment: "Bevorzugte Einsatzumgebung",
+    countries: "Zielländer",
+    languages: "Berufssprachen",
     env1: "Naher Osten (Regierung / VVIP)",
     env2: "Öl- & Gasplattformen (Onshore / Offshore)",
     env3: "Entlegene Bergbau- & Industriestandorte",
@@ -209,7 +219,7 @@ export const vvipOffshoreCopy = {
     p1Title: "Exzellenz & Diskretion",
     p1Desc: "Strikte Vertraulichkeitsprotokolle und absolute Verschwiegenheit.",
     p2Title: "Einsatzregionen",
-    p2Desc: "Persischer Golf, Naher Osten, Nordsee-Plattformen und Westafrika.",
+    p2Desc: "Golfregion, Naher Osten, Nordsee-Plattformen und Westafrika.",
     p3Title: "Internationale Standards",
     p3Desc: "Einhaltung strenger Medizinstandards (OGP, Oil & Gas UK, AHA).",
     section2Kicker: "Expertise & Fachgebiete",
@@ -245,7 +255,10 @@ export const vvipOffshoreCopy = {
     email: "职业邮箱",
     phone: "电话",
     specialty: "目标岗位 / 专业方向",
+    selectSpecialty: "选择岗位",
     environment: "倾向工作环境",
+    countries: "目标国家",
+    languages: "职业语言",
     env1: "中东地区（政府 / VVIP）",
     env2: "油气钻井平台（陆上 / 海上 Offshore）",
     env3: "偏远矿业与工业驻地",
@@ -281,7 +294,7 @@ export const vvipOffshoreCopy = {
     p1Title: "卓越与绝对保密",
     p1Desc: "严格的保密协议、安全许可与绝对隐秘。",
     p2Title: "核心派驻区域",
-    p2Desc: "波斯湾、中东、北海钻井平台及西非远洋项目。",
+    p2Desc: "海湾地区、中东、北海钻井平台及西非远洋项目。",
     p3Title: "严苛国际标准",
     p3Desc: "全面契合 OGP、Oil & Gas UK 及 AHA 医疗准则。",
     section2Kicker: "专长与领域",
@@ -344,7 +357,7 @@ const publicTrustCopy = {
   },
 } as const;
 
-/** Values sent to the API whatever the display language (targetCountries and message). */
+/** Values sent to the API whatever the display language (environments and message). */
 export const VVIP_ENVIRONMENTS = [
   { value: "Moyen-Orient (Gouvernement / VVIP)", labelKey: "env1" },
   { value: "Plateformes pétrolières & gazières (Onshore / Offshore)", labelKey: "env2" },
@@ -364,22 +377,31 @@ type FormState = {
   specialty: string;
   specialtyCustom: string;
   environments: string[];
+  targetCountries: string[];
+  otherTargetCountry: string;
   diplomaCountry: string;
+  languages: string[];
+  otherLanguage: string;
   yearsExperience: string;
   certifications: string;
   gdprConsent: boolean;
   website: string;
 };
 
-export const createInitialForm = (language: Language): FormState => ({
+/** An empty form: no specialty chosen for the candidate (REC-11). */
+export const createInitialForm = (): FormState => ({
   firstName: "",
   lastName: "",
   email: "",
   phone: "",
-  specialty: vvipOffshoreCopy[language].specialties[0],
+  specialty: "",
   specialtyCustom: "",
   environments: [],
+  targetCountries: [],
+  otherTargetCountry: "",
   diplomaCountry: "",
+  languages: [],
+  otherLanguage: "",
   yearsExperience: "",
   certifications: "",
   gdprConsent: false,
@@ -392,11 +414,11 @@ export function isAcceptedVvipCvFile(file: Pick<File, "name" | "size" | "type"> 
 }
 
 /** Fields the VVIP form checks before sending, in the order they appear on it. */
-const vvipFields = ["firstName", "lastName", "email", "specialty", "specialtyCustom", "environments", "diplomaCountry", "cv", "gdprConsent", "turnstile"] as const;
+const vvipFields = ["firstName", "lastName", "email", "specialty", "specialtyCustom", "environments", "targetCountries", "otherTargetCountry", "diplomaCountry", "cv", "gdprConsent", "turnstile"] as const;
 type VvipField = (typeof vvipFields)[number];
 /** Control focused for each of them; the anti-bot check takes no focus. */
 const vvipFieldIds: Record<Exclude<VvipField, "turnstile">, string> = {
-  firstName: "vvip-firstName", lastName: "vvip-lastName", email: "vvip-email", specialty: "vvip-specialty", specialtyCustom: "vvip-specialty-custom", environments: "vvip-environment-0", diplomaCountry: "vvip-diploma-country", cv: "vvip-cv", gdprConsent: "vvip-gdpr-consent",
+  firstName: "vvip-firstName", lastName: "vvip-lastName", email: "vvip-email", specialty: "vvip-specialty", specialtyCustom: "vvip-specialty-custom", environments: "vvip-environment-0", targetCountries: "vvip-target-country-0", otherTargetCountry: "vvip-other-target-country", diplomaCountry: "vvip-diploma-country", cv: "vvip-cv", gdprConsent: "vvip-gdpr-consent",
 };
 
 /**
@@ -412,6 +434,8 @@ export function vvipInvalidFields(form: FormState, file: Pick<File, "name" | "si
   if (!form.email.trim() || !/^\S+@\S+\.\S+$/.test(form.email)) invalid.add("email");
   if (!(isCustomSpecialty ? form.specialtyCustom.trim() : form.specialty)) invalid.add(isCustomSpecialty ? "specialtyCustom" : "specialty");
   if (!form.environments.length) invalid.add("environments");
+  if (!form.targetCountries.length) invalid.add("targetCountries");
+  if (form.targetCountries.includes(OTHER_TARGET_COUNTRY) && !form.otherTargetCountry.trim()) invalid.add("otherTargetCountry");
   if (!diplomaCountry) invalid.add("diplomaCountry");
   if (!file || !isAcceptedVvipCvFile(file)) invalid.add("cv");
   if (!form.gdprConsent) invalid.add("gdprConsent");
@@ -426,7 +450,7 @@ export function vvipInvalidFields(form: FormState, file: Pick<File, "name" | "si
  */
 export function vvipFieldsToCorrect(invalidFields: Iterable<VvipField>, file: Pick<File, "name" | "size" | "type"> | null, language: Language): FieldToCorrect[] {
   const t = vvipOffshoreCopy[language];
-  const names: Record<VvipField, string> = { firstName: t.firstName, lastName: t.lastName, email: t.email, specialty: t.specialty, specialtyCustom: customSpecialtyCopy[language], environments: t.environment, diplomaCountry: t.diplomaCountry, cv: t.cvField, gdprConsent: t.consentField, turnstile: getTurnstileWidgetCopy(language).label };
+  const names: Record<VvipField, string> = { firstName: t.firstName, lastName: t.lastName, email: t.email, specialty: t.specialty, specialtyCustom: customSpecialtyCopy[language], environments: t.environment, targetCountries: t.countries, otherTargetCountry: otherTargetCountryLabel[language], diplomaCountry: t.diplomaCountry, cv: t.cvField, gdprConsent: t.consentField, turnstile: getTurnstileWidgetCopy(language).label };
   return Array.from(invalidFields, field => {
     if (field === "turnstile") return { label: names.turnstile };
     if (field === "cv" && file) return { detail: t.fileError, focusId: vvipFieldIds.cv };
@@ -437,8 +461,10 @@ export function vvipFieldsToCorrect(invalidFields: Iterable<VvipField>, file: Pi
 /**
  * Multipart body of a VVIP application. The specialty keeps only the VVIP prefix,
  * which marks the pathway and keeps the application apart from a standard one;
- * the environments are sent in targetCountries and in the message (INTL-03).
- * `language` is the one the form is shown in.
+ * the environments are sent in the message and, for the owner's email, on
+ * their own (INTL-03). The target countries, languages and experience are the
+ * ones the candidate gave, none when not given (REC-11); the diploma country is
+ * its code (EN-11). `language` is the one the form is shown in.
  */
 export function buildVvipApplicationFormData({ form, cv, specialty, diplomaCountry, turnstileToken, language }: { form: FormState; cv: File; specialty: string; diplomaCountry: string; turnstileToken: string; language: Language }): FormData {
   const body = new FormData();
@@ -448,11 +474,12 @@ export function buildVvipApplicationFormData({ form, cv, specialty, diplomaCount
   body.append("email", form.email);
   body.append("phone", form.phone);
   const environmentSummary = form.environments.join(", ");
-  body.append("specialty", `[VVIP / Offshore] ${specialty}`);
+  body.append("specialty", `${VVIP_SPECIALTY_PREFIX}${specialty}`);
   body.append("diplomaCountry", diplomaCountry);
-  body.append("targetCountries", JSON.stringify(form.environments));
-  body.append("languages", JSON.stringify(["Français", "Anglais"]));
-  body.append("yearsExperience", form.yearsExperience ? String(Number(form.yearsExperience)) : "5");
+  body.append("targetCountries", JSON.stringify(submittedTargetCountries(form.targetCountries, form.otherTargetCountry)));
+  body.append("environments", JSON.stringify(form.environments));
+  body.append("languages", JSON.stringify(submittedProfessionalLanguages(form.languages, form.otherLanguage)));
+  body.append("yearsExperience", form.yearsExperience ? String(Number(form.yearsExperience)) : "");
   body.append("certifications", form.certifications);
   body.append("message", `Mission VVIP / Offshore. Environnements: ${environmentSummary}. Certifications: ${form.certifications}`);
   body.append("gdprConsent", "1");
@@ -477,7 +504,7 @@ export default function VvipOffshorePage() {
   const t = vvipOffshoreCopy[lang];
   const customSpecialtyLabel = customSpecialtyCopy[lang];
   const trust = publicTrustCopy[lang];
-  const [form, setForm] = useState<FormState>(() => createInitialForm(lang));
+  const [form, setForm] = useState<FormState>(createInitialForm);
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<"idle" | "sending" | "success" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
@@ -496,6 +523,13 @@ export default function VvipOffshorePage() {
   };
   const isInvalid = (field: string) => validationAttempted && invalidFields.has(field);
   const toggleEnvironment = (environment: string) => update("environments", form.environments.includes(environment) ? form.environments.filter(item => item !== environment) : [...form.environments, environment]);
+  // As on the standard form: unchecking « Autre pays » drops the country typed.
+  const toggleCountry = (country: string) => {
+    const targetCountries = form.targetCountries.includes(country) ? form.targetCountries.filter(item => item !== country) : [...form.targetCountries, country];
+    setForm(previous => ({ ...previous, targetCountries, otherTargetCountry: targetCountries.includes(OTHER_TARGET_COUNTRY) ? previous.otherTargetCountry : "" }));
+    setInvalidFields(previous => { const next = new Set(previous); next.delete("targetCountries"); next.delete("otherTargetCountry"); return next; });
+  };
+  const toggleLanguage = (languageValue: string) => update("languages", form.languages.includes(languageValue) ? form.languages.filter(item => item !== languageValue) : [...form.languages, languageValue]);
 
   /**
    * A CV of the wrong format or size is reported as soon as it is chosen, not only when sending (A11Y-03).
@@ -525,7 +559,7 @@ export default function VvipOffshorePage() {
     event.preventDefault();
     setErrorMessage("");
     setValidationAttempted(true);
-    const submittedDiplomaCountry = resolveCountryForSubmission(form.diplomaCountry, new FormData(event.currentTarget).get("diplomaCountry"), diplomaCountries.map(country => country.label));
+    const submittedDiplomaCountry = resolveCountryForSubmission(form.diplomaCountry, new FormData(event.currentTarget).get("diplomaCountry"), diplomaCountries);
 
     const isCustomSpecialty = form.specialty === t.specialties[t.specialties.length - 1];
     const finalSpecialty = isCustomSpecialty ? form.specialtyCustom.trim() : form.specialty;
@@ -658,6 +692,8 @@ export default function VvipOffshorePage() {
                       <label className="block w-full space-y-1.5 text-sm text-foreground">
                         <span className="block font-medium">{t.specialty} *</span>
                         <select id="vvip-specialty" value={form.specialty} aria-invalid={isInvalid("specialty")} onChange={(e) => update("specialty", e.target.value)} className={`form-control block w-full ${isInvalid("specialty") ? "form-field-invalid" : ""}`}>
+                          {/* No profile chosen for the candidate (REC-11). */}
+                          <option value="">{t.selectSpecialty}</option>
                           {t.specialties.map((opt) => (
                             <option key={opt} value={opt}>{opt}</option>
                           ))}
@@ -683,11 +719,25 @@ export default function VvipOffshorePage() {
                       </fieldset>
                     </div>
 
+                    {/* Countries of their own, apart from the environments (REC-11), from the standard form's list. */}
+                    <fieldset className={`block w-full space-y-2 text-sm text-foreground ${isInvalid("targetCountries") ? "form-consent-group-invalid" : ""}`}>
+                      <legend className="block font-medium">{t.countries} *</legend>
+                      <div className="grid gap-2 @sm:grid-cols-2">
+                        {countryOptions.map((country, index) => <label key={country.value} className="form-consent-item flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-foreground [overflow-wrap:anywhere]"><input id={`vvip-target-country-${index}`} type="checkbox" checked={form.targetCountries.includes(country.value)} aria-invalid={isInvalid("targetCountries")} onChange={() => toggleCountry(country.value)} className="form-consent-checkbox" />{country.labels[lang]}</label>)}
+                      </div>
+                      {form.targetCountries.includes(OTHER_TARGET_COUNTRY) && (
+                        <label className="block w-full space-y-1.5 pt-2">
+                          <span className="block font-medium">{otherTargetCountryLabel[lang]} *</span>
+                          <input id="vvip-other-target-country" required value={form.otherTargetCountry} aria-invalid={isInvalid("otherTargetCountry")} onChange={(e) => update("otherTargetCountry", e.target.value)} className={`form-control block w-full ${isInvalid("otherTargetCountry") ? "form-field-invalid" : ""}`} />
+                        </label>
+                      )}
+                    </fieldset>
+
                     <label className="block w-full space-y-1.5 text-sm text-foreground">
                       <span className="block font-medium">{t.diplomaCountry} *</span>
                       <select id="vvip-diploma-country" name="diplomaCountry" required value={form.diplomaCountry} aria-invalid={isInvalid("diplomaCountry")} onInput={(e) => update("diplomaCountry", e.currentTarget.value)} onChange={(e) => update("diplomaCountry", e.target.value)} className={`form-control block w-full ${isInvalid("diplomaCountry") ? "form-field-invalid" : ""}`} autoComplete="country-name">
                         <option value="">{t.selectCountry}</option>
-                        {diplomaCountries.map(country => <option key={country.code} value={country.label}>{country.label}</option>)}
+                        {diplomaCountries.map(country => <option key={country.code} value={country.code}>{country.label}</option>)}
                       </select>
                     </label>
 
@@ -701,6 +751,20 @@ export default function VvipOffshorePage() {
                         <input value={form.certifications} onChange={(e) => update("certifications", e.target.value)} className="form-control block w-full" placeholder={t.certificationsPlaceholder} />
                       </label>
                     </div>
+
+                    {/* Only the languages the candidate ticks or types are sent (REC-11). */}
+                    <fieldset className="block w-full space-y-2 text-sm text-foreground">
+                      <legend className="block font-medium">{t.languages}</legend>
+                      <div className="grid gap-2 @sm:grid-cols-2">
+                        {professionalLanguageOptions.map((option, index) => <label key={option.value} className="form-consent-item flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-foreground [overflow-wrap:anywhere]"><input id={`vvip-language-${index}`} type="checkbox" checked={form.languages.includes(option.value)} onChange={() => toggleLanguage(option.value)} className="form-consent-checkbox" />{option.labels[lang]}</label>)}
+                      </div>
+                      {form.languages.includes("Other") && (
+                        <label className="block w-full space-y-1.5 pt-2">
+                          <span className="block font-medium">{otherLanguageLabel[lang]}</span>
+                          <input id="vvip-other-language" value={form.otherLanguage} onChange={(e) => update("otherLanguage", e.target.value)} placeholder={otherLanguagePlaceholder[lang]} className="form-control block w-full" />
+                        </label>
+                      )}
+                    </fieldset>
 
                     <div className="space-y-2">
                       <input

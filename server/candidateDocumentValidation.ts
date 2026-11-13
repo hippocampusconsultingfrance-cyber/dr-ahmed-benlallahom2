@@ -43,17 +43,62 @@ export function shortenFileName(name: string, maxLength = FILE_NAME_MAX_LENGTH):
   if (name.length <= maxLength) return name;
   const dot = name.lastIndexOf(".");
   const extension = dot > 0 && name.length - dot <= 10 ? name.slice(dot) : "";
-  return `${name.slice(0, maxLength - extension.length).replace(/[. ]+$/, "")}${extension}`;
+  // Never half of a character written with two code units (an emoji, a rare ideogram).
+  return `${name.slice(0, maxLength - extension.length).replace(/[\uD800-\uDBFF]$/, "").replace(/[. ]+$/, "")}${extension}`;
 }
 
-export function safeCandidateDocumentName(value: string): string {
-  const safe = shortenFileName(value
-    .normalize("NFKC")
-    .replace(/[\\/\0]/g, "_")
-    .replace(/[^a-zA-Z0-9._ -]/g, "_")
+/**
+ * C0 and C1 controls, DEL, the direction controls that show a name other than
+ * the one stored (« CV », U+202E, « fdp.exe » reads « CVexe.pdf »), and the
+ * invisible characters with which two different names look the same or a name
+ * breaks its line: zero-width space, soft hyphen, word joiner and invisible
+ * operators, byte order mark, line and paragraph separators, tag characters.
+ * The zero-width non-joiner and joiner (U+200C, U+200D) stay: Persian words
+ * and composed emoji need them. Written as escapes: none of them appears as
+ * such in the source.
+ */
+const FILE_NAME_INVISIBLE_CHARACTERS = /[\u0000-\u001F\u007F-\u009F\u00AD\u061C\u200B\u200E\u200F\u2028-\u202E\u2060-\u2069\uFEFF\u{E0000}-\u{E007F}]/gu;
+/** Path separators and the other characters Windows refuses in a file name. */
+const FILE_NAME_FORBIDDEN_CHARACTERS = /[\\/<>:"|?*]/g;
+
+/**
+ * Name of a file as its sender gave it, to store, show and copy to Google
+ * Drive (INTL-07): composed (NFC), its Arabic, Chinese or accented letters kept
+ * (« 王小明简历.pdf », « Céline.pdf »), without control or direction characters,
+ * path separators and characters Windows refuses (each written « _ »), cut to
+ * 180 characters, extension kept; `fallback` when nothing is left.
+ */
+export function displayFileName(value: string, fallback: string): string {
+  return shortenFileName(value
+    .toWellFormed()
+    .normalize("NFC")
+    .replace(FILE_NAME_INVISIBLE_CHARACTERS, "")
+    .replace(FILE_NAME_FORBIDDEN_CHARACTERS, "_")
     .replace(/\.{2,}/g, ".")
-    .trim());
-  return safe || "document";
+    .trim()) || fallback;
+}
+
+/**
+ * The same name in ASCII letters, digits, « . », « _ » and « - », for a storage
+ * key and the filename= of a download, never shown (INTL-07): accents dropped
+ * (« Céline.pdf » : « Celine.pdf »), any other character written « _ »; a name
+ * left without an ASCII letter or digit (« 王小明简历.pdf ») is `fallback` with
+ * its extension (« cv.pdf »).
+ */
+export function asciiFileName(value: string, fallback: string): string {
+  const name = shortenFileName(displayFileName(value, fallback)
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .replace(/[^a-zA-Z0-9._-]/g, "_")
+    .replace(/_+/g, "_"));
+  const dot = name.lastIndexOf(".");
+  const extension = dot > 0 && name.length - dot <= 10 ? name.slice(dot) : "";
+  return /[a-zA-Z0-9]/.test(name.slice(0, name.length - extension.length)) ? name : `${fallback}${extension}`;
+}
+
+/** Name of a vault document as stored and shown: see displayFileName. */
+export function safeCandidateDocumentName(value: string): string {
+  return displayFileName(value, "document");
 }
 
 /** Same reading as the CV check: object streams and #xx-escaped names included, bounded inflation (REC-02). */

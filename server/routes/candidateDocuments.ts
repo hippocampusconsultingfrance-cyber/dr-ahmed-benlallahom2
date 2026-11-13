@@ -6,10 +6,10 @@ import { createContext } from "../_core/context";
 import { storageDelete, storageGetSignedUrl, storagePut } from "../storage";
 import { getDb } from "../db";
 import { candidateDocumentAuditLogs, candidateDocumentProcessingJobs, candidateDocuments } from "../../drizzle/schema";
-import { CANDIDATE_DOCUMENT_MAX_BYTES, CANDIDATE_DOCUMENT_TOO_LARGE_MESSAGE, candidateDocumentMimeTypes, candidateDocumentValidationMessage, safeCandidateDocumentName, validateCandidateDocument } from "../candidateDocumentValidation";
+import { asciiFileName, CANDIDATE_DOCUMENT_MAX_BYTES, CANDIDATE_DOCUMENT_TOO_LARGE_MESSAGE, candidateDocumentMimeTypes, candidateDocumentValidationMessage, safeCandidateDocumentName, validateCandidateDocument } from "../candidateDocumentValidation";
 import { CANDIDATE_UPLOADABLE_DOCUMENT_CATEGORIES, candidateDocumentAllowsAiAnalysis } from "../../shared/candidateDocumentCategories";
 import { CANDIDATE_DOCUMENT_ACCOUNT_FOREIGN_KEY, isForeignKeyViolation } from "../databaseConstraints";
-import { safeErrorName, safeFileName } from "./routeHelpers";
+import { attachmentContentDisposition, safeErrorName } from "./routeHelpers";
 
 /** A type the vault does not take, a legacy .doc among them (REC-15): the validation's stable code, which the portal translates. */
 const CANDIDATE_DOCUMENT_TYPE_REFUSED = "candidate_document_type_mismatch";
@@ -91,7 +91,8 @@ export function registerCandidateDocumentRoutes(app: Express) {
         }
         const { encryptCandidateDocument } = await import("../candidateDocumentEncryption");
         const encrypted = encryptCandidateDocument(file.buffer);
-        const stored = await storagePut(`candidate-documents/quarantine/${candidate.id}/${Date.now()}-${originalName}.enc`, encrypted.encrypted, "application/octet-stream");
+        // INTL-07: the name as sent is stored and shown; the storage key keeps its ASCII form.
+        const stored = await storagePut(`candidate-documents/quarantine/${candidate.id}/${Date.now()}-${asciiFileName(originalName, "document")}.enc`, encrypted.encrypted, "application/octet-stream");
         const db = await getDb();
         if (!db) {
           res.status(503).json({ error: "Le coffre documentaire est temporairement indisponible." });
@@ -184,7 +185,7 @@ export function registerCandidateDocumentRoutes(app: Express) {
       await db.insert(candidateDocumentAuditLogs).values({ candidateId: candidate.id, documentId: document.id, actorType: "candidate", actorReference: String(candidate.id), action: "download" });
       res.setHeader("Content-Type", document.mimeType);
       res.setHeader("Content-Length", String(content.byteLength));
-      res.setHeader("Content-Disposition", `attachment; filename="${safeFileName(document.originalName)}"`);
+      res.setHeader("Content-Disposition", attachmentContentDisposition(document.originalName, "document"));
       res.setHeader("Cache-Control", "no-store, private");
       res.send(content);
     } catch (error) {
@@ -216,7 +217,7 @@ export function registerCandidateDocumentRoutes(app: Express) {
       await db.insert(candidateDocumentAuditLogs).values({ candidateId: document.candidateId, documentId: document.id, actorType: "admin", actorReference: requestContext.user.openId, action: "download", metadata: JSON.stringify({ mfa: true }) });
       res.setHeader("Content-Type", document.mimeType);
       res.setHeader("Content-Length", String(content.byteLength));
-      res.setHeader("Content-Disposition", `attachment; filename="${safeFileName(document.originalName)}"`);
+      res.setHeader("Content-Disposition", attachmentContentDisposition(document.originalName, "document"));
       res.setHeader("Cache-Control", "no-store, private");
       res.send(content);
     } catch (error) {

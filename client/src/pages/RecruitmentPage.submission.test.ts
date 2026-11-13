@@ -93,7 +93,8 @@ describe("envoi de la candidature standard", () => {
 
     expect(sent).toHaveLength(1);
     const body = sent[0]!;
-    expect(body.get("diplomaCountry")).toBe("Tunisie");
+    // EN-11: the country chosen under its French name leaves as its code.
+    expect(body.get("diplomaCountry")).toBe("TN");
     expect(body.get("specialty")).toBe("Perfusionniste");
     expect(JSON.parse(String(body.get("targetCountries")))).toEqual(["France", "Autre pays : Islande"]);
     expect(JSON.parse(String(body.get("languages")))).toEqual(["French", "Italien", "russe"]);
@@ -105,7 +106,7 @@ describe("envoi de la candidature standard", () => {
     fillRequiredFields();
     visibleFields = [["diplomaCountry", "Maroc"]];
     await submit();
-    expect(sent[0]!.get("diplomaCountry")).toBe("Maroc");
+    expect(sent[0]!.get("diplomaCountry")).toBe("MA");
   });
 
   it("refuse l’option « Autre » sans précision, sans rien envoyer", async () => {

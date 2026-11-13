@@ -3,6 +3,7 @@ import { BrainCircuit, ClipboardList, Download, Eye, FileSearch, Loader2, Mail, 
 import { keepPreviousData } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { countryLabel } from "@/lib/countrySubmission";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import AdminLoadMore from "@/components/AdminLoadMore";
 import AdminSearchField from "@/components/AdminSearchField";
@@ -20,6 +21,7 @@ import { RECRUITMENT_APPLICATION_STATUS_OPTIONS, type RecruitmentApplicationStat
 import { RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "@shared/recruitmentAiAnalysis";
 import { candidateInvitationForcedResendAt } from "@shared/candidatePortalInvitationResend";
 import { PARIS_TIME_ZONE } from "@shared/parisTime";
+import { recruitmentPathway, VVIP_PATHWAY_LABEL } from "@shared/recruitmentPathway";
 import { AI_ANALYSIS_UNAVAILABLE_LABEL, isAiAnalysisUnavailable, SCORE_UNAVAILABLE_EXPLANATION, SCORE_UNAVAILABLE_HEADING, scoredApplicationsFirst } from "./recruitmentScoreGroups";
 import { contradictionEvidenceLabel, CV_READING_LABELS, CV_REVIEW_REMINDER, cvReadingTextForDisplay, extractionWarningLabel, fieldEvidenceStatusLabel, fieldEvidenceStatusTone } from "./recruitmentEvidenceLabels";
 import {
@@ -569,6 +571,8 @@ export default function RecruitmentTab({ initialSearch = "" }: { initialSearch?:
               : null;
             // The certification filter says where each matching certification comes from, and its expiry (IA-02).
             const searchedCertifications = filters.certification ? (application.certificationFacts ?? []).filter(fact => recruitmentFactNameContains(fact.name, filters.certification!)) : [];
+            // REC-11: the pathway named, not the prefix that marks it in the specialty.
+            const pathway = recruitmentPathway(application.specialty);
             return (
               <Fragment key={application.id}>
               {index === listedApplications.firstUnscored ? (
@@ -590,9 +594,10 @@ export default function RecruitmentTab({ initialSearch = "" }: { initialSearch?:
                       <span className="mt-1 rounded-full bg-primary/10 p-2 text-primary"><UserRound className="h-4 w-4" /></span>
                       <div className="min-w-0 wrap-anywhere">
                         <h3 className="font-semibold text-foreground">{application.firstName} {application.lastName}</h3>
-                        <p className="text-sm text-muted-foreground">{application.specialty} · {application.trackingId}</p>
+                        <p className="text-sm text-muted-foreground">{pathway.vvip ? <span className="mr-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">{VVIP_PATHWAY_LABEL}</span> : null}{pathway.specialty} · {application.trackingId}</p>
                         <p className="mt-1 text-sm text-muted-foreground">{countries.join(", ") || "Pays non précisés"}</p>
-                        {application.diplomaCountry ? <p className="mt-1 text-sm text-muted-foreground">Diplôme obtenu : {application.diplomaCountry}</p> : null}
+                        {/* EN-11: a code (« TN ») or a name recorded before it (« Tunisia »), named in French. */}
+                        {application.diplomaCountry ? <p className="mt-1 text-sm text-muted-foreground">Diplôme obtenu : {countryLabel(application.diplomaCountry, "fr")}</p> : null}
                         {searchedCertifications.length > 0 ? <p className="mt-1 text-sm text-muted-foreground">Certification recherchée : {searchedCertifications.map(certificationFactLabel).join(" ; ")}</p> : null}
                       </div>
                     </div>

@@ -1,7 +1,8 @@
 import { deflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { CANDIDATE_DOCUMENT_ACCEPTED_EXTENSIONS } from "../shared/candidateDocumentLimits";
-import { candidateDocumentMimeTypes, candidateDocumentValidationMessage, safeCandidateDocumentName, validateCandidateDocument } from "./candidateDocumentValidation";
+import { asciiFileName, candidateDocumentMimeTypes, candidateDocumentValidationMessage, displayFileName, safeCandidateDocumentName, validateCandidateDocument } from "./candidateDocumentValidation";
+import { attachmentContentDisposition } from "./routes/routeHelpers";
 import { DOCUMENT_DECOMPRESSION_LIMITS } from "./documentDecompressionLimits";
 import { appendWithoutXref, classicPdf, IMAGE_DATA_OBJ_KEYWORDS, libreOfficeChineseCvPdf, libreOfficeCvPdf, packPdfIntoObjectStream, pathologicalPdfs, pngPredict, saveIncrementally, scannedPdf, withObjectInStreamData } from "./testing/pdfFixture";
 import { buildZip } from "./testing/zipFixture";
@@ -10,6 +11,56 @@ describe("validation des documents candidats", () => {
   it("nettoie les noms de fichiers et rejette les chemins", () => {
     expect(safeCandidateDocumentName("../../passeport client.pdf")).not.toContain("/");
     expect(safeCandidateDocumentName("../../passeport client.pdf")).not.toContain("\\");
+    expect(safeCandidateDocumentName("..\\..\\passeport client.pdf")).not.toContain("\\");
+  });
+
+  it("garde le nom affiché tel qu’envoyé, lettres arabes, chinoises et accentuées comprises (INTL-07)", () => {
+    for (const name of ["王小明简历.pdf", "执业证书.pdf", "سيرة ذاتية - محمد العتيبي.pdf", "CV Zoë Ørsted-Łukasz.pdf", "Céline.pdf"]) expect(displayFileName(name, "cv"), name).toBe(name);
+    // Composed: a name typed on macOS (NFD) gives the same name.
+    expect(displayFileName("Céline.pdf".normalize("NFD"), "cv")).toBe("Céline.pdf");
+  });
+
+  it("retire du nom affiché les contrôles et contrôles de direction, et remplace les caractères refusés par Windows", () => {
+    const rlo = String.fromCharCode(0x202e);
+    const controls = [0x00, 0x09, 0x1f, 0x7f, 0x85, 0x9f, 0x061c, 0x200e, 0x200f, 0x202a, 0x2066, 0x2069].map(code => String.fromCharCode(code)).join("");
+    expect(displayFileName(`CV${rlo}fdp.exe${controls}.pdf`, "cv")).toBe("CVfdp.exe.pdf");
+    expect(displayFileName("a<b>c:d\"e|f?g*h/i\\j.pdf", "cv")).toBe("a_b_c_d_e_f_g_h_i_j.pdf");
+    expect(displayFileName(`${controls} `, "cv")).toBe("cv");
+  });
+
+  it("retire les caractères invisibles qui font paraître deux noms identiques ou coupent la ligne, sauf ceux du persan et des emoji", () => {
+    const invisible = [0x00ad, 0x200b, 0x2028, 0x2029, 0x2060, 0x2063, 0xfeff, 0xe0001, 0xe0041, 0xe007f].map(code => String.fromCodePoint(code));
+    for (const character of invisible) expect(displayFileName(`c${character}v.pdf`, "cv"), character.codePointAt(0)!.toString(16)).toBe("cv.pdf");
+    expect(displayFileName(invisible.join(""), "document")).toBe("document");
+    // « رزومه‌ی من » (ZWNJ), « 👩‍⚕️ » (ZWJ).
+    const zwnj = String.fromCharCode(0x200c);
+    const zwj = String.fromCharCode(0x200d);
+    for (const name of [`رزومه${zwnj}ی من.pdf`, `👩${zwj}⚕️ CV.pdf`]) expect(displayFileName(name, "cv"), name).toBe(name);
+  });
+
+  it("borne le nom affiché à 180 caractères sans couper un caractère en deux", () => {
+    const name = `${"😀".repeat(100)}.pdf`;
+    const shortened = displayFileName(name, "cv");
+    expect(shortened.length).toBeLessThanOrEqual(180);
+    expect(shortened.endsWith(".pdf")).toBe(true);
+    expect(shortened.isWellFormed()).toBe(true);
+    expect(displayFileName(`a${String.fromCharCode(0xd800)}b.pdf`, "cv").isWellFormed()).toBe(true);
+  });
+
+  it("donne pour les clés de stockage un nom ASCII, sans accent, ou le nom de repli quand il ne reste rien de lisible", () => {
+    expect(asciiFileName("Céline.pdf", "cv")).toBe("Celine.pdf");
+    expect(asciiFileName("CV Zoë Ørsted-Łukasz.pdf", "cv")).toBe("CV_Zoe_rsted-_ukasz.pdf");
+    expect(asciiFileName("王小明简历.pdf", "cv")).toBe("cv.pdf");
+    expect(asciiFileName("سيرة ذاتية - محمد العتيبي.pdf", "document")).toBe("document.pdf");
+    expect(asciiFileName("执业证书", "document")).toBe("document");
+    for (const name of ["王小明简历.pdf", "Ünïcödé ñame.docx", "../../x.pdf"]) expect(asciiFileName(name, "cv"), name).toMatch(/^[A-Za-z0-9._-]+$/);
+  });
+
+  it("annonce un téléchargement sous son nom en UTF-8, avec un nom ASCII de repli", () => {
+    expect(attachmentContentDisposition("执业证书.pdf", "document")).toBe("attachment; filename=\"document.pdf\"; filename*=UTF-8''%E6%89%A7%E4%B8%9A%E8%AF%81%E4%B9%A6.pdf");
+    expect(attachmentContentDisposition("Céline (2).pdf", "document")).toBe("attachment; filename=\"Celine_2_.pdf\"; filename*=UTF-8''C%C3%A9line%20%282%29.pdf");
+    // A name stored before INTL-07 keeps the one it had.
+    expect(attachmentContentDisposition("Dipl_me d__tat.pdf", "document")).toBe("attachment; filename=\"Dipl_me_d_tat.pdf\"; filename*=UTF-8''Dipl_me%20d__tat.pdf");
   });
 
   it("raccourcit un nom de plus de 180 caractères par la fin de son nom de base, extension gardée", () => {

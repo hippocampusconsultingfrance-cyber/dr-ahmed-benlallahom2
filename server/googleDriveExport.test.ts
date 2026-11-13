@@ -3,7 +3,15 @@ import { buildGoogleDriveAuthorizationUrl, createGoogleDriveOAuthState, googleDr
 
 describe("export Google Drive des CV", () => {
   it("construit un nom de copie traçable sans caractères de chemin dangereux", () => {
-    expect(googleDriveCvFileName("CV123", "../CV Dr. Amina?.pdf")).toBe("CV123-.._CV Dr. Amina_.pdf");
+    expect(googleDriveCvFileName("CV123", "../CV Dr. Amina?.pdf")).toBe("CV123-._CV Dr. Amina_.pdf");
+  });
+
+  it("garde dans le nom de la copie les lettres arabes, chinoises ou accentuées du CV, au même format (INTL-07)", () => {
+    expect(googleDriveCvFileName("CVZ6CJQTGQQEDUXGEZ", "王小明简历.pdf")).toBe("CVZ6CJQTGQQEDUXGEZ-王小明简历.pdf");
+    expect(googleDriveCvFileName("CVEA2E2TXBY95FP25X", "سيرة ذاتية - محمد العتيبي.pdf")).toBe("CVEA2E2TXBY95FP25X-سيرة ذاتية - محمد العتيبي.pdf");
+    expect(googleDriveCvFileName("CV123", "CV Zoë Ørsted-Łukasz.pdf")).toBe("CV123-CV Zoë Ørsted-Łukasz.pdf");
+    // A name stored before INTL-07, its letters already written « _ », keeps its earlier copy name.
+    expect(googleDriveCvFileName("CV123", "_______________.pdf")).toBe("CV123-_.pdf");
   });
 
   it("applique une reprise exponentielle plafonnée", () => {

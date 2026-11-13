@@ -8,20 +8,21 @@ const allEnvironments = VVIP_ENVIRONMENTS.map(environment => environment.value);
 
 function bodyFor(specialty: string, environments: string[] = allEnvironments) {
   return buildVvipApplicationFormData({
-    form: { ...createInitialForm("fr"), firstName: "Amira", lastName: "Haddad", email: "amira@example.test", environments, certifications: "ATLS, ACLS, HUET" },
+    form: { ...createInitialForm(), firstName: "Amira", lastName: "Haddad", email: "amira@example.test", environments, targetCountries: ["Qatar"], certifications: "ATLS, ACLS, HUET" },
     cv: new File(["%PDF-1.7"], "cv.pdf", { type: "application/pdf" }),
     specialty,
-    diplomaCountry: "Maroc",
+    diplomaCountry: "MA",
     turnstileToken: "turnstile-token-of-this-attempt",
     language: "fr",
   });
 }
 
 describe("INTL-03 — spécialité VVIP envoyée à l’API", () => {
-  it("garde le préfixe VVIP sans recopier les environnements, qui partent dans targetCountries et le message", () => {
+  it("garde le préfixe VVIP sans recopier les environnements, qui partent dans le message et à part, pas dans targetCountries", () => {
     const body = bodyFor("Infirmier(ère) paramédical(e) Offshore / Rig Medic");
     expect(body.get("specialty")).toBe("[VVIP / Offshore] Infirmier(ère) paramédical(e) Offshore / Rig Medic");
-    expect(JSON.parse(String(body.get("targetCountries")))).toEqual(allEnvironments);
+    expect(JSON.parse(String(body.get("environments")))).toEqual(allEnvironments);
+    expect(JSON.parse(String(body.get("targetCountries")))).toEqual(["Qatar"]);
     expect(String(body.get("message"))).toContain(`Environnements: ${allEnvironments.join(", ")}`);
   });
 

@@ -41,13 +41,13 @@ afterEach(() => { vi.unstubAllGlobals(); });
 describe("A11Y-03 — formulaire standard refusé avant l’envoi", () => {
   it("refuse les champs dans l’ordre du formulaire, et laisse partir un formulaire complet", () => {
     expect([...emptyFormFields]).toEqual(["firstName", "lastName", "email", "specialty", "diplomaCountry", "targetCountries", "cv", "gdprConsent", "turnstile"]);
-    expect([...standardInvalidFields(completeForm, acceptedCv, "token", "Maroc")]).toEqual([]);
+    expect([...standardInvalidFields(completeForm, acceptedCv, "token", "MA")]).toEqual([]);
 
-    expect([...standardInvalidFields({ ...completeForm, email: "amina@example" }, acceptedCv, "token", "Maroc")]).toEqual(["email"]);
+    expect([...standardInvalidFields({ ...completeForm, email: "amina@example" }, acceptedCv, "token", "MA")]).toEqual(["email"]);
     // "Other" asks for the typed specialty and the typed country instead.
-    expect([...standardInvalidFields({ ...completeForm, specialty: "Autre spécialité ou profession", specialtyCustom: " ", targetCountries: ["Autre pays / Mobilité mondiale"] }, acceptedCv, "token", "Maroc")])
+    expect([...standardInvalidFields({ ...completeForm, specialty: "Autre spécialité ou profession", specialtyCustom: " ", targetCountries: ["Autre pays / Mobilité mondiale"] }, acceptedCv, "token", "MA")])
       .toEqual(["specialtyCustom", "otherTargetCountry"]);
-    expect([...standardInvalidFields({ ...completeForm, specialty: "Autre spécialité ou profession", specialtyCustom: "Perfusionniste" }, acceptedCv, "token", "Maroc")]).toEqual([]);
+    expect([...standardInvalidFields({ ...completeForm, specialty: "Autre spécialité ou profession", specialtyCustom: "Perfusionniste" }, acceptedCv, "token", "MA")]).toEqual([]);
     // An attached CV of the wrong format is refused like a missing one; the alert tells them apart.
     expect([...standardInvalidFields(completeForm, refusedCv, "token", "")]).toEqual(["diplomaCountry", "cv"]);
   });

@@ -132,6 +132,16 @@ describe("règles déterministes du pipeline de traitement CV", () => {
     expect(result.analysisUsage.totalTokens).toBe(200);
   });
 
+  it("range le CV accepté sous une clé ASCII, son nom gardant ses lettres chinoises ou accentuées (INTL-07)", async () => {
+    const promotedKeys: string[] = [];
+    const promote = async (storageKey: string) => { promotedKeys.push(storageKey); return { key: storageKey }; };
+    for (const cvOriginalName of ["王小明简历.pdf", "CV Zoë Ørsted-Łukasz.pdf"]) {
+      const result = await executeCvExternalPipeline({ ...input, cvOriginalName }, { ...steps, promote });
+      expect(result.promotedStorage?.key, cvOriginalName).toBe(promotedKeys.at(-1));
+    }
+    expect(promotedKeys).toEqual(["recruitment/cv/CV-001-cv.pdf", "recruitment/cv/CV-001-CV_Zoe_rsted-_ukasz.pdf"]);
+  });
+
   it("transmet le signal de couverture incomplète pour un PDF mixte", async () => {
     let extractionIncomplete: boolean | undefined;
     await executeCvExternalPipeline(input, {

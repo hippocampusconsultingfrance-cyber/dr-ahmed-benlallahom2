@@ -96,12 +96,12 @@ beforeEach(() => {
 
 const allEnvironments = VVIP_ENVIRONMENTS.map(environment => environment.value);
 
-function vvipBody(specialty: string, cv: Buffer = validPdfBuffer(), environments: string[] = allEnvironments) {
+function vvipBody(specialty: string, cv: Buffer = validPdfBuffer(), environments: string[] = allEnvironments, targetCountries: string[] = ["Qatar"]) {
   return buildVvipApplicationFormData({
-    form: { ...createInitialForm("fr"), firstName: "Amira", lastName: "Haddad", email: "amira@example.test", environments, yearsExperience: "12", certifications: "ATLS, ACLS, HUET, BOSIET" },
+    form: { ...createInitialForm(), firstName: "Amira", lastName: "Haddad", email: "amira@example.test", environments, targetCountries, yearsExperience: "12", certifications: "ATLS, ACLS, HUET, BOSIET" },
     cv: new File([new Uint8Array(cv)], "cv-amira.pdf", { type: "application/pdf" }),
     specialty,
-    diplomaCountry: "Maroc",
+    diplomaCountry: "MA",
     turnstileToken: "turnstile-token-accepted-by-the-mock",
     language: "fr",
   });
@@ -131,24 +131,41 @@ describe("INTL-03 — candidature VVIP avec plusieurs environnements", () => {
     expect(result.status, JSON.stringify(result.body)).toBe(201);
   });
 
-  it("enregistre une nouvelle candidature, et prévient le propriétaire, quand le même CV vise d’autres environnements", async () => {
+  it("enregistre une nouvelle candidature, et prévient le propriétaire, quand le même CV vise d’autres pays", async () => {
     const cv = validPdfBuffer();
     const specialty = "Médecin urgentiste (ATLS / ACLS)";
     const [middleEast, , mining] = allEnvironments;
-    state.sameCvApplications = [{ id: 7, trackingId: "CVPREVIOUSVVIP001", email: "amira@example.test", specialty: `[VVIP / Offshore] ${specialty}`, targetCountries: JSON.stringify([middleEast]) }];
+    state.sameCvApplications = [{ id: 7, trackingId: "CVPREVIOUSVVIP001", email: "amira@example.test", specialty: `[VVIP / Offshore] ${specialty}`, targetCountries: JSON.stringify(["Qatar"]) }];
 
-    const sameEnvironments = await apply(vvipBody(specialty, cv, [middleEast]));
-    expect(sameEnvironments).toEqual({ status: 200, body: { success: true, duplicate: true, trackingId: "CVPREVIOUSVVIP001" } });
+    const sameCountries = await apply(vvipBody(specialty, cv, [middleEast], ["Qatar"]));
+    expect(sameCountries).toEqual({ status: 200, body: { success: true, duplicate: true, trackingId: "CVPREVIOUSVVIP001" } });
     expect(notifyOwner).not.toHaveBeenCalled();
 
-    const otherEnvironments = await apply(vvipBody(specialty, cv, [middleEast, mining]));
-    expect(otherEnvironments.status, JSON.stringify(otherEnvironments.body)).toBe(201);
-    expect(otherEnvironments.body.trackingId).not.toBe("CVPREVIOUSVVIP001");
+    const otherCountries = await apply(vvipBody(specialty, cv, [middleEast, mining], ["Qatar", "Oman"]));
+    expect(otherCountries.status, JSON.stringify(otherCountries.body)).toBe(201);
+    expect(otherCountries.body.trackingId).not.toBe("CVPREVIOUSVVIP001");
     const storedValues = state.executed.flatMap(query => new PgDialect().sqlToQuery(query as SQL).params);
-    expect(storedValues).toContain(JSON.stringify([middleEast, mining]));
+    expect(storedValues).toContain(JSON.stringify(["Qatar", "Oman"]));
     expect(storedValues).toContain(createHash("sha256").update(cv).digest("hex"));
     expect(notifyOwner).toHaveBeenCalledTimes(1);
     expect(vi.mocked(notifyOwner).mock.calls[0][0].content).toContain(mining);
+  });
+
+  it("répond « déjà reçue », sans nouvelle candidature, quand le même CV ne change que les environnements (REC-11)", async () => {
+    const cv = validPdfBuffer();
+    const specialty = "Médecin urgentiste (ATLS / ACLS)";
+    const [, rigs, mining] = allEnvironments;
+    // Received for Qatar with « Moyen-Orient »: the environments are not stored, the countries are.
+    state.sameCvApplications = [{ id: 7, trackingId: "CVPREVIOUSVVIP001", email: "amira@example.test", specialty: `[VVIP / Offshore] ${specialty}`, targetCountries: JSON.stringify(["Qatar"]) }];
+
+    const otherEnvironments = await apply(vvipBody(specialty, cv, [rigs, mining], ["Qatar"]));
+
+    // Like a standard application sent again with other languages or another message.
+    expect(otherEnvironments).toEqual({ status: 200, body: { success: true, duplicate: true, trackingId: "CVPREVIOUSVVIP001" } });
+    expect(state.confirmations).toEqual(["CVPREVIOUSVVIP001"]);
+    expect(state.stored).toEqual([]);
+    expect(state.executed.map(query => new PgDialect().sqlToQuery(query as SQL).sql).filter(text => text.includes("INSERT INTO cv_applications"))).toEqual([]);
+    expect(notifyOwner).not.toHaveBeenCalled();
   });
 
   it("refuse une spécialité trop longue, journalise le champ sans sa valeur et le formulaire affiche le vrai motif", async () => {
@@ -170,6 +187,52 @@ describe("INTL-03 — candidature VVIP avec plusieurs environnements", () => {
     } finally {
       warn.mockRestore();
     }
+  });
+});
+
+describe("REC-11 — candidature VVIP sans données inventées, email du propriétaire sans libellé interne", () => {
+  /** The first ten columns of the INSERT, all bound parameters, from tracking_id to years_experience. */
+  function storedApplication() {
+    const insert = state.executed.map(query => new PgDialect().sqlToQuery(query as SQL)).find(query => query.sql.includes("INSERT INTO cv_applications"))!;
+    const [, , , , , specialty, diplomaCountry, targetCountries, languages, yearsExperience] = insert.params;
+    return { specialty, diplomaCountry, targetCountries, languages, yearsExperience };
+  }
+
+  it("enregistre les pays et les langues du candidat, aucune expérience non saisie, le pays du diplôme en code", async () => {
+    const [middleEast, rigs] = allEnvironments;
+    const body = buildVvipApplicationFormData({
+      form: { ...createInitialForm(), firstName: "Amira", lastName: "Haddad", email: "amira@example.test", environments: [middleEast, rigs], targetCountries: ["Qatar", "Oman"] },
+      cv: new File([new Uint8Array(validPdfBuffer())], "cv-amira.pdf", { type: "application/pdf" }),
+      specialty: "Médecin urgentiste (ATLS / ACLS)",
+      diplomaCountry: "MA",
+      turnstileToken: "turnstile-token-accepted-by-the-mock",
+      language: "fr",
+    });
+    const result = await apply(body);
+
+    expect(result.status, JSON.stringify(result.body)).toBe(201);
+    // The pathway stays marked in the specialty until the owner decides on a column of its own.
+    expect(storedApplication()).toEqual({ specialty: "[VVIP / Offshore] Médecin urgentiste (ATLS / ACLS)", diplomaCountry: "MA", targetCountries: JSON.stringify(["Qatar", "Oman"]), languages: "[]", yearsExperience: null });
+    const content = String(vi.mocked(notifyOwner).mock.calls[0][0].content);
+    expect(content.split("\n")).toEqual(expect.arrayContaining([
+      "**Parcours:** VVIP & Offshore",
+      "**Spécialité:** Médecin urgentiste (ATLS / ACLS)",
+      `**Environnements:** ${middleEast}, ${rigs}`,
+      "**Pays du diplôme:** Maroc",
+      "**Pays ciblés:** Qatar, Oman",
+    ]));
+    expect(content).not.toContain("[VVIP / Offshore]");
+  });
+
+  it("ne donne ni parcours ni environnements dans l’email d’une candidature standard", async () => {
+    const body = vvipBody("Médecin urgentiste (ATLS / ACLS)");
+    body.set("specialty", "Médecine d’urgence");
+    const result = await apply(body);
+
+    expect(result.status, JSON.stringify(result.body)).toBe(201);
+    const content = String(vi.mocked(notifyOwner).mock.calls[0][0].content);
+    expect(content).toContain("**Spécialité:** Médecine d’urgence");
+    expect(content).not.toMatch(/Parcours|Environnements/);
   });
 });
 

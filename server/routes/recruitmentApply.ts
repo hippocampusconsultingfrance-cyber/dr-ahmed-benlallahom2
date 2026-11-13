@@ -15,7 +15,10 @@ import { sendTrackedCvApplicationConfirmationEmail } from "../recruitmentEmailTr
 import { CV_APPLICATION_SUBMISSION_UNIQUE_INDEX, isUniqueViolation } from "../databaseConstraints";
 import { emailText, multiLineText, refusesTextInputCharacters, singleLineText, TEXT_INPUT_INVALID_CHARACTERS, TEXT_INPUT_INVALID_CHARACTERS_MESSAGE } from "../../shared/textInput";
 import { adminLink } from "../adminLinks";
-import { PUBLIC_APP_ORIGIN, safeErrorName, safeFileName } from "./routeHelpers";
+import { asciiFileName, displayFileName } from "../candidateDocumentValidation";
+import { countryCodeOf, countryLabel } from "../../client/src/lib/countrySubmission";
+import { recruitmentPathway, VVIP_PATHWAY_LABEL } from "../../shared/recruitmentPathway";
+import { PUBLIC_APP_ORIGIN, safeErrorName } from "./routeHelpers";
 
 function safeErrorMetadata(error: unknown) {
   if (!error || typeof error !== "object") return { name: "UnknownError" };
@@ -62,6 +65,9 @@ const recruitmentApplicationSchema = z.object({
   diplomaCountry: singleLineText(z.string().min(1).max(100)),
   targetCountries: z.array(singleLineText(z.string().min(1).max(80))).min(1).max(RECRUITMENT_MAX_TARGET_COUNTRIES),
   languages: z.array(singleLineText(z.string().min(1).max(80))).max(12).default([]),
+  // Environments of a VVIP application, for the owner's email only: the form also writes them in the message.
+  // Stored nowhere else, they are not part of what makes an application (isSameRecruitmentSubmission).
+  environments: z.array(singleLineText(z.string().min(1).max(80))).max(RECRUITMENT_MAX_TARGET_COUNTRIES).default([]),
   yearsExperience: z.number().int().min(0).max(70).optional(),
   availability: singleLineText(z.string().max(100)).optional().default(""),
   mobility: singleLineText(z.string().max(150)).optional().default(""),
@@ -118,6 +124,7 @@ export function registerRecruitmentApplyRoute(app: Express) {
           diplomaCountry: req.body.diplomaCountry,
           targetCountries: parseListField(req.body.targetCountries),
           languages: parseListField(req.body.languages),
+          environments: parseListField(req.body.environments),
           yearsExperience: req.body.yearsExperience === "" || req.body.yearsExperience === undefined
             ? undefined
             : Number(req.body.yearsExperience),
@@ -145,6 +152,9 @@ export function registerRecruitmentApplyRoute(app: Express) {
           res.status(400).json({ error: "La candidature n’a pas pu être traitée." });
           return;
         }
+        // EN-11: the diploma country is stored as its code, also when a page loaded before EN-11 sends its
+        // name; a value that names no country is kept as sent, and shown as it is.
+        const diplomaCountry = countryCodeOf(parsed.data.diplomaCountry) ?? parsed.data.diplomaCountry;
 
         recruitmentStage = "security-protection";
         const { verifyCandidateTurnstile } = await import("../candidateTurnstile");
@@ -175,7 +185,8 @@ export function registerRecruitmentApplyRoute(app: Express) {
 
         recruitmentStage = "file-validation";
         const trackingId = secureReference("CV", 16);
-        const originalName = safeFileName(file.originalname);
+        // INTL-07: the name as sent (Arabic, Chinese, accented letters) is stored and shown; the storage key keeps its ASCII form.
+        const originalName = displayFileName(file.originalname, "cv");
         let fileValidation;
         try {
           fileValidation = validateCvFile({
@@ -261,7 +272,7 @@ export function registerRecruitmentApplyRoute(app: Express) {
 
         recruitmentStage = "storage-upload";
         const storageResult = await storagePut(
-          `recruitment/quarantine/${trackingId}-${originalName}`,
+          `recruitment/quarantine/${trackingId}-${asciiFileName(originalName, "cv")}`,
           file.buffer,
           file.mimetype,
         );
@@ -286,7 +297,7 @@ export function registerRecruitmentApplyRoute(app: Express) {
             gdpr_consent, marketing_consent, status, consent_at, retention_until, language
           ) VALUES (
             ${trackingId}, ${parsed.data.firstName}, ${parsed.data.lastName}, ${parsed.data.email},
-            ${parsed.data.phone || null}, ${parsed.data.specialty}, ${parsed.data.diplomaCountry}, ${storedTargetCountries},
+            ${parsed.data.phone || null}, ${parsed.data.specialty}, ${diplomaCountry}, ${storedTargetCountries},
             ${JSON.stringify(parsed.data.languages)}, ${parsed.data.yearsExperience ?? null},
             ${parsed.data.availability || null}, ${parsed.data.mobility || null}, ${parsed.data.certifications || null},
             ${parsed.data.message || null}, ${storageResult.key}, ${originalName}, ${file.mimetype}, ${file.size},
@@ -317,6 +328,20 @@ export function registerRecruitmentApplyRoute(app: Express) {
 
         recruitmentStage = "notifications";
         const candidateName = `${parsed.data.firstName} ${parsed.data.lastName}`;
+        // REC-11: a VVIP application gives its pathway and its environments, not the prefix that marks it in
+        // the specialty, nor its environments as target countries; the diploma country is named in French.
+        const pathway = recruitmentPathway(parsed.data.specialty);
+        const ownerNotificationLines = [
+          `**Référence:** ${trackingId}`,
+          `**Email:** ${parsed.data.email}`,
+          ...(pathway.vvip ? [`**Parcours:** ${VVIP_PATHWAY_LABEL}`] : []),
+          `**Spécialité:** ${pathway.specialty}`,
+          ...(pathway.vvip && parsed.data.environments.length ? [`**Environnements:** ${parsed.data.environments.join(", ")}`] : []),
+          `**Pays du diplôme:** ${countryLabel(diplomaCountry, "fr")}`,
+          `**Pays ciblés:** ${parsed.data.targetCountries.join(", ")}`,
+          "**CV:** reçu et stocké de manière privée",
+          `**Ouvrir la candidature:** ${adminLink("recruitment", trackingId)}`,
+        ];
         const candidatePortalInviteUrl = insertedId
           ? `${PUBLIC_APP_ORIGIN}/candidate/access?invite=${encodeURIComponent(createCandidateInvitationToken(Number(insertedId)))}`
           : undefined;
@@ -339,7 +364,7 @@ export function registerRecruitmentApplyRoute(app: Express) {
             reference: trackingId,
             title: "Candidature",
             name: candidateName,
-            content: `**Référence:** ${trackingId}\n**Email:** ${parsed.data.email}\n**Spécialité:** ${parsed.data.specialty}\n**Pays du diplôme:** ${parsed.data.diplomaCountry}\n**Pays ciblés:** ${parsed.data.targetCountries.join(", ")}\n**CV:** reçu et stocké de manière privée\n**Ouvrir la candidature:** ${adminLink("recruitment", trackingId)}`,
+            content: ownerNotificationLines.join("\n"),
           }),
         ]);
 

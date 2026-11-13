@@ -7,7 +7,7 @@ import { SEOHead } from "@/components/SEOHead";
 import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { resolveCountryForSubmission } from "@/lib/countrySubmission";
+import { countryCodeOf, countryLabel, resolveCountryForSubmission, WORLDWIDE_COUNTRY_CODES } from "@/lib/countrySubmission";
 import { recruitmentServiceFailureMessage, recruitmentSubmissionErrorMessage } from "@/lib/recruitmentSubmissionErrors";
 import { fieldsToCorrectMessage, reportFieldsToCorrect, type FieldToCorrect } from "@/lib/formFieldsToCorrect";
 import { getTurnstileWidgetCopy } from "@/lib/publicFormCopy";
@@ -36,7 +36,7 @@ export const countryOptions = [
   { value: "Maroc", labels: { fr: "Maroc", en: "Morocco", de: "Marokko", zh: "摩洛哥" } },
   { value: "Autre pays / Mobilité mondiale", labels: { fr: "Autre pays / Mobilité mondiale", en: "Other country / Global mobility", de: "Anderes Land / Globale Mobilität", zh: "其他国家/全球流动" } },
 ] as const;
-const OTHER_TARGET_COUNTRY = "Autre pays / Mobilité mondiale";
+export const OTHER_TARGET_COUNTRY = "Autre pays / Mobilité mondiale";
 /** The specialty is sent as typed: /api/recruitment/apply accepts up to 160 characters (cv_applications.specialty). */
 export const RECRUITMENT_CUSTOM_SPECIALTY_MAX_LENGTH = 160;
 
@@ -52,8 +52,8 @@ export const professionalLanguageOptions = [
   { value: "Other", labels: { fr: "Autre", en: "Other", de: "Andere", zh: "其他" } },
 ] as const;
 
-const otherLanguageLabel = { fr: "Autre langue (à préciser)", en: "Other language (please specify)", de: "Andere Sprache (bitte angeben)", zh: "其他语言（请注明）" } as const;
-const otherLanguagePlaceholder = { fr: "Ex. Italien, russe…", en: "e.g. Italian, Russian…", de: "z. B. Italienisch, Russisch…", zh: "例如：意大利语、俄语…" } as const;
+export const otherLanguageLabel = { fr: "Autre langue (à préciser)", en: "Other language (please specify)", de: "Andere Sprache (bitte angeben)", zh: "其他语言（请注明）" } as const;
+export const otherLanguagePlaceholder = { fr: "Ex. Italien, russe…", en: "e.g. Italian, Russian…", de: "z. B. Italienisch, Russisch…", zh: "例如：意大利语、俄语…" } as const;
 const customSpecialtyPlaceholder = { fr: "Ex. Perfusionniste, audioprothésiste…", en: "e.g. Perfusionist, hearing aid specialist…", de: "z. B. Kardiotechniker, Hörakustiker…", zh: "例如：体外循环灌注师、助听器验配师…" } as const;
 
 const copy = {
@@ -118,7 +118,7 @@ const diplomaCountryCopy = {
   de: { label: "Land des Diplomerwerbs", search: "Land weltweit suchen…", clear: "Ländersuche löschen", noMatch: "Kein Land entspricht Ihrer Suche." },
   zh: { label: "获得文凭的国家", search: "搜索世界各地的国家…", clear: "清除国家搜索", noMatch: "未找到符合条件的国家。" },
 } as const;
-const otherTargetCountryLabel = { fr: "Autre pays à préciser", en: "Specify the other country", de: "Anderes Land bitte angeben", zh: "请注明其他国家" } as const;
+export const otherTargetCountryLabel = { fr: "Autre pays à préciser", en: "Specify the other country", de: "Anderes Land bitte angeben", zh: "请注明其他国家" } as const;
 
 type Language = keyof typeof copy;
 type FormState = {
@@ -180,6 +180,18 @@ export function standardFieldsToCorrect(invalidFields: Iterable<StandardField>, 
   });
 }
 
+/** Target countries as sent: « Autre pays » carries the country typed (shared with the VVIP form). */
+export function submittedTargetCountries(targetCountries: readonly string[], otherTargetCountry: string): string[] {
+  return targetCountries.map(country => country === OTHER_TARGET_COUNTRY ? `Autre pays : ${otherTargetCountry.trim()}` : country);
+}
+
+/** Professional languages as sent: « Other » gives way to the languages typed, comma separated (shared with the VVIP form). */
+export function submittedProfessionalLanguages(languages: readonly string[], otherLanguage: string): string[] {
+  return languages.flatMap(languageValue => languageValue === "Other"
+    ? otherLanguage.split(",").map(item => item.trim()).filter(Boolean)
+    : [languageValue]);
+}
+
 /** Multipart body of a standard application; `language` is the one the form is shown in. */
 export function buildStandardApplicationFormData({ form, cv, specialty, diplomaCountry, turnstileToken, language }: { form: FormState; cv: File; specialty: string; diplomaCountry: string; turnstileToken: string; language: Language }): FormData {
   const body = new FormData();
@@ -190,12 +202,8 @@ export function buildStandardApplicationFormData({ form, cv, specialty, diplomaC
   body.append("phone", form.phone);
   body.append("specialty", specialty);
   body.append("diplomaCountry", diplomaCountry);
-  const submittedTargetCountries = form.targetCountries.map(country => country === OTHER_TARGET_COUNTRY ? `Autre pays : ${form.otherTargetCountry.trim()}` : country);
-  body.append("targetCountries", JSON.stringify(submittedTargetCountries));
-  const submittedLanguages = form.languages.flatMap(languageValue => languageValue === "Other"
-    ? form.otherLanguage.split(",").map(item => item.trim()).filter(Boolean)
-    : [languageValue]);
-  body.append("languages", JSON.stringify(submittedLanguages));
+  body.append("targetCountries", JSON.stringify(submittedTargetCountries(form.targetCountries, form.otherTargetCountry)));
+  body.append("languages", JSON.stringify(submittedProfessionalLanguages(form.languages, form.otherLanguage)));
   body.append("yearsExperience", form.yearsExperience);
   body.append("message", form.message);
   body.append("gdprConsent", form.gdprConsent ? "1" : "0");
@@ -238,8 +246,7 @@ export async function sendStandardApplication(body: FormData, language: Language
   return { trackingId: payload.trackingId };
 }
 
-const WORLDWIDE_COUNTRY_CODES = "AF,AX,AL,DZ,AS,AD,AO,AI,AQ,AG,AR,AM,AW,AU,AT,AZ,BS,BH,BD,BB,BY,BE,BZ,BJ,BM,BT,BO,BQ,BA,BW,BV,BR,IO,BN,BG,BF,BI,CV,KH,CM,CA,KY,CF,TD,CL,CN,CX,CC,CO,KM,CG,CD,CK,CR,CI,HR,CU,CW,CY,CZ,DK,DJ,DM,DO,EC,EG,SV,GQ,ER,EE,SZ,ET,FK,FO,FJ,FI,FR,GF,PF,TF,GA,GM,GE,DE,GH,GI,GR,GL,GD,GP,GU,GT,GG,GN,GW,GY,HT,HM,VA,HN,HK,HU,IS,IN,ID,IR,IQ,IE,IM,IL,IT,JM,JP,JE,JO,KZ,KE,KI,KP,KR,KW,KG,LA,LV,LB,LS,LR,LY,LI,LT,LU,MO,MG,MW,MY,MV,ML,MT,MH,MQ,MR,MU,YT,MX,FM,MD,MC,MN,ME,MS,MA,MZ,MM,NA,NR,NP,NL,NC,NZ,NI,NE,NG,NU,NF,MK,MP,NO,OM,PK,PW,PS,PA,PG,PY,PE,PH,PN,PL,PT,PR,QA,RE,RO,RU,RW,BL,SH,KN,LC,MF,PM,VC,WS,SM,ST,SA,SN,RS,SC,SL,SG,SX,SK,SI,SB,SO,ZA,GS,SS,ES,LK,SD,SR,SJ,SE,CH,SY,TW,TJ,TZ,TH,TL,TG,TK,TO,TT,TN,TR,TM,TC,TV,UG,UA,AE,GB,US,UM,UY,UZ,VU,VE,VN,VG,VI,WF,EH,YE,ZM,ZW".split(",");
-
+/** The diploma countries offered, named in `locale`; each is sent as its code (EN-11). */
 export function getWorldwideCountries(locale: string) {
   const supportedRegions = WORLDWIDE_COUNTRY_CODES;
   const names = new Intl.DisplayNames([locale], { type: "region" });
@@ -309,6 +316,8 @@ function loadRecruitmentDraft(): Partial<RecruitmentDraft> {
       if (typeof value[field] === "string") draft[field] = (value[field] as string).slice(0, 5000);
     }
     if (draft.specialty && !recruitmentSpecialtyCategories.some(group => group.items.some(item => item.value === draft.specialty))) delete draft.specialty;
+    // A draft kept before EN-11 holds the country's name: it comes back as its code.
+    if (draft.diplomaCountry) draft.diplomaCountry = countryCodeOf(draft.diplomaCountry) ?? "";
     const list = (items: unknown): unknown[] => (Array.isArray(items) ? items : []);
     draft.targetCountries = countryOptions.map(country => country.value).filter(country => list(value.targetCountries).includes(country));
     draft.languages = professionalLanguageOptions.map(option => option.value).filter(option => list(value.languages).includes(option));
@@ -352,7 +361,7 @@ export default function RecruitmentPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [trackingId, setTrackingId] = useState("");
   const [specialtyQuery, setSpecialtyQuery] = useState("");
-  const [diplomaCountryQuery, setDiplomaCountryQuery] = useState(form.diplomaCountry);
+  const [diplomaCountryQuery, setDiplomaCountryQuery] = useState(() => countryLabel(form.diplomaCountry, lang));
   const [diplomaCountryOpen, setDiplomaCountryOpen] = useState(false);
   const [diplomaCountryActiveIndex, setDiplomaCountryActiveIndex] = useState(-1);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
@@ -401,8 +410,9 @@ export default function RecruitmentPage() {
     setDiplomaCountryActiveIndex(-1);
   };
 
-  const chooseDiplomaCountry = (country: { label: string }) => {
-    update("diplomaCountry", country.label);
+  /** The country chosen is kept as its code (EN-11); the field shows its name. */
+  const chooseDiplomaCountry = (country: { code: string; label: string }) => {
+    update("diplomaCountry", country.code);
     setDiplomaCountryQuery(country.label);
     closeDiplomaCountryList();
   };
@@ -472,7 +482,7 @@ export default function RecruitmentPage() {
     event.preventDefault();
     setErrorMessage("");
     setValidationAttempted(true);
-    const submittedDiplomaCountry = resolveCountryForSubmission(form.diplomaCountry, new FormData(event.currentTarget).get("diplomaCountry"), worldwideCountries.map(country => country.label));
+    const submittedDiplomaCountry = resolveCountryForSubmission(form.diplomaCountry, new FormData(event.currentTarget).get("diplomaCountry"), worldwideCountries);
     const isCustomSpecialty = form.specialty === "Autre spécialité ou profession";
     const finalSpecialty = isCustomSpecialty ? form.specialtyCustom.trim() : form.specialty;
     const nextInvalidFields = standardInvalidFields(form, file, turnstileToken, submittedDiplomaCountry);
@@ -626,7 +636,7 @@ export default function RecruitmentPage() {
                         type="search"
                         value={diplomaCountryQuery}
                         onFocus={() => setDiplomaCountryOpen(true)}
-                        onInput={event => { const visibleCountry = event.currentTarget.value; const matchingCountry = worldwideCountries.find(country => country.label === visibleCountry); if (matchingCountry) update("diplomaCountry", matchingCountry.label); }}
+                        onInput={event => { const visibleCountry = event.currentTarget.value; const matchingCountry = worldwideCountries.find(country => country.label === visibleCountry); if (matchingCountry) update("diplomaCountry", matchingCountry.code); }}
                         onChange={event => searchDiplomaCountry(event.target.value)}
                         onKeyDown={handleDiplomaCountryKeyDown}
                         placeholder={diplomaCopy.search}
@@ -643,7 +653,7 @@ export default function RecruitmentPage() {
                       {diplomaCountryQuery && <button type="button" onClick={() => { searchDiplomaCountry(""); diplomaCountryInputRef.current?.focus(); }} className="site-search-clear" aria-label={diplomaCopy.clear}><X className="h-4 w-4" /></button>}
                     </div>
                     {/* Le pays retenu, annoncé avec le champ tant qu’une recherche tapée par-dessus ne l’a pas remplacé (A11Y-11). */}
-                    {form.diplomaCountry && <p id="recruitment-diploma-country-chosen" className="text-xs font-medium text-primary">{diplomaCopy.label} : {form.diplomaCountry}</p>}
+                    {form.diplomaCountry && <p id="recruitment-diploma-country-chosen" className="text-xs font-medium text-primary">{diplomaCopy.label} : {countryLabel(form.diplomaCountry, lang)}</p>}
                     {diplomaCountryListShown && (
                       // Liste et options hors de l’ordre de tabulation : défilante, la liste serait sinon un arrêt
                       // de Tab où flèches et Entrée ne font rien ; mousedown annulé pour garder le focus dans le champ.
