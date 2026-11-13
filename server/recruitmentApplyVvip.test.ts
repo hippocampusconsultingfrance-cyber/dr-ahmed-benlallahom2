@@ -151,6 +151,23 @@ describe("INTL-03 — candidature VVIP avec plusieurs environnements", () => {
     expect(vi.mocked(notifyOwner).mock.calls[0][0].content).toContain(mining);
   });
 
+  it("répond « déjà reçue », sans nouvelle candidature, quand le même CV ne change que les environnements (REC-11)", async () => {
+    const cv = validPdfBuffer();
+    const specialty = "Médecin urgentiste (ATLS / ACLS)";
+    const [, rigs, mining] = allEnvironments;
+    // Received for Qatar with « Moyen-Orient »: the environments are not stored, the countries are.
+    state.sameCvApplications = [{ id: 7, trackingId: "CVPREVIOUSVVIP001", email: "amira@example.test", specialty: `[VVIP / Offshore] ${specialty}`, targetCountries: JSON.stringify(["Qatar"]) }];
+
+    const otherEnvironments = await apply(vvipBody(specialty, cv, [rigs, mining], ["Qatar"]));
+
+    // Like a standard application sent again with other languages or another message.
+    expect(otherEnvironments).toEqual({ status: 200, body: { success: true, duplicate: true, trackingId: "CVPREVIOUSVVIP001" } });
+    expect(state.confirmations).toEqual(["CVPREVIOUSVVIP001"]);
+    expect(state.stored).toEqual([]);
+    expect(state.executed.map(query => new PgDialect().sqlToQuery(query as SQL).sql).filter(text => text.includes("INSERT INTO cv_applications"))).toEqual([]);
+    expect(notifyOwner).not.toHaveBeenCalled();
+  });
+
   it("refuse une spécialité trop longue, journalise le champ sans sa valeur et le formulaire affiche le vrai motif", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const tooLong = `Spécialité confidentielle ${"X".repeat(160)}`;

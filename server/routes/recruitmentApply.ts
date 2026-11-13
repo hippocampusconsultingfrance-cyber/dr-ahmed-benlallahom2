@@ -66,6 +66,7 @@ const recruitmentApplicationSchema = z.object({
   targetCountries: z.array(singleLineText(z.string().min(1).max(80))).min(1).max(RECRUITMENT_MAX_TARGET_COUNTRIES),
   languages: z.array(singleLineText(z.string().min(1).max(80))).max(12).default([]),
   // Environments of a VVIP application, for the owner's email only: the form also writes them in the message.
+  // Stored nowhere else, they are not part of what makes an application (isSameRecruitmentSubmission).
   environments: z.array(singleLineText(z.string().min(1).max(80))).max(RECRUITMENT_MAX_TARGET_COUNTRIES).default([]),
   yearsExperience: z.number().int().min(0).max(70).optional(),
   availability: singleLineText(z.string().max(100)).optional().default(""),

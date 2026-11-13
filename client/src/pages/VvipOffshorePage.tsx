@@ -357,7 +357,7 @@ const publicTrustCopy = {
   },
 } as const;
 
-/** Values sent to the API whatever the display language (targetCountries and message). */
+/** Values sent to the API whatever the display language (environments and message). */
 export const VVIP_ENVIRONMENTS = [
   { value: "Moyen-Orient (Gouvernement / VVIP)", labelKey: "env1" },
   { value: "Plateformes pétrolières & gazières (Onshore / Offshore)", labelKey: "env2" },
