@@ -181,8 +181,8 @@ export const bookingCustomerEmail = emailText(
  * la validation ; les marques de direction d’un numéro collé, elles, sont
  * retirées par normalizePhoneInput (INTL-09).
  */
-// eslint-disable-next-line no-control-regex -- les caractères de contrôle sont ceux que l’on refuse
 const PHONE_CONTROL_CHARACTERS = new RegExp(
+  // eslint-disable-next-line no-control-regex -- les caractères de contrôle sont ceux que l’on refuse
   "[\\u0000-\\u001F\\u007F-\\u009F\\u2028\\u2029]"
 );
 

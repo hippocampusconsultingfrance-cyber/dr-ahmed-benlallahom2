@@ -22,7 +22,7 @@ export function cleanTextInput(value: string): string {
  * server refuses it with the reason `invalid_characters` (emailText); the
  * booking page, which checks the address before sending, says the same.
  */
-// eslint-disable-next-line no-control-regex -- control characters are among those it refuses
 export const EMAIL_INVISIBLE_CHARACTER = new RegExp(
+  // eslint-disable-next-line no-control-regex -- control characters are among those it refuses
   "[\\u0000-\\u001F\\u007F-\\u009F\\u200B-\\u200F\\u2028-\\u202E\\u2060-\\u2069\\uFEFF]"
 );

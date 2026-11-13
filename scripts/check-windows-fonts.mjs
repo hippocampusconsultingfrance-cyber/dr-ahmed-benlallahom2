@@ -61,8 +61,9 @@ const measuredIndex = new Map(
 const bases = fontCharacters.map(
   character => measuredIndex.get(character.normalize("NFD")[0]) ?? 0
 );
-// eslint-disable-next-line no-control-regex, no-regex-spaces -- the table's lines as the generator writes them, newlines and indentation
+// eslint-disable-next-line no-regex-spaces -- the table's lines as the generator writes them, indentation included
 const signsMetrics = new RegExp(
+  // eslint-disable-next-line no-control-regex -- the table's lines as the generator writes them, newlines included
   '\n  "signs": \\{\n    line: (\\d+),\n    regular: "([^"]*)",(?:\n    italic: "[^"]*",)?\n    bold: "([^"]*)"',
   "s"
 ).exec(source);

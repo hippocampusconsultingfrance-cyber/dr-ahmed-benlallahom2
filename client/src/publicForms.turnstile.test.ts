@@ -92,9 +92,9 @@ const { getContactFormCopy, getGdprRequestCopy } = await import(
 );
 const { toast } = await import("sonner");
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the props of any element of the tree, read and called as each test needs
 type Element = {
   type: unknown;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the props of any element of the tree, read and called as each test needs
   props: Record<string, any>;
   key?: string | null;
 };

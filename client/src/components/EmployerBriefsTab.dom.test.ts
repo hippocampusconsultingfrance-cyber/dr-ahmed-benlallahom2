@@ -45,7 +45,12 @@ const server = vi.hoisted(() => ({
   briefsRefusal: null as null | Error,
   candidates: new Map<
     number,
-    Array<{ id: number; firstName: string; lastName: string }>
+    Array<{
+      id: number;
+      firstName: string;
+      lastName: string;
+      association?: { status: string };
+    }>
   >(),
   associate: vi.fn(),
   updateStatus: vi.fn(),
@@ -96,7 +101,7 @@ vi.mock("@/lib/trpc", async () => {
         ...candidate,
         specialty: "Anesthésie-réanimation",
         availability: null,
-        association: null,
+        association: candidate.association ?? null,
         createdAt: "2026-10-20T10:00:00.000Z",
         match: {
           score: 35,
@@ -619,4 +624,73 @@ describe("liste des missions illisible (ADM-10)", () => {
     expect(await screen.findByText("Clinique du Nord")).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
   });
+});
+
+describe("mission ouverte dans chaque langue de l’administration (ADM-BRIEF-01/02, LEGAL-22)", () => {
+  it.each([
+    [
+      "fr",
+      "Voir les profils",
+      "Détails du brief",
+      "Retirer de la shortlist",
+      "Avant de transmettre la shortlist à l’établissement, informez chaque candidat",
+    ],
+    [
+      "en",
+      "View profiles",
+      "Brief details",
+      "Remove from shortlist",
+      "Before sending the shortlist to the institution, inform each candidate",
+    ],
+    [
+      "de",
+      "Profile anzeigen",
+      "Brief-Details",
+      "Von der Shortlist entfernen",
+      "Informieren Sie vor dem Versand der Shortlist an die Einrichtung jeden Kandidaten",
+    ],
+    [
+      "zh",
+      "查看候选人",
+      "需求详情",
+      "从候选名单移除",
+      "在将候选名单发送给机构之前，请告知每位候选人",
+    ],
+  ] as const)(
+    "montre le détail de la mission, le rappel d’informer le candidat avant toute transmission et le retrait de la shortlist (%s)",
+    async (language, viewProfiles, details, removeFromShortlist, reminder) => {
+      server.language = language;
+      server.candidates.set(7, [
+        {
+          id: 11,
+          firstName: "Amal",
+          lastName: "Haddad",
+          association: { status: "shortlisted" },
+        },
+      ]);
+      mount();
+      const card = (await screen.findByText("Hôpital du Golfe")).closest(
+        "article"
+      )!;
+      fireEvent.click(within(card).getByRole("button", { name: viewProfiles }));
+      await screen.findByText("Amal Haddad");
+
+      expect(
+        screen.getByRole("region", { name: `${details} BRIEF-7` })
+      ).toBeTruthy();
+      expect(screen.getByText(text => text.startsWith(reminder))).toBeTruthy();
+      fireEvent.click(
+        screen.getByRole("button", { name: removeFromShortlist })
+      );
+      await waitFor(() =>
+        expect(server.associate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            briefId: 7,
+            applicationId: 11,
+            status: "declined",
+          })
+        )
+      );
+    }
+  );
 });

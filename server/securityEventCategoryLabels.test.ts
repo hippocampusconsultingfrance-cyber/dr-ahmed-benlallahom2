@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import {
   SECURITY_EVENT_LABELS,
@@ -71,18 +72,48 @@ const BUILT_CATEGORIES: Record<string, () => string[]> = {
       (Object.keys(IP_LIMITED_FORMS) as (keyof typeof IP_LIMITED_FORMS)[]).map(
         kind => `${PUBLIC_EMAIL_IP_RATE_LIMITS[kind].action}_rate_limit`
       ),
-  // logCandidateEmailDelivery's category, typed as a union of literals in the same file.
+  // logCandidateEmailDelivery's category, typed as a union of literals in the same file: read
+  // from the file's syntax tree, whatever its layout.
   "server/candidatePortalRouter.ts|input.category": () => {
-    const source = readFileSync(
-      path.join(SERVER_ROOT, "candidatePortalRouter.ts"),
-      "utf8"
+    const file = path.join(SERVER_ROOT, "candidatePortalRouter.ts");
+    const source = ts.createSourceFile(
+      file,
+      readFileSync(file, "utf8"),
+      ts.ScriptTarget.Latest
     );
-    const union =
-      /async function logCandidateEmailDelivery\(input: \{[^}]*?\bcategory: ((?:"[a-z0-9_]+"\s*\|\s*)*"[a-z0-9_]+");/.exec(
-        source
-      )?.[1];
-    expect(union, "logCandidateEmailDelivery's category union").toBeDefined();
-    return [...union!.matchAll(/"([a-z0-9_]+)"/g)].map(match => match[1]!);
+    const declaration = source.statements.find(
+      (statement): statement is ts.FunctionDeclaration =>
+        ts.isFunctionDeclaration(statement) &&
+        statement.name?.text === "logCandidateEmailDelivery"
+    );
+    const input = declaration?.parameters[0]?.type;
+    const category =
+      input && ts.isTypeLiteralNode(input)
+        ? input.members.find(
+            (member): member is ts.PropertySignature =>
+              ts.isPropertySignature(member) &&
+              ts.isIdentifier(member.name) &&
+              member.name.text === "category"
+          )
+        : undefined;
+    const members =
+      category?.type && ts.isUnionTypeNode(category.type)
+        ? category.type.types
+        : [];
+    const names = members.flatMap(member =>
+      ts.isLiteralTypeNode(member) && ts.isStringLiteral(member.literal)
+        ? [member.literal.text]
+        : []
+    );
+    expect(
+      names.length,
+      "logCandidateEmailDelivery's category union"
+    ).toBeGreaterThan(0);
+    expect(
+      names,
+      "logCandidateEmailDelivery's category union, of literals only"
+    ).toHaveLength(members.length);
+    return names;
   },
 };
 

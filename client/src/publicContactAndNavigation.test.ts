@@ -52,15 +52,7 @@ describe("coordonnées publiques uniques (PUB-CONTACT-01)", () => {
   });
 });
 
-// Le lien du pied de page vers /gdpr et celui de la page Employeurs vers /why-hippocampus, dans les
-// quatre langues : components/Footer.dom.test.ts, pages/EmployersPage.dom.test.ts.
-describe("pages orphelines reliées (PUB-NAV-01)", () => {
-  it("la politique de confidentialité (§6) renvoie vers /gdpr au lieu du formulaire de contact", () => {
-    const legal = read("client/src/pages/LegalPage.tsx");
-    expect(legal.match(/<Link href="\/gdpr"/g)).toHaveLength(4);
-    expect(legal).not.toContain(
-      'formulaire de contact avec la mention "Demande RGPD"'
-    );
-    expect(legal).not.toContain('contact form with the mention "GDPR Request"');
-  });
-});
+// Pages orphelines reliées (PUB-NAV-01), dans les quatre langues : le lien du pied de page vers
+// /gdpr, celui de la page Employeurs vers /why-hippocampus et celui de la politique de
+// confidentialité vers /gdpr (components/Footer.dom.test.ts, pages/EmployersPage.dom.test.ts,
+// pages/LegalPage.gdprLink.dom.test.ts).

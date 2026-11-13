@@ -80,14 +80,8 @@ describe("retours honnêtes dans l’administration du recrutement", () => {
     expect(briefsTab).toContain('status: "contract_signed"');
     expect(briefsTab).toContain("closeBrief(brief.id)");
     expect(briefsTab).toContain("{copy.shareReminder}");
-    for (const language of ["fr", "en", "de", "zh"]) {
-      const line = briefsTab
-        .split("\n")
-        .find(entry => entry.startsWith(`  ${language}: { title:`));
-      expect(line, language).toContain("removeFromShortlist:");
-      expect(line, language).toContain("details:");
-      // LEGAL-22: reminder to inform the candidate before any transmission.
-      expect(line, language).toContain("shareReminder:");
-    }
+    // The detail panel, the removal from the shortlist and the reminder to inform the candidate
+    // before any transmission (LEGAL-22), in the admin's four languages: on the mounted tab
+    // (components/EmployerBriefsTab.dom.test.ts).
   });
 });

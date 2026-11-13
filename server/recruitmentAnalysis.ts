@@ -1731,8 +1731,8 @@ function sameNormalizedValue(left: string, right: string) {
 }
 
 /** Arabic vowel signs, hamza marks and tatweel are ignored when naming a specialty (أ, إ and ا compare equal). */
-// eslint-disable-next-line no-misleading-character-class -- each sign is removed alone, tatweel and marks: none is read with the one before it
 const normalizeSpecialtyText = (value: string) =>
+  // eslint-disable-next-line no-misleading-character-class -- each sign is removed alone, tatweel and marks: none is read with the one before it
   normalizeEvidenceText(value).replace(/[\u0640\u064b-\u065f\u0670]/g, "");
 
 const specialtyEquivalents = Object.entries(

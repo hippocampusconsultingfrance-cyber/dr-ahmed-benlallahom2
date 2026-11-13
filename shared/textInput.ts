@@ -35,12 +35,12 @@ export const TEXT_INPUT_INVALID_CHARACTERS_MESSAGE =
 export { cleanTextInput };
 
 // Written as escapes: none of these characters appears as such in the source.
-// eslint-disable-next-line no-control-regex -- control characters are among those it refuses
 const SINGLE_LINE_REFUSED = new RegExp(
+  // eslint-disable-next-line no-control-regex -- control characters are among those it refuses
   "[\\u0000-\\u001F\\u007F-\\u009F\\u2028\\u2029\\u202D\\u202E]"
 );
-// eslint-disable-next-line no-control-regex -- control characters are among those it refuses
 const MULTI_LINE_REFUSED = new RegExp(
+  // eslint-disable-next-line no-control-regex -- control characters are among those it refuses
   "[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F-\\u009F\\u202D\\u202E]"
 );
 

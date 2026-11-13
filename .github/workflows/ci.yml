@@ -57,8 +57,8 @@ jobs:
       # nor what pnpm's configuration loads into node runs first. Changing any of it changes this file.
       - name: Check this workflow
         run: |
-          sha256sum --check --strict <<< "41962c528cbe7d98c223389ee5dd56d2a2d4dbd312bae87f328dd72953fd9e34  scripts/check-locked-packages.mjs"
-          sha256sum --check --strict <<< "9374c665ca5c554485eabc770dbe2d79502aef1a66651ba412c81b4a6e94d30a  scripts/ci-workflow.vitest.config.mjs"
+          sha256sum --check --strict <<< "90543f0988efb530a0cbfe60914ba39630a081b374b9311ff45126fe92a66948  scripts/check-locked-packages.mjs"
+          sha256sum --check --strict <<< "7742d5ed6733591d5bbfc8dd4f48270f61807278a41e81b093efe4f54c401db3  scripts/ci-workflow.vitest.config.mjs"
           node scripts/check-locked-packages.mjs
           node node_modules/vitest/vitest.mjs run server/ciWorkflow.test.ts --config scripts/ci-workflow.vitest.config.mjs --passWithNoTests=false
       - name: Verify TypeScript

@@ -1,0 +1,5 @@
+# Commits that only reformat the code, for `git blame` to skip:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# Prettier applied to the whole repository (CODE-04)
+269e21db25f62c16a843791de683efc919d240d0
