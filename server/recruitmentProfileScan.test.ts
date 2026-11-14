@@ -830,6 +830,503 @@ describe("Candidatures — profil de matching et filtres de la liste (IA-02)", (
     }
   });
 
+  it("lit les mêmes mots de qualification dans les quatre langues, les autres noms d’une langue de la table et une partie qui a son propre tiret comme une exigence : la mission, le profil saisi avec des virgules et le filtre Langue (IA02-R7)", async () => {
+    const dossier = (lastName: string, languages: string[]) => ({
+      tracking_id: `CVQUAL${lastName}`,
+      first_name: "Dr",
+      last_name: lastName,
+      email: `${lastName.toLowerCase()}@test.local`,
+      specialty: "Anesthésie-réanimation",
+      target_countries: JSON.stringify(["Émirats arabes unis"]),
+      languages: JSON.stringify(languages),
+      analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION,
+      cv_file_key: `recruitment/cv/${lastName}.pdf`,
+      cv_original_name: "cv.pdf",
+      cv_mime_type: "application/pdf",
+      cv_size_bytes: 1000,
+    });
+    memory.seed(cvApplications, [
+      dossier("Anglophone", ["English"]),
+      dossier("Darijaphone", ["English", "Darija"]),
+      dossier("Teochewphone", ["English", "Teochew"]),
+      dossier("Shanghaiphone", ["English", "上海话"]),
+      dossier("Hispanophone", ["English", "Spanish"]),
+      dossier("Arabromani", ["Arabic", "Romani"]),
+      dossier("Arabwolofromani", ["Arabic", "Wolof", "Romani"]),
+    ]);
+    const filtered = async (language: string) =>
+      lastNames(
+        (await caller().admin.recruitment.list({ language })).items
+      ).sort();
+    // The page splits a profile's languages at its commas.
+    const profiled = async (language: string) => {
+      const [profile] = memory.seed(recruitmentMatchProfiles, [
+        {
+          name: language,
+          minimum_score: 0,
+          required_languages: JSON.stringify(
+            language.split(",").map(term => term.trim())
+          ),
+          active: 1,
+        },
+      ]);
+      return lastNames(
+        (
+          await caller().admin.recruitment.list({
+            profileId: profile!.id as number,
+          })
+        ).items
+      ).sort();
+    };
+    const missioned = async (language: string) => {
+      const [brief] = memory.seed(clientBriefs, [
+        {
+          brief_id: `BRIEF-QUAL-${memory.rows(clientBriefs).length}`,
+          organization_name: "Hôpital",
+          contact_name: "RH",
+          email: "rh@test.local",
+          target_environment: "Hôpital",
+          specialty_needed: "Anesthésie-réanimation",
+          country: "Émirats arabes unis",
+          required_languages: language,
+        },
+      ]);
+      const result = await caller().admin.clientBriefs.candidates({
+        briefId: brief!.id as number,
+        limit: 50,
+      });
+      return result.candidates
+        .filter(candidate => candidate.match.breakdown.languages === 15)
+        .map(candidate => candidate.lastName)
+        .sort();
+    };
+    // Before (daf844a): Anglophone, or Arabromani, met these requirements whole (15 language points of 15, the profile and the filter).
+    const expected: Array<[string, string[]]> = [
+      ["English – read, written, spoken, Darija", ["Darijaphone"]],
+      ["Englisch – gelesen, geschrieben, gesprochen, Darija", ["Darijaphone"]],
+      ["English – two years, Teochew", ["Teochewphone"]],
+      ["英语 – 两年以上，上海话", ["Shanghaiphone"]],
+      ["English – Dubai, Castilian", ["Hispanophone"]],
+      [
+        "Arabe – courant ; Wolof – Dakar ; Romani – notions",
+        ["Arabwolofromani"],
+      ],
+      // A qualifier alone, in any of the four languages, is still met by the language it qualifies.
+      [
+        "English – read, written, spoken",
+        [
+          "Anglophone",
+          "Darijaphone",
+          "Hispanophone",
+          "Shanghaiphone",
+          "Teochewphone",
+        ],
+      ],
+    ];
+    for (const [language, names] of expected) {
+      expect(await filtered(language), `filtre ${language}`).toEqual(names);
+      expect(await profiled(language), `profil ${language}`).toEqual(names);
+      expect(await missioned(language), `mission ${language}`).toEqual(names);
+    }
+  });
+
+  // IA02-R7-PARITE: each concept of the closed list in French, English, German and Chinese, after a dash, then a language no list
+  // knows. Before (ac75d5a), in at least one of the four languages, the qualifier was no word of the list and the language written
+  // after it went on with the « places » it opened: Anglophone met the whole text (15 language points of 15, the profile and the filter).
+  const QUALIFIER_CONCEPTS: ReadonlyArray<
+    readonly [
+      concept: string,
+      phrases: readonly (readonly [
+        fr: string,
+        en: string,
+        de: string,
+        zh: string,
+      ])[],
+    ]
+  > = [
+    [
+      "les verbes lire, écrire, parler, comprendre",
+      [
+        [
+          "lire, écrire, parler",
+          "read, write, speak",
+          "lesen, schreiben, sprechen",
+          "读，写，说",
+        ],
+        ["comprendre", "understand", "verstehen", "听懂"],
+        [
+          "savoir lire et écrire",
+          "able to read and write",
+          "lesen und schreiben können",
+          "能读写",
+        ],
+      ],
+    ],
+    [
+      "les compétences",
+      [
+        [
+          "compétences orales",
+          "oral skills",
+          "mündliche Kenntnisse",
+          "口语能力",
+        ],
+        [
+          "compétences linguistiques",
+          "language skills",
+          "Sprachkenntnisse",
+          "语言能力",
+        ],
+        ["compétence", "competence", "Kompetenz", "能力"],
+      ],
+    ],
+    [
+      "au moins, minimum",
+      [
+        [
+          "au moins trois ans",
+          "at least three years",
+          "mindestens drei Jahre",
+          "至少三年",
+        ],
+        [
+          "trois ans minimum",
+          "three years minimum",
+          "drei Jahre mindestens",
+          "最少三年",
+        ],
+      ],
+    ],
+    [
+      "plus de, more than, mehr als, 以上",
+      [
+        [
+          "plus de deux ans",
+          "more than two years",
+          "mehr als zwei Jahre",
+          "两年以上",
+        ],
+        ["plus de 2 ans", "over 2 years", "über 2 Jahre", "超过2年"],
+        ["plusieurs années", "several years", "mehrere Jahre", "多年"],
+      ],
+    ],
+    [
+      "la pratique et l’expérience, et de quoi",
+      [
+        [
+          "5 ans de pratique",
+          "5 years of practice",
+          "5 Jahre Praxis",
+          "五年实践",
+        ],
+        [
+          "expérience de 3 ans",
+          "experience of 3 years",
+          "Erfahrung von 3 Jahren",
+          "3年的经验",
+        ],
+      ],
+    ],
+    [
+      "l’usage professionnel et quotidien",
+      [
+        [
+          "usage professionnel",
+          "professional use",
+          "beruflicher Gebrauch",
+          "工作使用",
+        ],
+        ["usage quotidien", "daily use", "täglicher Gebrauch", "日常使用"],
+        ["au quotidien", "everyday", "im Alltag", "日常"],
+      ],
+    ],
+    [
+      "les niveaux de LinkedIn, élevé, à l’aise",
+      [
+        ["notions", "elementary proficiency", "Grundkenntnisse", "初级"],
+        [
+          "compétence professionnelle limitée",
+          "limited working proficiency",
+          "gute Kenntnisse",
+          "有限工作能力",
+        ],
+        [
+          "compétence professionnelle",
+          "professional working proficiency",
+          "fließend",
+          "专业工作能力",
+        ],
+        [
+          "capacité professionnelle complète",
+          "full professional proficiency",
+          "verhandlungssicher",
+          "全面专业工作能力",
+        ],
+        ["niveau élevé", "high level", "hohes Niveau", "高水平"],
+        ["niveau soutenu", "high level", "hohes Niveau", "高水平"],
+        ["à l'aise", "comfortable", "sicher", "自如"],
+        [
+          "à l'aise en conversation",
+          "comfortable in conversation",
+          "sicher im Gespräch",
+          "会话自如",
+        ],
+      ],
+    ],
+  ];
+  const QUALIFIED_LANGUAGES = [
+    ["Anglais", ", ", "Darija", "Darijaphone"],
+    ["English", ", ", "Teochew", "Teochewphone"],
+    ["Englisch", ", ", "Tigrinisch", "Tigrinophone"],
+    ["英语", "，", "上海话", "Shanghaiphone"],
+  ] as const;
+  const seedSpeakers = (
+    prefix: string,
+    others: ReadonlyArray<readonly [lastName: string, languages: string[]]> = []
+  ) => {
+    const dossier = (lastName: string, languages: string[]) => ({
+      tracking_id: `${prefix}${lastName}`,
+      first_name: "Dr",
+      last_name: lastName,
+      email: `${prefix.toLowerCase()}${lastName.toLowerCase()}@test.local`,
+      specialty: "Anesthésie-réanimation",
+      target_countries: JSON.stringify(["Émirats arabes unis"]),
+      languages: JSON.stringify(languages),
+      analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION,
+      cv_file_key: `recruitment/cv/${prefix}${lastName}.pdf`,
+      cv_original_name: "cv.pdf",
+      cv_mime_type: "application/pdf",
+      cv_size_bytes: 1000,
+    });
+    memory.seed(cvApplications, [
+      dossier("Anglophone", ["English"]),
+      ...QUALIFIED_LANGUAGES.map(([, , name, speaker]) =>
+        dossier(speaker, ["English", name])
+      ),
+      dossier("Sinophone", ["English", "中文"]),
+      dossier("Neerlandophone", ["English", "Français", "Nederlands"]),
+      dossier("Arabophone", ["English", "Français", "Arabic"]),
+      ...others.map(([lastName, languages]) => dossier(lastName, languages)),
+    ]);
+  };
+  // The Langue filter, a profile as the page splits it at its commas, a mission: the dossiers each keeps, by their names.
+  const kept = async (language: string) => {
+    const filtered = lastNames(
+      (await caller().admin.recruitment.list({ language })).items
+    ).sort();
+    const [profile] = memory.seed(recruitmentMatchProfiles, [
+      {
+        name: language,
+        minimum_score: 0,
+        required_languages: JSON.stringify(
+          language.split(",").map(term => term.trim())
+        ),
+        active: 1,
+      },
+    ]);
+    const profiled = lastNames(
+      (
+        await caller().admin.recruitment.list({
+          profileId: profile!.id as number,
+        })
+      ).items
+    ).sort();
+    const [brief] = memory.seed(clientBriefs, [
+      {
+        brief_id: `BRIEF-R72-${memory.rows(clientBriefs).length}`,
+        organization_name: "Hôpital",
+        contact_name: "RH",
+        email: "rh@test.local",
+        target_environment: "Hôpital",
+        specialty_needed: "Anesthésie-réanimation",
+        country: "Émirats arabes unis",
+        required_languages: language,
+      },
+    ]);
+    const result = await caller().admin.clientBriefs.candidates({
+      briefId: brief!.id as number,
+      limit: 50,
+    });
+    const missioned = result.candidates
+      .filter(candidate => candidate.match.breakdown.languages === 15)
+      .map(candidate => candidate.lastName)
+      .sort();
+    return { filtered, profiled, missioned };
+  };
+  const expectKept = async (language: string, names: string[]) => {
+    expect(await kept(language), language).toEqual({
+      filtered: [...names].sort(),
+      profiled: [...names].sort(),
+      missioned: [...names].sort(),
+    });
+  };
+
+  it.each(QUALIFIER_CONCEPTS)(
+    "lit %s dans les quatre langues : un nom de langue écrit après eux reste une exigence, pour la mission, le profil et le filtre Langue (IA02-R7-PARITE)",
+    async (_, phrases) => {
+      seedSpeakers("CVR72P");
+      for (const phrase of phrases) {
+        for (let index = 0; index < QUALIFIED_LANGUAGES.length; index += 1) {
+          const [lead, separator, name, speaker] = QUALIFIED_LANGUAGES[index]!;
+          await expectKept(`${lead} – ${phrase[index]}${separator}${name}`, [
+            speaker,
+          ]);
+        }
+      }
+      // A qualifier alone is still met by the language it qualifies, in each of the four languages.
+      for (let index = 0; index < QUALIFIED_LANGUAGES.length; index += 1) {
+        await expectKept(
+          `${QUALIFIED_LANGUAGES[index]![0]} – ${phrases[0]![index]}`,
+          [
+            "Anglophone",
+            "Arabophone",
+            "Darijaphone",
+            "Neerlandophone",
+            "Shanghaiphone",
+            "Sinophone",
+            "Teochewphone",
+            "Tigrinophone",
+          ]
+        );
+      }
+    }
+  );
+
+  it("lit un autre nom d’une langue de la table comme un nom à lui seulement, et 和, 及, 与 comme « et » : la mission, le profil et le filtre Langue (IA02-R7-ALIAS-DANS-LIEU, IA02-R7-CONJONCTION-CHINOISE)", async () => {
+    seedSpeakers("CVR72A");
+    const everyone = [
+      "Anglophone",
+      "Arabophone",
+      "Darijaphone",
+      "Neerlandophone",
+      "Shanghaiphone",
+      "Sinophone",
+      "Teochewphone",
+      "Tigrinophone",
+    ];
+    // Before (ac75d5a): Mandarin, Dutch or Arabic was required, and only Sinophone, Neerlandophone or Arabophone met the text.
+    await expectKept("英语 – 所在国语言", everyone);
+    await expectKept("英语 – 熟悉该国语言", everyone);
+    await expectKept("Français – Brabant flamand", [
+      "Arabophone",
+      "Neerlandophone",
+    ]);
+    await expectKept("English – Flemish Region", everyone);
+    await expectKept("Français – MSA", ["Arabophone", "Neerlandophone"]);
+    // Before (ac75d5a): Sinophone met « the host country's language preferred » as if it were Mandarin.
+    await expectKept("英语，所在国语言优先", []);
+    // Before (ac75d5a, daf844a, 749519f): 上海话 and 潮州话 were lost after 和, 及, 与, and everyone met these texts.
+    await expectKept("英语和上海话", ["Shanghaiphone"]);
+    await expectKept("英语 – 流利和上海话", ["Shanghaiphone"]);
+    await expectKept("英语 – 流利及上海话", ["Shanghaiphone"]);
+    // What the language is used for, after 与 (with), still qualifies it.
+    await expectKept("英语 – 与患者沟通", everyone);
+    // Before (ac75d5a, daf844a): a language's Chinese name, after the places a dash opened, went on with them.
+    await expectKept("英语 – 迪拜，上海话", ["Shanghaiphone"]);
+    await expectKept("英语 – 迪拜，医学术语", everyone);
+  });
+
+  it("ne lit un mot chinois qui finit par 话, 文 ou 言 comme un nom de langue qu’après un nom connu de langue, de peuple ou de lieu : la mission, le profil et le filtre Langue (IA02-R7B-NOM-CHINOIS-FAUX-POSITIF)", async () => {
+    seedSpeakers("CVR7BZ");
+    const everyone = [
+      "Anglophone",
+      "Arabophone",
+      "Darijaphone",
+      "Neerlandophone",
+      "Shanghaiphone",
+      "Sinophone",
+      "Teochewphone",
+      "Tigrinophone",
+    ];
+    // Before (b81633b): 电话 (the phone), 论文 (a paper), 方言 (a dialect)... were a language nobody spoke after the places a dash
+    // opened or after 和: nobody met these texts, where daf844a and ac75d5a, and the French, English and German texts, keep everyone.
+    for (const required of [
+      "英语 – 迪拜，接听电话",
+      "英语 – 利雅得，撰写论文",
+      "英语 – 听说读写和打电话",
+      "英语 – 阅读和翻译医学论文",
+      "英语 – 迪拜，方言",
+      "英语 – 多哈，会议发言",
+      "英语 – 流利及电话沟通",
+      "Anglais – Dubaï, réponse au téléphone",
+      "English – Dubai, answering the phone",
+      "Englisch – Dubai, Telefonate",
+    ]) {
+      await expectKept(required, everyone);
+    }
+    // After the name of a place, a language or a people, still a language's name: a requirement of its own.
+    await expectKept("英语 – 迪拜，上海话", ["Shanghaiphone"]);
+    await expectKept("英语 – 听说读写和上海话", ["Shanghaiphone"]);
+    await expectKept("英语 – 迪拜，中文", ["Sinophone"]);
+    await expectKept("英语 – 迪拜，潮州话", []);
+    await expectKept("英语和白话", []);
+  });
+
+  it("lit le nom chinois en 文 ou 话 d’une langue qu’Intl.DisplayNames nomme hors des listes comme une exigence, et un mot courant en 话 comme un mot : la mission, le profil et le filtre Langue (IA02-R8-NOM-CHINOIS-HORS-LISTES-PERDU, IA02-R8-MOTS-ORDINAIRES-RESTANTS)", async () => {
+    seedSpeakers("CVR8ZH", [
+      ["Latiniste", ["English", "拉丁文"]],
+      ["Sanskritiste", ["English", "梵文"]],
+    ]);
+    const everyone = [
+      "Anglophone",
+      "Arabophone",
+      "Darijaphone",
+      "Latiniste",
+      "Neerlandophone",
+      "Sanskritiste",
+      "Shanghaiphone",
+      "Sinophone",
+      "Teochewphone",
+      "Tigrinophone",
+    ];
+    // Before (ebc5768): 拉丁文 (Latin) and 梵文 (Sanskrit) were everyday words after the places a dash opened or after 和, and the
+    // speaker of English alone met the texts; b81633b kept them, as 拉丁语 and 梵语 still are.
+    await expectKept("英语 – 迪拜，拉丁文", ["Latiniste"]);
+    await expectKept("英语和梵文", ["Sanskritiste"]);
+    await expectKept("英语 – 利雅得，医学拉丁文", ["Latiniste"]);
+    await expectKept("英语 – 听说读写和巴利文", []);
+    await expectKept("英语 – 迪拜，平话", []);
+    // Before (ebc5768, as b81633b): 恭维话 (compliments), 大白话 and 明白话 (plain words) were a language nobody spoke.
+    await expectKept("英语 – 迪拜，恭维话", everyone);
+    await expectKept("英语和大白话", everyone);
+    await expectKept("英语 – 听说读写和明白话", everyone);
+    // 维文, 白话 and 官话 starting a word, or after a place, are still a language's name.
+    await expectKept("英语 – 迪拜，维文", []);
+    await expectKept("英语 – 迪拜，广东白话", []);
+    await expectKept("英语和官话", []);
+  });
+
+  it("lit 白话, 官话 ou un peuple d’un caractère après un qualificatif ou un lieu qu’aucune liste ne connaît comme une exigence, et 大白话 ou 恭维话 comme un mot : la mission, le profil et le filtre Langue (IA02-R8B-NOM-CHINOIS-APRES-QUALIFICATIF-PERDU)", async () => {
+    seedSpeakers("CVR8BZH", [
+      ["Cantonophone", ["English", "白话"]],
+      ["Mandarinophone", ["English", "官话"]],
+      ["Daiphone", ["English", "傣文"]],
+    ]);
+    const everyone = [
+      "Anglophone",
+      "Arabophone",
+      "Cantonophone",
+      "Daiphone",
+      "Darijaphone",
+      "Mandarinophone",
+      "Neerlandophone",
+      "Shanghaiphone",
+      "Sinophone",
+      "Teochewphone",
+      "Tigrinophone",
+    ];
+    // Before (3df46bb): after 熟悉, 当地 or 标准, or after 德宏, a place no list knows, 白话, 官话 and 傣文 were everyday words, and the
+    // speaker of English alone met the texts; ebc5768 and b81633b kept them, as « English – Guangzhou, local Cantonese ».
+    await expectKept("英语 – 香港，熟悉白话", ["Cantonophone"]);
+    await expectKept("英语和当地官话", ["Mandarinophone"]);
+    await expectKept("英语 – 流利及标准官话", ["Mandarinophone"]);
+    await expectKept("英语 – 德宏，傣文", ["Daiphone"]);
+    await expectKept("英语 – 香港，德宏傣文", ["Daiphone"]);
+    // 大白话 (plain words) and 恭维话 (compliments) are still words, one requirement met by English.
+    await expectKept("英语 – 迪拜，大白话", everyone);
+    await expectKept("英语和恭维话", everyone);
+  });
+
   it("ne lit les langues tirées du CV, et leurs citations, que pour un profil qui exige des langues (IA-02)", async () => {
     seedCandidates(0, 3, 3);
     const [byCountry, byLanguage] = memory.seed(recruitmentMatchProfiles, [

@@ -427,6 +427,255 @@ describe("matching mission–candidat", () => {
     ).toBe(15);
   });
 
+  it("lit les mêmes mots de qualification dans les quatre langues, les autres noms d’une langue de la table et une partie qui a son propre tiret comme une exigence (IA02-R7)", () => {
+    const candidate = {
+      specialty: "Anesthésie-réanimation",
+      targetCountries: '["Émirats arabes unis"]',
+    };
+    const match = (requiredLanguages: string, declared: string[]) =>
+      computeBriefCandidateMatch(
+        {
+          specialtyNeeded: "Anesthésie-réanimation",
+          country: "Émirats arabes unis",
+          requiredCertifications: null,
+          requiredLanguages,
+        },
+        {
+          ...candidate,
+          languageFacts: languageFacts(JSON.stringify(declared), []),
+        }
+      );
+    // Before (daf844a): English, or Arabic and Romani, gave 15 language points of 15: Darija, Teochew, 上海话, Castilian or
+    // Wolof was lost after « read », « two years », « 两年以上 », a place, or within the requirement before it.
+    for (const [required, lead, all] of [
+      [
+        "English – read, written, spoken, Darija",
+        ["English"],
+        ["English", "Darija"],
+      ],
+      [
+        "Englisch – gelesen, geschrieben, gesprochen, Darija",
+        ["English"],
+        ["English", "Darija"],
+      ],
+      ["English – two years, Teochew", ["English"], ["English", "Teochew"]],
+      ["英语 – 两年以上，上海话", ["English"], ["English", "上海话"]],
+      ["English – Dubai, Castilian", ["English"], ["English", "Spanish"]],
+      [
+        "Arabe – courant ; Wolof – Dakar ; Romani – notions",
+        ["Arabic", "Romani"],
+        ["Arabic", "Wolof", "Romani"],
+      ],
+    ] as const) {
+      expect(
+        match(required, [...lead]).breakdown.languages,
+        required
+      ).toBeLessThan(15);
+      expect(match(required, [...all]).breakdown.languages, required).toBe(15);
+    }
+    // A qualifier alone, in any of the four languages, is still met by the language it qualifies.
+    for (const required of [
+      "English – read, written, spoken",
+      "Englisch – zwei Jahre",
+      "英语 – 两年以上",
+      "Anglais – deux ans d'expérience",
+    ]) {
+      expect(match(required, ["English"]).breakdown.languages, required).toBe(
+        15
+      );
+    }
+  });
+
+  it("lit chaque mot de qualification dans les quatre langues, un autre nom d’une langue seulement comme un nom à lui, et 和, 及, 与 comme « et » (IA02-R7-PARITE, IA02-R7-ALIAS-DANS-LIEU, IA02-R7-CONJONCTION-CHINOISE)", () => {
+    const candidate = {
+      specialty: "Anesthésie-réanimation",
+      targetCountries: '["Émirats arabes unis"]',
+    };
+    const match = (requiredLanguages: string, declared: string[]) =>
+      computeBriefCandidateMatch(
+        {
+          specialtyNeeded: "Anesthésie-réanimation",
+          country: "Émirats arabes unis",
+          requiredCertifications: null,
+          requiredLanguages,
+        },
+        {
+          ...candidate,
+          languageFacts: languageFacts(JSON.stringify(declared), []),
+        }
+      );
+    // Before (ac75d5a): English gave 15 language points of 15, the name after the qualifier, or after 和, lost.
+    for (const [required, name] of [
+      ["Anglais – compétences orales, Darija", "Darija"],
+      ["Anglais – lire, écrire, parler, Darija", "Darija"],
+      ["Anglais – plus de deux ans d'expérience, Darija", "Darija"],
+      ["English – more than two years, Teochew", "Teochew"],
+      ["English – limited working proficiency, Darija", "Darija"],
+      ["Englisch – mehr als zwei Jahre, Tigrinisch", "Tigrinisch"],
+      ["Englisch – beruflicher Gebrauch, Darija", "Darija"],
+      ["英语 – 至少三年，上海话", "上海话"],
+      ["Anglais – 5 ans de pratique, Darija", "Darija"],
+      ["Anglais – usage quotidien, Darija", "Darija"],
+      ["英语和上海话", "上海话"],
+      ["英语 – 流利及潮州话", "潮州话"],
+    ] as const) {
+      expect(
+        match(required, ["English"]).breakdown.languages,
+        required
+      ).toBeLessThan(15);
+      expect(
+        match(required, ["English", name]).breakdown.languages,
+        required
+      ).toBe(15);
+    }
+    // Before (ac75d5a): « read, write, speak » were three requirements; 国语 in 所在国语言, flamand in « Brabant flamand » and MSA
+    // required Mandarin, Dutch or Arabic. One requirement, met by the language at the head.
+    for (const [required, lead] of [
+      ["English – read, write, speak", "English"],
+      ["英语 – 所在国语言", "英语"],
+      ["Français – Brabant flamand", "Français"],
+      ["English – Flemish Region", "English"],
+      ["Français – MSA", "Français"],
+    ] as const) {
+      expect(match(required, [lead]).breakdown.languages, required).toBe(15);
+    }
+  });
+
+  it("ne lit un mot chinois qui finit par 话, 文 ou 言 comme un nom de langue qu’après un nom connu de langue, de peuple ou de lieu (IA02-R7B-NOM-CHINOIS-FAUX-POSITIF)", () => {
+    const candidate = {
+      specialty: "Anesthésie-réanimation",
+      targetCountries: '["Émirats arabes unis"]',
+    };
+    const match = (requiredLanguages: string, declared: string[]) =>
+      computeBriefCandidateMatch(
+        {
+          specialtyNeeded: "Anesthésie-réanimation",
+          country: "Émirats arabes unis",
+          requiredCertifications: null,
+          requiredLanguages,
+        },
+        {
+          ...candidate,
+          languageFacts: languageFacts(JSON.stringify(declared), []),
+        }
+      );
+    // Before (b81633b): English gave 8 language points of 15, 电话, 论文 or 方言 read as a language nobody spoke.
+    for (const required of [
+      "英语 – 迪拜，接听电话",
+      "英语 – 利雅得，撰写论文",
+      "英语 – 听说读写和打电话",
+      "英语 – 迪拜，方言",
+      "English – Dubai, answering the phone",
+    ]) {
+      expect(match(required, ["English"]).breakdown.languages, required).toBe(
+        15
+      );
+    }
+    for (const [required, name] of [
+      ["英语 – 迪拜，上海话", "上海话"],
+      ["英语 – 流利和温州话", "温州话"],
+      ["英语 – 迪拜，台湾话", "台湾话"],
+    ] as const) {
+      expect(
+        match(required, ["English"]).breakdown.languages,
+        required
+      ).toBeLessThan(15);
+      expect(
+        match(required, ["English", name]).breakdown.languages,
+        required
+      ).toBe(15);
+    }
+  });
+
+  it("lit le nom chinois en 文 ou 话 d’une langue qu’Intl.DisplayNames nomme hors des listes comme une exigence, et un mot courant en 话 comme un mot (IA02-R8-NOM-CHINOIS-HORS-LISTES-PERDU, IA02-R8-MOTS-ORDINAIRES-RESTANTS)", () => {
+    const candidate = {
+      specialty: "Anesthésie-réanimation",
+      targetCountries: '["Émirats arabes unis"]',
+    };
+    const match = (requiredLanguages: string, declared: string[]) =>
+      computeBriefCandidateMatch(
+        {
+          specialtyNeeded: "Anesthésie-réanimation",
+          country: "Émirats arabes unis",
+          requiredCertifications: null,
+          requiredLanguages,
+        },
+        {
+          ...candidate,
+          languageFacts: languageFacts(JSON.stringify(declared), []),
+        }
+      );
+    // Before (ebc5768): English gave 15 language points of 15, 拉丁文 (Latin), 梵文 (Sanskrit), 巴利文 (Pali) or 平话 read as everyday words.
+    for (const [required, name] of [
+      ["英语 – 迪拜，拉丁文", "拉丁文"],
+      ["英语和梵文", "梵文"],
+      ["英语 – 流利及巴利文", "巴利文"],
+      ["英语 – 迪拜，平话", "平话"],
+    ] as const) {
+      expect(
+        match(required, ["English"]).breakdown.languages,
+        required
+      ).toBeLessThan(15);
+      expect(
+        match(required, ["English", name]).breakdown.languages,
+        required
+      ).toBe(15);
+    }
+    // Before (ebc5768, as b81633b): English gave 8 language points of 15, 恭维话, 大白话 or 打官话 read as a language nobody spoke.
+    for (const required of [
+      "英语 – 迪拜，恭维话",
+      "英语和大白话",
+      "英语 – 迪拜，明白话",
+      "英语 – 迪拜，打官话",
+    ]) {
+      expect(match(required, ["English"]).breakdown.languages, required).toBe(
+        15
+      );
+    }
+  });
+
+  it("lit 白话, 官话 ou un peuple d’un caractère après un qualificatif ou un lieu qu’aucune liste ne connaît comme une exigence, et 大白话 ou 恭维话 comme un mot (IA02-R8B-NOM-CHINOIS-APRES-QUALIFICATIF-PERDU)", () => {
+    const candidate = {
+      specialty: "Anesthésie-réanimation",
+      targetCountries: '["Émirats arabes unis"]',
+    };
+    const match = (requiredLanguages: string, declared: string[]) =>
+      computeBriefCandidateMatch(
+        {
+          specialtyNeeded: "Anesthésie-réanimation",
+          country: "Émirats arabes unis",
+          requiredCertifications: null,
+          requiredLanguages,
+        },
+        {
+          ...candidate,
+          languageFacts: languageFacts(JSON.stringify(declared), []),
+        }
+      );
+    // Before (3df46bb): English gave 15 language points of 15, 熟悉白话, 当地官话 or 德宏傣文 read as everyday words; ebc5768 and b81633b kept them.
+    for (const [required, name] of [
+      ["英语 – 香港，熟悉白话", "白话"],
+      ["英语和当地官话", "官话"],
+      ["英语 – 德宏，傣文", "傣文"],
+      ["英语 – 香港，德宏傣文", "傣文"],
+      ["英語 – 香港，熟悉白話", "白話"],
+    ] as const) {
+      expect(
+        match(required, ["English"]).breakdown.languages,
+        required
+      ).toBeLessThan(15);
+      expect(
+        match(required, ["English", name]).breakdown.languages,
+        required
+      ).toBe(15);
+    }
+    for (const required of ["英语 – 迪拜，大白话", "英语和恭维话"]) {
+      expect(match(required, ["English"]).breakdown.languages, required).toBe(
+        15
+      );
+    }
+  });
+
   it("une certification déclarée par le candidat compte, elle aussi, une fois confirmée", () => {
     const declaredOnly = computeBriefCandidateMatch(brief, {
       ...anaesthetist,
