@@ -467,6 +467,25 @@ describe("Candidatures — profil de matching et filtres de la liste (IA-02)", (
     await expectKept("英语 – 迪拜，医学术语", everyone);
   });
 
+  it("ne lit un mot chinois qui finit par 话, 文 ou 言 comme un nom de langue qu’après un nom connu de langue, de peuple ou de lieu : la mission, le profil et le filtre Langue (IA02-R7B-NOM-CHINOIS-FAUX-POSITIF)", async () => {
+    seedSpeakers("CVR7BZ");
+    const everyone = ["Anglophone", "Arabophone", "Darijaphone", "Neerlandophone", "Shanghaiphone", "Sinophone", "Teochewphone", "Tigrinophone"];
+    // Before (b81633b): 电话 (the phone), 论文 (a paper), 方言 (a dialect)... were a language nobody spoke after the places a dash
+    // opened or after 和: nobody met these texts, where daf844a and ac75d5a, and the French, English and German texts, keep everyone.
+    for (const required of [
+      "英语 – 迪拜，接听电话", "英语 – 利雅得，撰写论文", "英语 – 听说读写和打电话", "英语 – 阅读和翻译医学论文", "英语 – 迪拜，方言", "英语 – 多哈，会议发言", "英语 – 流利及电话沟通",
+      "Anglais – Dubaï, réponse au téléphone", "English – Dubai, answering the phone", "Englisch – Dubai, Telefonate",
+    ]) {
+      await expectKept(required, everyone);
+    }
+    // After the name of a place, a language or a people, still a language's name: a requirement of its own.
+    await expectKept("英语 – 迪拜，上海话", ["Shanghaiphone"]);
+    await expectKept("英语 – 听说读写和上海话", ["Shanghaiphone"]);
+    await expectKept("英语 – 迪拜，中文", ["Sinophone"]);
+    await expectKept("英语 – 迪拜，潮州话", []);
+    await expectKept("英语和白话", []);
+  });
+
   it("ne lit les langues tirées du CV, et leurs citations, que pour un profil qui exige des langues (IA-02)", async () => {
     seedCandidates(0, 3, 3);
     const [byCountry, byLanguage] = memory.seed(recruitmentMatchProfiles, [

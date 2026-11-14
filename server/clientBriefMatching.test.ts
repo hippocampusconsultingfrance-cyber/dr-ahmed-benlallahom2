@@ -203,6 +203,20 @@ describe("matching mission–candidat", () => {
     }
   });
 
+  it("ne lit un mot chinois qui finit par 话, 文 ou 言 comme un nom de langue qu’après un nom connu de langue, de peuple ou de lieu (IA02-R7B-NOM-CHINOIS-FAUX-POSITIF)", () => {
+    const candidate = { specialty: "Anesthésie-réanimation", targetCountries: '["Émirats arabes unis"]' };
+    const match = (requiredLanguages: string, declared: string[]) =>
+      computeBriefCandidateMatch({ specialtyNeeded: "Anesthésie-réanimation", country: "Émirats arabes unis", requiredCertifications: null, requiredLanguages }, { ...candidate, languageFacts: languageFacts(JSON.stringify(declared), []) });
+    // Before (b81633b): English gave 8 language points of 15, 电话, 论文 or 方言 read as a language nobody spoke.
+    for (const required of ["英语 – 迪拜，接听电话", "英语 – 利雅得，撰写论文", "英语 – 听说读写和打电话", "英语 – 迪拜，方言", "English – Dubai, answering the phone"]) {
+      expect(match(required, ["English"]).breakdown.languages, required).toBe(15);
+    }
+    for (const [required, name] of [["英语 – 迪拜，上海话", "上海话"], ["英语 – 流利和温州话", "温州话"], ["英语 – 迪拜，台湾话", "台湾话"]] as const) {
+      expect(match(required, ["English"]).breakdown.languages, required).toBeLessThan(15);
+      expect(match(required, ["English", name]).breakdown.languages, required).toBe(15);
+    }
+  });
+
   it("une certification déclarée par le candidat compte, elle aussi, une fois confirmée", () => {
     const declaredOnly = computeBriefCandidateMatch(brief, { ...anaesthetist, certificationFacts: certificationFacts("ACLS, ATLS", []) });
     expect(declaredOnly.breakdown.certifications).toBe(0);

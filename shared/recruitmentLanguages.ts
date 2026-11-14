@@ -206,11 +206,49 @@ const namesLanguage = (folded: string, entry: (typeof LANGUAGE_NAMES)[number]) =
 const COUNTRY_CHARACTERS = "国國";
 /** The Chinese conjunctions (和, 及, 与, 與) and 或. */
 const CHINESE_JOINING_CHARACTERS = "和及与與或";
-/** The characters a language's Chinese name ends with: 英语, 上海话, 中文, 方言. */
+/** The characters a language's Chinese name ends with: 英语, 上海话, 中文. */
 const CHINESE_NAME_ENDINGS = "语語话話文言";
+/**
+ * IA02-R7B: those of them an everyday Chinese word ends with as well: 话 (电话,
+ * 通话, 讲话, 说话), 文 (论文, 作文, 课文, 原文), 言 (发言, 留言, 前言, 方言).
+ * A word that ends so is a language's name only after the name of a language,
+ * a people or a place (below).
+ */
+const CHINESE_WORD_ENDINGS = "话話文言";
 /** Taiwan's Chinese names: 台湾国语 is Taiwanese Mandarin. */
 const TAIWAN_NAMES = ["台湾", "台灣", "臺灣", "臺湾"];
 const HAN_CHARACTER = new RegExp("\\p{Script=Han}", "u");
+const HAN_WORD = new RegExp("^\\p{Script=Han}+$", "u");
+
+/**
+ * IA02-R7B: the names a Chinese speech or script is named after, beside those
+ * of the languages (英 of 英语, 阿拉伯 of 阿拉伯语, 广东 of 广东话, 斯瓦希里 of
+ * 斯瓦希里语) and the countries and regions Intl.DisplayNames gives in Chinese
+ * (中国, 新加坡, 香港, 台湾): China's provinces, municipalities and autonomous
+ * regions, and the areas and cities whose speech is named after them (上海话,
+ * 潮州话, 四川话, 温州话, 潮汕话, 东北话, 莆仙话); then the peoples of China
+ * whose script or speech is named after them (蒙文, 维文, 满文, 傣文); then the
+ * usual short Chinese names of languages no list knows (印尼语, 越语, 缅语,
+ * 柬语); each in simplified and traditional characters.
+ */
+const CHINESE_PLACE_NAMES =
+  "北京 天津 上海 重庆 重慶 河北 山西 辽宁 遼寧 吉林 黑龙江 黑龍江 江苏 江蘇 浙江 安徽 福建 江西 山东 山東 河南 湖北 湖南 广东 廣東 海南 四川 " +
+  "贵州 貴州 云南 雲南 陕西 陝西 甘肃 甘肅 青海 内蒙古 內蒙古 广西 廣西 西藏 宁夏 寧夏 新疆 " +
+  "东北 東北 闽南 閩南 闽东 閩東 闽北 閩北 潮汕 广府 廣府 胶东 膠東 江淮 苏北 蘇北 苏南 蘇南 粤西 粵西 雷州 四邑 " +
+  "广州 廣州 深圳 东莞 東莞 佛山 中山 珠海 江门 江門 台山 臺山 潮州 汕头 汕頭 揭阳 揭陽 梅州 湛江 惠州 福州 厦门 廈門 泉州 漳州 莆田 温州 溫州 " +
+  "宁波 寧波 杭州 绍兴 紹興 金华 金華 台州 臺州 苏州 蘇州 无锡 無錫 常州 扬州 揚州 南京 南通 武汉 武漢 长沙 長沙 南昌 合肥 成都 西安 济南 濟南 " +
+  "青岛 青島 大连 大連 沈阳 瀋陽 长春 長春 哈尔滨 哈爾濱 太原 郑州 鄭州 洛阳 洛陽 昆明 贵阳 貴陽 南宁 南寧 桂林 柳州 海口 兰州 蘭州 银川 銀川 " +
+  "西宁 西寧 乌鲁木齐 烏魯木齊 拉萨 拉薩 呼和浩特 " +
+  "开平 開平 恩平 新会 新會 鹤山 鶴山 顺德 順德 南海 番禺 阳江 陽江 茂名 化州 廉江 肇庆 肇慶 清远 清遠 韶关 韶關 河源 梅县 梅縣 兴宁 興寧 汕尾 " +
+  "海陆丰 海陸豐 潮阳 潮陽 普宁 普寧 澄海 云浮 雲浮 石岐 福清 长乐 長樂 闽侯 閩侯 莆仙 兴化 興化 仙游 仙遊 晋江 晉江 石狮 石獅 永春 安溪 龙岩 龍巖 三明 南平 " +
+  "建瓯 建甌 宁德 寧德 福安 嘉兴 嘉興 湖州 衢州 丽水 麗水 舟山 义乌 義烏 镇江 鎮江 泰州 盐城 鹽城 徐州 淮安 连云港 連雲港 宿迁 宿遷 启东 啟東 " +
+  "海门 海門 湘潭 株洲 衡阳 衡陽 岳阳 岳陽 常德 益阳 益陽 娄底 婁底 邵阳 邵陽 怀化 懷化 郴州 永州 张家界 張家界 湘西 九江 赣州 贛州 上饶 上饒 " +
+  "景德镇 景德鎮 萍乡 萍鄉 宜春 抚州 撫州 吉安 芜湖 蕪湖 安庆 安慶 徽州 蚌埠 阜阳 阜陽 三亚 三亞 儋州 文昌 琼海 瓊海 临高 臨高 梧州 北海 玉林 " +
+  "钦州 欽州 桂柳 百色 石家庄 石家莊 唐山 保定 宜昌 襄阳 襄陽 荆州 荊州 绵阳 綿陽 自贡 自貢 乐山 樂山 宜宾 宜賓 遵义 遵義 烟台 煙臺 煙台 开封 開封";
+const CHINESE_PEOPLE_NAMES = "汉 漢 蒙 藏 维 維 满 滿 苗 彝 壮 壯 傣 侗 瑶 黎 佤 畲 傈僳 纳西 納西 景颇 景頗 锡伯 錫伯 哈尼 土家 布依 朝鲜 朝鮮 哈萨克 哈薩克 柯尔克孜 柯爾克孜 维吾尔 維吾爾";
+const CHINESE_SHORT_LANGUAGE_NAMES = "印尼 越 缅 緬 柬";
+/** The names of a Chinese speech named after none of these, whole: 白话 (白話), Cantonese, and 官话 (官話), Mandarin. */
+const CHINESE_SPEECH_NAMES = ["白话", "白話", "官话", "官話"];
 
 /**
  * IA02-R7: whether 国语 (國語) at this place of a folded text, « the language
@@ -1052,12 +1090,15 @@ function namesLanguageAmong(part: string, places: readonly RegionName[]) {
  * is qualified with that end otherwise are set aside (« 上海话优先 »,
  * « 潮州话流利 », « 会说上海话的 »). A language's Chinese name ends with 语,
  * 话, 文 or 言, whether a list knows it or not (粤语, 上海话, 潮州话, 台语,
- * 手语, 中文, 方言): such a last word, outside the closed list, is a
- * language's name (`name`); a word of the list that ends so is what the
- * language is used for or how (术语, 用语, 口语, 语言: `qualifier`); any
- * other Chinese word is a place, a field or a use (迪拜, 患者沟通: `other`);
- * a part whose last word is not Chinese, or that is wholly the known words a
- * language is qualified with, is none of them (`none`).
+ * 手语, 中文): such a last word, outside the closed list, is a language's
+ * name (`name`); a word of the list that ends so is what the language is used
+ * for or how (术语, 用语, 口语, 语言: `qualifier`); any other Chinese word is a
+ * place, a field or a use (迪拜, 患者沟通: `other`); a part whose last word is
+ * not Chinese, or that is wholly the known words a language is qualified
+ * with, is none of them (`none`). IA02-R7B: a word that ends with 话, 文 or 言
+ * is a language's name only after a known name (namesChineseSpeech, below);
+ * any other is an everyday word (电话, 打电话, 讲话, 论文, 作文, 发言, 留言,
+ * 方言: `other`), read as « téléphone », « phone » and « Telefon » are.
  */
 function chineseLastWord(part: string): "name" | "qualifier" | "other" | "none" {
   if (!HAN_CHARACTER.test(part) || saysOnlyQualifiers(part)) return "none";
@@ -1071,7 +1112,52 @@ function chineseLastWord(part: string): "name" | "qualifier" | "other" | "none" 
   }
   const last = rest.at(-1) ?? "";
   if (!HAN_CHARACTER.test(last)) return "none";
-  return CHINESE_NAME_ENDINGS.includes(last) ? "name" : "other";
+  return CHINESE_NAME_ENDINGS.includes(last) && namesChineseSpeech(rest) ? "name" : "other";
+}
+
+/** The names a Chinese word that ends with 话, 文 or 言 is a language's name after, as above: read when first asked for. */
+let chineseSpeechStems: ReadonlySet<string> | undefined;
+let chineseSpeechStemLength = 0;
+
+function readChineseSpeechStems() {
+  const stems = new Set<string>();
+  const add = (name: string) => {
+    if (!HAN_WORD.test(name)) return;
+    stems.add(name);
+    chineseSpeechStemLength = Math.max(chineseSpeechStemLength, name.length);
+  };
+  [CHINESE_PLACE_NAMES, CHINESE_PEOPLE_NAMES, CHINESE_SHORT_LANGUAGE_NAMES].forEach(names => names.split(" ").forEach(add));
+  TAIWAN_NAMES.forEach(add);
+  for (const region of regionNames("zh")) add(region.folded);
+  // A language's Chinese name without its last character; not 国 of 国语, which ends a word for a country (所在国, 外国).
+  otherLanguageNames ??= readOtherLanguageNames();
+  for (const name of [...LANGUAGE_NAMES.map(entry => entry.folded), ...Array.from(otherLanguageNames.keys())]) {
+    const stem = name.slice(0, -1);
+    if (CHINESE_NAME_ENDINGS.includes(name.at(-1) ?? "") && !COUNTRY_CHARACTERS.includes(stem)) add(stem);
+  }
+  return stems;
+}
+
+/**
+ * IA02-R7B: whether the Chinese word that ends this folded text, with 语, 话,
+ * 文 or 言, is a language's name. One that ends with 语 (語) always is (粤语,
+ * 台语, 手语). One that ends with 话, 文 or 言 is when what is written before
+ * that character ends with the name of a language (英文, 法文, 粤话, 希腊文),
+ * of a country or a region Intl.DisplayNames gives in Chinese (台湾话,
+ * 新加坡话, 香港话), of a Chinese province, area or city (上海话, 潮州话,
+ * 四川话, 温州话, 东北话), of a people (藏文, 维文) or a usual short name
+ * (印尼文, 越文), or when it is 白话 or 官话. Any other is an everyday word
+ * (电话, 通话, 说话, 论文, 公文, 原文, 发言, 前言, 方言, 文言).
+ */
+function namesChineseSpeech(folded: string) {
+  if (!CHINESE_WORD_ENDINGS.includes(folded.at(-1) ?? "")) return true;
+  if (CHINESE_SPEECH_NAMES.some(name => folded.endsWith(name))) return true;
+  chineseSpeechStems ??= readChineseSpeechStems();
+  const before = folded.slice(0, -1);
+  for (let length = Math.min(before.length, chineseSpeechStemLength); length > 0; length -= 1) {
+    if (chineseSpeechStems.has(before.slice(-length))) return true;
+  }
+  return false;
 }
 
 /**

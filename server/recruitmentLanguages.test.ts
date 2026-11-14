@@ -829,6 +829,53 @@ describe("langues du recrutement comparées par code (IA-02)", () => {
     }
   });
 
+  // IA02-R7B-NOM-CHINOIS-FAUX-POSITIF: everyday Chinese words that end with 话, 文 or 言 as a language's Chinese name does.
+  const CHINESE_EVERYDAY_WORDS = [
+    "电话", "打电话", "接听电话", "通话", "讲话", "说话", "谈话", "电话沟通能力", "论文", "撰写论文", "医学论文", "公文", "作文", "课文", "原文", "全文", "正文", "外文",
+    "发言", "留言", "前言", "方言", "文言", "文言文", "土话", "本地话",
+  ];
+  const CHINESE_CONTEXTS: ReadonlyArray<readonly [context: string, write: (word: string) => string]> = [
+    ["après les lieux qu’un tiret ouvre", word => `英语 – 迪拜，${word}`], ["après 和", word => `英语 – 听说读写和${word}`], ["après 及", word => `英语 – 流利及${word}`], ["après une langue et 和", word => `英语和${word}`],
+  ];
+
+  it.each(CHINESE_CONTEXTS)("lit un mot chinois courant qui finit par 话, 文 ou 言 %s comme « téléphone », « phone » ou « Telefon » : il qualifie la langue (IA02-R7B-NOM-CHINOIS-FAUX-POSITIF)", (_, write) => {
+    // Before (b81633b): any such word was read as a language's Chinese name, a requirement that nobody met; daf844a and ac75d5a
+    // read one requirement met by English, as « Anglais – Dubaï, réponse au téléphone » and « English – Dubai, answering the phone ».
+    for (const word of CHINESE_EVERYDAY_WORDS) {
+      const required = write(word);
+      for (const requirements of [recruitmentLanguageRequirements(required), recruitmentLanguageListRequirements([required])]) {
+        expect(requirements.map(requirement => requirement.text), required).toEqual([required]);
+        expect(meetsRequiredLanguage(["English"], requirements[0]!), required).toBe(true);
+      }
+    }
+    for (const required of ["Anglais – Dubaï, réponse au téléphone", "English – Dubai, answering the phone", "Englisch – Dubai, Telefonate"]) {
+      expect(recruitmentLanguageRequirements(required), required).toHaveLength(1);
+    }
+  });
+
+  it.each(CHINESE_CONTEXTS)("lit toujours %s un nom chinois de langue qui finit par 话, 文 ou 言 après un nom connu de langue, de peuple ou de lieu comme une exigence (IA02-R7B-NOM-CHINOIS-FAUX-POSITIF)", (_, write) => {
+    // A Chinese province, area or city (上海, 潮州, 四川, 温州, 潮汕, 东北), a country or a region of Intl.DisplayNames (台湾, 香港,
+    // 新加坡), a language (英, 日, 希腊, 斯瓦希里), a people (藏, 维), a usual short name (印尼), or 白话 and 官话, written whole.
+    for (const name of [
+      "上海话", "潮州话", "四川话", "温州话", "潮汕话", "陕西话", "东北话", "福州话", "广府话", "白话", "官话", "台湾话", "香港话", "新加坡话",
+      "上海話", "溫州話", "東北話", "白話", "台灣話", "希腊文", "荷兰文", "斯瓦希里文", "藏文", "维文", "蒙文", "印尼文", "越文", "会说上海话", "上海话优先",
+    ]) {
+      const required = write(name);
+      for (const requirements of [recruitmentLanguageRequirements(required), recruitmentLanguageListRequirements([required])]) {
+        expect(requirements, required).toHaveLength(2);
+        expect(requirements.every(requirement => meetsRequiredLanguage(["English"], requirement)), required).toBe(false);
+        expect(requirements.every(requirement => meetsRequiredLanguage(["English", name.replace("会说", "").replace("优先", "")], requirement)), required).toBe(true);
+      }
+    }
+    // The names of the lists and of the table, as before: 广东话, 客家话, 闽南话 by their codes, 中文, 日文, 法文 by the table's.
+    for (const [name, declared] of [["广东话", "粤语"], ["廣東話", "Cantonese"], ["客家话", "客家話"], ["闽南话", "闽南话"], ["普通话", "中文"], ["中文", "Chinese"], ["日文", "Japanese"], ["法文", "French"]] as const) {
+      const requirements = recruitmentLanguageRequirements(write(name));
+      expect(requirements, name).toHaveLength(2);
+      expect(requirements.every(requirement => meetsRequiredLanguage(["English"], requirement)), name).toBe(false);
+      expect(requirements.every(requirement => meetsRequiredLanguage(["English", declared], requirement)), name).toBe(true);
+    }
+  });
+
   it("sans Intl.DisplayNames (un navigateur ou un Node.js sans ses données), garde les noms de sa propre liste et ce qui qualifie une langue (IA-02)", async () => {
     vi.stubGlobal("Intl", { ...Intl, DisplayNames: undefined });
     vi.resetModules();
