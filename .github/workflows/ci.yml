@@ -9,10 +9,17 @@ on:
 permissions:
   contents: read
 
+# One run at a time per ref. A new push to a pull request cancels its run in progress; on main,
+# the run in progress always finishes and the latest push waiting behind it runs next.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   quality:
     name: TypeScript and test suite
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     env:
       RESEND_API_KEY: re_test_dummy_key_12345678
@@ -34,20 +41,59 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: pnpm
+      # No code of the repository runs before the next step has checked this workflow: neither the
+      # project's install scripts nor a pnpmfile, which would run before any check and could change
+      # what every next step runs (node_modules, their variables). esbuild and @tailwindcss/oxide find
+      # their binary in their platform package without their install script.
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile
+      # The check of this workflow, before any other, run alone as well, with a configuration of its
+      # own: neither a vitest.config.ts that leaves it out of the suite nor one that runs code before
+      # the tests keeps it from running, and it then refuses that vitest.config.ts. The step compares
+      # the digests of what it runs before vitest, listed here, then checks that every package
+      # installed is the registry's, and runs vitest by its file: neither a script of package.json
+      # nor what pnpm's configuration loads into node runs first. Changing any of it changes this file.
+      - name: Check this workflow
+        run: |
+          sha256sum --check --strict <<< "90543f0988efb530a0cbfe60914ba39630a081b374b9311ff45126fe92a66948  scripts/check-locked-packages.mjs"
+          sha256sum --check --strict <<< "7742d5ed6733591d5bbfc8dd4f48270f61807278a41e81b093efe4f54c401db3  scripts/ci-workflow.vitest.config.mjs"
+          node scripts/check-locked-packages.mjs
+          node node_modules/vitest/vitest.mjs run server/ciWorkflow.test.ts --config scripts/ci-workflow.vitest.config.mjs --passWithNoTests=false
       - name: Verify TypeScript
         run: pnpm check
+      - name: Run ESLint
+        run: pnpm lint
+      - name: Check formatting
+        run: pnpm format:check
       - name: Run test suite
         run: pnpm test:ci
       - name: Verify production build
+        id: build
         run: pnpm build
+      # The four checks below each run once the build has passed, even if one of them fails,
+      # so a single run reports every regression.
+      - name: Check performance budgets
+        run: node scripts/check-performance-budgets.mjs
+      - name: Start the built server
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: node scripts/smoke-built-server.mjs
+      - name: Verify migrations match the schema
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          node scripts/check-migrations-in-sync.mjs
+          git diff --exit-code -- drizzle/pg
+          untracked="$(git status --porcelain --untracked-files=all -- drizzle/pg)"
+          if [ -n "$untracked" ]; then echo "$untracked"; exit 1; fi
+      - name: Find unused files and dependencies
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: pnpm knip
 
   dependency-audit:
     name: Dependency vulnerability report
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -56,9 +102,59 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Audit production dependencies
         run: pnpm audit --prod --audit-level=high
+
+  # The paths that earn money or collect personal data, end to end (CODE-22): the built
+  # server with a PostgreSQL of its own and the local doubles of every outside service
+  # (e2e/support), driven by Playwright in the runner's Chrome. No secret: none is needed.
+  e2e:
+    name: End-to-end scenarios
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: e2e
+        ports:
+          - 5432:5432
+        options: --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 12
+
+    env:
+      E2E_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/e2e
+      VITE_TURNSTILE_SITE_KEY: 1x00000000000000000000AA
+      CHROMIUM: /usr/bin/google-chrome
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile
+      - name: Verify the scenarios' types
+        run: pnpm check:e2e
+      - name: Build with Turnstile's test key
+        run: pnpm build
+      - name: Run the end-to-end scenarios
+        run: pnpm test:e2e
+      # The built server's log and the traces Playwright keeps of a failed scenario (dummy data only).
+      - name: Keep the server log and traces of a failed run
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results
+          path: tmp/e2e
+          retention-days: 7

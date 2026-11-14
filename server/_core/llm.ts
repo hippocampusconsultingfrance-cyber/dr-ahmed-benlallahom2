@@ -1,4 +1,8 @@
 import { ENV } from "./env";
+import {
+  isProcessingDeadlineError,
+  stepTimeoutMs,
+} from "../processingDeadline";
 
 export type Role = "system" | "user" | "assistant" | "tool" | "function";
 
@@ -19,7 +23,12 @@ export type FileContent = {
   type: "file_url";
   file_url: {
     url: string;
-    mime_type?: "audio/mpeg" | "audio/wav" | "application/pdf" | "audio/mp4" | "video/mp4" ;
+    mime_type?:
+      | "audio/mpeg"
+      | "audio/wav"
+      | "application/pdf"
+      | "audio/mp4"
+      | "video/mp4";
   };
 };
 
@@ -270,9 +279,21 @@ const normalizeResponseFormat = ({
   };
 };
 
-const RETRY_MAX_RETRIES = 4;
+/**
+ * EXPL-12: a request that does not answer is cut after LLM_REQUEST_TIMEOUT_MS,
+ * and a call, its new tries and pauses included, ends within
+ * LLM_CALL_BUDGET_MS, inside the 60 s Vercel function limit. Within a
+ * scheduled job's deadline (processingDeadline.ts), each request is also cut
+ * to the time the job has left: a first request that would get less than
+ * LLM_REQUEST_MINIMUM_MS is not sent (ProcessingDeadlineError), and no new
+ * try is made that would.
+ */
+const RETRY_MAX_RETRIES = 2;
 const RETRY_BASE_DELAY_MS = 500;
-const RETRY_MAX_DELAY_MS = 30_000;
+const RETRY_MAX_DELAY_MS = 5_000;
+export const LLM_REQUEST_TIMEOUT_MS = 30_000;
+export const LLM_CALL_BUDGET_MS = 45_000;
+export const LLM_REQUEST_MINIMUM_MS = 10_000;
 
 type FetchInit = NonNullable<Parameters<typeof fetch>[1]>;
 
@@ -299,24 +320,57 @@ const computeBackoffDelay = (
   return Math.min(Math.max(jittered, retryAfterMs ?? 0), RETRY_MAX_DELAY_MS);
 };
 
-// Retries non-2xx responses and network errors with exponential backoff, then
-// returns the final Response so callers keep their existing error handling.
+// Time a new try may take once `waitMs` has passed, or null when it would get
+// less than the minimum from the call's budget or the scheduled job's deadline.
+const retryTimeoutMs = (
+  callDeadlineAt: number,
+  waitMs: number
+): number | null => {
+  const callLeftMs = callDeadlineAt - Date.now() - waitMs;
+  if (callLeftMs < LLM_REQUEST_MINIMUM_MS) return null;
+  try {
+    return stepTimeoutMs("llm", Math.min(LLM_REQUEST_TIMEOUT_MS, callLeftMs), {
+      reserveMs: waitMs,
+      minimumMs: LLM_REQUEST_MINIMUM_MS,
+    });
+  } catch (error) {
+    if (isProcessingDeadlineError(error)) return null;
+    throw error;
+  }
+};
+
+// Retries non-2xx responses and network errors (a request cut by its timeout
+// included) with exponential backoff while the time left allows, then returns
+// the final Response so callers keep their existing error handling.
 const fetchWithBackoff = async (
   url: string,
   init: FetchInit
 ): Promise<Response> => {
-  let lastError: unknown;
+  const callDeadlineAt = Date.now() + LLM_CALL_BUDGET_MS;
+  let timeoutMs = stepTimeoutMs("llm", LLM_REQUEST_TIMEOUT_MS, {
+    minimumMs: LLM_REQUEST_MINIMUM_MS,
+  });
 
-  for (let attempt = 0; attempt <= RETRY_MAX_RETRIES; attempt++) {
+  for (let attempt = 0; ; attempt++) {
+    let waitMs: number;
     try {
-      const response = await fetch(url, init);
+      // The signal also bounds the caller's reading of the answer. It takes
+      // whole milliseconds only (a RangeError otherwise, the request never
+      // sent): a new try's time, after a jittered pause, has a fraction.
+      const response = await fetch(url, {
+        ...init,
+        signal: AbortSignal.timeout(Math.floor(timeoutMs)),
+      });
       if (response.ok || attempt === RETRY_MAX_RETRIES) {
         return response;
       }
 
-      const retryAfterMs = parseRetryAfter(
-        response.headers.get("retry-after")
+      waitMs = computeBackoffDelay(
+        attempt,
+        parseRetryAfter(response.headers.get("retry-after"))
       );
+      const nextTimeoutMs = retryTimeoutMs(callDeadlineAt, waitMs);
+      if (nextTimeoutMs === null) return response;
       try {
         await response.body?.cancel();
       } catch {
@@ -325,20 +379,19 @@ const fetchWithBackoff = async (
       console.warn(
         `LLM request retry ${attempt + 1}/${RETRY_MAX_RETRIES} after status ${response.status}`
       );
-      await sleep(computeBackoffDelay(attempt, retryAfterMs));
+      timeoutMs = nextTimeoutMs;
     } catch (error) {
-      lastError = error;
       if (attempt === RETRY_MAX_RETRIES) throw error;
+      waitMs = computeBackoffDelay(attempt);
+      const nextTimeoutMs = retryTimeoutMs(callDeadlineAt, waitMs);
+      if (nextTimeoutMs === null) throw error;
       console.warn(
         `LLM request retry ${attempt + 1}/${RETRY_MAX_RETRIES} after network error`
       );
-      await sleep(computeBackoffDelay(attempt));
+      timeoutMs = nextTimeoutMs;
     }
+    await sleep(waitMs);
   }
-
-  throw lastError instanceof Error
-    ? lastError
-    : new Error("LLM request failed after exhausting retries");
 };
 
 export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
@@ -382,7 +435,8 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     payload.tool_choice = normalizedToolChoice;
   }
 
-  const resolvedMaxCompletionTokens = max_completion_tokens ?? maxCompletionTokens;
+  const resolvedMaxCompletionTokens =
+    max_completion_tokens ?? maxCompletionTokens;
   if (typeof resolvedMaxCompletionTokens === "number") {
     payload.max_completion_tokens = resolvedMaxCompletionTokens;
   } else {
@@ -444,9 +498,10 @@ export type ModelsResponse = {
 export async function listLLMModels(): Promise<ModelsResponse> {
   assertApiKey();
 
-  const url = ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
-    ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/models`
-    : "https://forge.manus.im/v1/models";
+  const url =
+    ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
+      ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/models`
+      : "https://forge.manus.im/v1/models";
 
   const response = await fetchWithBackoff(url, {
     headers: { authorization: `Bearer ${ENV.forgeApiKey}` },

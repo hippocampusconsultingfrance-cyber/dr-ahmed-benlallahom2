@@ -2,13 +2,13 @@
 
 Le visuel de campagne est disponible à l’adresse `/manus-storage/hippocampus-linkedin-recruitment-international_09269b3d.png`. Il est prévu pour une publication LinkedIn verticale en format 3:4, avec une zone libre en bas pour l’URL ou une mention de contact ajoutée directement dans LinkedIn.
 
-| Élément | Cadre retenu |
-|---|---|
-| Objectif | Présenter Hippocampus Consulting comme un point d’entrée pour le recrutement international de professionnels de santé et paramédicaux. |
-| Zones mises en avant | Europe, Canada, Moyen-Orient et Afrique. |
-| Ton | Institutionnel, international, inclusif et sans promesse d’embauche. |
-| Texte principal | « Recrutement international — Professionnels de santé & paramédicaux ». |
-| Restrictions | Aucun logo tiers, aucune donnée de candidat, aucun témoignage, aucune promesse d’emploi ou de résultat. |
+| Élément              | Cadre retenu                                                                                                                           |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Objectif             | Présenter Hippocampus Consulting comme un point d’entrée pour le recrutement international de professionnels de santé et paramédicaux. |
+| Zones mises en avant | Europe, Canada, Moyen-Orient et Afrique.                                                                                               |
+| Ton                  | Institutionnel, international, inclusif et sans promesse d’embauche.                                                                   |
+| Texte principal      | « Recrutement international — Professionnels de santé & paramédicaux ».                                                                |
+| Restrictions         | Aucun logo tiers, aucune donnée de candidat, aucun témoignage, aucune promesse d’emploi ou de résultat.                                |
 
 ## Proposition de légende LinkedIn
 

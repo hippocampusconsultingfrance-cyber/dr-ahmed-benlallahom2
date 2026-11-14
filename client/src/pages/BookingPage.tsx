@@ -1,16 +1,33 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { Calendar, Clock, User, Mail, Phone, FileText, CheckCircle, AlertCircle } from "lucide-react";
+import {
+  Calendar,
+  Clock,
+  User,
+  Mail,
+  Phone,
+  FileText,
+  CheckCircle,
+  AlertCircle,
+} from "lucide-react";
 import Breadcrumb from "@/components/Breadcrumb";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { SEOHead } from "@/components/SEOHead";
 import Footer from "@/components/Footer";
 import BookingLegalNotice from "@/components/BookingLegalNotice";
-import { getBookingFormCopy } from "@/lib/publicFormCopy";
+import LanguageMenu from "@/components/LanguageMenu";
+import { TurnstileWidget } from "@/components/TurnstileWidget";
+import { siteConfig } from "@/data/site-config";
+import {
+  formatVisitorTime,
+  getBookingDateTimeFormat,
+  getBookingLocale,
+} from "@/lib/bookingTime";
+import { getBookingFormCopy, publicFormCopy } from "@/lib/publicFormCopy";
 import {
   clearBookingDraft,
   clearPendingBooking,
@@ -24,80 +41,196 @@ import {
   BOOKING_HORIZON_DAYS,
   BOOKING_MIN_LEAD_TIME_HOURS,
   BOOKING_REQUEST_SUBJECT_MAX_LENGTH,
+  BOOKING_HORIZON_MS,
+  CONSULTATION_DAY_RATE_CENTS,
+  CONSULTATION_NIGHT_RATE_CENTS,
+  NIGHT_RATE_END_HOUR,
+  NIGHT_RATE_START_HOUR,
+  englishRateHour,
+  formatRateAmount,
   getBookingWindowIssue,
+  isBookingEmailAddress,
+  isBookingRefusalReason,
   isPlausiblePhoneNumber,
+  normalizePhoneInput,
+  type BookingRefusalReason,
 } from "@shared/bookingPolicy";
+import {
+  PARIS_TIME_ZONE,
+  isBookableAppointmentTime,
+  parisDateKey,
+  parisWallClockTime,
+  timeToMinutes,
+  type AvailabilitySlot,
+} from "@shared/parisTime";
+import {
+  cleanTextInput,
+  EMAIL_INVISIBLE_CHARACTER,
+} from "@shared/textInputCleaning";
+
+// Délai minimal et horizon : même texte pour la vérification de la page et pour
+// le refus du serveur (EN-06).
+const bookingWindowMessages = {
+  fr: {
+    tooSoon: `Ce créneau n’est plus réservable : réservez au moins ${BOOKING_MIN_LEAD_TIME_HOURS} h à l’avance.`,
+    tooFar: `Les réservations sont ouvertes jusqu’à ${BOOKING_HORIZON_DAYS} jours à l’avance.`,
+  },
+  en: {
+    tooSoon: `This time slot can no longer be booked: please book at least ${BOOKING_MIN_LEAD_TIME_HOURS} hours ahead.`,
+    tooFar: `Bookings are open up to ${BOOKING_HORIZON_DAYS} days ahead.`,
+  },
+  de: {
+    tooSoon: `Dieser Termin kann nicht mehr gebucht werden: Bitte buchen Sie mindestens ${BOOKING_MIN_LEAD_TIME_HOURS} Stunden im Voraus.`,
+    tooFar: `Buchungen sind bis zu ${BOOKING_HORIZON_DAYS} Tage im Voraus möglich.`,
+  },
+  zh: {
+    tooSoon: `该时段已无法预约：请至少提前 ${BOOKING_MIN_LEAD_TIME_HOURS} 小时预约。`,
+    tooFar: `最多可提前 ${BOOKING_HORIZON_DAYS} 天预约。`,
+  },
+};
 
 export const bookingContent = {
   fr: {
-    title: "Réserver une Consultation",
+    title: "Réserver une consultation",
     subtitle: "Conseil en santé - 30 minutes",
     form: {
       name: "Nom complet",
       email: "Email",
       phone: "Numéro de téléphone",
       date: "Date et heure",
-      datePlaceholder: "JJ/MM/AAAA · HH:MM",
-      dateOnlyPlaceholder: "JJ/MM/AAAA",
-      timePlaceholder: "HH:MM",
-      timeLabel: "Heure",
-      invalidDate: "Saisissez une date valide au format JJ/MM/AAAA et une heure au format HH:MM.",
-      dateHint: "Choisissez la date et l’heure de votre consultation. Le créneau est affiché en heure de Paris.",
+      day: "Jour",
+      dayPlaceholder: "Choisissez un jour",
+      slotsLegend: "Horaire (heure de Paris)",
+      openingHours: "Disponibilités (heure de Paris)",
+      noBookableDay: `Aucun créneau n’est disponible dans les ${BOOKING_HORIZON_DAYS} prochains jours.`,
+      noSlotsThisDay:
+        "Tous les horaires de ce jour sont déjà réservés. Choisissez un autre jour.",
+      noSlotsLeftThisDay:
+        "Plus aucun horaire n’est disponible ce jour-là. Choisissez un autre jour.",
+      slotsError: "Les horaires de ce jour n’ont pas pu être chargés.",
+      retry: "Réessayer",
+      priceError:
+        "Le tarif de cet horaire n’a pas pu être calculé. Réessayez avant de procéder au paiement.",
+      parisTime: "heure de Paris",
+      localTime: (time: string) => `soit ${time} chez vous`,
+      localTimeShort: (time: string) => `${time} chez vous`,
+      dateHint:
+        "Choisissez un jour, puis un horaire libre. Les horaires sont en heure de Paris ; l’heure de chez vous s’affiche dessous lorsqu’elle diffère.",
       windowHint: `Réservation au moins ${BOOKING_MIN_LEAD_TIME_HOURS} h à l’avance et jusqu’à ${BOOKING_HORIZON_DAYS} jours.`,
-      tooSoon: `Ce créneau n’est plus réservable : réservez au moins ${BOOKING_MIN_LEAD_TIME_HOURS} h à l’avance.`,
-      tooFar: `Les réservations sont ouvertes jusqu’à ${BOOKING_HORIZON_DAYS} jours à l’avance.`,
-      invalidPhone: "Saisissez un numéro de téléphone valide (8 à 15 chiffres, indicatif international accepté, ex. +33 6 12 34 56 78).",
+      tooSoon: bookingWindowMessages.fr.tooSoon,
+      tooFar: bookingWindowMessages.fr.tooFar,
+      invalidPhone:
+        "Saisissez un numéro de téléphone valide, avec l’indicatif du pays précédé de + ou 00 (8 à 15 chiffres, ex. +33 6 12 34 56 78).",
+      phoneHint: "Avec l’indicatif du pays, par exemple +33 6 12 34 56 78.",
+      invalidEmail:
+        "Saisissez une adresse email complète, par exemple nom@exemple.fr.",
+      emailSuggestion: (address: string) => `Vouliez-vous dire ${address} ?`,
+      useEmailSuggestion: "Corriger l’adresse",
+      confirmationTo: (address: string) =>
+        `Confirmation et facture envoyées à ${address} après le paiement.`,
+      nearestSlots: (times: string[]) =>
+        `Horaires libres les plus proches : ${times.join(", ")}.`,
+      suggestedSlot: "horaire proposé",
       details: "Objet de la demande (sans information médicale)",
-      detailsPlaceholder: "Ex. : demande d’avis, questions d’organisation, préparation de la consultation",
-      detailsWarning: "N’indiquez ici aucune information de santé (symptômes, diagnostic, traitement, antécédents, résultats d’examens). Ces éléments seront abordés uniquement pendant la consultation.",
+      detailsPlaceholder:
+        "Ex. : demande d’avis, questions d’organisation, préparation de la consultation",
+      detailsWarning:
+        "N’indiquez ici aucune information de santé (symptômes, diagnostic, traitement, antécédents, résultats d’examens). Ces éléments seront abordés uniquement pendant la consultation.",
       submit: "Procéder au paiement",
       loading: "Traitement...",
       checkingAvailability: "Vérification du créneau...",
-      availabilityError: "La disponibilité ne peut pas être confirmée pour le moment. Veuillez réessayer avant de procéder au paiement.",
+      availabilityError:
+        "La disponibilité ne peut pas être confirmée pour le moment. Veuillez réessayer avant de procéder au paiement.",
       available: "Créneau disponible",
       blocked: "Date indisponible",
       alreadyBooked: "Ce créneau est déjà réservé",
       selectDate: "Sélectionnez une date et une heure",
-      noAvailability: "Aucun créneau de consultation n’est configuré pour le moment.",
-      outsideSchedule: "Ce créneau est en dehors des horaires de consultation disponibles.",
+      noAvailability:
+        "Aucun créneau de consultation n’est configuré pour le moment.",
+      outsideSchedule:
+        "Ce créneau est en dehors des horaires de consultation disponibles.",
+    },
+    // Refus du serveur, traduits à partir de leur motif stable (EN-06).
+    refusals: {
+      slot_taken:
+        "Ce créneau vient d’être réservé par un autre patient. Choisissez-en un autre.",
+      too_soon: bookingWindowMessages.fr.tooSoon,
+      too_far: bookingWindowMessages.fr.tooFar,
+      outside_schedule:
+        "Ce créneau ne fait plus partie des horaires de consultation. Choisissez-en un autre.",
+      no_availability:
+        "Aucun horaire de consultation n’est ouvert pour le moment.",
+      date_blocked:
+        "Cette date n’est plus disponible. Choisissez un autre jour.",
+      rate_limited: `Trop de tentatives de réservation ont été effectuées. Réessayez dans une heure ou appelez-nous au ${siteConfig.phone}.`,
+      too_many_holds:
+        "Vous avez déjà deux réservations en attente de paiement. Finalisez ou annulez l’un de ces paiements, ou patientez une trentaine de minutes avant de réserver un nouveau créneau.",
+      payment_unavailable:
+        "Le service de paiement est momentanément indisponible. Votre créneau n’a pas été réservé : réessayez dans quelques minutes ou contactez-nous.",
+      invalid_name:
+        "Saisissez votre nom complet : il doit comporter au moins une lettre ou un chiffre.",
+      security_check_required:
+        "Une vérification anti-robot est nécessaire pour finaliser cette réservation : effectuez-la au-dessus du bouton, puis cliquez de nouveau sur « Procéder au paiement ».",
+      security_check_unavailable:
+        "La vérification anti-robot est momentanément indisponible. Votre créneau n’a pas été réservé : réessayez dans quelques minutes ou contactez-nous.",
+      invalid_characters: publicFormCopy.invalidCharacters.fr,
     },
     pricing: {
       title: "Tarification",
-      dayRate: "Tarif jour (8h-18h)",
-      nightRate: "Tarif nuit (18h-8h)",
+      dayRate: `Tarif jour (${NIGHT_RATE_END_HOUR}h-${NIGHT_RATE_START_HOUR}h)`,
+      nightRate: `Tarif nuit (${NIGHT_RATE_START_HOUR}h-${NIGHT_RATE_END_HOUR}h)`,
       eur: "€",
       total: "Total",
     },
     success: "Réservation créée avec succès!",
     error: "Erreur lors de la création de la réservation",
     paymentSuccess: "Paiement réussi! Votre consultation a été confirmée.",
-    paymentCanceled: "Paiement annulé. Votre réservation n'a pas été finalisée.",
-    confirmationNextSteps: "Un email de confirmation et votre facture vous seront envoyés après validation du paiement.",
-    canceledNextSteps: "Vous pouvez modifier vos informations puis relancer le paiement lorsque vous êtes prêt.",
+    paymentCanceled:
+      "Paiement annulé. Votre réservation n'a pas été finalisée.",
+    confirmationNextSteps:
+      "Un email de confirmation et votre facture vous seront envoyés après validation du paiement.",
+    canceledNextSteps:
+      "Vous pouvez modifier vos informations puis relancer le paiement lorsque vous êtes prêt.",
     restartBooking: "Nouvelle réservation",
+    stepOf: (step: number, total: number) => `Étape ${step} sur ${total} : `,
     paymentError: "Une erreur est survenue pendant le paiement.",
-    bookingError: "Une erreur est survenue pendant la création de la réservation.",
-    invalidInput: "Certaines informations sont invalides : vérifiez votre nom, votre email, votre téléphone et la date choisie.",
-          trackingId: "Numéro de suivi:",
-      cancellation: "Remboursement intégral au-delà de 24 h avant le rendez-vous. Après ce délai, la réservation n’est pas remboursable.",
-      paymentTrust: "Paiement sécurisé par Stripe · Confirmation et facture envoyées par email",
-      availabilityLabel: "Disponibilité",
-      emergencyTitle: "En cas d’urgence",
-      emergencyNote: "En cas d’urgence médicale ou de danger immédiat, appelez immédiatement les secours. Cette consultation programmée ne remplace pas une prise en charge d’urgence.",
-      pending: {
-        title: "Un paiement est en attente",
-        description: "Votre créneau est réservé temporairement pendant le paiement. Reprenez le paiement pour confirmer la consultation, ou annulez pour choisir un autre créneau.",
-        slot: "Créneau",
-        heldUntil: "Réservé jusqu’à",
-        reference: "Référence",
-        resume: "Reprendre le paiement",
-        cancel: "Annuler et choisir un autre créneau",
-        cancelled: "Le créneau a été libéré. Vos informations sont conservées : choisissez une nouvelle date ou heure.",
-        closed: "Cette réservation n’est plus en attente. Si vous avez finalisé le paiement, vous recevrez une confirmation par email ; sinon, choisissez à nouveau votre créneau.",
-        resumeError: "Le paiement ne peut plus être repris (session expirée). Choisissez à nouveau votre créneau.",
-        cancelError: "L’annulation n’a pas pu être confirmée. Réessayez dans un instant.",
-      },
-
+    bookingError:
+      "Une erreur est survenue pendant la création de la réservation.",
+    invalidInput:
+      "Certaines informations sont invalides : vérifiez votre nom, votre email, votre téléphone et la date choisie.",
+    trackingId: "Numéro de suivi:",
+    cancellation:
+      "Remboursement intégral au-delà de 24 h avant le rendez-vous. Après ce délai, la réservation n’est pas remboursable.",
+    paymentTrust:
+      "Paiement sécurisé par Stripe · Confirmation et facture envoyées par email",
+    availabilityLabel: "Disponibilité",
+    emergencyTitle: "En cas d’urgence",
+    emergencyNote:
+      "En cas d’urgence médicale ou de danger immédiat, appelez immédiatement les secours. Cette consultation programmée ne remplace pas une prise en charge d’urgence.",
+    pending: {
+      title: "Un paiement est en attente",
+      description:
+        "Votre créneau est réservé temporairement pendant le paiement. Reprenez le paiement pour confirmer la consultation, ou annulez pour choisir un autre créneau.",
+      slot: "Créneau",
+      remaining: "Temps restant pour payer",
+      remainingValue: (minutes: number) =>
+        minutes < 1 ? "moins d’une minute" : `encore ${minutes} min`,
+      reference: "Référence",
+      // Ponctuation des libellés de l’encart : espace avant les deux-points en français seulement.
+      labelSeparator: " : ",
+      resume: "Reprendre le paiement",
+      cancel: "Annuler et choisir un autre créneau",
+      cancelled:
+        "Le créneau a été libéré. Vos informations sont conservées : choisissez une nouvelle date ou heure.",
+      closed:
+        "Cette réservation n’est plus en attente. Si vous avez finalisé le paiement, vous recevrez une confirmation par email ; sinon, choisissez à nouveau votre créneau.",
+      resumeError:
+        "Le paiement ne peut plus être repris (session expirée). Choisissez à nouveau votre créneau.",
+      resumeUnavailable:
+        "Le service de paiement est momentanément indisponible. Votre créneau reste réservé pendant le temps restant : réessayez de reprendre le paiement dans quelques minutes ou contactez-nous.",
+      cancelError:
+        "L’annulation n’a pas pu être confirmée. Réessayez dans un instant.",
+    },
   },
   en: {
     title: "Book a Consultation",
@@ -107,34 +240,84 @@ export const bookingContent = {
       email: "Email",
       phone: "Phone Number",
       date: "Date and Time",
-      datePlaceholder: "DD/MM/YYYY · HH:MM",
-      dateOnlyPlaceholder: "DD/MM/YYYY",
-      timePlaceholder: "HH:MM",
-      timeLabel: "Time",
-      invalidDate: "Enter a valid date in DD/MM/YYYY format and a time in HH:MM format.",
-      dateHint: "Choose your consultation date and time. The slot is displayed in Paris time.",
+      day: "Day",
+      dayPlaceholder: "Choose a day",
+      slotsLegend: "Time (Paris time)",
+      openingHours: "Availability (Paris time)",
+      noBookableDay: `No time slot is available in the next ${BOOKING_HORIZON_DAYS} days.`,
+      noSlotsThisDay:
+        "All times on this day are already booked. Please choose another day.",
+      noSlotsLeftThisDay:
+        "No times are available on this day any more. Please choose another day.",
+      slotsError: "The times for this day could not be loaded.",
+      retry: "Try again",
+      priceError:
+        "The price for this time could not be calculated. Please try again before proceeding to payment.",
+      parisTime: "Paris time",
+      localTime: (time: string) => `that is ${time} your time`,
+      localTimeShort: (time: string) => `${time} your time`,
+      dateHint:
+        "Choose a day, then a free time. Times are in Paris time; your own time is shown below when it differs.",
       windowHint: `Book at least ${BOOKING_MIN_LEAD_TIME_HOURS} hours ahead and up to ${BOOKING_HORIZON_DAYS} days ahead.`,
-      tooSoon: `This time slot can no longer be booked: please book at least ${BOOKING_MIN_LEAD_TIME_HOURS} hours ahead.`,
-      tooFar: `Bookings are open up to ${BOOKING_HORIZON_DAYS} days ahead.`,
-      invalidPhone: "Enter a valid phone number (8 to 15 digits, international prefix accepted, e.g. +33 6 12 34 56 78).",
+      tooSoon: bookingWindowMessages.en.tooSoon,
+      tooFar: bookingWindowMessages.en.tooFar,
+      invalidPhone:
+        "Enter a valid phone number with its country code, after + or 00 (8 to 15 digits, e.g. +33 6 12 34 56 78).",
+      phoneHint: "With your country code, for example +33 6 12 34 56 78.",
+      invalidEmail:
+        "Enter a complete email address, for example name@example.com.",
+      emailSuggestion: (address: string) => `Did you mean ${address}?`,
+      useEmailSuggestion: "Use this address",
+      confirmationTo: (address: string) =>
+        `Confirmation and invoice sent to ${address} after payment.`,
+      nearestSlots: (times: string[]) =>
+        `Nearest free times: ${times.join(", ")}.`,
+      suggestedSlot: "suggested time",
       details: "Purpose of your request (no medical information)",
-      detailsPlaceholder: "E.g. request for advice, practical questions, preparing the consultation",
-      detailsWarning: "Do not enter any health information here (symptoms, diagnosis, treatment, medical history, test results). These will only be discussed during the consultation.",
+      detailsPlaceholder:
+        "E.g. request for advice, practical questions, preparing the consultation",
+      detailsWarning:
+        "Do not enter any health information here (symptoms, diagnosis, treatment, medical history, test results). These will only be discussed during the consultation.",
       submit: "Proceed to Payment",
       loading: "Processing...",
       checkingAvailability: "Checking availability...",
-      availabilityError: "Availability cannot be confirmed at the moment. Please try again before proceeding to payment.",
+      availabilityError:
+        "Availability cannot be confirmed at the moment. Please try again before proceeding to payment.",
       available: "Time slot available",
       blocked: "Date unavailable",
       alreadyBooked: "This time slot is already booked",
       selectDate: "Select a date and time",
       noAvailability: "No consultation time slots are currently configured.",
-      outsideSchedule: "This time slot is outside the available consultation hours.",
+      outsideSchedule:
+        "This time slot is outside the available consultation hours.",
+    },
+    refusals: {
+      slot_taken:
+        "This time slot has just been booked by another patient. Please choose another one.",
+      too_soon: bookingWindowMessages.en.tooSoon,
+      too_far: bookingWindowMessages.en.tooFar,
+      outside_schedule:
+        "This time slot is no longer part of the consultation hours. Please choose another one.",
+      no_availability: "No consultation hours are open at the moment.",
+      date_blocked:
+        "This date is no longer available. Please choose another day.",
+      rate_limited: `Too many booking attempts have been made. Please try again in an hour or call us on ${siteConfig.phone}.`,
+      too_many_holds:
+        "You already have two bookings awaiting payment. Complete or cancel one of these payments, or wait about thirty minutes before booking a new time slot.",
+      payment_unavailable:
+        "The payment service is temporarily unavailable. Your time slot has not been booked: please try again in a few minutes or contact us.",
+      invalid_name:
+        "Please enter your full name: it must contain at least one letter or digit.",
+      security_check_required:
+        "An anti-bot check is needed to complete this booking: complete it above the button, then click “Proceed to Payment” again.",
+      security_check_unavailable:
+        "The anti-bot check is temporarily unavailable. Your time slot has not been booked: please try again in a few minutes or contact us.",
+      invalid_characters: publicFormCopy.invalidCharacters.en,
     },
     pricing: {
       title: "Pricing",
-      dayRate: "Day Rate (8am-6pm)",
-      nightRate: "Night Rate (6pm-8am)",
+      dayRate: `Day Rate (${englishRateHour(NIGHT_RATE_END_HOUR)}-${englishRateHour(NIGHT_RATE_START_HOUR)})`,
+      nightRate: `Night Rate (${englishRateHour(NIGHT_RATE_START_HOUR)}-${englishRateHour(NIGHT_RATE_END_HOUR)})`,
       eur: "€",
       total: "Total",
     },
@@ -142,32 +325,48 @@ export const bookingContent = {
     error: "Error creating booking",
     paymentSuccess: "Payment successful! Your consultation has been confirmed.",
     paymentCanceled: "Payment canceled. Your booking was not finalized.",
-    confirmationNextSteps: "A confirmation email and your invoice will be sent after the payment is validated.",
-    canceledNextSteps: "You can update your information and restart the payment whenever you are ready.",
+    confirmationNextSteps:
+      "A confirmation email and your invoice will be sent after the payment is validated.",
+    canceledNextSteps:
+      "You can update your information and restart the payment whenever you are ready.",
     restartBooking: "Start a new booking",
+    stepOf: (step: number, total: number) => `Step ${step} of ${total}: `,
     paymentError: "An error occurred during payment.",
     bookingError: "An error occurred while creating your booking.",
-    invalidInput: "Some information is invalid: please check your name, email, phone number and chosen date.",
-          trackingId: "Tracking ID:",
-      cancellation: "Full refund is available more than 24 hours before the appointment. After that deadline, the booking is non-refundable.",
-      paymentTrust: "Secure payment by Stripe · Confirmation and invoice sent by email",
-      availabilityLabel: "Availability",
-      emergencyTitle: "In an emergency",
-      emergencyNote: "For a medical emergency or immediate danger, call emergency services immediately. This scheduled consultation does not replace emergency care.",
-      pending: {
-        title: "A payment is pending",
-        description: "Your time slot is held temporarily during payment. Resume the payment to confirm the consultation, or cancel to choose another time slot.",
-        slot: "Time slot",
-        heldUntil: "Held until",
-        reference: "Reference",
-        resume: "Resume payment",
-        cancel: "Cancel and choose another time slot",
-        cancelled: "The time slot has been released. Your details are kept: choose a new date or time.",
-        closed: "This booking is no longer pending. If you completed the payment, you will receive a confirmation email; otherwise, choose your time slot again.",
-        resumeError: "The payment can no longer be resumed (session expired). Please choose your time slot again.",
-        cancelError: "The cancellation could not be confirmed. Please try again in a moment.",
-      },
-
+    invalidInput:
+      "Some information is invalid: please check your name, email, phone number and chosen date.",
+    trackingId: "Tracking ID:",
+    cancellation:
+      "Full refund is available more than 24 hours before the appointment. After that deadline, the booking is non-refundable.",
+    paymentTrust:
+      "Secure payment by Stripe · Confirmation and invoice sent by email",
+    availabilityLabel: "Availability",
+    emergencyTitle: "In an emergency",
+    emergencyNote:
+      "For a medical emergency or immediate danger, call emergency services immediately. This scheduled consultation does not replace emergency care.",
+    pending: {
+      title: "A payment is pending",
+      description:
+        "Your time slot is held temporarily during payment. Resume the payment to confirm the consultation, or cancel to choose another time slot.",
+      slot: "Time slot",
+      remaining: "Time left to pay",
+      remainingValue: (minutes: number) =>
+        minutes < 1 ? "less than a minute" : `${minutes} min left`,
+      reference: "Reference",
+      labelSeparator: ": ",
+      resume: "Resume payment",
+      cancel: "Cancel and choose another time slot",
+      cancelled:
+        "The time slot has been released. Your details are kept: choose a new date or time.",
+      closed:
+        "This booking is no longer pending. If you completed the payment, you will receive a confirmation email; otherwise, choose your time slot again.",
+      resumeError:
+        "The payment can no longer be resumed (session expired). Please choose your time slot again.",
+      resumeUnavailable:
+        "The payment service is temporarily unavailable. Your time slot remains held for the time left: please try resuming the payment in a few minutes or contact us.",
+      cancelError:
+        "The cancellation could not be confirmed. Please try again in a moment.",
+    },
   },
   de: {
     title: "Beratung buchen",
@@ -177,67 +376,134 @@ export const bookingContent = {
       email: "E-Mail",
       phone: "Telefonnummer",
       date: "Datum und Uhrzeit",
-      datePlaceholder: "TT.MM.JJJJ · HH:MM",
-      dateOnlyPlaceholder: "TT.MM.JJJJ",
-      timePlaceholder: "HH:MM",
-      timeLabel: "Uhrzeit",
-      invalidDate: "Geben Sie ein gültiges Datum im Format TT.MM.JJJJ und eine Uhrzeit im Format HH:MM ein.",
-      dateHint: "Wählen Sie Datum und Uhrzeit Ihrer Beratung. Der Termin wird in Pariser Zeit angezeigt.",
+      day: "Tag",
+      dayPlaceholder: "Tag wählen",
+      slotsLegend: "Uhrzeit (Pariser Zeit)",
+      openingHours: "Verfügbarkeit (Pariser Zeit)",
+      noBookableDay: `In den nächsten ${BOOKING_HORIZON_DAYS} Tagen ist kein Termin verfügbar.`,
+      noSlotsThisDay:
+        "Alle Uhrzeiten an diesem Tag sind bereits gebucht. Bitte wählen Sie einen anderen Tag.",
+      noSlotsLeftThisDay:
+        "An diesem Tag ist keine Uhrzeit mehr verfügbar. Bitte wählen Sie einen anderen Tag.",
+      slotsError: "Die Uhrzeiten für diesen Tag konnten nicht geladen werden.",
+      retry: "Erneut versuchen",
+      priceError:
+        "Der Preis für diese Uhrzeit konnte nicht berechnet werden. Bitte versuchen Sie es erneut, bevor Sie zur Zahlung übergehen.",
+      parisTime: "Pariser Zeit",
+      localTime: (time: string) => `also ${time} bei Ihnen`,
+      localTimeShort: (time: string) => `${time} bei Ihnen`,
+      dateHint:
+        "Wählen Sie einen Tag und dann eine freie Uhrzeit. Die Uhrzeiten sind in Pariser Zeit; Ihre Ortszeit wird darunter angezeigt, wenn sie abweicht.",
       windowHint: `Buchung mindestens ${BOOKING_MIN_LEAD_TIME_HOURS} Stunden im Voraus und bis zu ${BOOKING_HORIZON_DAYS} Tage im Voraus.`,
-      tooSoon: `Dieser Termin kann nicht mehr gebucht werden: Bitte buchen Sie mindestens ${BOOKING_MIN_LEAD_TIME_HOURS} Stunden im Voraus.`,
-      tooFar: `Buchungen sind bis zu ${BOOKING_HORIZON_DAYS} Tage im Voraus möglich.`,
-      invalidPhone: "Geben Sie eine gültige Telefonnummer ein (8 bis 15 Ziffern, internationale Vorwahl möglich, z. B. +49 30 1234567).",
+      tooSoon: bookingWindowMessages.de.tooSoon,
+      tooFar: bookingWindowMessages.de.tooFar,
+      invalidPhone:
+        "Geben Sie eine gültige Telefonnummer mit Ländervorwahl nach + oder 00 ein (8 bis 15 Ziffern, z. B. +49 30 1234567).",
+      phoneHint: "Mit Ländervorwahl, zum Beispiel +49 30 1234567.",
+      invalidEmail:
+        "Geben Sie eine vollständige E-Mail-Adresse ein, zum Beispiel name@beispiel.de.",
+      emailSuggestion: (address: string) => `Meinten Sie ${address}?`,
+      useEmailSuggestion: "Diese Adresse verwenden",
+      confirmationTo: (address: string) =>
+        `Bestätigung und Rechnung werden nach der Zahlung an ${address} gesendet.`,
+      nearestSlots: (times: string[]) =>
+        `Nächste freie Uhrzeiten: ${times.join(", ")}.`,
+      suggestedSlot: "vorgeschlagene Uhrzeit",
       details: "Anlass Ihrer Anfrage (ohne medizinische Angaben)",
-      detailsPlaceholder: "z. B. Bitte um Rat, organisatorische Fragen, Vorbereitung der Beratung",
-      detailsWarning: "Geben Sie hier keine Gesundheitsdaten an (Symptome, Diagnose, Behandlung, Vorgeschichte, Untersuchungsergebnisse). Diese werden ausschließlich während der Beratung besprochen.",
+      detailsPlaceholder:
+        "z. B. Bitte um Rat, organisatorische Fragen, Vorbereitung der Beratung",
+      detailsWarning:
+        "Geben Sie hier keine Gesundheitsdaten an (Symptome, Diagnose, Behandlung, Vorgeschichte, Untersuchungsergebnisse). Diese werden ausschließlich während der Beratung besprochen.",
       submit: "Zur Zahlung übergehen",
       loading: "Verarbeitung...",
       checkingAvailability: "Verfügbarkeit wird geprüft...",
-      availabilityError: "Die Verfügbarkeit kann derzeit nicht bestätigt werden. Bitte versuchen Sie es erneut, bevor Sie zur Zahlung übergehen.",
+      availabilityError:
+        "Die Verfügbarkeit kann derzeit nicht bestätigt werden. Bitte versuchen Sie es erneut, bevor Sie zur Zahlung übergehen.",
       available: "Termin verfügbar",
       blocked: "Datum nicht verfügbar",
       alreadyBooked: "Dieser Termin ist bereits reserviert",
       selectDate: "Wählen Sie Datum und Uhrzeit",
       noAvailability: "Derzeit sind keine Beratungszeiten konfiguriert.",
-      outsideSchedule: "Dieser Termin liegt außerhalb der verfügbaren Beratungszeiten.",
+      outsideSchedule:
+        "Dieser Termin liegt außerhalb der verfügbaren Beratungszeiten.",
+    },
+    refusals: {
+      slot_taken:
+        "Dieser Termin wurde soeben von einer anderen Person gebucht. Bitte wählen Sie einen anderen.",
+      too_soon: bookingWindowMessages.de.tooSoon,
+      too_far: bookingWindowMessages.de.tooFar,
+      outside_schedule:
+        "Dieser Termin liegt nicht mehr innerhalb der Beratungszeiten. Bitte wählen Sie einen anderen.",
+      no_availability: "Derzeit sind keine Beratungszeiten freigeschaltet.",
+      date_blocked:
+        "Dieses Datum ist nicht mehr verfügbar. Bitte wählen Sie einen anderen Tag.",
+      rate_limited: `Es wurden zu viele Buchungsversuche unternommen. Bitte versuchen Sie es in einer Stunde erneut oder rufen Sie uns unter ${siteConfig.phone} an.`,
+      too_many_holds:
+        "Sie haben bereits zwei Buchungen, die auf Zahlung warten. Schließen Sie eine dieser Zahlungen ab oder stornieren Sie sie, oder warten Sie etwa dreißig Minuten, bevor Sie einen neuen Termin buchen.",
+      payment_unavailable:
+        "Der Zahlungsdienst ist vorübergehend nicht verfügbar. Ihr Termin wurde nicht reserviert: Bitte versuchen Sie es in einigen Minuten erneut oder kontaktieren Sie uns.",
+      invalid_name:
+        "Bitte geben Sie Ihren vollständigen Namen ein: Er muss mindestens einen Buchstaben oder eine Ziffer enthalten.",
+      security_check_required:
+        "Für diese Buchung ist eine Bot-Prüfung erforderlich: Führen Sie sie über der Schaltfläche durch und klicken Sie dann erneut auf „Zur Zahlung übergehen“.",
+      security_check_unavailable:
+        "Die Bot-Prüfung ist vorübergehend nicht verfügbar. Ihr Termin wurde nicht reserviert: Bitte versuchen Sie es in einigen Minuten erneut oder kontaktieren Sie uns.",
+      invalid_characters: publicFormCopy.invalidCharacters.de,
     },
     pricing: {
       title: "Preisgestaltung",
-      dayRate: "Tagessatz (8:00-18:00)",
-      nightRate: "Nachtsatz (18:00-8:00)",
+      dayRate: `Tagessatz (${NIGHT_RATE_END_HOUR}:00-${NIGHT_RATE_START_HOUR}:00)`,
+      nightRate: `Nachtsatz (${NIGHT_RATE_START_HOUR}:00-${NIGHT_RATE_END_HOUR}:00)`,
       eur: "€",
       total: "Gesamt",
     },
     success: "Buchung erfolgreich erstellt!",
     error: "Fehler beim Erstellen der Buchung",
     paymentSuccess: "Zahlung erfolgreich! Ihre Beratung wurde bestätigt.",
-    paymentCanceled: "Zahlung abgebrochen. Ihre Buchung wurde nicht abgeschlossen.",
-    confirmationNextSteps: "Nach erfolgreicher Zahlung erhalten Sie eine Bestätigungs-E-Mail und Ihre Rechnung.",
-    canceledNextSteps: "Sie können Ihre Angaben ändern und die Zahlung erneut starten, sobald Sie bereit sind.",
+    paymentCanceled:
+      "Zahlung abgebrochen. Ihre Buchung wurde nicht abgeschlossen.",
+    confirmationNextSteps:
+      "Nach erfolgreicher Zahlung erhalten Sie eine Bestätigungs-E-Mail und Ihre Rechnung.",
+    canceledNextSteps:
+      "Sie können Ihre Angaben ändern und die Zahlung erneut starten, sobald Sie bereit sind.",
     restartBooking: "Neue Buchung",
+    stepOf: (step: number, total: number) => `Schritt ${step} von ${total}: `,
     paymentError: "Bei der Zahlung ist ein Fehler aufgetreten.",
     bookingError: "Bei der Erstellung der Buchung ist ein Fehler aufgetreten.",
-    invalidInput: "Einige Angaben sind ungültig: Bitte prüfen Sie Name, E-Mail, Telefonnummer und gewähltes Datum.",
-          trackingId: "Verfolgungsnummer:",
-      cancellation: "Eine vollständige Rückerstattung ist mehr als 24 Stunden vor dem Termin möglich. Danach ist die Buchung nicht erstattungsfähig.",
-      paymentTrust: "Sichere Zahlung über Stripe · Bestätigung und Rechnung per E-Mail",
-      availabilityLabel: "Verfügbarkeit",
-      emergencyTitle: "Im Notfall",
-      emergencyNote: "Bei einem medizinischen Notfall oder unmittelbarer Gefahr rufen Sie sofort den Rettungsdienst an. Diese geplante Beratung ersetzt keine Notfallversorgung.",
-      pending: {
-        title: "Eine Zahlung ist ausstehend",
-        description: "Ihr Termin ist während der Zahlung vorübergehend reserviert. Setzen Sie die Zahlung fort, um die Beratung zu bestätigen, oder stornieren Sie, um einen anderen Termin zu wählen.",
-        slot: "Termin",
-        heldUntil: "Reserviert bis",
-        reference: "Referenz",
-        resume: "Zahlung fortsetzen",
-        cancel: "Stornieren und anderen Termin wählen",
-        cancelled: "Der Termin wurde freigegeben. Ihre Angaben bleiben erhalten: Wählen Sie ein neues Datum oder eine neue Uhrzeit.",
-        closed: "Diese Buchung ist nicht mehr ausstehend. Wenn Sie die Zahlung abgeschlossen haben, erhalten Sie eine Bestätigung per E-Mail; andernfalls wählen Sie Ihren Termin erneut.",
-        resumeError: "Die Zahlung kann nicht mehr fortgesetzt werden (Sitzung abgelaufen). Bitte wählen Sie Ihren Termin erneut.",
-        cancelError: "Die Stornierung konnte nicht bestätigt werden. Bitte versuchen Sie es gleich noch einmal.",
-      },
-
+    invalidInput:
+      "Einige Angaben sind ungültig: Bitte prüfen Sie Name, E-Mail, Telefonnummer und gewähltes Datum.",
+    trackingId: "Verfolgungsnummer:",
+    cancellation:
+      "Eine vollständige Rückerstattung ist mehr als 24 Stunden vor dem Termin möglich. Danach ist die Buchung nicht erstattungsfähig.",
+    paymentTrust:
+      "Sichere Zahlung über Stripe · Bestätigung und Rechnung per E-Mail",
+    availabilityLabel: "Verfügbarkeit",
+    emergencyTitle: "Im Notfall",
+    emergencyNote:
+      "Bei einem medizinischen Notfall oder unmittelbarer Gefahr rufen Sie sofort den Rettungsdienst an. Diese geplante Beratung ersetzt keine Notfallversorgung.",
+    pending: {
+      title: "Eine Zahlung ist ausstehend",
+      description:
+        "Ihr Termin ist während der Zahlung vorübergehend reserviert. Setzen Sie die Zahlung fort, um die Beratung zu bestätigen, oder stornieren Sie, um einen anderen Termin zu wählen.",
+      slot: "Termin",
+      remaining: "Verbleibende Zeit zum Bezahlen",
+      remainingValue: (minutes: number) =>
+        minutes < 1 ? "weniger als eine Minute" : `noch ${minutes} Min.`,
+      reference: "Referenz",
+      labelSeparator: ": ",
+      resume: "Zahlung fortsetzen",
+      cancel: "Stornieren und anderen Termin wählen",
+      cancelled:
+        "Der Termin wurde freigegeben. Ihre Angaben bleiben erhalten: Wählen Sie ein neues Datum oder eine neue Uhrzeit.",
+      closed:
+        "Diese Buchung ist nicht mehr ausstehend. Wenn Sie die Zahlung abgeschlossen haben, erhalten Sie eine Bestätigung per E-Mail; andernfalls wählen Sie Ihren Termin erneut.",
+      resumeError:
+        "Die Zahlung kann nicht mehr fortgesetzt werden (Sitzung abgelaufen). Bitte wählen Sie Ihren Termin erneut.",
+      resumeUnavailable:
+        "Der Zahlungsdienst ist vorübergehend nicht verfügbar. Ihr Termin bleibt für die verbleibende Zeit reserviert: Bitte versuchen Sie in einigen Minuten erneut, die Zahlung fortzusetzen, oder kontaktieren Sie uns.",
+      cancelError:
+        "Die Stornierung konnte nicht bestätigt werden. Bitte versuchen Sie es gleich noch einmal.",
+    },
   },
   zh: {
     title: "预订咨询",
@@ -247,19 +513,39 @@ export const bookingContent = {
       email: "电子邮件",
       phone: "电话号码",
       date: "日期和时间",
-      datePlaceholder: "年/月/日 · 时:分",
-      dateOnlyPlaceholder: "日/月/年",
-      timePlaceholder: "时:分",
-      timeLabel: "时间",
-      invalidDate: "请输入有效日期（日/月/年）和时间（时:分）。",
-      dateHint: "请选择咨询日期和时间。时段以巴黎时间显示。",
+      day: "日期",
+      dayPlaceholder: "请选择日期",
+      slotsLegend: "时间（巴黎时间）",
+      openingHours: "可预约时间（巴黎时间）",
+      noBookableDay: `未来 ${BOOKING_HORIZON_DAYS} 天内没有可预约的时段。`,
+      noSlotsThisDay: "当天所有时间均已被预订，请选择其他日期。",
+      noSlotsLeftThisDay: "当天已没有可预约的时间，请选择其他日期。",
+      slotsError: "无法加载当天的时间。",
+      retry: "重试",
+      priceError: "无法计算该时间的费用。请重试后再继续付款。",
+      parisTime: "巴黎时间",
+      localTime: (time: string) => `即您当地时间 ${time}`,
+      localTimeShort: (time: string) => `当地 ${time}`,
+      dateHint:
+        "请先选择日期，再选择空闲时间。时间均为巴黎时间；如与您当地时间不同，将在下方显示当地时间。",
       windowHint: `请至少提前 ${BOOKING_MIN_LEAD_TIME_HOURS} 小时预约，最多可提前 ${BOOKING_HORIZON_DAYS} 天。`,
-      tooSoon: `该时段已无法预约：请至少提前 ${BOOKING_MIN_LEAD_TIME_HOURS} 小时预约。`,
-      tooFar: `最多可提前 ${BOOKING_HORIZON_DAYS} 天预约。`,
-      invalidPhone: "请输入有效的电话号码（8 至 15 位数字，可含国际区号，例如 +33 6 12 34 56 78）。",
+      tooSoon: bookingWindowMessages.zh.tooSoon,
+      tooFar: bookingWindowMessages.zh.tooFar,
+      invalidPhone:
+        "请输入有效的电话号码，并在 + 或 00 后填写国家区号（8 至 15 位数字，例如 +33 6 12 34 56 78）。",
+      phoneHint: "请填写国家区号，例如 +33 6 12 34 56 78。",
+      invalidEmail: "请输入完整的电子邮件地址，例如 name@example.com。",
+      emailSuggestion: (address: string) => `您是否想输入 ${address}？`,
+      useEmailSuggestion: "使用此地址",
+      confirmationTo: (address: string) =>
+        `付款后，确认信息和发票将发送至 ${address}。`,
+      nearestSlots: (times: string[]) =>
+        `最近的空闲时间：${times.join("、")}。`,
+      suggestedSlot: "推荐时间",
       details: "咨询事由（请勿填写医疗信息）",
       detailsPlaceholder: "例如：寻求建议、组织安排问题、咨询准备",
-      detailsWarning: "请勿在此填写任何健康信息（症状、诊断、治疗、病史、检查结果）。这些内容仅在咨询过程中讨论。",
+      detailsWarning:
+        "请勿在此填写任何健康信息（症状、诊断、治疗、病史、检查结果）。这些内容仅在咨询过程中讨论。",
       submit: "继续付款",
       loading: "处理中...",
       checkingAvailability: "正在检查可用性...",
@@ -271,10 +557,29 @@ export const bookingContent = {
       noAvailability: "目前尚未配置可预约的咨询时段。",
       outsideSchedule: "该时间不在可预约的咨询时间范围内。",
     },
+    refusals: {
+      slot_taken: "该时段刚刚被其他患者预订，请选择其他时段。",
+      too_soon: bookingWindowMessages.zh.tooSoon,
+      too_far: bookingWindowMessages.zh.tooFar,
+      outside_schedule: "该时段已不在咨询时间范围内，请选择其他时段。",
+      no_availability: "目前没有开放的咨询时段。",
+      date_blocked: "该日期已不可预约，请选择其他日期。",
+      rate_limited: `预约尝试次数过多。请一小时后再试，或致电 ${siteConfig.phone} 联系我们。`,
+      too_many_holds:
+        "您已有两笔待付款的预约。请完成或取消其中一笔付款，或等待约三十分钟后再预约新的时段。",
+      payment_unavailable:
+        "支付服务暂时不可用，您的时段尚未预订：请几分钟后重试或联系我们。",
+      invalid_name: "请填写您的全名：其中至少须包含一个文字或数字。",
+      security_check_required:
+        "完成此预约需要进行反机器人验证：请在按钮上方完成验证，然后再次点击“继续付款”。",
+      security_check_unavailable:
+        "反机器人验证暂时不可用，您的时段尚未预订：请几分钟后重试或联系我们。",
+      invalid_characters: publicFormCopy.invalidCharacters.zh,
+    },
     pricing: {
       title: "价格",
-      dayRate: "日间费率 (8:00-18:00)",
-      nightRate: "夜间费率 (18:00-8:00)",
+      dayRate: `日间费率 (${NIGHT_RATE_END_HOUR}:00-${NIGHT_RATE_START_HOUR}:00)`,
+      nightRate: `夜间费率 (${NIGHT_RATE_START_HOUR}:00-${NIGHT_RATE_END_HOUR}:00)`,
       eur: "€",
       total: "总计",
     },
@@ -285,128 +590,328 @@ export const bookingContent = {
     confirmationNextSteps: "付款确认后，您将通过电子邮件收到确认信息和发票。",
     canceledNextSteps: "您可以修改信息，并在准备好后重新开始付款。",
     restartBooking: "新建预约",
+    stepOf: (step: number, total: number) => `第 ${step} 步，共 ${total} 步：`,
     paymentError: "付款过程中发生错误。",
     bookingError: "创建预约时发生错误。",
-    invalidInput: "部分信息无效：请检查您的姓名、电子邮件、电话号码和所选日期。",
-          trackingId: "跟踪 ID:",
-      cancellation: "预约前24小时以上可全额退款，超过此期限后不可退款。",
-      paymentTrust: "Stripe安全支付 · 确认信息和发票将通过电子邮件发送",
-      availabilityLabel: "可用性",
-      emergencyTitle: "紧急情况",
-      emergencyNote: "如遇医疗紧急情况或面临即时危险，请立即联系急救服务。本次预约咨询不能替代紧急医疗救治。",
-      pending: {
-        title: "有一笔付款待完成",
-        description: "付款期间您的时段已被临时保留。继续付款以确认咨询，或取消后选择其他时段。",
-        slot: "时段",
-        heldUntil: "保留至",
-        reference: "编号",
-        resume: "继续付款",
-        cancel: "取消并选择其他时段",
-        cancelled: "该时段已释放。您的信息已保留：请选择新的日期或时间。",
-        closed: "此预约已不再处于待付款状态。如果您已完成付款，将收到确认邮件；否则请重新选择时段。",
-        resumeError: "无法继续付款（会话已过期）。请重新选择时段。",
-        cancelError: "无法确认取消。请稍后重试。",
-      },
-
+    invalidInput:
+      "部分信息无效：请检查您的姓名、电子邮件、电话号码和所选日期。",
+    trackingId: "跟踪 ID:",
+    cancellation: "预约前24小时以上可全额退款，超过此期限后不可退款。",
+    paymentTrust: "Stripe安全支付 · 确认信息和发票将通过电子邮件发送",
+    availabilityLabel: "可用性",
+    emergencyTitle: "紧急情况",
+    emergencyNote:
+      "如遇医疗紧急情况或面临即时危险，请立即联系急救服务。本次预约咨询不能替代紧急医疗救治。",
+    pending: {
+      title: "有一笔付款待完成",
+      description:
+        "付款期间您的时段已被临时保留。继续付款以确认咨询，或取消后选择其他时段。",
+      slot: "时段",
+      remaining: "剩余付款时间",
+      remainingValue: (minutes: number) =>
+        minutes < 1 ? "不到 1 分钟" : `还剩 ${minutes} 分钟`,
+      reference: "编号",
+      labelSeparator: "：",
+      resume: "继续付款",
+      cancel: "取消并选择其他时段",
+      cancelled: "该时段已释放。您的信息已保留：请选择新的日期或时间。",
+      closed:
+        "此预约已不再处于待付款状态。如果您已完成付款，将收到确认邮件；否则请重新选择时段。",
+      resumeError: "无法继续付款（会话已过期）。请重新选择时段。",
+      resumeUnavailable:
+        "支付服务暂时不可用。在剩余时间内，您的时段仍为您保留：请几分钟后再次尝试继续付款，或联系我们。",
+      cancelError: "无法确认取消。请稍后重试。",
+    },
   },
 };
 
-export function parseBookingDateTime(dateValue: string, timeValue: string): Date | null {
-  const normalizedDate = dateValue.trim().replace(/[.\-]/g, "/");
-  const dateMatch = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(normalizedDate);
-  const timeMatch = /^(\d{1,2}):(\d{2})$/.exec(timeValue.trim());
+export type BookingAvailabilitySlot = AvailabilitySlot;
 
-  if (!dateMatch || !timeMatch) return null;
+/** A 30-minute start offered in the grid: exact instant, Paris calendar day and Paris time. */
+export type BookingSlotOption = { start: Date; dayKey: string; time: string };
 
-  const [, dayText, monthText, yearText] = dateMatch;
-  const [, hourText, minuteText] = timeMatch;
-  const day = Number(dayText);
-  const month = Number(monthText);
-  const year = Number(yearText);
-  const hour = Number(hourText);
-  const minute = Number(minuteText);
-  const wallClockMs = Date.UTC(year, month - 1, day, hour, minute, 0);
-  let utcMs = wallClockMs;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const parts = getParisBookingParts(new Date(utcMs));
-    const representedWallClockMs = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, 0);
-    const offsetErrorMs = representedWallClockMs - wallClockMs;
-    if (offsetErrorMs === 0) break;
-    utcMs -= offsetErrorMs;
+/** Paris calendar day of an instant ("2026-11-05"), read as the server reads it (shared/parisTime.ts). */
+export const toParisBookingDateKey = parisDateKey;
+
+function minutesToBookingTime(minutes: number): string {
+  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+}
+
+/** Paris calendar day `days` days after `dayKey` ("2026-11-05"). */
+function addBookingDays(dayKey: string, days: number): string {
+  const [year, month, day] = dayKey.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day + days))
+    .toISOString()
+    .slice(0, 10);
+}
+
+/**
+ * Instant of a Paris wall-clock time ("2026-11-05", "19:00"), whatever the
+ * visitor's time zone; null for a time that does not exist in Paris (the hour
+ * skipped when clocks go forward) or an impossible date.
+ */
+export function parisBookingSlotStart(
+  dayKey: string,
+  time: string
+): Date | null {
+  const dayMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dayKey);
+  const timeMatch = /^(\d{2}):(\d{2})$/.exec(time);
+  if (!dayMatch || !timeMatch) return null;
+  const [year, month, day] = dayMatch.slice(1).map(Number);
+  const [hour, minute] = timeMatch.slice(1).map(Number);
+  return parisWallClockTime(year, month, day, hour, minute);
+}
+
+/**
+ * Every 30-minute start the server accepts (RES-02): drawn from the opening
+ * hours in Paris time (a range past midnight also opens the early hours of the
+ * next day), within the booking window (2 h ahead, 90 days at most), minus the
+ * blocked dates. Booked slots are removed per day with removeBookedSlots.
+ */
+export function listBookableSlots(
+  slots: BookingAvailabilitySlot[],
+  blockedDateKeys: Iterable<string>,
+  now: number = Date.now()
+): BookingSlotOption[] {
+  const blocked = new Set(blockedDateKeys);
+  const lastDayKey = toParisBookingDateKey(new Date(now + BOOKING_HORIZON_MS));
+  const options = new Map<number, BookingSlotOption>();
+  // Dès la veille : une plage de nuit (22:00–02:00) ouvre aussi le début de la journée.
+  for (
+    let dayKey = addBookingDays(toParisBookingDateKey(new Date(now)), -1);
+    dayKey <= lastDayKey;
+    dayKey = addBookingDays(dayKey, 1)
+  ) {
+    const [year, month, day] = dayKey.split("-").map(Number);
+    const dayOfWeek = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+    for (const slot of slots) {
+      if (slot.dayOfWeek !== dayOfWeek) continue;
+      const slotStart = timeToMinutes(slot.startTime);
+      const rawSlotEnd = timeToMinutes(slot.endTime);
+      if (!Number.isFinite(slotStart) || !Number.isFinite(rawSlotEnd)) continue;
+      const slotEnd =
+        rawSlotEnd <= slotStart ? rawSlotEnd + 24 * 60 : rawSlotEnd;
+      for (let minutes = slotStart; minutes + 30 <= slotEnd; minutes += 30) {
+        const optionDayKey =
+          minutes >= 24 * 60 ? addBookingDays(dayKey, 1) : dayKey;
+        const time = minutesToBookingTime(minutes % (24 * 60));
+        const start = parisBookingSlotStart(optionDayKey, time);
+        if (
+          !start ||
+          options.has(start.getTime()) ||
+          blocked.has(optionDayKey) ||
+          getBookingWindowIssue(start, now)
+        )
+          continue;
+        // Même contrôle que le serveur (isBookableAppointmentTime) avant de proposer l’horaire.
+        if (!isBookableAppointmentTime(start, slots, 30)) continue;
+        options.set(start.getTime(), { start, dayKey: optionDayKey, time });
+      }
+    }
   }
-
-  const parsed = new Date(utcMs);
-  const verified = getParisBookingParts(parsed);
-  return verified.year === year && verified.month === month && verified.day === day && verified.hour === hour && verified.minute === minute
-    ? parsed
-    : null;
+  return Array.from(options.values()).sort(
+    (a, b) => a.start.getTime() - b.start.getTime()
+  );
 }
 
-const PARIS_BOOKING_DAY_INDEX: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
-
-function getParisBookingParts(date: Date) {
-  const values = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
-    timeZone: "Europe/Paris",
-    weekday: "short",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(date).filter(part => part.type !== "literal").map(part => [part.type, part.value]));
-  return {
-    year: Number(values.year), month: Number(values.month), day: Number(values.day),
-    hour: Number(values.hour), minute: Number(values.minute), weekday: String(values.weekday),
-  };
-}
-
-export function toParisBookingDateKey(date: Date): string {
-  const parts = getParisBookingParts(date);
-  return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
-}
-
-function bookingTimeToMinutes(value: string): number {
-  const match = /^(\d{2}):(\d{2})$/.exec(value);
-  if (!match) return Number.NaN;
-  const hour = Number(match[1]);
-  const minute = Number(match[2]);
-  return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59 ? hour * 60 + minute : Number.NaN;
-}
-
-export function isWithinBookingAvailability(
-  date: Date,
-  slots: Array<{ dayOfWeek: number; startTime: string; endTime: string }>,
+/** Whether a consultation starting at `start` overlaps a held or confirmed appointment of the day (availability.getBookedSlots). */
+export function overlapsBookedSlot(
+  start: Date,
+  booked: Array<Date | string>,
   durationMinutes = 30
 ): boolean {
-  if (slots.length === 0) return false;
-  const parts = getParisBookingParts(date);
-  const dayOfWeek = PARIS_BOOKING_DAY_INDEX[parts.weekday];
-  const previousDayOfWeek = (dayOfWeek + 6) % 7;
-  const candidateStart = parts.hour * 60 + parts.minute;
-
-  return slots.some(slot => {
-    const slotStart = bookingTimeToMinutes(slot.startTime);
-    const rawSlotEnd = bookingTimeToMinutes(slot.endTime);
-    if (!Number.isFinite(slotStart) || !Number.isFinite(rawSlotEnd)) return false;
-    const crossesMidnight = rawSlotEnd <= slotStart;
-    const slotEnd = crossesMidnight ? rawSlotEnd + 24 * 60 : rawSlotEnd;
-    let normalizedCandidateStart = candidateStart;
-    if (!crossesMidnight) {
-      if (slot.dayOfWeek !== dayOfWeek) return false;
-    } else if (slot.dayOfWeek === dayOfWeek && candidateStart >= slotStart) {
-      normalizedCandidateStart = candidateStart;
-    } else if (slot.dayOfWeek === previousDayOfWeek && candidateStart < rawSlotEnd) {
-      normalizedCandidateStart = candidateStart + 24 * 60;
-    } else {
-      return false;
-    }
-    const offsetFromStart = normalizedCandidateStart - slotStart;
-    return offsetFromStart >= 0 && normalizedCandidateStart + durationMinutes <= slotEnd && offsetFromStart % durationMinutes === 0;
+  const durationMs = durationMinutes * 60 * 1000;
+  return booked.some(value => {
+    const bookedStart = new Date(value).getTime();
+    return (
+      start.getTime() < bookedStart + durationMs &&
+      bookedStart < start.getTime() + durationMs
+    );
   });
 }
 
-export type BookingAvailabilityState = "select" | "checking" | "unavailable" | "available";
+/** The day's starts that are still free. */
+export function removeBookedSlots(
+  options: BookingSlotOption[],
+  booked: Array<Date | string>
+): BookingSlotOption[] {
+  return options.filter(({ start }) => !overlapsBookedSlot(start, booked));
+}
+
+/**
+ * Free starts closest to a slot just refused as taken (RES-10), at most
+ * `count`, in time order: what the grid puts forward instead.
+ */
+export function nearestFreeSlots<T extends BookingSlotOption>(
+  options: T[],
+  takenStart: number,
+  count = 3
+): T[] {
+  const distance = (option: T) => Math.abs(option.start.getTime() - takenStart);
+  return options
+    .filter(option => option.start.getTime() !== takenStart)
+    .sort(
+      (a, b) =>
+        distance(a) - distance(b) || a.start.getTime() - b.start.getTime()
+    )
+    .slice(0, count)
+    .sort((a, b) => a.start.getTime() - b.start.getTime());
+}
+
+// Fautes de frappe courantes dans le domaine d’une adresse : proposées, jamais imposées.
+const BOOKING_EMAIL_DOMAIN_TYPOS = new Map([
+  ["gmail", "gmail.com"],
+  ["gmial.com", "gmail.com"],
+  ["gmal.com", "gmail.com"],
+  ["gmai.com", "gmail.com"],
+  ["gamil.com", "gmail.com"],
+  ["gnail.com", "gmail.com"],
+  ["gmail.con", "gmail.com"],
+  ["hotmial.com", "hotmail.com"],
+  ["hotmal.com", "hotmail.com"],
+  ["hotmai.com", "hotmail.com"],
+  ["hotmail.con", "hotmail.com"],
+  ["hotmial.fr", "hotmail.fr"],
+  ["hotmal.fr", "hotmail.fr"],
+  ["yahou.fr", "yahoo.fr"],
+  ["yahou.com", "yahoo.com"],
+  ["yaho.fr", "yahoo.fr"],
+  ["yaho.com", "yahoo.com"],
+  ["yahoo.con", "yahoo.com"],
+  ["outlok.com", "outlook.com"],
+  ["outlook.con", "outlook.com"],
+  ["outlok.fr", "outlook.fr"],
+  ["iclod.com", "icloud.com"],
+  ["icloud.con", "icloud.com"],
+]);
+
+/** The address with a common domain typo corrected ("jeanne@gmial.com" → "jeanne@gmail.com"), or null. */
+export function suggestBookingEmail(value: string): string | null {
+  const address = value.trim();
+  const at = address.lastIndexOf("@");
+  if (at < 1) return null;
+  const domain = BOOKING_EMAIL_DOMAIN_TYPOS.get(
+    address.slice(at + 1).toLowerCase()
+  );
+  return domain ? `${address.slice(0, at)}@${domain}` : null;
+}
+
+/**
+ * Starts of a sorted list still inside the booking window at `now`, as a
+ * [first, end) range: the same slots as filtering each one with
+ * getBookingWindowIssue (too soon at the front, too far at the back), but the
+ * page clock only changes the range when a slot actually leaves the window.
+ */
+export function bookableSlotRange(
+  options: BookingSlotOption[],
+  now: number
+): [number, number] {
+  let first = 0;
+  while (
+    first < options.length &&
+    getBookingWindowIssue(options[first].start, now)
+  )
+    first += 1;
+  let end = options.length;
+  while (end > first && getBookingWindowIssue(options[end - 1].start, now))
+    end -= 1;
+  return [first, end];
+}
+
+/**
+ * Opening hours shown as soon as the page opens (RES-02), Monday to Sunday,
+ * in Paris time: [{ day: "lun.", ranges: ["09:00–12:00", "18:00–22:00"] }].
+ */
+export function summarizeBookingAvailability(
+  slots: BookingAvailabilitySlot[],
+  locale: string
+) {
+  const weekday = new Intl.DateTimeFormat(locale, {
+    weekday: "short",
+    timeZone: "UTC",
+  });
+  return [1, 2, 3, 4, 5, 6, 0].flatMap(dayOfWeek => {
+    const ranges = Array.from(
+      new Set(
+        slots
+          .filter(slot => slot.dayOfWeek === dayOfWeek)
+          .sort((a, b) => a.startTime.localeCompare(b.startTime))
+          .map(
+            slot =>
+              `${slot.startTime}–${slot.endTime === "00:00" ? "24:00" : slot.endTime}`
+          )
+      )
+    );
+    // Le 4 janvier 1970 est un dimanche.
+    return ranges.length
+      ? [
+          {
+            day: weekday.format(new Date(Date.UTC(1970, 0, 4 + dayOfWeek))),
+            ranges,
+          },
+        ]
+      : [];
+  });
+}
+
+/** "jeudi 29 octobre 2026" for a Paris day key, in the page language. */
+export function formatBookingDay(dayKey: string, locale: string): string {
+  const [year, month, day] = dayKey.split("-").map(Number);
+  return getBookingDateTimeFormat(locale, {
+    dateStyle: "full",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(year, month - 1, day)));
+}
+
+const BOOKING_SLOT_LIST_REFRESH_MS = 30 * 60 * 1000;
+
+/** Whole minutes left before the held slot is released (RES-04). */
+export function getHoldRemainingMinutes(
+  holdExpiresAt: string,
+  now: number = Date.now()
+): number {
+  return Math.max(
+    0,
+    Math.floor((new Date(holdExpiresAt).getTime() - now) / 60_000)
+  );
+}
+
+/**
+ * What the page clock changes on screen at `time`: the half-hour of the 90-day
+ * list, the slots still inside the booking window, the window issue of the
+ * chosen slot and the minutes left to pay a held slot. A tick that changes none
+ * of them does not render the page again (RES-02, RES-04).
+ */
+export function getBookingClockSignature(
+  time: number,
+  {
+    openSlots,
+    selectedDate,
+    holdExpiresAt,
+  }: {
+    openSlots: BookingSlotOption[];
+    selectedDate: Date | null;
+    holdExpiresAt: string | null;
+  }
+): string {
+  const parts: Array<string | number | null> = [
+    Math.floor(time / BOOKING_SLOT_LIST_REFRESH_MS),
+    ...bookableSlotRange(openSlots, time),
+    selectedDate ? getBookingWindowIssue(selectedDate, time) : null,
+  ];
+  if (holdExpiresAt)
+    parts.push(
+      getHoldRemainingMinutes(holdExpiresAt, time),
+      new Date(holdExpiresAt).getTime() <= time ? "expired" : "held"
+    );
+  return parts.join("|");
+}
+
+export type BookingAvailabilityState =
+  | "select"
+  | "checking"
+  | "unavailable"
+  | "available";
 
 export function getBookingAvailabilityState({
   selected,
@@ -425,66 +930,178 @@ export function getBookingAvailabilityState({
   return "available";
 }
 
-// Refus métier attendus (créneau déjà pris, trop de tentatives, réservations
-// en attente) : le serveur renvoie un message français destiné au patient.
-// Toute autre erreur garde le message générique pour ne rien exposer de technique.
-const BOOKING_USER_FACING_ERROR_CODES = new Set(["CONFLICT", "TOO_MANY_REQUESTS", "UNPROCESSABLE_CONTENT", "SERVICE_UNAVAILABLE"]);
-
 /** Input rejected by validation (BAD_REQUEST): a localized hint instead of the raw validation report. */
 export function isBookingInputError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
-  return (error as { data?: { code?: unknown } | null }).data?.code === "BAD_REQUEST";
+  return (
+    (error as { data?: { code?: unknown } | null }).data?.code === "BAD_REQUEST"
+  );
 }
 
-export function getBookingServerErrorMessage(error: unknown): string | null {
+/** Stable reason of a refused booking sent by the server (slot taken, too soon…), or null (EN-06). */
+export function getBookingRefusalReason(
+  error: unknown
+): BookingRefusalReason | null {
   if (!error || typeof error !== "object") return null;
-  const { data, message } = error as { data?: { code?: unknown } | null; message?: unknown };
-  if (typeof data?.code !== "string" || !BOOKING_USER_FACING_ERROR_CODES.has(data.code)) return null;
-  return typeof message === "string" && message.trim() ? message.trim() : null;
+  const reason = (error as { data?: { reason?: unknown } | null }).data?.reason;
+  return isBookingRefusalReason(reason) ? reason : null;
+}
+
+/**
+ * Alert of a refused booking, always in the page language (EN-06): the
+ * translation of its stable reason, a hint for rejected input, otherwise the
+ * generic message. The French text written by the server is never shown, nor
+ * any technical detail.
+ */
+export function getBookingErrorMessage(
+  error: unknown,
+  copy: {
+    refusals: Record<BookingRefusalReason, string>;
+    invalidInput: string;
+    bookingError: string;
+  }
+): string {
+  const refusal = getBookingRefusalReason(error);
+  if (refusal) return copy.refusals[refusal];
+  return isBookingInputError(error) ? copy.invalidInput : copy.bookingError;
 }
 
 export default function BookingPage() {
   const { language } = useLanguage();
-  const [location, setLocation] = useLocation();
-  const content = bookingContent[language as keyof typeof bookingContent] || bookingContent.en;
+  useLocation();
+  const content =
+    bookingContent[language as keyof typeof bookingContent] ||
+    bookingContent.en;
   const bookingFormCopy = getBookingFormCopy(language);
   const bookingRailCopy = {
-    fr: { label: "Consultation", note: "Une consultation structurée, confidentielle et adaptée à votre demande." },
-    en: { label: "Consultation", note: "A structured, confidential consultation tailored to your request." },
-    de: { label: "Beratung", note: "Eine strukturierte, vertrauliche Beratung, die auf Ihre Anfrage zugeschnitten ist." },
+    fr: {
+      label: "Consultation",
+      note: "Une consultation structurée, confidentielle et adaptée à votre demande.",
+    },
+    en: {
+      label: "Consultation",
+      note: "A structured, confidential consultation tailored to your request.",
+    },
+    de: {
+      label: "Beratung",
+      note: "Eine strukturierte, vertrauliche Beratung, die auf Ihre Anfrage zugeschnitten ist.",
+    },
     zh: { label: "咨询", note: "为您的需求量身定制的结构化、保密咨询。" },
-  }[language] ?? { label: "Consultation", note: "A structured, confidential consultation tailored to your request." };
-  const bookingBrandCopy = {
-    fr: "Médecin anesthésiste-réanimateur · Conseil médical",
-    en: "Anaesthesiologist & intensive care physician · Medical advisory",
-    de: "Anästhesist und Intensivmediziner · Medizinische Beratung",
-    zh: "麻醉与重症医学医师 · 医疗咨询",
-  }[language] ?? "Medical advisory";
+  }[language] ?? {
+    label: "Consultation",
+    note: "A structured, confidential consultation tailored to your request.",
+  };
+  const bookingBrandCopy =
+    {
+      fr: "Médecin anesthésiste-réanimateur · Conseil médical",
+      en: "Anaesthesiologist & intensive care physician · Medical advisory",
+      de: "Anästhesist und Intensivmediziner · Medizinische Beratung",
+      zh: "麻醉与重症医学医师 · 医疗咨询",
+    }[language] ?? "Medical advisory";
 
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     phone: "",
-    date: "",
     details: "",
   });
 
+  // Jour choisi (clé de Paris « 2026-11-05 ») puis créneau choisi dans la grille.
+  const [dayKey, setDayKey] = useState("");
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [dateText, setDateText] = useState("");
-  const [timeText, setTimeText] = useState("");
-  const [dateError, setDateError] = useState<string | null>(null);
   const [phoneError, setPhoneError] = useState<string | null>(null);
-  const [paymentStatus, setPaymentStatus] = useState<"success" | "canceled" | null>(null);
+  // Adresse sans domaine complet : erreur sous le champ ; faute de frappe courante : correction proposée, sans bloquer (RES-10).
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [emailSuggestion, setEmailSuggestion] = useState<string | null>(null);
+  // Under the field, what the server would refuse: an invisible character left inside the address
+  // (a direction mark before the @), named as the other forms name it, the reason invalid_characters
+  // (INTL-05), rather than an address said incomplete that looks complete; then the format (RES-10).
+  const bookingEmailIssue = (email: string) =>
+    EMAIL_INVISIBLE_CHARACTER.test(email)
+      ? content.refusals.invalid_characters
+      : isBookingEmailAddress(email)
+        ? null
+        : content.form.invalidEmail;
+  const showEmailIssue = (email: string, issue: string | null) => {
+    setEmailError(issue);
+    // No correction proposed for an address to type again.
+    setEmailSuggestion(
+      issue === content.refusals.invalid_characters
+        ? null
+        : suggestBookingEmail(email)
+    );
+  };
+  // Refus de l’envoi affiché dans la page, qui prend le focus (RES-10, A11Y-10) : une clé neuve à
+  // chaque refus, pour qu’un même message soit de nouveau annoncé. Créneau pris : le message passe
+  // en tête de la grille, amenée à l’écran, qui met en avant les horaires libres les plus proches ;
+  // sinon il reste au-dessus du bouton de paiement.
+  const [submitError, setSubmitError] = useState<{
+    message: string;
+    key: number;
+    revealSlots: boolean;
+  } | null>(null);
+  const submitErrorRef = useRef<HTMLParagraphElement>(null);
+  const submitErrorCountRef = useRef(0);
+  const [takenSlot, setTakenSlot] = useState<number | null>(null);
+  const pendingTitleRef = useRef<HTMLParagraphElement>(null);
+  const [paymentStatus, setPaymentStatus] = useState<
+    "success" | "canceled" | null
+  >(null);
   const [trackingId, setTrackingId] = useState<string | null>(null);
-  const [pendingBooking, setPendingBooking] = useState<PendingBooking | null>(null);
+  const [pendingBooking, setPendingBooking] = useState<PendingBooking | null>(
+    null
+  );
   const [pendingNotice, setPendingNotice] = useState<string | null>(null);
+  // Anti-robot demandé par le serveur seulement en cas d’abus (ABUS-02) : absent du parcours normal.
+  // Un jeton ne sert qu’une fois : chaque nouvel essai affiche une nouvelle vérification.
+  const [securityCheckRequired, setSecurityCheckRequired] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileAttempt, setTurnstileAttempt] = useState(0);
+  // Horloge de la page : délai de 2 h des créneaux proposés et temps restant du paiement en attente.
+  const [now, setNow] = useState(() => Date.now());
+  const clockSignatureRef = useRef<(time: number) => string>(() => "");
   const paymentSubmissionRef = useRef(false);
+  const draftSlotRef = useRef<string | null>(null);
+  // Grille des horaires : jour dont les réservations sont en cours de nouvel essai, et
+  // jour dont la grille reçoit le focus quand ce nouvel essai se termine (RES-02).
+  const slotsFieldsetRef = useRef<HTMLFieldSetElement>(null);
+  const [slotsRetryDay, setSlotsRetryDay] = useState<string | null>(null);
+  const slotsRetryFocusRef = useRef<string | null>(null);
+  const locale = getBookingLocale(language);
+  // Tarifs et total depuis les centimes de shared/bookingPolicy.ts, ceux que l’API encaisse (CODE-09).
+  const formatPrice = (cents: number) =>
+    `${formatRateAmount(cents, locale)} ${content.pricing.eur}`;
+  const parisDateTimeFormat = useMemo(
+    () =>
+      new Intl.DateTimeFormat(locale, {
+        dateStyle: "full",
+        timeStyle: "short",
+        timeZone: PARIS_TIME_ZONE,
+      }),
+    [locale]
+  );
   const localizedDate = selectedDate
-    ? new Intl.DateTimeFormat(
-        language === "fr" ? "fr-FR" : language === "de" ? "de-DE" : language === "zh" ? "zh-CN" : "en-GB",
-        { dateStyle: "full", timeStyle: "short", timeZone: "Europe/Paris" }
-      ).format(selectedDate)
+    ? `${parisDateTimeFormat.format(selectedDate)} (${content.form.parisTime})`
     : null;
+  const selectedLocalTime = selectedDate
+    ? formatVisitorTime(selectedDate, locale)
+    : null;
+  const pendingLocalTime = pendingBooking
+    ? formatVisitorTime(new Date(pendingBooking.appointmentDate), locale)
+    : null;
+
+  useEffect(() => {
+    // Tic sans effet à l’écran (voir getBookingClockSignature) : même état, pas de nouveau rendu.
+    const timer = window.setInterval(() => {
+      const time = Date.now();
+      setNow(current =>
+        clockSignatureRef.current(time) === clockSignatureRef.current(current)
+          ? current
+          : time
+      );
+    }, 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   // Handle Stripe redirect
   useEffect(() => {
@@ -505,87 +1122,253 @@ export default function BookingPage() {
     }
   }, []);
 
-  const dateKey = selectedDate ? toParisBookingDateKey(selectedDate) : "";
+  const dateKey = selectedDate ? toParisBookingDateKey(selectedDate) : dayKey;
   const blockedDates = trpc.availability.getBlockedDates.useQuery();
   const bookedSlots = trpc.availability.getBookedSlots.useQuery(
     { date: dateKey },
     { enabled: Boolean(dateKey) }
   );
   const availabilitySlots = trpc.availability.getSlots.useQuery();
-
-  const isBlockedDate = Boolean(dateKey && blockedDates.data?.some((item) => item.date === dateKey));
-  const isBookedSlot = Boolean(
-    selectedDate &&
-      bookedSlots.data?.some((slot) => new Date(slot).toISOString().slice(0, 16) === selectedDate.toISOString().slice(0, 16))
-  );
-  const availabilityPending = blockedDates.isLoading || bookedSlots.isLoading || availabilitySlots.isLoading;
-  const availabilityQueryError = blockedDates.isError || bookedSlots.isError || availabilitySlots.isError;
-  const configuredSlots = availabilitySlots.data ?? [];
-  const hasConfiguredSlots = configuredSlots.length > 0;
-  const isOutsideConfiguredAvailability = Boolean(
-    selectedDate && availabilitySlots.data && !isWithinBookingAvailability(selectedDate, configuredSlots, 30)
-  );
-  // Délai minimal (2 h, passé compris) et horizon (90 jours) : mêmes règles que le serveur.
-  const bookingWindowIssue = selectedDate ? getBookingWindowIssue(selectedDate) : null;
-  const availabilityLabel = availabilityQueryError
-    ? bookingFormCopy.availabilityError
-    : !selectedDate
-    ? bookingFormCopy.selectDate
-    : bookingWindowIssue === "too_soon"
-    ? content.form.tooSoon
-    : bookingWindowIssue === "too_far"
-    ? content.form.tooFar
-    : availabilityPending
-      ? bookingFormCopy.checkingAvailability
-      : isBlockedDate
-      ? bookingFormCopy.blocked
-      : isBookedSlot
-        ? bookingFormCopy.alreadyBooked
-        : !hasConfiguredSlots
-          ? bookingFormCopy.noAvailability
-          : isOutsideConfiguredAvailability
-            ? bookingFormCopy.outsideSchedule
-            : bookingFormCopy.available;
-  const availabilityState = getBookingAvailabilityState({
-    selected: Boolean(selectedDate),
-    pending: availabilityPending && !bookingWindowIssue,
-    blocked: isBlockedDate || availabilityQueryError || isOutsideConfiguredAvailability || Boolean(bookingWindowIssue),
-    booked: isBookedSlot,
-  });
-
   const calculatePrice = trpc.appointments.calculatePrice.useQuery(
     { appointmentDate: selectedDate?.toISOString() || "" },
     { enabled: !!selectedDate }
   );
-  const availabilityError = availabilityQueryError || calculatePrice.isError;
+
+  const isBlockedDate = Boolean(
+    dateKey && blockedDates.data?.some(item => item.date === dateKey)
+  );
+  const isBookedSlot = Boolean(
+    selectedDate &&
+      bookedSlots.data &&
+      overlapsBookedSlot(selectedDate, bookedSlots.data)
+  );
+  const availabilityPending =
+    blockedDates.isLoading ||
+    bookedSlots.isLoading ||
+    availabilitySlots.isLoading;
+  const availabilityQueryError =
+    blockedDates.isError || bookedSlots.isError || availabilitySlots.isError;
+  const configuredSlots = availabilitySlots.data ?? [];
+  const hasConfiguredSlots = configuredSlots.length > 0;
+  const isOutsideConfiguredAvailability = Boolean(
+    selectedDate &&
+      availabilitySlots.data &&
+      !isBookableAppointmentTime(selectedDate, configuredSlots, 30)
+  );
+  // Grille (RES-02) : jours ouverts des 90 prochains jours, moins les dates
+  // bloquées et le délai de 2 h, puis horaires libres du jour choisi. La liste
+  // (90 jours relus en heure de Paris) n’est recalculée que toutes les 30 min ;
+  // le délai de 2 h, lui, suit l’horloge de la page, qui ne recopie la liste
+  // (et ne recalcule la grille) que lorsqu’un horaire sort de la fenêtre.
+  const slotListClock =
+    Math.floor(now / BOOKING_SLOT_LIST_REFRESH_MS) *
+    BOOKING_SLOT_LIST_REFRESH_MS;
+  const openSlots = useMemo(
+    () =>
+      listBookableSlots(
+        availabilitySlots.data ?? [],
+        (blockedDates.data ?? []).map(item => item.date),
+        slotListClock
+      ),
+    [availabilitySlots.data, blockedDates.data, slotListClock]
+  );
+  const [firstBookableSlot, endBookableSlot] = bookableSlotRange(
+    openSlots,
+    now
+  );
+  const bookableSlots = useMemo(
+    () => openSlots.slice(firstBookableSlot, endBookableSlot),
+    [openSlots, firstBookableSlot, endBookableSlot]
+  );
+  const scheduleLoaded = Boolean(availabilitySlots.data && blockedDates.data);
+  const nothingToBook = scheduleLoaded && bookableSlots.length === 0;
+  const dayOptions = useMemo(
+    () =>
+      Array.from(
+        new Set([
+          ...bookableSlots.map(slot => slot.dayKey),
+          ...(dayKey ? [dayKey] : []),
+        ])
+      )
+        .sort()
+        .map(key => ({ key, label: formatBookingDay(key, locale) })),
+    [bookableSlots, dayKey, locale]
+  );
+  // Horaires du jour choisi avant et après les réservations : une grille vide
+  // ne dit « déjà réservés » que si ce sont bien les réservations qui l’ont vidée.
+  const dayOpenSlots = useMemo(
+    () => bookableSlots.filter(slot => slot.dayKey === dayKey),
+    [bookableSlots, dayKey]
+  );
+  const daySlots = useMemo(
+    () =>
+      (bookedSlots.data
+        ? removeBookedSlots(dayOpenSlots, bookedSlots.data)
+        : []
+      ).map(option => ({
+        ...option,
+        localTime: formatVisitorTime(option.start, locale),
+      })),
+    [dayOpenSlots, bookedSlots.data, locale]
+  );
+  // Créneau refusé « déjà pris » : horaires libres les plus proches, relus avec les réservations rechargées (RES-10).
+  const suggestedSlots = useMemo(
+    () => (takenSlot === null ? [] : nearestFreeSlots(daySlots, takenSlot)),
+    [daySlots, takenSlot]
+  );
+  const suggestedSlotTimes = new Set(
+    suggestedSlots.map(slot => slot.start.getTime())
+  );
+  const openingHours = useMemo(
+    () => summarizeBookingAvailability(availabilitySlots.data ?? [], locale),
+    [availabilitySlots.data, locale]
+  );
+  // Délai minimal (2 h, passé compris) et horizon (90 jours) : mêmes règles que le serveur.
+  const bookingWindowIssue = selectedDate
+    ? getBookingWindowIssue(selectedDate, now)
+    : null;
+  // Tarif de l’horaire coché non calculé (souvent dans la même requête groupée que
+  // l’agenda) : « Procéder au paiement » reste désactivé, et le statut le dit au lieu
+  // de « Créneau disponible ». Le dernier résultat reçu pour cet horaire reste un échec
+  // pendant un nouvel essai (« Réessayer », retour sur l’onglet), même quand React Query
+  // efface l’erreur faute de tarif déjà reçu : l’alerte et son bouton restent en place,
+  // et le statut dit « Vérification… » comme le bouton, jusqu’à la réponse.
+  const priceLastFailed =
+    Boolean(selectedDate) &&
+    calculatePrice.errorUpdatedAt > calculatePrice.dataUpdatedAt;
+  const priceFailed = priceLastFailed && !calculatePrice.isFetching;
+  const priceRetrying =
+    priceLastFailed && calculatePrice.isFetching && !availabilityQueryError;
+  const availabilityLabel = availabilityQueryError
+    ? bookingFormCopy.availabilityError
+    : availabilitySlots.data && !hasConfiguredSlots
+      ? bookingFormCopy.noAvailability
+      : nothingToBook && !selectedDate
+        ? content.form.noBookableDay
+        : !selectedDate
+          ? bookingFormCopy.selectDate
+          : bookingWindowIssue === "too_soon"
+            ? content.form.tooSoon
+            : bookingWindowIssue === "too_far"
+              ? content.form.tooFar
+              : availabilityPending || priceRetrying
+                ? bookingFormCopy.checkingAvailability
+                : isBlockedDate
+                  ? bookingFormCopy.blocked
+                  : isBookedSlot
+                    ? bookingFormCopy.alreadyBooked
+                    : !hasConfiguredSlots
+                      ? bookingFormCopy.noAvailability
+                      : isOutsideConfiguredAvailability
+                        ? bookingFormCopy.outsideSchedule
+                        : priceFailed
+                          ? content.form.priceError
+                          : bookingFormCopy.available;
+  const availabilityState = getBookingAvailabilityState({
+    // « Aucun créneau ouvert » et l’échec du chargement de l’agenda sont des
+    // états indisponibles dès l’arrivée, sans attendre une sélection.
+    selected: Boolean(selectedDate) || nothingToBook || availabilityQueryError,
+    pending: (availabilityPending || priceRetrying) && !bookingWindowIssue,
+    blocked:
+      isBlockedDate ||
+      availabilityQueryError ||
+      isOutsideConfiguredAvailability ||
+      Boolean(bookingWindowIssue) ||
+      nothingToBook ||
+      priceFailed,
+    booked: isBookedSlot,
+  });
+  const availabilityError = availabilityQueryError || priceLastFailed;
 
   const createAppointment = trpc.appointments.create.useMutation();
   const resumeCheckout = trpc.appointments.createCheckoutSession.useMutation();
   const cancelPendingBooking = trpc.appointments.cancelPending.useMutation();
 
-  const synchronizeDateTime = (nextDateText: string, nextTimeText: string) => {
-    setDateText(nextDateText);
-    setTimeText(nextTimeText);
-
-    if (!nextDateText.trim() || !nextTimeText.trim()) {
-      setSelectedDate(null);
-      setDateError(null);
-      setFormData((current) => ({ ...current, date: "" }));
-      return;
-    }
-
-    const parsed = parseBookingDateTime(nextDateText, nextTimeText);
-    if (!parsed) {
-      setSelectedDate(null);
-      setDateError(bookingFormCopy.invalidDate);
-      setFormData((current) => ({ ...current, date: "" }));
-      return;
-    }
-
-    setDateError(null);
-    setSelectedDate(parsed);
-    setFormData((current) => ({ ...current, date: parsed.toISOString() }));
+  // Bouton « Réessayer » de la grille : relance chaque donnée d’agenda dont le chargement a échoué,
+  // et le tarif de l’horaire coché s’il a échoué avec elles (même requête groupée) : sinon la
+  // grille reviendrait avec « Procéder au paiement » toujours désactivé.
+  // Pendant le nouvel essai, l’encadré d’erreur reste affiché et son bouton garde le focus
+  // (aria-disabled, pas disabled) ; s’il réussit, le focus passe dans la grille qui le remplace
+  // au lieu de retomber au début du document, sinon il reste sur le bouton.
+  const slotsRetrying = Boolean(dateKey) && slotsRetryDay === dateKey;
+  const retryAvailability = () => {
+    if (slotsRetrying) return;
+    const retriedDay = dateKey;
+    setSlotsRetryDay(retriedDay);
+    for (const query of [blockedDates, availabilitySlots, calculatePrice])
+      if (query.isError) void query.refetch();
+    void bookedSlots.refetch().finally(() => {
+      slotsRetryFocusRef.current = retriedDay;
+      setSlotsRetryDay(current => (current === retriedDay ? null : current));
+    });
   };
+
+  // Focus dans la grille : horaire coché, sinon premier horaire, sinon le message « aucun horaire ».
+  const focusSlotGrid = () => {
+    const grid = slotsFieldsetRef.current;
+    const target =
+      grid?.querySelector<HTMLElement>("input[name='booking-slot']:checked") ??
+      grid?.querySelector<HTMLElement>("input[name='booking-slot']") ??
+      grid?.querySelector<HTMLElement>("[data-slots-empty]");
+    target?.focus();
+  };
+
+  // Tarif seul en échec (agenda chargé, grille affichée) : son propre « Réessayer ». Le bouton
+  // disparaît avec l’alerte quand le tarif arrive : le focus passe alors dans la grille, sauf si
+  // le visiteur est allé ailleurs pendant l’attente (jusqu’à plusieurs secondes avec les nouveaux essais).
+  const priceRetryOnly = priceLastFailed && !availabilityQueryError;
+  const retryPrice = (event: React.MouseEvent<HTMLButtonElement>) => {
+    if (calculatePrice.isFetching) return;
+    const button = event.currentTarget;
+    void calculatePrice.refetch().then(({ isError }) => {
+      if (
+        !isError &&
+        (document.activeElement === button ||
+          document.activeElement === document.body)
+      )
+        focusSlotGrid();
+    });
+  };
+
+  useEffect(() => {
+    if (slotsRetrying || !dateKey || slotsRetryFocusRef.current !== dateKey)
+      return;
+    slotsRetryFocusRef.current = null;
+    if (bookedSlots.isError) return;
+    focusSlotGrid();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- seulement à la fin d’un nouvel essai de l’agenda : le jour et l’erreur sont lus tels qu’ils sont alors
+  }, [slotsRetrying]);
+
+  const chooseDay = (nextDayKey: string) => {
+    // Choix du patient : il remplace le créneau du brouillon pas encore repris.
+    draftSlotRef.current = null;
+    setDayKey(nextDayKey);
+    if (selectedDate && toParisBookingDateKey(selectedDate) !== nextDayKey)
+      setSelectedDate(null);
+    setTakenSlot(null);
+    setSubmitError(null);
+  };
+
+  // Nouvel horaire choisi : le refus et les horaires proposés à la place de l’ancien n’ont plus lieu d’être.
+  const chooseSlot = (start: Date) => {
+    setSelectedDate(start);
+    setTakenSlot(null);
+    setSubmitError(null);
+  };
+
+  const showSubmitError = (message: string, revealSlots = false) => {
+    submitErrorCountRef.current += 1;
+    setSubmitError({ message, key: submitErrorCountRef.current, revealSlots });
+  };
+
+  useEffect(() => {
+    const message = submitErrorRef.current;
+    if (!submitError || !message) return;
+    // Créneau pris : le message prend le focus en tête de la grille, qui vient en haut de l’écran
+    // (sous l’en-tête fixe) avec les horaires proposés sous lui. Sinon, au-dessus du bouton, il est déjà en vue.
+    message.focus({ preventScroll: submitError.revealSlots });
+    if (submitError.revealSlots) message.scrollIntoView?.({ block: "start" });
+  }, [submitError]);
 
   // Retour depuis Stripe (bouton Précédent, rechargement, page restaurée du
   // cache) : saisie conservée et réservation en attente proposée à la reprise
@@ -599,8 +1382,14 @@ export default function BookingPage() {
     restorePendingBooking();
     const draft = loadBookingDraft();
     if (draft) {
-      setFormData((current) => ({ ...current, name: draft.name, email: draft.email, phone: draft.phone, details: draft.details }));
-      if (draft.dateText || draft.timeText) synchronizeDateTime(draft.dateText, draft.timeText);
+      setFormData(current => ({
+        ...current,
+        name: draft.name,
+        email: draft.email,
+        phone: draft.phone,
+        details: draft.details,
+      }));
+      draftSlotRef.current = draft.appointmentDate || null;
     }
     const onPageShow = (event: PageTransitionEvent) => {
       if (event.persisted) restorePendingBooking();
@@ -609,17 +1398,76 @@ export default function BookingPage() {
     return () => window.removeEventListener("pageshow", onPageShow);
   }, [restorePendingBooking]);
 
+  // Créneau du brouillon : repris une fois l’agenda chargé, s’il est encore proposé.
   useEffect(() => {
-    const draft = { name: formData.name, email: formData.email, phone: formData.phone, dateText, timeText, details: formData.details };
-    if (Object.values(draft).some(Boolean)) saveBookingDraft(draft);
-  }, [formData.name, formData.email, formData.phone, formData.details, dateText, timeText]);
+    const draftSlot = draftSlotRef.current;
+    if (!draftSlot || !scheduleLoaded) return;
+    draftSlotRef.current = null;
+    const option = bookableSlots.find(
+      slot => slot.start.toISOString() === draftSlot
+    );
+    if (option) {
+      setDayKey(option.dayKey);
+      setSelectedDate(option.start);
+    }
+  }, [scheduleLoaded, bookableSlots]);
+
+  const appointmentDate = selectedDate?.toISOString() ?? "";
+  useEffect(() => {
+    const draft = {
+      name: formData.name,
+      email: formData.email,
+      phone: formData.phone,
+      appointmentDate,
+      details: formData.details,
+    };
+    if (!Object.values(draft).some(Boolean)) return;
+    // Agenda pas encore chargé : le créneau du brouillon, en attente de reprise, est gardé.
+    saveBookingDraft({
+      ...draft,
+      appointmentDate: appointmentDate || draftSlotRef.current || "",
+    });
+  }, [
+    formData.name,
+    formData.email,
+    formData.phone,
+    formData.details,
+    appointmentDate,
+  ]);
 
   const forgetPendingBooking = (notice: string) => {
     clearPendingBooking();
     setPendingBooking(null);
     setPendingNotice(notice);
-    void bookedSlots.refetch();
+    // Jour affiché rechargé pour reproposer le créneau libéré ; sans jour choisi,
+    // pas de requête (un jour vide est refusé par le serveur).
+    if (dateKey) void bookedSlots.refetch();
   };
+
+  useEffect(() => {
+    clockSignatureRef.current = time =>
+      getBookingClockSignature(time, {
+        openSlots,
+        selectedDate,
+        holdExpiresAt: pendingBooking?.holdExpiresAt ?? null,
+      });
+  });
+
+  // Maintien écoulé pendant que la page reste ouverte : le créneau est libéré côté serveur.
+  const pendingHoldExpired = Boolean(
+    pendingBooking && new Date(pendingBooking.holdExpiresAt).getTime() <= now
+  );
+  useEffect(() => {
+    if (pendingHoldExpired) forgetPendingBooking(content.pending.closed);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- une seule fois quand le maintien expire : forgetPendingBooking et le texte sont recréés à chaque rendu
+  }, [pendingHoldExpired]);
+
+  // Paiement en attente retrouvé (retour depuis Stripe, page restaurée du cache) : le focus passe
+  // sur le titre de sa carte, qui est ainsi annoncée au lieu de rester sur le haut de page (A11Y-10).
+  const pendingSessionId = pendingBooking?.checkoutSessionId ?? null;
+  useEffect(() => {
+    if (pendingSessionId) pendingTitleRef.current?.focus();
+  }, [pendingSessionId]);
 
   const handleResumePayment = async () => {
     if (!pendingBooking || paymentSubmissionRef.current) return;
@@ -633,17 +1481,25 @@ export default function BookingPage() {
       });
       if (!result.checkoutUrl) throw new Error("checkout_url_missing");
       window.location.assign(result.checkoutUrl);
-    } catch {
+    } catch (error) {
       paymentSubmissionRef.current = false;
-      forgetPendingBooking(content.pending.resumeError);
+      // Stripe indisponible : le serveur garde le créneau, le paiement en attente
+      // reste donc proposé à la reprise au lieu d’être oublié.
+      if (getBookingRefusalReason(error) === "payment_unavailable")
+        setPendingNotice(content.pending.resumeUnavailable);
+      else forgetPendingBooking(content.pending.resumeError);
     }
   };
 
   const handleCancelPendingBooking = async () => {
     if (!pendingBooking) return;
     try {
-      const result = await cancelPendingBooking.mutateAsync({ sessionId: pendingBooking.checkoutSessionId });
-      forgetPendingBooking(result.cancelled ? content.pending.cancelled : content.pending.closed);
+      const result = await cancelPendingBooking.mutateAsync({
+        sessionId: pendingBooking.checkoutSessionId,
+      });
+      forgetPendingBooking(
+        result.cancelled ? content.pending.cancelled : content.pending.closed
+      );
     } catch {
       setPendingNotice(content.pending.cancelError);
     }
@@ -655,34 +1511,65 @@ export default function BookingPage() {
     if (paymentSubmissionRef.current || isLoading) return;
 
     if (!selectedDate) {
-      alert(content.form.date);
+      showSubmitError(bookingFormCopy.selectDate);
       return;
     }
 
-    if (getBookingWindowIssue(selectedDate) || isBlockedDate || isBookedSlot || isOutsideConfiguredAvailability || availabilityError) {
-      alert(availabilityLabel);
+    // Délai relu à l’instant de l’envoi : l’horloge de la page ne se met à jour que toutes les 30 s.
+    const windowIssue = getBookingWindowIssue(selectedDate);
+    if (
+      windowIssue ||
+      isBlockedDate ||
+      isBookedSlot ||
+      isOutsideConfiguredAvailability ||
+      availabilityError
+    ) {
+      showSubmitError(
+        windowIssue === "too_soon"
+          ? content.form.tooSoon
+          : windowIssue === "too_far"
+            ? content.form.tooFar
+            : availabilityLabel
+      );
       return;
     }
 
-    if (!isPlausiblePhoneNumber(formData.phone)) {
+    // Même règle que le serveur : une adresse qu’il refuserait l’est ici, sous le champ (RES-10, INTL-05).
+    const email = formData.email.trim();
+    const emailIssue = bookingEmailIssue(email);
+    if (emailIssue) {
+      showEmailIssue(email, emailIssue);
+      document.getElementById("booking-email")?.focus();
+      return;
+    }
+
+    // Chiffres arabes, persans ou pleine chasse et marques de direction d’un numéro collé : lus comme le serveur (INTL-09).
+    const phone = normalizePhoneInput(formData.phone);
+    if (!isPlausiblePhoneNumber(phone)) {
       setPhoneError(content.form.invalidPhone);
       document.getElementById("booking-phone")?.focus();
       return;
     }
 
     if (!calculatePrice.data) {
-      alert(content.error);
+      showSubmitError(content.form.priceError);
       return;
     }
 
+    // Vérification demandée mais pas encore faite : elle signale elle-même ce qui manque.
+    if (securityCheckRequired && !turnstileToken) return;
+
     paymentSubmissionRef.current = true;
+    setSubmitError(null);
     try {
       const appointmentResult = await createAppointment.mutateAsync({
         customerName: formData.name,
-        customerEmail: formData.email,
-        customerPhone: formData.phone,
+        customerEmail: email,
+        customerPhone: phone,
         appointmentDate: selectedDate.toISOString(),
         requestDetails: formData.details,
+        language,
+        ...(securityCheckRequired && turnstileToken ? { turnstileToken } : {}),
       });
 
       if (appointmentResult.success && appointmentResult.checkoutUrl) {
@@ -698,47 +1585,132 @@ export default function BookingPage() {
         window.location.assign(appointmentResult.checkoutUrl);
       } else {
         paymentSubmissionRef.current = false;
-        alert(content.paymentError);
+        showSubmitError(content.paymentError);
       }
     } catch (error) {
       paymentSubmissionRef.current = false;
       console.error("Booking error:", error);
-      const serverMessage = getBookingServerErrorMessage(error);
-      if (serverMessage) {
-        // Le message serveur est rédigé en français : on le précède du libellé
-        // localisé pour les autres langues de l’interface.
-        alert(language === "fr" ? serverMessage : `${content.bookingError}\n\n${serverMessage}`);
-      } else if (isBookingInputError(error)) {
-        alert(content.invalidInput);
-      } else {
-        alert(content.bookingError);
+      const refusal = getBookingRefusalReason(error);
+      // ABUS-02 : vérification affichée à la demande du serveur, puis renouvelée
+      // après chaque refus, son jeton ayant déjà servi.
+      if (refusal === "security_check_required" || securityCheckRequired) {
+        setSecurityCheckRequired(true);
+        setTurnstileToken(null);
+        setTurnstileAttempt(attempt => attempt + 1);
       }
+      if (refusal === "slot_taken") setTakenSlot(selectedDate.getTime());
+      // Message dans la langue de la page (EN-06), jamais le texte français du serveur.
+      showSubmitError(
+        getBookingErrorMessage(error, content),
+        refusal === "slot_taken"
+      );
+      // Créneau pris entre-temps, date fermée… : agenda rechargé pour que la grille ne le propose plus.
+      if (refusal)
+        void Promise.all([
+          bookedSlots.refetch(),
+          blockedDates.refetch(),
+          availabilitySlots.refetch(),
+        ]);
     }
   };
 
   const handleReset = () => {
     paymentSubmissionRef.current = false;
     clearBookingDraft();
-    setFormData({ name: "", email: "", phone: "", date: "", details: "" });
+    draftSlotRef.current = null;
+    setFormData({ name: "", email: "", phone: "", details: "" });
+    setDayKey("");
     setSelectedDate(null);
-    setDateText("");
-    setTimeText("");
-    setDateError(null);
     setPhoneError(null);
+    setEmailError(null);
+    setEmailSuggestion(null);
+    setSubmitError(null);
+    setTakenSlot(null);
     setPaymentStatus(null);
     setTrackingId(null);
   };
 
   const isLoading = createAppointment.isPending;
+  const confirmationEmail = isBookingEmailAddress(formData.email.trim())
+    ? formData.email.trim()
+    : null;
+  // Refus d’un horaire (créneau pris) affiché en tête de la grille, avec les horaires libres les plus
+  // proches dans le texte annoncé ; tout autre refus au-dessus du bouton de paiement (RES-10, A11Y-10).
+  const slotRefusalInGrid = Boolean(submitError?.revealSlots && dayKey);
+  const nearestSlotsShown =
+    slotRefusalInGrid &&
+    suggestedSlots.length > 0 &&
+    !bookedSlots.isError &&
+    !slotsRetrying;
+  const submitErrorMessage = submitError && (
+    <p
+      key={`submit-error-${submitError.key}`}
+      id="booking-submit-error"
+      ref={submitErrorRef}
+      tabIndex={-1}
+      className={`rounded-xl border border-destructive/35 bg-destructive/5 p-4 text-sm text-destructive focus:outline-none${slotRefusalInGrid ? " mb-3" : ""}`}
+      role="alert"
+    >
+      {submitError.message}
+      {nearestSlotsShown && (
+        <>
+          {" "}
+          <span
+            id="booking-nearest-slots"
+            className="mt-1 block font-medium text-foreground"
+          >
+            {content.form.nearestSlots(suggestedSlots.map(slot => slot.time))}
+          </span>
+        </>
+      )}
+    </p>
+  );
 
   // Progress steps
   const steps = [
-    { label: language === "fr" ? "Informations" : language === "de" ? "Informationen" : language === "zh" ? "信息" : "Information", icon: User },
-    { label: language === "fr" ? "Date & Heure" : language === "de" ? "Datum & Uhrzeit" : language === "zh" ? "日期和时间" : "Date & Time", icon: Calendar },
-    { label: language === "fr" ? "Paiement" : language === "de" ? "Zahlung" : language === "zh" ? "支付" : "Payment", icon: Clock },
+    {
+      label:
+        language === "fr"
+          ? "Informations"
+          : language === "de"
+            ? "Informationen"
+            : language === "zh"
+              ? "信息"
+              : "Information",
+      icon: User,
+    },
+    {
+      label:
+        language === "fr"
+          ? "Date & Heure"
+          : language === "de"
+            ? "Datum & Uhrzeit"
+            : language === "zh"
+              ? "日期和时间"
+              : "Date & Time",
+      icon: Calendar,
+    },
+    {
+      label:
+        language === "fr"
+          ? "Paiement"
+          : language === "de"
+            ? "Zahlung"
+            : language === "zh"
+              ? "支付"
+              : "Payment",
+      icon: Clock,
+    },
   ];
 
-  const currentStep = paymentStatus === "success" ? 3 : (isLoading || (selectedDate && formData.details)) ? 2 : (formData.name && formData.email && formData.phone) ? 1 : 0;
+  const currentStep =
+    paymentStatus === "success"
+      ? 3
+      : isLoading || (selectedDate && formData.details)
+        ? 2
+        : formData.name && formData.email && formData.phone
+          ? 1
+          : 0;
 
   const seoDescription = {
     fr: "Réservez une consultation de conseil en santé de 30 minutes avec le Dr. Ahmed Ben Lallahom, avec paiement Stripe sécurisé.",
@@ -749,373 +1721,915 @@ export default function BookingPage() {
 
   return (
     <>
-    <div className="min-h-screen bg-background py-8 sm:py-12 px-4">
-      <SEOHead
-        title={`${content.title} | Dr. Ahmed Ben Lallahom`}
-        description={seoDescription}
-        ogUrl="https://drahmedbenlallahom.com/booking"
-      />
-      <div id="main-content" role="main" tabIndex={-1} className="max-w-3xl mx-auto">
-        {/* Breadcrumb */}
-        <Breadcrumb items={[{ label: content.title }]} />
+      <div className="min-h-screen bg-background py-8 sm:py-12 px-4">
+        <SEOHead
+          title={`${content.title} | Dr. Ahmed Ben Lallahom`}
+          description={seoDescription}
+          ogUrl="https://drahmedbenlallahom.com/booking"
+        />
+        <div
+          id="main-content"
+          role="main"
+          tabIndex={-1}
+          className="max-w-3xl mx-auto"
+        >
+          {/* Breadcrumb */}
+          <Breadcrumb items={[{ label: content.title }]} />
 
-        <div className="mb-6 flex items-center gap-3 rounded-xl border border-border/50 bg-card/40 px-4 py-3 shadow-sm shadow-black/10">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-primary/50 bg-primary/10 font-display text-sm font-bold tracking-tight text-primary" aria-hidden="true">
-            ABL
-          </span>
-          <div className="min-w-0">
-            <p className="font-display text-base font-semibold tracking-tight text-foreground">Dr. Ahmed Ben Lallahom</p>
-            <p className="text-xs leading-5 text-muted-foreground">{bookingBrandCopy}</p>
-          </div>
-          <span className="ml-auto hidden h-2 w-2 shrink-0 rounded-full bg-[#c9a96e] sm:block" aria-hidden="true" />
-        </div>
-
-        {/* Progress Indicator */}
-        {!paymentStatus && (
-          <div className="mb-8">
-            <div className="flex items-center justify-between">
-              {steps.map((step, index) => {
-                const StepIcon = step.icon;
-                const isCompleted = index < currentStep;
-                const isCurrent = index === currentStep;
-                const isActive = isCompleted || isCurrent;
-                return (
-                  <div key={index} className="flex items-center flex-1">
-                    <div className={`flex items-center gap-2 ${isCompleted ? 'text-primary' : isCurrent ? 'text-primary' : 'text-muted-foreground'}`}>
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300 ${isCompleted ? 'bg-primary text-primary-foreground' : isCurrent ? 'bg-primary/20 text-primary border-2 border-primary' : 'bg-muted text-muted-foreground'}`}>
-                        <StepIcon size={14} />
-                      </div>
-                      <span className="text-xs font-medium hidden sm:inline">{step.label}</span>
-                    </div>
-                    {index < steps.length - 1 && (
-                      <div className={`flex-1 h-0.5 mx-2 transition-all duration-300 ${index < currentStep ? 'bg-primary' : 'bg-muted'}`} />
-                    )}
-                  </div>
-                );
-              })}
+          <div className="mb-6 flex items-center gap-3 rounded-xl border border-border/50 bg-card/40 px-4 py-3 shadow-sm shadow-black/10">
+            <span
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-primary/50 bg-primary/10 font-display text-sm font-bold tracking-tight text-primary"
+              aria-hidden="true"
+            >
+              ABL
+            </span>
+            <div className="min-w-0">
+              <p className="font-display text-base font-semibold tracking-tight text-foreground">
+                Dr. Ahmed Ben Lallahom
+              </p>
+              <p className="text-xs leading-5 text-muted-foreground">
+                {bookingBrandCopy}
+              </p>
             </div>
+            <span
+              className="ml-auto hidden h-2 w-2 shrink-0 rounded-full bg-[#c9a96e] sm:block"
+              aria-hidden="true"
+            />
+            <LanguageMenu className="ml-auto shrink-0 sm:ml-0" />
           </div>
-        )}
 
-        {/* Pending payment after a return from Stripe */}
-        {!paymentStatus && pendingBooking && (
-          <Card className="payment-state payment-state-canceled mb-6 p-5 sm:p-6" role="region" aria-labelledby="pending-booking-title">
-            <div className="flex items-start gap-4">
-              <span className="payment-state-icon" aria-hidden="true">
-                <Clock className="w-6 h-6" />
-              </span>
-              <div className="min-w-0">
-                <h2 id="pending-booking-title" className="font-display text-xl font-bold mb-2">{content.pending.title}</h2>
-                <p className="text-sm text-muted-foreground leading-relaxed">{content.pending.description}</p>
-                <dl className="mt-3 grid gap-1 text-sm">
-                  <div><dt className="inline font-medium">{content.pending.slot} : </dt><dd className="inline">{new Intl.DateTimeFormat(language === "fr" ? "fr-FR" : language === "de" ? "de-DE" : language === "zh" ? "zh-CN" : "en-GB", { dateStyle: "full", timeStyle: "short", timeZone: "Europe/Paris" }).format(new Date(pendingBooking.appointmentDate))}</dd></div>
-                  <div><dt className="inline font-medium">{content.pending.heldUntil} : </dt><dd className="inline">{new Intl.DateTimeFormat(language === "fr" ? "fr-FR" : language === "de" ? "de-DE" : language === "zh" ? "zh-CN" : "en-GB", { timeStyle: "short", timeZone: "Europe/Paris" }).format(new Date(pendingBooking.holdExpiresAt))}</dd></div>
-                  <div><dt className="inline font-medium">{content.pending.reference} : </dt><dd className="inline font-mono text-primary">{pendingBooking.trackingId}</dd></div>
-                </dl>
-                <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                  <Button type="button" onClick={handleResumePayment} disabled={resumeCheckout.isPending || cancelPendingBooking.isPending} className="cta-primary">
-                    {content.pending.resume}
-                  </Button>
-                  <Button type="button" variant="outline" onClick={handleCancelPendingBooking} disabled={resumeCheckout.isPending || cancelPendingBooking.isPending} className="cta-secondary">
-                    {content.pending.cancel}
+          {/* Progress Indicator */}
+          {!paymentStatus && (
+            <div className="mb-8">
+              {/* Étape courante annoncée (aria-current, « Étape 2 sur 3 »), libellés lus aussi sur téléphone (A11Y-10). */}
+              <ol className="flex items-center justify-between">
+                {steps.map((step, index) => {
+                  const StepIcon = step.icon;
+                  const isCompleted = index < currentStep;
+                  const isCurrent = index === currentStep;
+                  return (
+                    <li
+                      key={index}
+                      className="flex items-center flex-1"
+                      aria-current={isCurrent ? "step" : undefined}
+                    >
+                      <div
+                        className={`flex items-center gap-2 ${isCompleted ? "text-primary" : isCurrent ? "text-primary" : "text-muted-foreground"}`}
+                      >
+                        <div
+                          className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300 ${isCompleted ? "bg-primary text-primary-foreground" : isCurrent ? "bg-primary/20 text-primary border-2 border-primary" : "bg-muted text-muted-foreground"}`}
+                        >
+                          <StepIcon size={14} aria-hidden="true" />
+                        </div>
+                        <span className="text-xs font-medium">
+                          <span className="sr-only">
+                            {content.stepOf(index + 1, steps.length)}
+                          </span>
+                          <span className="sr-only sm:not-sr-only">
+                            {step.label}
+                          </span>
+                        </span>
+                      </div>
+                      {index < steps.length - 1 && (
+                        <div
+                          aria-hidden="true"
+                          className={`flex-1 h-0.5 mx-2 transition-all duration-300 ${index < currentStep ? "bg-primary" : "bg-muted"}`}
+                        />
+                      )}
+                    </li>
+                  );
+                })}
+              </ol>
+            </div>
+          )}
+
+          {/* Pending payment after a return from Stripe */}
+          {/* Titre de chaque carte d'état, ici comme plus bas : pas un titre, il précéderait le h1 de la page dans la
+            lecture (A11Y-15) ; la carte est une région nommée par lui. */}
+          {!paymentStatus && pendingBooking && (
+            <Card
+              className="payment-state payment-state-canceled mb-6 p-5 sm:p-6"
+              role="region"
+              aria-labelledby="pending-booking-title"
+            >
+              <div className="flex items-start gap-4">
+                <span className="payment-state-icon" aria-hidden="true">
+                  <Clock className="w-6 h-6" />
+                </span>
+                <div className="min-w-0">
+                  <p
+                    id="pending-booking-title"
+                    ref={pendingTitleRef}
+                    tabIndex={-1}
+                    className="font-display text-xl font-bold mb-2 focus:outline-none"
+                  >
+                    {content.pending.title}
+                  </p>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    {content.pending.description}
+                  </p>
+                  <dl className="mt-3 grid gap-1 text-sm">
+                    <div>
+                      <dt className="inline font-medium">
+                        {content.pending.slot}
+                        {content.pending.labelSeparator}
+                      </dt>
+                      <dd className="inline">
+                        {parisDateTimeFormat.format(
+                          new Date(pendingBooking.appointmentDate)
+                        )}{" "}
+                        ({content.form.parisTime})
+                        {pendingLocalTime &&
+                          `, ${content.form.localTime(pendingLocalTime)}`}
+                      </dd>
+                    </div>
+                    {/* Temps restant plutôt qu’une heure de Paris qui semble déjà passée à l’étranger (RES-04). */}
+                    <div>
+                      <dt className="inline font-medium">
+                        {content.pending.remaining}
+                        {content.pending.labelSeparator}
+                      </dt>
+                      <dd className="inline">
+                        {content.pending.remainingValue(
+                          getHoldRemainingMinutes(
+                            pendingBooking.holdExpiresAt,
+                            now
+                          )
+                        )}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="inline font-medium">
+                        {content.pending.reference}
+                        {content.pending.labelSeparator}
+                      </dt>
+                      <dd className="inline font-mono text-primary">
+                        {pendingBooking.trackingId}
+                      </dd>
+                    </div>
+                  </dl>
+                  <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                    <Button
+                      type="button"
+                      onClick={handleResumePayment}
+                      disabled={
+                        resumeCheckout.isPending ||
+                        cancelPendingBooking.isPending
+                      }
+                      className="cta-primary"
+                    >
+                      {content.pending.resume}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleCancelPendingBooking}
+                      disabled={
+                        resumeCheckout.isPending ||
+                        cancelPendingBooking.isPending
+                      }
+                      className="cta-secondary"
+                    >
+                      {content.pending.cancel}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          )}
+          {!paymentStatus && pendingNotice && (
+            <p
+              className="mb-6 rounded-xl border border-primary/30 bg-primary/5 p-4 text-sm text-foreground"
+              role="status"
+              aria-live="polite"
+            >
+              {pendingNotice}
+            </p>
+          )}
+
+          {/* Payment Success Message */}
+          {paymentStatus === "success" && (
+            <Card
+              className="payment-state payment-state-success mb-6 p-6 sm:p-8"
+              role="region"
+              aria-labelledby="payment-success-title"
+            >
+              <div className="flex items-start gap-4">
+                <span className="payment-state-icon" aria-hidden="true">
+                  <CheckCircle className="w-6 h-6" />
+                </span>
+                <div className="min-w-0">
+                  <span className="eyebrow-label mb-3">
+                    {content.pricing.total}
+                  </span>
+                  <p
+                    id="payment-success-title"
+                    className="font-display text-2xl font-bold mb-3"
+                  >
+                    {content.paymentSuccess}
+                  </p>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    {content.confirmationNextSteps}
+                  </p>
+                  {trackingId && (
+                    <p className="mt-4 text-sm text-foreground">
+                      {content.trackingId}{" "}
+                      <span className="font-mono text-primary">
+                        {trackingId}
+                      </span>
+                    </p>
+                  )}
+                  <Button
+                    type="button"
+                    onClick={handleReset}
+                    className="cta-secondary mt-6"
+                  >
+                    {content.restartBooking}
                   </Button>
                 </div>
               </div>
-            </div>
-          </Card>
-        )}
-        {!paymentStatus && pendingNotice && (
-          <p className="mb-6 rounded-xl border border-primary/30 bg-primary/5 p-4 text-sm text-foreground" role="status" aria-live="polite">{pendingNotice}</p>
-        )}
+            </Card>
+          )}
 
-        {/* Payment Success Message */}
-        {paymentStatus === "success" && (
-          <Card className="payment-state payment-state-success mb-6 p-6 sm:p-8">
-            <div className="flex items-start gap-4">
-              <span className="payment-state-icon" aria-hidden="true">
-                <CheckCircle className="w-6 h-6" />
+          {/* Payment Canceled Message */}
+          {paymentStatus === "canceled" && (
+            <Card
+              className="payment-state payment-state-canceled mb-6 p-6 sm:p-8"
+              role="region"
+              aria-labelledby="payment-canceled-title"
+            >
+              <div className="flex items-start gap-4">
+                <span className="payment-state-icon" aria-hidden="true">
+                  <AlertCircle className="w-6 h-6" />
+                </span>
+                <div className="min-w-0">
+                  <span className="eyebrow-label mb-3">
+                    {content.pricing.title}
+                  </span>
+                  <p
+                    id="payment-canceled-title"
+                    className="font-display text-2xl font-bold mb-3"
+                  >
+                    {content.paymentCanceled}
+                  </p>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    {content.canceledNextSteps}
+                  </p>
+                  <Button
+                    type="button"
+                    onClick={handleReset}
+                    className="cta-secondary mt-6"
+                  >
+                    {content.restartBooking}
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          <div className="grid lg:grid-cols-[0.72fr_1.28fr] gap-6 items-start">
+            <aside
+              className="booking-rail rounded-2xl border border-border/60 bg-card/60 p-5 sm:p-6"
+              aria-label={bookingRailCopy.label}
+            >
+              <span className="eyebrow-label mb-5">
+                {bookingRailCopy.label}
               </span>
-              <div className="min-w-0">
-                <span className="eyebrow-label mb-3">{content.pricing.total}</span>
-                <h3 className="font-display text-2xl font-bold mb-3">{content.paymentSuccess}</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">{content.confirmationNextSteps}</p>
-                {trackingId && (
-                  <p className="mt-4 text-sm text-foreground">
-                    {content.trackingId} <span className="font-mono text-primary">{trackingId}</span>
+              {/* Pas un titre : il précéderait le h1 de la page dans la lecture (A11Y-10, A11Y-15). */}
+              <p className="font-display text-2xl font-bold tracking-tight mb-3">
+                {content.subtitle}
+              </p>
+              <p className="text-sm text-muted-foreground leading-relaxed mb-6">
+                {bookingRailCopy.note}
+              </p>
+              <img
+                src="/assets/booking-care.svg"
+                sizes="(min-width: 1024px) 30vw, 100vw"
+                loading="lazy"
+                decoding="async"
+                alt=""
+                aria-hidden="true"
+                className="mb-6 h-32 w-full rounded-xl border border-border/40 object-cover opacity-70 saturate-75"
+              />
+              <div className="booking-rail-list">
+                {steps.map((step, index) => {
+                  const StepIcon = step.icon;
+                  const active = index <= currentStep;
+                  return (
+                    <div
+                      key={step.label}
+                      className={`booking-rail-item ${active ? "is-active" : ""}`}
+                    >
+                      <span className="booking-rail-marker">
+                        <StepIcon aria-hidden="true" className="h-3.5 w-3.5" />
+                      </span>
+                      <span>{step.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mt-6 pt-5 border-t border-border/50 text-sm text-muted-foreground">
+                <div className="flex items-center justify-between gap-3">
+                  <span>{content.pricing.dayRate}</span>
+                  <strong className="text-foreground">
+                    {formatPrice(CONSULTATION_DAY_RATE_CENTS)}
+                  </strong>
+                </div>
+                <div className="flex items-center justify-between gap-3 mt-2">
+                  <span>{content.pricing.nightRate}</span>
+                  <strong className="text-foreground">
+                    {formatPrice(CONSULTATION_NIGHT_RATE_CENTS)}
+                  </strong>
+                </div>
+              </div>
+            </aside>
+
+            <Card className="p-5 sm:p-8 border-border/60 bg-card/90 shadow-xl shadow-black/5">
+              <div className="section-heading mb-8">
+                <span className="eyebrow-label mb-4">
+                  Hippocampus Consulting
+                </span>
+                <h1 className="text-3xl sm:text-4xl font-display font-bold tracking-tight mb-3">
+                  {content.title}
+                </h1>
+                <p className="text-muted-foreground leading-relaxed">
+                  {content.subtitle}
+                </p>
+              </div>
+
+              <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Name */}
+                <div>
+                  <label
+                    htmlFor="booking-name"
+                    className="block text-sm font-medium mb-2 flex items-center gap-2"
+                  >
+                    <User className="w-4 h-4" aria-hidden="true" />
+                    {content.form.name}
+                  </label>
+                  <input
+                    id="booking-name"
+                    type="text"
+                    required
+                    value={formData.name}
+                    onChange={e =>
+                      setFormData({ ...formData, name: e.target.value })
+                    }
+                    autoComplete="name"
+                    enterKeyHint="next"
+                    className="form-field-premium w-full px-4 py-2 border"
+                  />
+                </div>
+
+                {/* Email */}
+                <div>
+                  <label
+                    htmlFor="booking-email"
+                    className="block text-sm font-medium mb-2 flex items-center gap-2"
+                  >
+                    <Mail className="w-4 h-4" aria-hidden="true" />
+                    {content.form.email}
+                  </label>
+                  <input
+                    id="booking-email"
+                    type="email"
+                    required
+                    value={formData.email}
+                    onChange={e => {
+                      // Pasted address: without the spaces and direction marks left at either end, as the server reads it (INTL-05).
+                      const email = cleanTextInput(e.target.value);
+                      setFormData({ ...formData, email });
+                      if (emailError && isBookingEmailAddress(email))
+                        setEmailError(null);
+                      setEmailSuggestion(null);
+                    }}
+                    onBlur={() => {
+                      const email = formData.email.trim();
+                      showEmailIssue(
+                        email,
+                        email ? bookingEmailIssue(email) : null
+                      );
+                    }}
+                    autoComplete="email"
+                    inputMode="email"
+                    enterKeyHint="next"
+                    aria-invalid={emailError ? true : undefined}
+                    aria-describedby={
+                      [
+                        emailError && "booking-email-error",
+                        emailSuggestion && "booking-email-suggestion",
+                      ]
+                        .filter(Boolean)
+                        .join(" ") || undefined
+                    }
+                    className="form-field-premium w-full px-4 py-2 border"
+                  />
+                  {emailError && (
+                    <p
+                      id="booking-email-error"
+                      className="mt-2 text-sm text-destructive"
+                      role="alert"
+                    >
+                      {emailError}
+                    </p>
+                  )}
+                  {/* Faute de frappe courante (gmial.com…) : correction proposée, l’adresse saisie reste acceptée. */}
+                  <p
+                    id="booking-email-suggestion"
+                    role="status"
+                    className={
+                      emailSuggestion
+                        ? "mt-2 text-sm text-foreground"
+                        : "sr-only"
+                    }
+                  >
+                    {emailSuggestion && (
+                      <>
+                        {content.form.emailSuggestion(emailSuggestion)}{" "}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormData({
+                              ...formData,
+                              email: emailSuggestion,
+                            });
+                            setEmailSuggestion(null);
+                            setEmailError(null);
+                            document.getElementById("booking-email")?.focus();
+                          }}
+                          className="font-medium text-primary underline underline-offset-2"
+                        >
+                          {content.form.useEmailSuggestion}
+                        </button>
+                      </>
+                    )}
+                  </p>
+                </div>
+
+                {/* Phone */}
+                <div>
+                  <label
+                    htmlFor="booking-phone"
+                    className="block text-sm font-medium mb-2 flex items-center gap-2"
+                  >
+                    <Phone className="w-4 h-4" aria-hidden="true" />
+                    {content.form.phone}
+                  </label>
+                  {/* Indicatif exigé (INTL-09) : dit avant la saisie, pas seulement par l’erreur. */}
+                  <p
+                    id="booking-phone-hint"
+                    className="mb-2 text-xs leading-5 text-muted-foreground"
+                  >
+                    {content.form.phoneHint}
+                  </p>
+                  <input
+                    id="booking-phone"
+                    type="tel"
+                    required
+                    value={formData.phone}
+                    onChange={e => {
+                      setFormData({ ...formData, phone: e.target.value });
+                      if (
+                        phoneError &&
+                        isPlausiblePhoneNumber(
+                          normalizePhoneInput(e.target.value)
+                        )
+                      )
+                        setPhoneError(null);
+                    }}
+                    onBlur={() =>
+                      setPhoneError(
+                        formData.phone.trim() &&
+                          !isPlausiblePhoneNumber(
+                            normalizePhoneInput(formData.phone)
+                          )
+                          ? content.form.invalidPhone
+                          : null
+                      )
+                    }
+                    autoComplete="tel"
+                    inputMode="tel"
+                    enterKeyHint="next"
+                    maxLength={50}
+                    aria-invalid={phoneError ? true : undefined}
+                    aria-describedby={
+                      phoneError
+                        ? "booking-phone-hint booking-phone-error"
+                        : "booking-phone-hint"
+                    }
+                    className="form-field-premium w-full px-4 py-2 border"
+                  />
+                  {phoneError && (
+                    <p
+                      id="booking-phone-error"
+                      className="mt-2 text-sm text-destructive"
+                      role="alert"
+                    >
+                      {phoneError}
+                    </p>
+                  )}
+                </div>
+
+                {/* Date : jour puis horaire libre, choisis dans l’agenda (RES-02) */}
+                <fieldset>
+                  <legend className="block text-sm font-medium mb-2 flex items-center gap-2">
+                    <Calendar className="w-4 h-4" aria-hidden="true" />
+                    {content.form.date}
+                  </legend>
+                  <div
+                    id="booking-opening-hours"
+                    className="mb-4 rounded-xl border border-border/60 bg-background/40 px-4 py-3 text-xs leading-5 text-muted-foreground"
+                  >
+                    <p className="font-semibold text-foreground">
+                      {content.form.openingHours}
+                    </p>
+                    {availabilitySlots.isLoading ? (
+                      <p>{bookingFormCopy.checkingAvailability}</p>
+                    ) : openingHours.length > 0 ? (
+                      <ul className="mt-1 grid gap-0.5">
+                        {openingHours.map(({ day, ranges }) => (
+                          <li key={day}>
+                            <span className="font-medium text-foreground">
+                              {day}
+                            </span>{" "}
+                            {ranges.join(", ")}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : availabilitySlots.data ? (
+                      <p>{bookingFormCopy.noAvailability}</p>
+                    ) : null}
+                  </div>
+                  <label
+                    htmlFor="booking-day"
+                    className="block text-xs font-medium mb-2"
+                  >
+                    {content.form.day}
+                  </label>
+                  <select
+                    id="booking-day"
+                    required
+                    value={dayKey}
+                    onChange={e => chooseDay(e.target.value)}
+                    disabled={dayOptions.length === 0}
+                    aria-describedby="booking-opening-hours booking-date-hint availability-status"
+                    aria-invalid={isBlockedDate || undefined}
+                    className="form-field-premium h-11 w-full border px-4 py-2"
+                  >
+                    <option value="">{content.form.dayPlaceholder}</option>
+                    {dayOptions.map(({ key, label }) => (
+                      <option key={key} value={key}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                  {dayKey && (
+                    // Boutons radio natifs : Tab entre dans la grille, les flèches changent d’horaire.
+                    <fieldset
+                      ref={slotsFieldsetRef}
+                      className="mt-4"
+                      aria-describedby={`${nearestSlotsShown ? "booking-nearest-slots " : ""}booking-date-hint availability-status`}
+                    >
+                      <legend className="block text-xs font-medium mb-2">
+                        {content.form.slotsLegend}
+                      </legend>
+                      {slotRefusalInGrid && submitErrorMessage}
+                      {bookedSlots.isLoading && !slotsRetrying ? (
+                        <p className="text-sm text-muted-foreground">
+                          {bookingFormCopy.checkingAvailability}
+                        </p>
+                      ) : bookedSlots.isError || slotsRetrying ? (
+                        // Réservations du jour non chargées : erreur explicite et nouvel essai, au lieu d’une grille vide.
+                        <div
+                          className="flex flex-col items-start gap-3 rounded-xl border border-destructive/35 bg-destructive/5 p-4 text-sm text-destructive"
+                          role="alert"
+                        >
+                          <p>{content.form.slotsError}</p>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={retryAvailability}
+                            aria-disabled={slotsRetrying || undefined}
+                            className="min-h-11 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                          >
+                            {slotsRetrying
+                              ? bookingFormCopy.checkingAvailability
+                              : content.form.retry}
+                          </Button>
+                        </div>
+                      ) : daySlots.length === 0 ? (
+                        <p
+                          data-slots-empty
+                          tabIndex={-1}
+                          className="text-sm text-muted-foreground focus:outline-none"
+                        >
+                          {dayOpenSlots.length > 0
+                            ? content.form.noSlotsThisDay
+                            : content.form.noSlotsLeftThisDay}
+                        </p>
+                      ) : (
+                        <div
+                          id="booking-slots"
+                          className="grid grid-cols-3 gap-2 sm:grid-cols-4"
+                        >
+                          {daySlots.map(option => {
+                            // Horaire libre proche d’un créneau refusé « déjà pris » : mis en avant (RES-10).
+                            const suggested = suggestedSlotTimes.has(
+                              option.start.getTime()
+                            );
+                            return (
+                              <label
+                                key={option.start.toISOString()}
+                                className="block cursor-pointer"
+                                data-suggested={suggested || undefined}
+                              >
+                                <input
+                                  type="radio"
+                                  name="booking-slot"
+                                  value={option.start.toISOString()}
+                                  checked={
+                                    selectedDate?.getTime() ===
+                                    option.start.getTime()
+                                  }
+                                  onChange={() => chooseSlot(option.start)}
+                                  className="peer sr-only"
+                                />
+                                <span
+                                  className={`flex min-h-11 flex-col items-center justify-center rounded-xl border ${suggested ? "border-primary bg-primary/15" : "border-border/70 bg-background/40"} px-2 py-2 text-sm font-semibold text-foreground transition-colors hover:border-primary/60 peer-checked:border-primary peer-checked:bg-primary peer-checked:text-primary-foreground peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-background`}
+                                >
+                                  <span>{option.time}</span>
+                                  {option.localTime && (
+                                    <span className="text-[11px] font-normal leading-4 opacity-80">
+                                      {content.form.localTimeShort(
+                                        option.localTime
+                                      )}
+                                    </span>
+                                  )}
+                                  {suggested && (
+                                    <span className="sr-only">
+                                      {" "}
+                                      ({content.form.suggestedSlot})
+                                    </span>
+                                  )}
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </fieldset>
+                  )}
+                  <p
+                    id="booking-date-hint"
+                    className="mt-2 text-xs leading-5 text-muted-foreground"
+                  >
+                    {content.form.dateHint} {content.form.windowHint}
+                  </p>
+                  {localizedDate && (
+                    <p
+                      className="mt-2 text-sm font-medium text-primary"
+                      aria-live="polite"
+                    >
+                      {localizedDate}
+                      {selectedLocalTime && (
+                        <span className="block text-xs font-normal text-muted-foreground">
+                          {content.form.localTime(selectedLocalTime)}
+                        </span>
+                      )}
+                    </p>
+                  )}
+                  <div
+                    id="availability-status"
+                    className={`availability-status availability-${availabilityState} mt-3 flex items-center gap-2`}
+                    role="status"
+                    aria-live="polite"
+                    data-state={availabilityState}
+                  >
+                    {availabilityState === "select" && (
+                      <span
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary"
+                        aria-hidden="true"
+                      >
+                        <Calendar className="h-4 w-4" />
+                      </span>
+                    )}
+                    <span className="availability-dot" aria-hidden="true" />
+                    <span>{availabilityLabel}</span>
+                  </div>
+                </fieldset>
+
+                {/* Price Display */}
+                {selectedDate &&
+                  calculatePrice.isLoading &&
+                  !priceLastFailed && (
+                    <PublicContentSkeleton
+                      cards={1}
+                      label={bookingFormCopy.checkingAvailability}
+                    />
+                  )}
+                {selectedDate &&
+                  availabilityError &&
+                  (priceRetryOnly ? (
+                    <div
+                      className="flex flex-col items-start gap-3 rounded-xl border border-destructive/35 bg-destructive/5 p-4 text-sm text-destructive"
+                      role="alert"
+                    >
+                      <p>{content.form.priceError}</p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={retryPrice}
+                        aria-disabled={calculatePrice.isFetching || undefined}
+                        className="min-h-11 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                      >
+                        {calculatePrice.isFetching
+                          ? bookingFormCopy.checkingAvailability
+                          : content.form.retry}
+                      </Button>
+                    </div>
+                  ) : (
+                    <p
+                      className="rounded-xl border border-destructive/35 bg-destructive/5 p-4 text-sm text-destructive"
+                      role="alert"
+                    >
+                      {bookingFormCopy.availabilityError}
+                    </p>
+                  ))}
+                {calculatePrice.data && (
+                  <Card className="summary-card-premium p-4 sm:p-5">
+                    <h2 className="font-semibold mb-3">
+                      {content.pricing.title}
+                    </h2>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span>{content.pricing.dayRate}:</span>
+                        <span>{formatPrice(CONSULTATION_DAY_RATE_CENTS)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>{content.pricing.nightRate}:</span>
+                        <span>
+                          {formatPrice(CONSULTATION_NIGHT_RATE_CENTS)}
+                        </span>
+                      </div>
+                      <div className="border-t border-border pt-2 mt-2 flex justify-between font-bold">
+                        <span>{content.pricing.total}:</span>
+                        <span>
+                          {formatPrice(
+                            Math.round(calculatePrice.data.finalPrice * 100)
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  </Card>
+                )}
+
+                {/* Details */}
+                <div>
+                  <label
+                    htmlFor="booking-details"
+                    className="block text-sm font-medium mb-2 flex items-center gap-2"
+                  >
+                    <FileText className="w-4 h-4" aria-hidden="true" />
+                    {content.form.details}
+                  </label>
+                  <p
+                    id="booking-details-warning"
+                    className="mb-2 flex gap-2 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-foreground"
+                  >
+                    <AlertCircle
+                      className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-300"
+                      aria-hidden="true"
+                    />
+                    <span>{content.form.detailsWarning}</span>
+                  </p>
+                  <textarea
+                    id="booking-details"
+                    required
+                    maxLength={BOOKING_REQUEST_SUBJECT_MAX_LENGTH}
+                    value={formData.details}
+                    onChange={e =>
+                      setFormData({ ...formData, details: e.target.value })
+                    }
+                    placeholder={content.form.detailsPlaceholder}
+                    aria-describedby="booking-details-warning"
+                    rows={3}
+                    enterKeyHint="done"
+                    className="form-field-premium w-full px-4 py-2 border"
+                  />
+                </div>
+
+                {/* Vérification anti-robot, seulement quand le serveur la demande (ABUS-02). */}
+                {securityCheckRequired && (
+                  <TurnstileWidget
+                    key={turnstileAttempt}
+                    onToken={setTurnstileToken}
+                  />
+                )}
+
+                {/* Adresse qui recevra la confirmation, relue avant de partir vers Stripe (RES-10). */}
+                {confirmationEmail && (
+                  <p
+                    id="booking-confirmation-email"
+                    className="flex items-start gap-2 text-sm text-muted-foreground"
+                  >
+                    <Mail
+                      className="mt-0.5 h-4 w-4 shrink-0"
+                      aria-hidden="true"
+                    />
+                    <span className="min-w-0 wrap-anywhere">
+                      {content.form.confirmationTo(confirmationEmail)}
+                    </span>
                   </p>
                 )}
-                <Button type="button" onClick={handleReset} className="cta-secondary mt-6">
-                  {content.restartBooking}
+
+                {/* Refus de l’envoi, dans la page plutôt qu’en fenêtre d’alerte (RES-10, A11Y-10). */}
+                {!slotRefusalInGrid && submitErrorMessage}
+
+                {/* Submit Button */}
+                <Button
+                  type="submit"
+                  disabled={
+                    isLoading ||
+                    availabilityPending ||
+                    availabilityError ||
+                    isBlockedDate ||
+                    isBookedSlot ||
+                    isOutsideConfiguredAvailability ||
+                    Boolean(bookingWindowIssue) ||
+                    !selectedDate ||
+                    !calculatePrice.data ||
+                    (securityCheckRequired && !turnstileToken)
+                  }
+                  aria-describedby={
+                    confirmationEmail ? "booking-confirmation-email" : undefined
+                  }
+                  className="cta-primary w-full"
+                  size="lg"
+                >
+                  {isLoading ? bookingFormCopy.loading : bookingFormCopy.submit}
                 </Button>
-              </div>
-            </div>
-          </Card>
-        )}
-
-        {/* Payment Canceled Message */}
-        {paymentStatus === "canceled" && (
-          <Card className="payment-state payment-state-canceled mb-6 p-6 sm:p-8">
-            <div className="flex items-start gap-4">
-              <span className="payment-state-icon" aria-hidden="true">
-                <AlertCircle className="w-6 h-6" />
-              </span>
-              <div className="min-w-0">
-                <span className="eyebrow-label mb-3">{content.pricing.title}</span>
-                <h3 className="font-display text-2xl font-bold mb-3">{content.paymentCanceled}</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">{content.canceledNextSteps}</p>
-                <Button type="button" onClick={handleReset} className="cta-secondary mt-6">
-                  {content.restartBooking}
-                </Button>
-              </div>
-            </div>
-          </Card>
-        )}
-
-        <div className="grid lg:grid-cols-[0.72fr_1.28fr] gap-6 items-start">
-          <aside className="booking-rail rounded-2xl border border-border/60 bg-card/60 p-5 sm:p-6" aria-label={bookingRailCopy.label}>
-            <span className="eyebrow-label mb-5">{bookingRailCopy.label}</span>
-            <h2 className="font-display text-2xl font-bold tracking-tight mb-3">{content.subtitle}</h2>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-6">
-              {bookingRailCopy.note}
-            </p>
-            <img
-              src="/assets/booking-care.svg"
-              sizes="(min-width: 1024px) 30vw, 100vw"
-              loading="lazy"
-              decoding="async"
-              alt=""
-              aria-hidden="true"
-              className="mb-6 h-32 w-full rounded-xl border border-border/40 object-cover opacity-70 saturate-75"
-            />
-            <div className="booking-rail-list">
-              {steps.map((step, index) => {
-                const StepIcon = step.icon;
-                const active = index <= currentStep;
-                return (
-                  <div key={step.label} className={`booking-rail-item ${active ? "is-active" : ""}`}>
-                    <span className="booking-rail-marker"><StepIcon aria-hidden="true" className="h-3.5 w-3.5" /></span>
-                    <span>{step.label}</span>
+                <BookingLegalNotice className="-mt-2" />
+                <div
+                  className="booking-notes grid gap-3 sm:grid-cols-2 mt-2"
+                  aria-label={content.pricing.title}
+                >
+                  <div className="booking-note">
+                    <span className="text-xs uppercase tracking-[0.14em] text-primary font-bold">
+                      {content.availabilityLabel}
+                    </span>
+                    <p>{content.paymentTrust}</p>
                   </div>
-                );
-              })}
-            </div>
-            <div className="mt-6 pt-5 border-t border-border/50 text-sm text-muted-foreground">
-              <div className="flex items-center justify-between gap-3">
-                <span>{content.pricing.dayRate}</span>
-                <strong className="text-foreground">100 {content.pricing.eur}</strong>
-              </div>
-              <div className="flex items-center justify-between gap-3 mt-2">
-                <span>{content.pricing.nightRate}</span>
-                <strong className="text-foreground">150 {content.pricing.eur}</strong>
-              </div>
-            </div>
-          </aside>
-
-        <Card className="p-5 sm:p-8 border-border/60 bg-card/90 shadow-xl shadow-black/5">
-          <div className="section-heading mb-8">
-            <span className="eyebrow-label mb-4">Hippocampus Consulting</span>
-            <h1 className="text-3xl sm:text-4xl font-display font-bold tracking-tight mb-3">{content.title}</h1>
-            <p className="text-muted-foreground leading-relaxed">{content.subtitle}</p>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Name */}
-            <div>
-              <label htmlFor="booking-name" className="block text-sm font-medium mb-2 flex items-center gap-2">
-                <User className="w-4 h-4" aria-hidden="true" />
-                {content.form.name}
-              </label>
-              <input
-                id="booking-name"
-                type="text"
-                required
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                autoComplete="name"
-                enterKeyHint="next"
-                className="form-field-premium w-full px-4 py-2 border"
-              />
-            </div>
-
-            {/* Email */}
-            <div>
-              <label htmlFor="booking-email" className="block text-sm font-medium mb-2 flex items-center gap-2">
-                <Mail className="w-4 h-4" aria-hidden="true" />
-                {content.form.email}
-              </label>
-              <input
-                id="booking-email"
-                type="email"
-                required
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                autoComplete="email"
-                inputMode="email"
-                enterKeyHint="next"
-                className="form-field-premium w-full px-4 py-2 border"
-              />
-            </div>
-
-            {/* Phone */}
-            <div>
-              <label htmlFor="booking-phone" className="block text-sm font-medium mb-2 flex items-center gap-2">
-                <Phone className="w-4 h-4" aria-hidden="true" />
-                {content.form.phone}
-              </label>
-              <input
-                id="booking-phone"
-                type="tel"
-                required
-                value={formData.phone}
-                onChange={(e) => {
-                  setFormData({ ...formData, phone: e.target.value });
-                  if (phoneError && isPlausiblePhoneNumber(e.target.value)) setPhoneError(null);
-                }}
-                onBlur={() => setPhoneError(formData.phone.trim() && !isPlausiblePhoneNumber(formData.phone) ? content.form.invalidPhone : null)}
-                autoComplete="tel"
-                inputMode="tel"
-                enterKeyHint="next"
-                maxLength={50}
-                aria-invalid={phoneError ? true : undefined}
-                aria-describedby={phoneError ? "booking-phone-error" : undefined}
-                className="form-field-premium w-full px-4 py-2 border"
-              />
-              {phoneError && <p id="booking-phone-error" className="mt-2 text-sm text-destructive" role="alert">{phoneError}</p>}
-            </div>
-
-            {/* Date */}
-            <div>
-              <label htmlFor="booking-date" className="block text-sm font-medium mb-2 flex items-center gap-2">
-                <Calendar className="w-4 h-4" aria-hidden="true" />
-                {content.form.date}
-              </label>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <input
-                  id="booking-date"
-                  type="text"
-                  required
-                  value={dateText}
-                  onChange={(e) => synchronizeDateTime(e.target.value, timeText)}
-                  inputMode="numeric"
-                  autoComplete="off"
-                  enterKeyHint="next"
-                  placeholder={content.form.dateOnlyPlaceholder}
-                  className="form-field-premium h-11 w-full border px-4 py-2"
-                  aria-describedby="availability-status booking-date-error"
-                  aria-label={content.form.date}
-                />
-                <input
-                  id="booking-time"
-                  type="text"
-                  required
-                  value={timeText}
-                  onChange={(e) => synchronizeDateTime(dateText, e.target.value)}
-                  inputMode="numeric"
-                  autoComplete="off"
-                  enterKeyHint="next"
-                  placeholder={content.form.timePlaceholder}
-                  className="form-field-premium h-11 w-full border px-4 py-2"
-                  aria-describedby="availability-status booking-date-error"
-                  aria-label={content.form.timeLabel}
-                />
-              </div>
-              <p className="mt-2 text-xs leading-5 text-muted-foreground">{content.form.dateHint} {content.form.windowHint}</p>
-              {dateError && <p id="booking-date-error" className="mt-2 text-sm text-destructive" role="alert">{dateError}</p>}
-              {localizedDate && <p className="mt-2 text-sm font-medium text-primary" aria-live="polite">{localizedDate}</p>}
-              <div id="availability-status" className={`availability-status availability-${availabilityState} mt-3 flex items-center gap-2`} role="status" aria-live="polite" data-state={availabilityState}>
-                {availabilityState === "select" && <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary" aria-hidden="true"><Calendar className="h-4 w-4" /></span>}
-                <span className="availability-dot" aria-hidden="true" />
-                <span>{availabilityLabel}</span>
-              </div>
-            </div>
-
-            {/* Price Display */}
-            {selectedDate && calculatePrice.isLoading && <PublicContentSkeleton cards={1} label={bookingFormCopy.checkingAvailability} />}
-            {selectedDate && availabilityError && <p className="rounded-xl border border-destructive/35 bg-destructive/5 p-4 text-sm text-destructive" role="alert">{bookingFormCopy.availabilityError}</p>}
-            {calculatePrice.data && (
-              <Card className="summary-card-premium p-4 sm:p-5">
-                <h3 className="font-semibold mb-3">{content.pricing.title}</h3>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span>{content.pricing.dayRate}:</span>
-                    <span>100 {content.pricing.eur}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>{content.pricing.nightRate}:</span>
-                    <span>150 {content.pricing.eur}</span>
-                  </div>
-                  <div className="border-t border-border pt-2 mt-2 flex justify-between font-bold">
-                    <span>{content.pricing.total}:</span>
-                    <span>{calculatePrice.data.finalPrice} {content.pricing.eur}</span>
+                  <div className="booking-note">
+                    <span className="text-xs uppercase tracking-[0.14em] text-primary font-bold">
+                      {language === "fr"
+                        ? "Annulation"
+                        : language === "de"
+                          ? "Stornierung"
+                          : language === "zh"
+                            ? "取消政策"
+                            : "Cancellation"}
+                    </span>
+                    <p>{content.cancellation}</p>
                   </div>
                 </div>
-              </Card>
-            )}
+                <aside
+                  role="note"
+                  aria-label={content.emergencyTitle}
+                  className="mt-4 flex gap-3 rounded-xl border border-amber-400/30 bg-amber-500/10 p-4 text-sm text-foreground"
+                >
+                  <AlertCircle
+                    className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-300"
+                    aria-hidden="true"
+                  />
+                  <div>
+                    <p className="font-semibold">{content.emergencyTitle}</p>
+                    <p className="mt-1 leading-6 text-muted-foreground">
+                      {content.emergencyNote}
+                    </p>
+                  </div>
+                </aside>
+              </form>
 
-            {/* Details */}
-            <div>
-              <label htmlFor="booking-details" className="block text-sm font-medium mb-2 flex items-center gap-2">
-                <FileText className="w-4 h-4" aria-hidden="true" />
-                {content.form.details}
-              </label>
-              <p id="booking-details-warning" className="mb-2 flex gap-2 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-foreground">
-                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-300" aria-hidden="true" />
-                <span>{content.form.detailsWarning}</span>
-              </p>
-              <textarea
-                id="booking-details"
-                required
-                maxLength={BOOKING_REQUEST_SUBJECT_MAX_LENGTH}
-                value={formData.details}
-                onChange={(e) => setFormData({ ...formData, details: e.target.value })}
-                placeholder={content.form.detailsPlaceholder}
-                aria-describedby="booking-details-warning"
-                rows={3}
-                enterKeyHint="done"
-                className="form-field-premium w-full px-4 py-2 border"
-              />
-            </div>
-
-            {/* Submit Button */}
-            <Button
-              type="submit"
-              disabled={isLoading || availabilityPending || availabilityError || isBlockedDate || isBookedSlot || isOutsideConfiguredAvailability || Boolean(bookingWindowIssue) || !selectedDate || !calculatePrice.data}
-              className="cta-primary w-full"
-              size="lg"
-            >
-              {isLoading ? bookingFormCopy.loading : bookingFormCopy.submit}
-            </Button>
-            <BookingLegalNotice className="-mt-2" />
-            <div className="booking-notes grid gap-3 sm:grid-cols-2 mt-2" aria-label={content.pricing.title}>
-              <div className="booking-note">
-                <span className="text-xs uppercase tracking-[0.14em] text-primary font-bold">{content.availabilityLabel}</span>
-                <p>{content.paymentTrust}</p>
-              </div>
-              <div className="booking-note">
-                <span className="text-xs uppercase tracking-[0.14em] text-primary font-bold">{language === "fr" ? "Annulation" : language === "de" ? "Stornierung" : language === "zh" ? "取消政策" : "Cancellation"}</span>
-                <p>{content.cancellation}</p>
-              </div>
-            </div>
-            <aside role="note" aria-label={content.emergencyTitle} className="mt-4 flex gap-3 rounded-xl border border-amber-400/30 bg-amber-500/10 p-4 text-sm text-foreground">
-              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-300" aria-hidden="true" />
-              <div><p className="font-semibold">{content.emergencyTitle}</p><p className="mt-1 leading-6 text-muted-foreground">{content.emergencyNote}</p></div>
-            </aside>
-          </form>
-
-          {paymentStatus && (
-            <Button
-              onClick={handleReset}
-              variant="outline"
-              className="w-full mt-4"
-            >
-              {language === "fr" ? "Nouvelle réservation" : language === "de" ? "Neue Buchung" : language === "zh" ? "新预约" : "New Booking"}
-            </Button>
-          )}
-        </Card>
+              {paymentStatus && (
+                <Button
+                  onClick={handleReset}
+                  variant="outline"
+                  className="w-full mt-4"
+                >
+                  {language === "fr"
+                    ? "Nouvelle réservation"
+                    : language === "de"
+                      ? "Neue Buchung"
+                      : language === "zh"
+                        ? "新预约"
+                        : "New Booking"}
+                </Button>
+              )}
+            </Card>
+          </div>
         </div>
       </div>
-    </div>
-    <Footer />
+      <Footer />
     </>
   );
 }

@@ -11,7 +11,11 @@ export const contentZh = {
     contact: "联系",
     getInTouch: "联系我们",
     blog: "新闻",
-    switchLang: "中文",
+    // Short header labels, also used by the footer (PUB-08).
+    consultation: "咨询",
+    healthQuestions: "健康问答",
+    recruitment: "招聘",
+    employers: "雇主专区",
   },
 
   // Hero Section
@@ -43,7 +47,10 @@ export const contentZh = {
       { title: "患者安全", description: "安全是每一项临床和战略决策的核心。" },
       { title: "临床卓越", description: "对最高护理标准的持续承诺。" },
       { title: "循证护理", description: "每项实践都以科学和证据为指导。" },
-      { title: "医疗保健领导", description: "通过创新和管理改变医疗保健系统。" },
+      {
+        title: "医疗保健领导",
+        description: "通过创新和管理改变医疗保健系统。",
+      },
     ],
   },
 
@@ -55,25 +62,29 @@ export const contentZh = {
       {
         company: "海马咨询公司",
         role: "首席执行官和创始人",
-        description: "战略咨询和管理公司，完全面向出口，协助企业进行数字化转型和可持续增长。",
+        description:
+          "战略咨询和管理公司，完全面向出口，协助企业进行数字化转型和可持续增长。",
         tags: ["战略", "数字化转型", "增长"],
       },
       {
         company: "拉斯卡公司",
         role: "联合创始人",
-        description: "专业医疗和辅助医疗人员配置，将医疗机构与合格专业人员联系起来，提供永久职位、替代和临时工作。",
+        description:
+          "专业医疗和辅助医疗人员配置，将医疗机构与合格专业人员联系起来，提供永久职位、替代和临时工作。",
         tags: ["医疗人员配置", "临时工作", "医疗人力资源"],
       },
       {
         company: "突尼斯医疗呼吁",
         role: "联合创始人",
-        description: "医疗人员配置和人员配置企业，将合格的医疗专业人员与需要他们的医院和诊所联系起来。",
+        description:
+          "医疗人员配置和人员配置企业，将合格的医疗专业人员与需要他们的医院和诊所联系起来。",
         tags: ["人员配置", "突尼斯", "人员配置"],
       },
       {
         company: "章鱼人才",
         role: "联合创始人",
-        description: "总部位于巴黎的IT、数据、人工智能和网络安全咨询公司，通过定制的技术解决方案推动企业数字化转型。",
+        description:
+          "总部位于巴黎的IT、数据、人工智能和网络安全咨询公司，通过定制的技术解决方案推动企业数字化转型。",
         tags: ["IT", "人工智能", "网络安全"],
       },
       {
@@ -85,7 +96,8 @@ export const contentZh = {
       {
         company: "临床实践",
         role: "麻醉学家和重症医学专家",
-        description: "在法国领先医院进行一线麻醉和重症监护实践，包括曼恩中心医院和西部癌症研究所。",
+        description:
+          "在法国领先医院进行一线麻醉和重症监护实践，包括曼恩中心医院和西部癌症研究所。",
         tags: ["麻醉", "重症监护", "肿瘤学"],
       },
     ],
@@ -111,13 +123,15 @@ export const contentZh = {
       {
         number: "03",
         title: "医学咨询",
-        description: "为需要质量、组织和信誉的医疗机构、运营商和医疗企业提供临床战略。",
+        description:
+          "为需要质量、组织和信誉的医疗机构、运营商和医疗企业提供临床战略。",
         tags: ["治理", "协议", "性能"],
       },
       {
         number: "04",
         title: "医疗创新",
-        description: "数字平台、协作生态系统和以技术为先导的医疗交付模式的医学方向。",
+        description:
+          "数字平台、协作生态系统和以技术为先导的医疗交付模式的医学方向。",
         tags: ["医疗科技", "平台", "合作"],
       },
     ],
@@ -128,19 +142,55 @@ export const contentZh = {
     title: "教育",
     subtitle: "全面的医学和专业资格",
     diplomas: [
-      { year: "2025–2026", title: "疼痛评估和治疗能力", institution: "南特大学（进行中）" },
-      { year: "2024", title: "消化外科围手术期复苏大学文凭", institution: "巴黎城市大学" },
-      { year: "2023", title: "局部麻醉（ALR）和急性疼痛管理欧洲文凭", institution: "" },
+      {
+        year: "2025–2026",
+        title: "疼痛评估和治疗能力",
+        institution: "南特大学（进行中）",
+      },
+      {
+        year: "2024",
+        title: "消化外科围手术期复苏大学文凭",
+        institution: "巴黎城市大学",
+      },
+      {
+        year: "2023",
+        title: "局部麻醉（ALR）和急性疼痛管理欧洲文凭",
+        institution: "",
+      },
       { year: "2022", title: "麻醉学和重症医学欧洲文凭", institution: "" },
-      { year: "2022", title: "儿科麻醉能力维持大学文凭", institution: "索邦大学" },
-      { year: "2022", title: "大学文凭 - 严重创伤：前24小时管理", institution: "巴黎-萨克雷大学" },
-      { year: "2021", title: "知识验证考试（PAE）获奖者", institution: "成绩：13.83/20" },
+      {
+        year: "2022",
+        title: "儿科麻醉能力维持大学文凭",
+        institution: "索邦大学",
+      },
+      {
+        year: "2022",
+        title: "大学文凭 - 严重创伤：前24小时管理",
+        institution: "巴黎-萨克雷大学",
+      },
+      {
+        year: "2021",
+        title: "知识验证考试（PAE）获奖者",
+        institution: "成绩：13.83/20",
+      },
       { year: "2021", title: "人工通气大学文凭", institution: "昂热大学" },
-      { year: "2021", title: "血外净化技术大学文凭", institution: "斯特拉斯堡大学" },
+      {
+        year: "2021",
+        title: "血外净化技术大学文凭",
+        institution: "斯特拉斯堡大学",
+      },
       { year: "2020", title: "代谢复苏跨大学文凭", institution: "" },
       { year: "2020", title: "麻醉学和重症医学专业完成文凭", institution: "" },
-      { year: "2019", title: "麻醉学和重症医学专业医学培训文凭", institution: "索邦大学" },
-      { year: "2017", title: "医学博士", institution: "以优异成绩、陪审团祝贺和最佳论文奖提名" },
+      {
+        year: "2019",
+        title: "麻醉学和重症医学专业医学培训文凭",
+        institution: "索邦大学",
+      },
+      {
+        year: "2017",
+        title: "医学博士",
+        institution: "以优异成绩、陪审团祝贺和最佳论文奖提名",
+      },
       { year: "2015–2018", title: "麻醉学和重症医学实习生", institution: "" },
       { year: "2013–2014", title: "突尼斯医院外部实习", institution: "" },
       { year: "2006–2012", title: "医学研究", institution: "突尼斯医学院" },
@@ -169,7 +219,8 @@ export const contentZh = {
   gdpr: {
     title: "GDPR请求",
     subtitle: "行使您的数据保护权",
-    description: "您有权访问、更正、删除您的个人数据或反对其处理。填写此表格以提交您的请求。",
+    description:
+      "您有权访问、更正、删除您的个人数据或反对其处理。填写此表格以提交您的请求。",
     form: {
       name: "全名",
       namePlaceholder: "您的全名",
@@ -182,20 +233,43 @@ export const contentZh = {
         access: "访问我的数据",
         rectification: "更正我的数据",
         deletion: "删除我的数据（被遗忘权）",
+        restriction: "限制处理我的数据",
         portability: "数据可携带性",
         objection: "反对处理",
+        consent_withdrawal: "撤回我的同意",
       },
       description: "您的请求描述",
       descriptionPlaceholder: "详细描述您的GDPR请求...",
       send: "提交请求",
-      successMessage: "您的GDPR请求已收到。我们将在30天内处理您的请求。",
+      successMessage:
+        "您的GDPR请求已收到。我们将在收到请求后一个月内答复。您将通过电子邮件收到您的参考编号以及确认您邮箱地址的链接。",
+    },
+    // Link confirming the address, sent with the acknowledgement (RGPD-13).
+    confirmation: {
+      title: "确认您的电子邮件地址",
+      description: "请点击下方按钮，确认您的GDPR请求所使用的地址属于您本人。",
+      button: "确认我的地址",
+      confirming: "正在确认...",
+      confirmedTitle: "地址已确认",
+      confirmed:
+        "谢谢：您的请求 {reference} 的地址已确认。我们将在收到请求后一个月内答复。",
+      used: "此链接已被使用：您的请求地址已经确认。",
+      invalid:
+        "此确认链接无效或已过期。如需补充您的请求，请回复确认收件邮件并注明您的参考编号。",
+      error: "无法记录确认。请重试。",
+      newRequest: "提交另一项请求",
     },
   },
 
   // Footer
   footer: {
     tagline: "临床卓越服务于全球医学创新。",
-    navigate: "导航",
+    // Patients / Recruitment (nav.recruitment) / Information / Legal columns (PUB-08).
+    patients: "患者",
+    information: "信息",
+    legalHeading: "法律",
+    apply: "申请职位",
+    candidatePortal: "候选人空间",
     legal: "法律声明",
     privacy: "隐私政策",
     terms: "使用条款",

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { getSkeletonCardCount, getSkeletonGridClass } from "./PublicContentSkeleton";
+import {
+  getSkeletonCardCount,
+  getSkeletonGridClass,
+} from "./PublicContentSkeleton";
 
 describe("PublicContentSkeleton", () => {
   it("borne le nombre de cartes pour préserver la lisibilité", () => {

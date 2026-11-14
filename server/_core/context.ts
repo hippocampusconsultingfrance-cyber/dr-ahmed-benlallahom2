@@ -3,7 +3,8 @@ import type { User } from "../../drizzle/schema";
 import { clerkClient, getAuth } from "@clerk/express";
 import * as db from "../db";
 import { isAdminMfaVerified } from "../adminMfa";
-import { isConfiguredAdminOpenId } from "./env";
+import { isConfiguredAdminOpenId, localDevelopmentShortcuts } from "./env";
+import { logError } from "./logError";
 
 export type TrpcContext = {
   req: CreateExpressContextOptions["req"];
@@ -18,13 +19,27 @@ export async function createContext(
   let user: User | null = null;
   let mfaVerified = false;
 
+  // Local development without Clerk keys (CODE-15, never in production): createApp
+  // leaves clerkMiddleware out, without which getAuth throws; nobody is signed in, so
+  // every admin route, tRPC or Express, refuses as it refuses any visitor.
+  if (localDevelopmentShortcuts().includes("clerk_optional"))
+    return { req: opts.req, res: opts.res, user, mfaVerified };
+
   const auth = getAuth(opts.req);
   if (auth.isAuthenticated && auth.userId) {
     try {
       const clerkUser = await clerkClient.users.getUser(auth.userId);
-      const primaryEmail = clerkUser.emailAddresses.find(address => address.id === clerkUser.primaryEmailAddressId);
-      const verifiedEmail = primaryEmail?.verification?.status === "verified" ? primaryEmail.emailAddress : null;
-      const name = [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ") || verifiedEmail || "Administrateur";
+      const primaryEmail = clerkUser.emailAddresses.find(
+        address => address.id === clerkUser.primaryEmailAddressId
+      );
+      const verifiedEmail =
+        primaryEmail?.verification?.status === "verified"
+          ? primaryEmail.emailAddress
+          : null;
+      const name =
+        [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ") ||
+        verifiedEmail ||
+        "Administrateur";
 
       await db.upsertUser({
         openId: auth.userId,
@@ -35,12 +50,17 @@ export async function createContext(
       });
       const synchronizedUser = (await db.getUserByOpenId(auth.userId)) ?? null;
       user = synchronizedUser
-        ? { ...synchronizedUser, role: isConfiguredAdminOpenId(auth.userId) ? "admin" : "user" }
+        ? {
+            ...synchronizedUser,
+            role: isConfiguredAdminOpenId(auth.userId) ? "admin" : "user",
+          }
         : null;
 
       mfaVerified = await isAdminMfaVerified(opts.req, auth.userId);
     } catch (error) {
-      console.error("[Clerk] Unable to synchronize authenticated user", error);
+      logError("[Clerk] Unable to synchronize authenticated user", error, {
+        req: opts.req,
+      });
     }
   }
 

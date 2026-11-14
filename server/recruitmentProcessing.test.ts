@@ -2,7 +2,21 @@ import { describe, expect, it } from "vitest";
 import { drizzle } from "drizzle-orm/neon-http";
 import { and, eq } from "drizzle-orm";
 import { cvApplications } from "../drizzle/schema";
-import { analysisCompletionStatus, cvAnalysisEnqueueDisposition, cvExtractionPersistenceFields, didClaimProcessingJob, executeCvExternalPipeline, extractionMethodFor, recoveredCvAnalysisRetryIsCurrent, retryDelayMs } from "./recruitmentProcessing";
+import {
+  analysisCompletionStatus,
+  cvAnalysisEnqueueDisposition,
+  cvExtractionPersistenceFields,
+  didClaimProcessingJob,
+  executeCvExternalPipeline,
+  extractionMethodFor,
+  recoveredCvAnalysisRetryIsCurrent,
+  retryDelayMs,
+} from "./recruitmentProcessing";
+import type {
+  InvisibleTextSummary,
+  RecruitmentAnalysisExecution,
+  RecruitmentAnalysisResult,
+} from "./recruitmentAnalysis";
 
 const checksum = "a".repeat(64);
 const input = {
@@ -22,13 +36,22 @@ const input = {
   message: null,
 };
 
-const analysis = {
+const analysis: RecruitmentAnalysisResult = {
   summary: "Profil professionnel vérifiable.",
   professionalTitle: "Anesthésiste",
   specialties: ["Anesthésie"],
   skills: ["ACLS"],
   languages: ["Français"],
-  normalizedLanguages: [{ language: "Français", proficiency: "unknown" as const, evidence: "Français", sourceLocation: "page 1", confidence: 90, evidenceVerified: true }],
+  normalizedLanguages: [
+    {
+      language: "Français",
+      proficiency: "unknown" as const,
+      evidence: "Français",
+      sourceLocation: "page 1",
+      confidence: 90,
+      evidenceVerified: true,
+    },
+  ],
   certifications: [],
   countriesOfInterest: ["France"],
   yearsExperience: 8,
@@ -38,7 +61,16 @@ const analysis = {
   gaps: [],
   dataQualityWarnings: [],
   requiredFollowUps: [],
-  fieldEvidence: [{ field: "language", value: "Français", evidence: "Français", sourceLocation: "page 1", confidence: 90, evidenceVerified: true }],
+  fieldEvidence: [
+    {
+      field: "language",
+      value: "Français",
+      evidence: "Français",
+      sourceLocation: "page 1",
+      confidence: 90,
+      evidenceVerified: true,
+    },
+  ],
   contradictions: [],
   confidence: 92,
   evidenceCoverage: 100,
@@ -52,25 +84,43 @@ const analysis = {
   reasoning: "Revue humaine requise.",
 };
 
-const analysisExecution = {
+const analysisExecution: RecruitmentAnalysisExecution = {
   result: analysis,
   model: "openai/gpt-5.6-sol",
   generationId: "generation-test",
   usage: { inputTokens: 120, outputTokens: 80, totalTokens: 200 },
 };
 
-const steps = {
+const steps: Parameters<typeof executeCvExternalPipeline>[1] = {
   download: async () => Buffer.alloc(320, 1),
   promote: async () => ({ key: "recruitment/cv/CV-001-cv.pdf" }),
-  validate: () => ({ checksum, notes: "signature_verified", mimeType: "application/pdf", pageCount: 1, securityScanVersion: "document-safety-v2", warnings: [] }),
-  extract: async () => ({ text: "CV professionnel avec expérience clinique confirmée.", method: "pdf_text" as const, totalPages: 1, ocrConfidence: null, ocrModelVersion: null, warnings: [] }),
+  validate: () => ({
+    checksum,
+    notes: "signature_verified",
+    mimeType: "application/pdf",
+    pageCount: 1,
+    securityScanVersion: "document-safety-v2",
+    warnings: [],
+  }),
+  extract: async () => ({
+    text: "CV professionnel avec expérience clinique confirmée.",
+    method: "pdf_text" as const,
+    totalPages: 1,
+    ocrConfidence: null,
+    ocrModelVersion: null,
+    warnings: [],
+  }),
   analyze: async () => analysisExecution,
 };
 
 describe("règles déterministes du pipeline de traitement CV", () => {
   it("identifie les parseurs attendus pour PDF, DOCX et DOC", () => {
     expect(extractionMethodFor("application/pdf")).toBe("pdf_text_or_vision");
-    expect(extractionMethodFor("application/vnd.openxmlformats-officedocument.wordprocessingml.document")).toBe("docx");
+    expect(
+      extractionMethodFor(
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      )
+    ).toBe("docx");
     expect(extractionMethodFor("application/msword")).toBe("doc");
     expect(extractionMethodFor("text/plain")).toBe("unknown");
   });
@@ -100,24 +150,65 @@ describe("règles déterministes du pipeline de traitement CV", () => {
   });
 
   it("n'affiche un job récupéré comme en attente que s'il n'a pas déjà été revendiqué", () => {
-    const db = drizzle.mock();
-    const update = db.update(cvApplications).set({ analysisStatus: "queued" }).where(and(
-      eq(cvApplications.id, 42),
-      recoveredCvAnalysisRetryIsCurrent(db, 7, 1),
-    )).toSQL();
-    expect(update.sql).toContain('exists (select "id" from "cv_processing_jobs"');
+    // A query builder without a connection, typed as the application's database.
+    const db = drizzle.mock() as unknown as Parameters<
+      typeof recoveredCvAnalysisRetryIsCurrent
+    >[0];
+    const update = db
+      .update(cvApplications)
+      .set({ analysisStatus: "queued" })
+      .where(
+        and(
+          eq(cvApplications.id, 42),
+          recoveredCvAnalysisRetryIsCurrent(db, 7, 1)
+        )
+      )
+      .toSQL();
+    expect(update.sql).toContain(
+      'exists (select "id" from "cv_processing_jobs"'
+    );
     expect(update.sql).toContain('"cv_processing_jobs"."job_status" =');
     expect(update.sql).toContain('"cv_processing_jobs"."attempts" =');
     expect(update.params).toContain("retry");
   });
 
   it("termine une analyse propre et impose une revue humaine en cas d’incertitude", () => {
-    expect(analysisCompletionStatus({ gaps: [], dataQualityWarnings: [] })).toBe("completed");
-    expect(analysisCompletionStatus({ gaps: ["certification non vérifiée"], dataQualityWarnings: [] })).toBe("needs_review");
-    expect(analysisCompletionStatus({ gaps: [], dataQualityWarnings: ["date ambiguë"] })).toBe("needs_review");
-    expect(analysisCompletionStatus({ gaps: [], dataQualityWarnings: [], relevanceScore: null })).toBe("needs_review");
-    expect(analysisCompletionStatus({ gaps: [], dataQualityWarnings: [], requiredFollowUps: ["Vérifier le diplôme"] })).toBe("needs_review");
-    expect(analysisCompletionStatus({ gaps: [], dataQualityWarnings: [], contradictions: [{ field: "language" }] })).toBe("needs_review");
+    expect(
+      analysisCompletionStatus({ gaps: [], dataQualityWarnings: [] })
+    ).toBe("completed");
+    expect(
+      analysisCompletionStatus({
+        gaps: ["certification non vérifiée"],
+        dataQualityWarnings: [],
+      })
+    ).toBe("needs_review");
+    expect(
+      analysisCompletionStatus({
+        gaps: [],
+        dataQualityWarnings: ["date ambiguë"],
+      })
+    ).toBe("needs_review");
+    expect(
+      analysisCompletionStatus({
+        gaps: [],
+        dataQualityWarnings: [],
+        relevanceScore: null,
+      })
+    ).toBe("needs_review");
+    expect(
+      analysisCompletionStatus({
+        gaps: [],
+        dataQualityWarnings: [],
+        requiredFollowUps: ["Vérifier le diplôme"],
+      })
+    ).toBe("needs_review");
+    expect(
+      analysisCompletionStatus({
+        gaps: [],
+        dataQualityWarnings: [],
+        contradictions: [{ field: "language" }],
+      })
+    ).toBe("needs_review");
   });
 
   it("enchaîne stockage, promotion, extraction et analyse via des dépendances isolées", async () => {
@@ -128,6 +219,30 @@ describe("règles déterministes du pipeline de traitement CV", () => {
     expect(result.analysisModel).toBe("openai/gpt-5.6-sol");
     expect(result.analysisGenerationId).toBe("generation-test");
     expect(result.analysisUsage.totalTokens).toBe(200);
+  });
+
+  it("range le CV accepté sous une clé ASCII, son nom gardant ses lettres chinoises ou accentuées (INTL-07)", async () => {
+    const promotedKeys: string[] = [];
+    const promote = async (storageKey: string) => {
+      promotedKeys.push(storageKey);
+      return { key: storageKey };
+    };
+    for (const cvOriginalName of [
+      "王小明简历.pdf",
+      "CV Zoë Ørsted-Łukasz.pdf",
+    ]) {
+      const result = await executeCvExternalPipeline(
+        { ...input, cvOriginalName },
+        { ...steps, promote }
+      );
+      expect(result.promotedStorage?.key, cvOriginalName).toBe(
+        promotedKeys.at(-1)
+      );
+    }
+    expect(promotedKeys).toEqual([
+      "recruitment/cv/CV-001-cv.pdf",
+      "recruitment/cv/CV-001-CV_Zoe_rsted-_ukasz.pdf",
+    ]);
   });
 
   it("transmet le signal de couverture incomplète pour un PDF mixte", async () => {
@@ -150,40 +265,200 @@ describe("règles déterministes du pipeline de traitement CV", () => {
     expect(extractionIncomplete).toBe(true);
   });
 
+  it("un scan dont la vision n’a lu que les premières pages reste incomplet, avec la confiance de la vision telle quelle (IA-01)", async () => {
+    let received:
+      | Pick<
+          Parameters<typeof steps.analyze>[0],
+          "extractionIncomplete" | "ocrConfidence"
+        >
+      | undefined;
+    await executeCvExternalPipeline(input, {
+      ...steps,
+      extract: async () => ({
+        text: "[PAGE 1]\nDocument fictif avec assez de texte.",
+        method: "pdf_vision" as const,
+        totalPages: 8,
+        ocrConfidence: 92,
+        ocrModelVersion: "google/gemini-3.8-flash",
+        warnings: ["vision_ocr_fallback", "vision_ocr_first_8_pages_only"],
+      }),
+      analyze: async analysisInput => {
+        received = {
+          extractionIncomplete: analysisInput.extractionIncomplete,
+          ocrConfidence: analysisInput.ocrConfidence,
+        };
+        return analysisExecution;
+      },
+    });
+    // No whole-document score, but no « 0 % » either: the quotes found on the pages read stay found.
+    expect(received).toEqual({ extractionIncomplete: true, ocrConfidence: 92 });
+  });
+
+  it("traite comme une extraction incomplète un texte lu sans contrôle de visibilité, un texte invisible au-delà de 30 caractères, ou un texte non vérifiable d’un tiers au moins (IA-01)", async () => {
+    const received: Array<
+      Pick<
+        Parameters<typeof steps.analyze>[0],
+        "extractionIncomplete" | "invisibleText" | "visibilityUnchecked"
+      >
+    > = [];
+    const extractWith = (extra: {
+      warnings: string[];
+      invisibleText?: InvisibleTextSummary;
+    }) =>
+      executeCvExternalPipeline(input, {
+        ...steps,
+        extract: async () => ({
+          text: "[PAGE 1]\nDocument fictif avec assez de texte.",
+          method: "pdf_text" as const,
+          totalPages: 1,
+          ocrConfidence: null,
+          ocrModelVersion: null,
+          ...extra,
+        }),
+        analyze: async analysisInput => {
+          received.push({
+            extractionIncomplete: analysisInput.extractionIncomplete,
+            invisibleText: analysisInput.invisibleText,
+            visibilityUnchecked: analysisInput.visibilityUnchecked,
+          });
+          return analysisExecution;
+        },
+      });
+    const unverifiable = (
+      characters: number,
+      share: number
+    ): InvisibleTextSummary => ({
+      characters: 0,
+      excerpt: "",
+      unverifiable: {
+        characters,
+        excerpt: "x".repeat(Math.min(characters, 80)),
+        reasons: ["unfinished"],
+        share,
+      },
+    });
+    await extractWith({ warnings: ["pdf_visibility_check_unavailable"] });
+    await extractWith({
+      warnings: ["invisible_text_ignored:31"],
+      invisibleText: { characters: 31, excerpt: "x".repeat(31) },
+    });
+    await extractWith({
+      warnings: ["invisible_text_ignored:30"],
+      invisibleText: {
+        characters: 30,
+        excerpt: "réf. modèle de CV, 30 signes.",
+      },
+    });
+    // Text set aside as unverifiable: not held against the CV, unless it is a third of it or more.
+    await extractWith({
+      warnings: [
+        "unverifiable_text_set_aside:900",
+        "pdf_visibility_check_unfinished",
+      ],
+      invisibleText: unverifiable(900, 0.4),
+    });
+    await extractWith({
+      warnings: [
+        "unverifiable_text_set_aside:300",
+        "pdf_visibility_check_unfinished",
+      ],
+      invisibleText: unverifiable(300, 0.1),
+    });
+    expect(received.map(item => item.extractionIncomplete)).toEqual([
+      true,
+      true,
+      false,
+      true,
+      false,
+    ]);
+    // Text read without the check keeps its facts out of the filters, as text that hides too much.
+    expect(received.map(item => item.visibilityUnchecked)).toEqual([
+      true,
+      false,
+      false,
+      false,
+      false,
+    ]);
+    // The admin alert needs the count and the excerpt, whatever the threshold.
+    expect(received[2]!.invisibleText).toEqual({
+      characters: 30,
+      excerpt: "réf. modèle de CV, 30 signes.",
+    });
+  });
+
   it("propage de manière contrôlée les échecs de stockage, OCR et IA pour la logique de reprise", async () => {
-    await expect(executeCvExternalPipeline(input, { ...steps, download: async () => { throw new Error("cv_download_failed_503"); } })).rejects.toThrow("cv_download_failed_503");
-    await expect(executeCvExternalPipeline(input, { ...steps, extract: async () => { throw new Error("ocr_engine_failed"); } })).rejects.toThrow("ocr_engine_failed");
-    await expect(executeCvExternalPipeline(input, { ...steps, analyze: async () => { throw new Error("ai_provider_failed"); } })).rejects.toThrow("ai_provider_failed");
+    await expect(
+      executeCvExternalPipeline(input, {
+        ...steps,
+        download: async () => {
+          throw new Error("cv_download_failed_503");
+        },
+      })
+    ).rejects.toThrow("cv_download_failed_503");
+    await expect(
+      executeCvExternalPipeline(input, {
+        ...steps,
+        extract: async () => {
+          throw new Error("ocr_engine_failed");
+        },
+      })
+    ).rejects.toThrow("ocr_engine_failed");
+    await expect(
+      executeCvExternalPipeline(input, {
+        ...steps,
+        analyze: async () => {
+          throw new Error("ai_provider_failed");
+        },
+      })
+    ).rejects.toThrow("ai_provider_failed");
   });
 
   it("rend le CV exportable avant une éventuelle panne de l’analyse IA", async () => {
     let validatedKey: string | null = null;
-    await expect(executeCvExternalPipeline(
-      input,
-      { ...steps, analyze: async () => { throw new Error("ai_provider_failed"); } },
-      async ({ promotedStorage }) => { validatedKey = promotedStorage?.key ?? null; },
-    )).rejects.toThrow("ai_provider_failed");
+    await expect(
+      executeCvExternalPipeline(
+        input,
+        {
+          ...steps,
+          analyze: async () => {
+            throw new Error("ai_provider_failed");
+          },
+        },
+        async ({ promotedStorage }) => {
+          validatedKey = promotedStorage?.key ?? null;
+        }
+      )
+    ).rejects.toThrow("ai_provider_failed");
     expect(validatedKey).toBe("recruitment/cv/CV-001-cv.pdf");
   });
 
   it("enregistre la preuve d’extraction avant l’appel IA même si celui-ci échoue", async () => {
-    const persisted: Array<ReturnType<typeof cvExtractionPersistenceFields>> = [];
-    await expect(executeCvExternalPipeline(
-      input,
-      {
-        ...steps,
-        analyze: async () => {
-          expect(persisted).toHaveLength(1);
-          expect(persisted[0].analysisStatus).toBe("analyzing");
-          throw new Error("ai_provider_failed");
+    const persisted: Array<ReturnType<typeof cvExtractionPersistenceFields>> =
+      [];
+    await expect(
+      executeCvExternalPipeline(
+        input,
+        {
+          ...steps,
+          analyze: async () => {
+            expect(persisted).toHaveLength(1);
+            expect(persisted[0].analysisStatus).toBe("analyzing");
+            throw new Error("ai_provider_failed");
+          },
         },
-      },
-      undefined,
-      async ({ validation, extraction }) => {
-        await Promise.resolve();
-        persisted.push(cvExtractionPersistenceFields(validation, extraction, new Date("2026-10-03T00:00:00.000Z")));
-      },
-    )).rejects.toThrow("ai_provider_failed");
+        undefined,
+        async ({ validation, extraction }) => {
+          await Promise.resolve();
+          persisted.push(
+            cvExtractionPersistenceFields(
+              validation,
+              extraction,
+              new Date("2026-10-03T00:00:00.000Z")
+            )
+          );
+        }
+      )
+    ).rejects.toThrow("ai_provider_failed");
 
     expect(persisted[0]).toMatchObject({
       extractedText: "CV professionnel avec expérience clinique confirmée.",

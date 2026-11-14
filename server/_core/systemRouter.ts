@@ -15,10 +15,13 @@ export const systemRouter = router({
     })),
 
   /**
-   * Noms des variables critiques manquantes (jamais leurs valeurs), affichés en bandeau
-   * dans le tableau de bord admin (OPS-01). Même source que GET /api/health.
+   * Noms des variables critiques manquantes et codes des incohérences relevées selon
+   * VERCEL_ENV (EXPL-20), jamais leurs valeurs, affichés en bandeau dans le tableau de
+   * bord admin (OPS-01). Même source que GET /api/health.
    */
-  configurationStatus: adminProcedure.query(() => getEnvironmentConfigurationStatus()),
+  configurationStatus: adminProcedure.query(() =>
+    getEnvironmentConfigurationStatus()
+  ),
 
   notifyOwner: adminProcedure
     .input(

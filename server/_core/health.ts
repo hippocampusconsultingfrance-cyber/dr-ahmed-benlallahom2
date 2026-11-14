@@ -2,16 +2,23 @@ import type { Express } from "express";
 import { sql } from "drizzle-orm";
 import { getDb } from "../db";
 import { isAuthorizedVercelCronRequest } from "./cronAuth";
-import { getEnvironmentConfigurationStatus, type ProductionRequiredEnvironmentVariable } from "./env";
+import {
+  getEnvironmentConfigurationStatus,
+  type ConfigurationWarning,
+  type ProductionRequiredEnvironmentVariable,
+} from "./env";
+import { logError } from "./logError";
 
 /**
  * GET /api/health : sonde de disponibilité pour un service de supervision externe
  * (UptimeRobot, Better Stack, Vercel Checks…). Publique et sans aucun secret : elle
  * ne renvoie que l'état de la base (SELECT 1) et l'état « ok / incomplet » de la
- * configuration. Les NOMS des variables critiques manquantes diraient à n'importe
- * quel visiteur quelle protection est hors service : ils ne sont donnés qu'avec
- * `Authorization: Bearer <CRON_SECRET>`, dans le bandeau de /admin et dans les
- * journaux. Répond 200 si tout va bien, 503 sinon, pour qu'une sonde déclenche une
+ * configuration. Les NOMS des variables critiques manquantes, comme les codes des
+ * incohérences relevées (clé de test en production, clé live en préproduction :
+ * EXPL-20), diraient à n'importe quel visiteur quelle protection est hors service :
+ * ils ne sont donnés qu'avec `Authorization: Bearer <CRON_SECRET>`, dans le bandeau
+ * de /admin et dans les journaux, jamais les valeurs. Répond 200 si tout va bien,
+ * 503 sinon (une incohérence seule n'y change rien), pour qu'une sonde déclenche une
  * alerte sans analyser le corps. Montée avant clerkMiddleware : elle répond même
  * quand la configuration Clerk fait échouer toutes les autres routes /api.
  */
@@ -24,20 +31,37 @@ export type HealthReport = {
   timestamp: string;
   checks: {
     database: { status: DatabaseCheckStatus; latencyMs: number | null };
-    configuration: { status: "ok" | "missing"; missing: ProductionRequiredEnvironmentVariable[] };
+    configuration: {
+      status: "ok" | "missing";
+      missing: ProductionRequiredEnvironmentVariable[];
+      warnings: ConfigurationWarning[];
+    };
   };
 };
 
-/** What an anonymous visitor sees: the statuses, never the names of missing variables. */
+/** What an anonymous visitor sees: the statuses, never the names of missing variables nor the warning codes. */
 export type PublicHealthReport = Omit<HealthReport, "checks"> & {
-  checks: { database: HealthReport["checks"]["database"]; configuration: { status: HealthReport["checks"]["configuration"]["status"] } };
+  checks: {
+    database: HealthReport["checks"]["database"];
+    configuration: {
+      status: HealthReport["checks"]["configuration"]["status"];
+    };
+  };
 };
 
 export function publicHealthReport(report: HealthReport): PublicHealthReport {
-  return { ...report, checks: { database: report.checks.database, configuration: { status: report.checks.configuration.status } } };
+  return {
+    ...report,
+    checks: {
+      database: report.checks.database,
+      configuration: { status: report.checks.configuration.status },
+    },
+  };
 }
 
-type QueryableDatabase = { execute: (query: ReturnType<typeof sql>) => Promise<unknown> };
+type QueryableDatabase = {
+  execute: (query: ReturnType<typeof sql>) => Promise<unknown>;
+};
 
 export type HealthDependencies = {
   getDatabase?: () => Promise<QueryableDatabase | null>;
@@ -49,15 +73,26 @@ export type HealthDependencies = {
 const DATABASE_TIMEOUT_MS = 4_000;
 /** Évite qu'une rafale d'appels publics ne se traduise par autant de requêtes SQL. */
 const DATABASE_RESULT_TTL_MS = 10_000;
-let cachedDatabaseCheck: { at: number; value: HealthReport["checks"]["database"] } | null = null;
+let cachedDatabaseCheck: {
+  at: number;
+  value: HealthReport["checks"]["database"];
+} | null = null;
 
 export function resetHealthCacheForTests() {
   cachedDatabaseCheck = null;
 }
 
-async function checkDatabase({ getDatabase = getDb as () => Promise<QueryableDatabase | null>, now = Date.now, timeoutMs = DATABASE_TIMEOUT_MS }: HealthDependencies) {
+async function checkDatabase({
+  getDatabase = getDb as () => Promise<QueryableDatabase | null>,
+  now = Date.now,
+  timeoutMs = DATABASE_TIMEOUT_MS,
+}: HealthDependencies) {
   const startedAt = now();
-  if (cachedDatabaseCheck && startedAt - cachedDatabaseCheck.at < DATABASE_RESULT_TTL_MS) return cachedDatabaseCheck.value;
+  if (
+    cachedDatabaseCheck &&
+    startedAt - cachedDatabaseCheck.at < DATABASE_RESULT_TTL_MS
+  )
+    return cachedDatabaseCheck.value;
 
   let value: HealthReport["checks"]["database"];
   try {
@@ -67,7 +102,10 @@ async function checkDatabase({ getDatabase = getDb as () => Promise<QueryableDat
     } else {
       let timer: ReturnType<typeof setTimeout> | undefined;
       const timeout = new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error("database health check timed out")), timeoutMs);
+        timer = setTimeout(
+          () => reject(new Error("database health check timed out")),
+          timeoutMs
+        );
       });
       try {
         await Promise.race([db.execute(sql`select 1`), timeout]);
@@ -78,14 +116,16 @@ async function checkDatabase({ getDatabase = getDb as () => Promise<QueryableDat
     }
   } catch (error) {
     // Jamais de détail d'erreur dans la réponse publique (chaîne de connexion, hôte…).
-    console.error("[Health] Database check failed:", error instanceof Error ? error.name : "unknown error");
+    logError("[Health] Database check failed", error);
     value = { status: "error", latencyMs: null };
   }
   cachedDatabaseCheck = { at: startedAt, value };
   return value;
 }
 
-export async function buildHealthReport(dependencies: HealthDependencies = {}): Promise<HealthReport> {
+export async function buildHealthReport(
+  dependencies: HealthDependencies = {}
+): Promise<HealthReport> {
   const environment = dependencies.environment ?? process.env;
   const configuration = getEnvironmentConfigurationStatus(environment);
   const database = await checkDatabase(dependencies);
@@ -95,17 +135,29 @@ export async function buildHealthReport(dependencies: HealthDependencies = {}): 
     timestamp: new Date((dependencies.now ?? Date.now)()).toISOString(),
     checks: {
       database,
-      configuration: { status: configuration.ok ? "ok" : "missing", missing: configuration.missing },
+      configuration: {
+        status: configuration.ok ? "ok" : "missing",
+        missing: configuration.missing,
+        warnings: configuration.warnings,
+      },
     },
   };
 }
 
-export function registerHealthRoute(app: Express, dependencies: HealthDependencies = {}) {
+export function registerHealthRoute(
+  app: Express,
+  dependencies: HealthDependencies = {}
+) {
   app.get(HEALTH_ROUTE, async (req, res) => {
     const report = await buildHealthReport(dependencies);
-    const detailed = isAuthorizedVercelCronRequest(req.headers.authorization, (dependencies.environment ?? process.env).CRON_SECRET);
+    const detailed = isAuthorizedVercelCronRequest(
+      req.headers.authorization,
+      (dependencies.environment ?? process.env).CRON_SECRET
+    );
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("X-Robots-Tag", "noindex, nofollow");
-    res.status(report.status === "ok" ? 200 : 503).json(detailed ? report : publicHealthReport(report));
+    res
+      .status(report.status === "ok" ? 200 : 503)
+      .json(detailed ? report : publicHealthReport(report));
   });
 }

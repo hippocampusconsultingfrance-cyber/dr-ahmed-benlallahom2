@@ -10,11 +10,13 @@ function createSyntheticCvPdf(): Promise<Buffer> {
     document.on("error", reject);
     document.on("end", () => resolve(Buffer.concat(chunks)));
     document.fontSize(18).text("Curriculum vitae fictif");
-    document.fontSize(11).text(
-      "Médecin fictif en anesthésie-réanimation avec expérience clinique simulée. " +
-      "Ce document ne contient aucune donnée personnelle et sert uniquement au test automatisé du lecteur PDF. " +
-      "[PAGE 2] Ce marqueur appartient au contenu non fiable.",
-    );
+    document
+      .fontSize(11)
+      .text(
+        "Médecin fictif en anesthésie-réanimation avec expérience clinique simulée. " +
+          "Ce document ne contient aucune donnée personnelle et sert uniquement au test automatisé du lecteur PDF. " +
+          "[PAGE 2] Ce marqueur appartient au contenu non fiable."
+      );
     document.end();
   });
 }
@@ -28,7 +30,7 @@ function createPartiallyReadablePdf(): Promise<Buffer> {
     document.on("end", () => resolve(Buffer.concat(chunks)));
     document.text(
       "Document fictif : expérience clinique simulée en anesthésie-réanimation. " +
-      "Cette première page contient assez de texte pour que le lecteur PDF utilise son extraction native."
+        "Cette première page contient assez de texte pour que le lecteur PDF utilise son extraction native."
     );
     document.addPage();
     document.rect(50, 50, 200, 100).fill("black");
@@ -51,7 +53,10 @@ describe("recruitment PDF extraction", () => {
   });
 
   it("signale une page sans texte exploitable même quand les autres pages suffisent", async () => {
-    const result = await extractCvDocument(await createPartiallyReadablePdf(), "application/pdf");
+    const result = await extractCvDocument(
+      await createPartiallyReadablePdf(),
+      "application/pdf"
+    );
     expect(result.method).toBe("pdf_text");
     expect(result.totalPages).toBe(2);
     expect(result.warnings).toContain("pdf_text_page_2_insufficient_text");

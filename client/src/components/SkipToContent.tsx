@@ -1,6 +1,18 @@
+import { useLanguage } from "@/contexts/LanguageContext";
+
+/** The skip link in the language shown (EN-07): read first by keyboard and screen reader users on every page. */
+export const skipToContentCopy = {
+  fr: "Aller au contenu principal",
+  en: "Skip to main content",
+  de: "Zum Hauptinhalt springen",
+  zh: "跳到主要内容",
+} as const;
+
 type MainTarget = Pick<HTMLElement, "id" | "tabIndex" | "focus">;
 
-export function getMainContentTarget(root: { querySelector: (selector: string) => MainTarget | null }) {
+export function getMainContentTarget(root: {
+  querySelector: (selector: string) => MainTarget | null;
+}) {
   const main = root.querySelector('main, [role="main"]');
   if (!main) return null;
   if (!main.id) main.id = "main-content";
@@ -9,6 +21,7 @@ export function getMainContentTarget(root: { querySelector: (selector: string) =
 }
 
 export default function SkipToContent() {
+  const { language } = useLanguage();
   return (
     <a
       href="#main-content"
@@ -20,7 +33,7 @@ export default function SkipToContent() {
         main.focus({ preventScroll: false });
       }}
     >
-      Aller au contenu principal
+      {skipToContentCopy[language]}
     </a>
   );
 }

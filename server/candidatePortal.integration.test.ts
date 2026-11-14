@@ -1,11 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createCandidateToken,
   hashCandidatePassword,
   hashCandidateToken,
   verifyCandidatePassword,
 } from "./candidateAuth";
-import { decryptCandidateDocument, encryptCandidateDocument } from "./candidateDocumentEncryption";
+import {
+  decryptCandidateDocument,
+  encryptCandidateDocument,
+} from "./candidateDocumentEncryption";
 import { validateCandidateDocument } from "./candidateDocumentValidation";
 import { verifyCandidateTurnstile } from "./candidateTurnstile";
 
@@ -15,21 +18,35 @@ function validPdfBuffer() {
 }
 
 describe("parcours candidat — protections intégrées non destructives", () => {
-  it("vérifie un mot de passe, isole les jetons d’activation et accepte le contrôle anti-bot en environnement de test", async () => {
+  it("vérifie un mot de passe, isole les jetons d’activation et accepte un contrôle anti-bot validé par Cloudflare", async () => {
     const password = "Mot-de-passe-long-et-unique-2026";
     const passwordHash = await hashCandidatePassword(password);
     const token = createCandidateToken();
 
-    await expect(verifyCandidatePassword(password, passwordHash)).resolves.toBe(true);
-    await expect(verifyCandidatePassword(`${password}-incorrect`, passwordHash)).resolves.toBe(false);
-    expect(hashCandidateToken(token, "verification")).not.toBe(hashCandidateToken(token, "session"));
+    await expect(verifyCandidatePassword(password, passwordHash)).resolves.toBe(
+      true
+    );
+    await expect(
+      verifyCandidatePassword(`${password}-incorrect`, passwordHash)
+    ).resolves.toBe(false);
+    expect(hashCandidateToken(token, "verification")).not.toBe(
+      hashCandidateToken(token, "session")
+    );
 
     const originalFetch = global.fetch;
-    global.fetch = async () => new Response(JSON.stringify({ success: true, hostname: "drahmedbenlallahom.com" }), { status: 200 });
+    global.fetch = async () =>
+      new Response(
+        JSON.stringify({ success: true, hostname: "drahmedbenlallahom.com" }),
+        { status: 200 }
+      );
+    vi.stubEnv("TURNSTILE_SECRET_KEY", "1x0000000000000000000000000000000AA");
     try {
-      await expect(verifyCandidateTurnstile({ token: "test-turnstile-token-valide" })).resolves.toBeUndefined();
+      await expect(
+        verifyCandidateTurnstile({ token: "test-turnstile-token-valide" })
+      ).resolves.toBeUndefined();
     } finally {
       global.fetch = originalFetch;
+      vi.unstubAllEnvs();
     }
   });
 
@@ -43,22 +60,33 @@ describe("parcours candidat — protections intégrées non destructives", () =>
     });
     const encrypted = encryptCandidateDocument(source);
 
-    expect(validation.securityScanVersion).toBe("candidate-document-safety-v1");
+    expect(validation.securityScanVersion).toBe("candidate-document-safety-v2");
     expect(encrypted.encrypted.equals(source)).toBe(false);
-    expect(decryptCandidateDocument(encrypted.encrypted, encrypted.iv, encrypted.authTag)).toEqual(source);
+    expect(
+      decryptCandidateDocument(
+        encrypted.encrypted,
+        encrypted.iv,
+        encrypted.authTag
+      )
+    ).toEqual(source);
   });
 
   it("bloque les documents PDF actifs ou chiffrés avant toute mise en quarantaine", () => {
     const activePdf = Buffer.concat([
-      Buffer.from("%PDF-1.7\n1 0 obj\n<< /Type /Page /JavaScript (malicious) >>\nendobj\n%%EOF", "utf8"),
+      Buffer.from(
+        "%PDF-1.7\n1 0 obj\n<< /Type /Page /JavaScript (malicious) >>\nendobj\n%%EOF",
+        "utf8"
+      ),
       Buffer.alloc(256),
     ]);
 
-    expect(() => validateCandidateDocument({
-      buffer: activePdf,
-      mimeType: "application/pdf",
-      originalName: "document.pdf",
-      size: activePdf.length,
-    })).toThrow("candidate_document_pdf_active_content");
+    expect(() =>
+      validateCandidateDocument({
+        buffer: activePdf,
+        mimeType: "application/pdf",
+        originalName: "document.pdf",
+        size: activePdf.length,
+      })
+    ).toThrow("candidate_document_pdf_active_content");
   });
 });

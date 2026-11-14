@@ -1,0 +1,47 @@
+# Dependency updates (CODE-23). Minor and patch updates come grouped, one pull request a week
+# per group; a major version comes alone, one pull request per package, to be taken one at a
+# time once the CI passes. A dependency matching several groups goes to the first one.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      # Prettier comes alone, pinned to its exact version: a new version can format the code
+      # otherwise and fail `pnpm format:check`. Its pull request then takes a `pnpm format`
+      # commit of its own, listed in .git-blame-ignore-revs, and holds back no other tool.
+      formatting:
+        patterns:
+          - "prettier"
+        update-types:
+          - minor
+          - patch
+      types:
+        patterns:
+          - "@types/*"
+        update-types:
+          - minor
+          - patch
+      development-tooling:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+      production-dependencies:
+        dependency-type: production
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # The types of express 5 do not describe express 4: they come with express 5, by hand.
+      - dependency-name: "@types/express"
+        update-types:
+          - version-update:semver-major
+
+  # The quality job's steps are listed in server/ciWorkflow.test.ts: a new version of an action
+  # changes that list in the same pull request.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

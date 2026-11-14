@@ -16,8 +16,18 @@ describe("GDPR Request Validation", () => {
     name: z.string().min(1, "Le nom est requis").max(255),
     email: z.string().email("Email invalide").max(320),
     phone: z.string().max(50).optional(),
-    requestType: z.enum(["access", "rectification", "deletion", "portability", "objection"]),
-    description: z.string().min(1, "La description est requise").max(5000).optional(),
+    requestType: z.enum([
+      "access",
+      "rectification",
+      "deletion",
+      "portability",
+      "objection",
+    ]),
+    description: z
+      .string()
+      .min(1, "La description est requise")
+      .max(5000)
+      .optional(),
   });
 
   describe("Contact Form with GDPR Consent", () => {
@@ -162,7 +172,7 @@ describe("GDPR Request Validation", () => {
       const invalidData = {
         name: "Jane Smith",
         email: "jane@example.com",
-        requestType: "invalid" as any,
+        requestType: "invalid",
         description: "I want to access my personal data.",
       };
 
@@ -238,7 +248,7 @@ describe("GDPR Request Validation", () => {
         "user+tag@example.com",
       ];
 
-      validEmails.forEach((email) => {
+      validEmails.forEach(email => {
         const result = z.string().email().safeParse(email);
         expect(result.success).toBe(true);
       });
@@ -252,7 +262,7 @@ describe("GDPR Request Validation", () => {
         "user@.com",
       ];
 
-      invalidEmails.forEach((email) => {
+      invalidEmails.forEach(email => {
         const result = z.string().email().safeParse(email);
         expect(result.success).toBe(false);
       });

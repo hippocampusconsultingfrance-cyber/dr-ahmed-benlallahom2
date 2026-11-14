@@ -4,20 +4,23 @@ import { getDb } from "./db";
 import { and, desc, eq, exists, isNotNull, like, lt, or } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { createCandidateInvitationToken } from "./candidateAuth";
+import { candidateInvitationForcedResendAt } from "../shared/candidatePortalInvitationResend";
+import { emailLanguageFor } from "./emailLanguage";
 import {
   sendCvApplicationConfirmationEmail,
   type CvApplicationConfirmationDelivery,
+  type ResendDeliveryFailureCode,
 } from "./_core/notifications";
 
 export type TrackedCvConfirmationInput = {
   applicationId: number;
   candidateEmail: string;
-  candidateName: string;
+  candidateFirstName: string;
   trackingId: string;
-  specialty: string;
-  targetCountries: string;
   candidatePortalInviteUrl?: string;
   deliveryAttempt?: number;
+  /** Language of the application form: French email for "fr", English otherwise (EN-02). */
+  language?: string;
 };
 
 export type CvConfirmationTraceEvent = {
@@ -37,81 +40,134 @@ type CvConfirmationAttemptPayload = {
 type CandidatePortalInvitationAttemptPayload = {
   kind: "candidate_portal_invitation";
   outcome?: "sent" | "failed" | "unknown";
-  failureCode?: "provider_rejected" | "delivery_exception";
+  failureCode?: ResendDeliveryFailureCode;
   attempt?: number;
 };
 
 type CandidatePortalActivationAttemptPayload = {
   kind: "candidate_portal_activation";
   outcome?: "sent" | "failed" | "unknown";
-  failureCode?: "provider_rejected" | "delivery_exception";
+  failureCode?: ResendDeliveryFailureCode;
   attempt?: number;
 };
 
-const TERMINAL_DELIVERY_EVENTS = new Set(["email.delivered", "email.bounced", "email.complained", "email.suppressed"]);
+const TERMINAL_DELIVERY_EVENTS = new Set([
+  "email.delivered",
+  "email.bounced",
+  "email.complained",
+  "email.suppressed",
+]);
 const MAX_CONFIRMATION_ATTEMPTS = 3;
 const CONFIRMATION_PAYLOAD_PATTERN = '%"kind":"application_confirmation"%';
 const RETRY_SCAN_PAGE_SIZE = 100;
 const RETRY_CURSOR_EVENT_ID = "internal:cv_confirmation_retry_cursor:v1";
 
-function trackedEmailEventType(delivery: { status: "sent" | "failed"; failureCode: "provider_rejected" | "delivery_exception" | null }) {
+function trackedEmailEventType(delivery: {
+  status: "sent" | "failed";
+  failureCode: ResendDeliveryFailureCode | null;
+}) {
   if (delivery.status === "sent") return "email.sent";
-  return delivery.failureCode === "delivery_exception" ? "email.delivery_unknown" : "email.failed";
+  return delivery.failureCode === "delivery_exception"
+    ? "email.delivery_unknown"
+    : "email.failed";
 }
 
-function trackedEmailOutcome(delivery: { status: "sent" | "failed"; failureCode: "provider_rejected" | "delivery_exception" | null }) {
+function trackedEmailOutcome(delivery: {
+  status: "sent" | "failed";
+  failureCode: ResendDeliveryFailureCode | null;
+}) {
   if (delivery.status === "sent") return "sent" as const;
-  return delivery.failureCode === "delivery_exception" ? "unknown" as const : "failed" as const;
+  return delivery.failureCode === "delivery_exception"
+    ? ("unknown" as const)
+    : ("failed" as const);
 }
 
-function parseConfirmationAttempt(payload: string | null): CvConfirmationAttemptPayload | null {
+function parseConfirmationAttempt(
+  payload: string | null
+): CvConfirmationAttemptPayload | null {
   if (!payload) return null;
   try {
     const parsed = JSON.parse(payload) as Record<string, unknown>;
-    return parsed.kind === "application_confirmation" ? parsed as CvConfirmationAttemptPayload : null;
-  } catch {
-    return null;
-  }
-}
-
-function parseCandidatePortalInvitationAttempt(payload: string | null): CandidatePortalInvitationAttemptPayload | CvConfirmationAttemptPayload | null {
-  if (!payload) return null;
-  try {
-    const parsed = JSON.parse(payload) as Record<string, unknown>;
-    return parsed.kind === "candidate_portal_invitation" || parsed.kind === "application_confirmation"
-      ? parsed as CandidatePortalInvitationAttemptPayload | CvConfirmationAttemptPayload
+    return parsed.kind === "application_confirmation"
+      ? (parsed as CvConfirmationAttemptPayload)
       : null;
   } catch {
     return null;
   }
 }
 
-function parseCandidatePortalActivationAttempt(payload: string | null): CandidatePortalActivationAttemptPayload | null {
+function parseCandidatePortalInvitationAttempt(
+  payload: string | null
+):
+  | CandidatePortalInvitationAttemptPayload
+  | CvConfirmationAttemptPayload
+  | null {
   if (!payload) return null;
   try {
     const parsed = JSON.parse(payload) as Record<string, unknown>;
-    return parsed.kind === "candidate_portal_activation" ? parsed as CandidatePortalActivationAttemptPayload : null;
+    return parsed.kind === "candidate_portal_invitation" ||
+      parsed.kind === "application_confirmation"
+      ? (parsed as
+          | CandidatePortalInvitationAttemptPayload
+          | CvConfirmationAttemptPayload)
+      : null;
   } catch {
     return null;
   }
 }
 
-function resolveLatestAttempt<TPayload extends { attempt?: number; failureCode?: string | null }>(
+function parseCandidatePortalActivationAttempt(
+  payload: string | null
+): CandidatePortalActivationAttemptPayload | null {
+  if (!payload) return null;
+  try {
+    const parsed = JSON.parse(payload) as Record<string, unknown>;
+    return parsed.kind === "candidate_portal_activation"
+      ? (parsed as CandidatePortalActivationAttemptPayload)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function resolveLatestAttempt<
+  TPayload extends { attempt?: number; failureCode?: string | null },
+>(
   events: CvConfirmationTraceEvent[],
-  parseAttempt: (payload: string | null) => TPayload | null,
+  parseAttempt: (payload: string | null) => TPayload | null
 ) {
   const attempts = events
     .map(event => ({ event, payload: parseAttempt(event.payload) }))
-    .filter((attempt): attempt is { event: CvConfirmationTraceEvent; payload: TPayload } => Boolean(attempt.payload));
-  const latestAttempt = [...attempts].sort((left, right) => {
-    const sequenceDifference = (right.payload.attempt || 0) - (left.payload.attempt || 0);
-    return sequenceDifference || right.event.occurredAt.getTime() - left.event.occurredAt.getTime();
-  })[0] || null;
+    .filter(
+      (
+        attempt
+      ): attempt is { event: CvConfirmationTraceEvent; payload: TPayload } =>
+        Boolean(attempt.payload)
+    );
+  const latestAttempt =
+    [...attempts].sort((left, right) => {
+      const sequenceDifference =
+        (right.payload.attempt || 0) - (left.payload.attempt || 0);
+      return (
+        sequenceDifference ||
+        right.event.occurredAt.getTime() - left.event.occurredAt.getTime()
+      );
+    })[0] || null;
   const latestProviderEmailId = latestAttempt?.event.providerEmailId || null;
   const relevantEvents = latestAttempt
     ? events
-      .filter(event => event === latestAttempt.event || Boolean(latestProviderEmailId && event.providerEmailId === latestProviderEmailId))
-      .sort((left, right) => right.occurredAt.getTime() - left.occurredAt.getTime())
+        .filter(
+          event =>
+            event === latestAttempt.event ||
+            Boolean(
+              latestProviderEmailId &&
+                event.providerEmailId === latestProviderEmailId
+            )
+        )
+        .sort(
+          (left, right) =>
+            right.occurredAt.getTime() - left.occurredAt.getTime()
+        )
     : [];
   const latest = relevantEvents[0] || null;
   const latestPayload = latest ? parseAttempt(latest.payload) : null;
@@ -125,33 +181,72 @@ function resolveLatestAttempt<TPayload extends { attempt?: number; failureCode?:
 }
 
 /** Resolve only the application-confirmation chain, excluding campaigns and manual emails. */
-export function resolveCvConfirmationDelivery(events: CvConfirmationTraceEvent[]) {
+export function resolveCvConfirmationDelivery(
+  events: CvConfirmationTraceEvent[]
+) {
   return resolveLatestAttempt(events, parseConfirmationAttempt);
 }
 
 /** The confirmation email also contains the signed portal invitation link. */
-export function resolveCandidatePortalInvitationDelivery(events: CvConfirmationTraceEvent[]) {
+export function resolveCandidatePortalInvitationDelivery(
+  events: CvConfirmationTraceEvent[]
+) {
   return resolveLatestAttempt(events, parseCandidatePortalInvitationAttempt);
 }
 
+/**
+ * REC-14: an invitation whose latest attempt is uncertain may be sent again
+ * anyway once that attempt is CANDIDATE_INVITATION_FORCED_RESEND_DELAY_MS old,
+ * as a new attempt under its own idempotency key.
+ */
+export function canForceCandidatePortalInvitation(
+  delivery: ReturnType<typeof resolveCandidatePortalInvitationDelivery>,
+  now = new Date()
+) {
+  if (delivery.eventType !== "email.delivery_unknown" || !delivery.occurredAt)
+    return false;
+  return (
+    candidateInvitationForcedResendAt(delivery.occurredAt).getTime() <=
+    now.getTime()
+  );
+}
+
 /** Resolve the verification-email chain separately from the initial portal invitation. */
-export function resolveCandidatePortalActivationDelivery(events: CvConfirmationTraceEvent[]) {
+export function resolveCandidatePortalActivationDelivery(
+  events: CvConfirmationTraceEvent[]
+) {
   return resolveLatestAttempt(events, parseCandidatePortalActivationAttempt);
 }
 
 export function candidatePortalAccountMatchesApplication(
-  account: { linkedApplicationId: number | null; email: string; emailVerifiedAt: Date | null },
-  application: { id: number; email: string },
+  account: {
+    linkedApplicationId: number | null;
+    email: string;
+    emailVerifiedAt: Date | null;
+  },
+  application: { id: number; email: string }
 ) {
   if (!account.emailVerifiedAt) return false;
   if (account.linkedApplicationId === application.id) return true;
-  return account.email.trim().toLowerCase() === application.email.trim().toLowerCase();
+  return (
+    account.email.trim().toLowerCase() ===
+    application.email.trim().toLowerCase()
+  );
 }
 
 export function buildCandidatePortalInvitationEmailEvent(
-  input: { applicationId: number; candidateEmail: string; trackingId: string; deliveryAttempt?: number },
-  delivery: { status: "sent" | "failed"; providerEmailId: string | null; failureCode: "provider_rejected" | "delivery_exception" | null },
-  options: { now?: Date; localEventId?: string } = {},
+  input: {
+    applicationId: number;
+    candidateEmail: string;
+    trackingId: string;
+    deliveryAttempt?: number;
+  },
+  delivery: {
+    status: "sent" | "failed";
+    providerEmailId: string | null;
+    failureCode: ResendDeliveryFailureCode | null;
+  },
+  options: { now?: Date; localEventId?: string } = {}
 ) {
   return {
     providerEventId: delivery.providerEmailId
@@ -175,8 +270,12 @@ export function buildCandidatePortalInvitationEmailEvent(
 
 export function buildCandidatePortalActivationEmailEvent(
   input: { applicationId: number; candidateEmail: string; trackingId: string },
-  delivery: { status: "sent" | "failed"; providerEmailId: string | null; failureCode: "provider_rejected" | "delivery_exception" | null },
-  options: { now?: Date; localEventId?: string } = {},
+  delivery: {
+    status: "sent" | "failed";
+    providerEmailId: string | null;
+    failureCode: ResendDeliveryFailureCode | null;
+  },
+  options: { now?: Date; localEventId?: string } = {}
 ) {
   return {
     providerEventId: delivery.providerEmailId
@@ -198,27 +297,44 @@ export function buildCandidatePortalActivationEmailEvent(
 }
 
 export function cvConfirmationRetryDelayMs(attempts: number) {
-  return [0, 5 * 60_000, 60 * 60_000, 24 * 60 * 60_000][Math.min(Math.max(attempts, 0), 3)];
+  return [0, 5 * 60_000, 60 * 60_000, 24 * 60 * 60_000][
+    Math.min(Math.max(attempts, 0), 3)
+  ];
 }
 
 export function canRetryCvConfirmation(
   delivery: ReturnType<typeof resolveCvConfirmationDelivery>,
-  now = new Date(),
+  now = new Date()
 ) {
-  if (delivery.eventType !== "email.failed" || delivery.attempts >= MAX_CONFIRMATION_ATTEMPTS || !delivery.occurredAt) return false;
-  return delivery.occurredAt.getTime() + cvConfirmationRetryDelayMs(delivery.attempts) <= now.getTime();
+  if (
+    delivery.eventType !== "email.failed" ||
+    delivery.attempts >= MAX_CONFIRMATION_ATTEMPTS ||
+    !delivery.occurredAt
+  )
+    return false;
+  return (
+    delivery.occurredAt.getTime() +
+      cvConfirmationRetryDelayMs(delivery.attempts) <=
+    now.getTime()
+  );
 }
 
-export function cvConfirmationRetryOutcome(delivery: CvApplicationConfirmationDelivery) {
-  return delivery.status === "failed" && delivery.failureCode === "delivery_exception"
-    ? "delivery_unknown" as const
+export function cvConfirmationRetryOutcome(
+  delivery: CvApplicationConfirmationDelivery
+) {
+  return delivery.status === "failed" &&
+    delivery.failureCode === "delivery_exception"
+    ? ("delivery_unknown" as const)
     : delivery.status;
 }
 
 export function buildCvConfirmationEmailEvent(
-  input: Pick<TrackedCvConfirmationInput, "applicationId" | "candidateEmail" | "trackingId" | "deliveryAttempt">,
+  input: Pick<
+    TrackedCvConfirmationInput,
+    "applicationId" | "candidateEmail" | "trackingId" | "deliveryAttempt"
+  >,
   delivery: CvApplicationConfirmationDelivery,
-  options: { now?: Date; localEventId?: string } = {},
+  options: { now?: Date; localEventId?: string } = {}
 ) {
   return {
     providerEventId: delivery.providerEmailId
@@ -241,22 +357,28 @@ export function buildCvConfirmationEmailEvent(
 }
 
 export async function sendTrackedCvApplicationConfirmationEmail(
-  input: TrackedCvConfirmationInput,
+  input: TrackedCvConfirmationInput
 ): Promise<CvApplicationConfirmationDelivery> {
   const delivery = await sendCvApplicationConfirmationEmail(
     input.candidateEmail,
-    input.candidateName,
+    input.candidateFirstName,
     input.trackingId,
-    input.specialty,
-    input.targetCountries,
     input.candidatePortalInviteUrl,
     `cv-application-confirmation-${input.trackingId}-attempt-${input.deliveryAttempt || 1}`,
+    emailLanguageFor(input.language)
   );
 
   try {
     const db = await getDb();
     if (db) {
-      await db.insert(recruitmentEmailEvents).values(buildCvConfirmationEmailEvent(input, delivery));
+      // The same key gives Resend's same id, so the same send:<id> trace: an
+      // answer « already received » (DATA-11) finds it recorded, no error.
+      await db
+        .insert(recruitmentEmailEvents)
+        .values(buildCvConfirmationEmailEvent(input, delivery))
+        .onConflictDoNothing({
+          target: recruitmentEmailEvents.providerEventId,
+        });
     }
   } catch (error) {
     const errorName = error instanceof Error ? error.name : "UnknownError";
@@ -266,97 +388,141 @@ export async function sendTrackedCvApplicationConfirmationEmail(
   return delivery;
 }
 
-async function loadConfirmationEvents(applicationId: number): Promise<CvConfirmationTraceEvent[]> {
+async function loadConfirmationEvents(
+  applicationId: number
+): Promise<CvConfirmationTraceEvent[]> {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  return db.select({
-    eventType: recruitmentEmailEvents.eventType,
-    providerEmailId: recruitmentEmailEvents.providerEmailId,
-    payload: recruitmentEmailEvents.payload,
-    occurredAt: recruitmentEmailEvents.occurredAt,
-  }).from(recruitmentEmailEvents)
+  return db
+    .select({
+      eventType: recruitmentEmailEvents.eventType,
+      providerEmailId: recruitmentEmailEvents.providerEmailId,
+      payload: recruitmentEmailEvents.payload,
+      occurredAt: recruitmentEmailEvents.occurredAt,
+    })
+    .from(recruitmentEmailEvents)
     .where(eq(recruitmentEmailEvents.applicationId, applicationId))
     .orderBy(desc(recruitmentEmailEvents.occurredAt));
 }
 
 type RecruitmentDb = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 
-export function buildFailedConfirmationRetryCandidateQuery(db: RecruitmentDb, beforeId: number | null = null) {
-  const confirmationAttempts = alias(recruitmentEmailEvents, "confirmation_attempt_events");
-  const linkedConfirmationAttempt = db.select({ id: confirmationAttempts.id })
+export function buildFailedConfirmationRetryCandidateQuery(
+  db: RecruitmentDb,
+  beforeId: number | null = null
+) {
+  const confirmationAttempts = alias(
+    recruitmentEmailEvents,
+    "confirmation_attempt_events"
+  );
+  const linkedConfirmationAttempt = db
+    .select({ id: confirmationAttempts.id })
     .from(confirmationAttempts)
-    .where(and(
-      eq(confirmationAttempts.applicationId, recruitmentEmailEvents.applicationId),
-      eq(confirmationAttempts.providerEmailId, recruitmentEmailEvents.providerEmailId),
-      like(confirmationAttempts.payload, CONFIRMATION_PAYLOAD_PATTERN),
-    ));
-  return db.select({ id: recruitmentEmailEvents.id, applicationId: recruitmentEmailEvents.applicationId })
+    .where(
+      and(
+        eq(
+          confirmationAttempts.applicationId,
+          recruitmentEmailEvents.applicationId
+        ),
+        eq(
+          confirmationAttempts.providerEmailId,
+          recruitmentEmailEvents.providerEmailId
+        ),
+        like(confirmationAttempts.payload, CONFIRMATION_PAYLOAD_PATTERN)
+      )
+    );
+  return db
+    .select({
+      id: recruitmentEmailEvents.id,
+      applicationId: recruitmentEmailEvents.applicationId,
+    })
     .from(recruitmentEmailEvents)
-    .where(and(
-      eq(recruitmentEmailEvents.eventType, "email.failed"),
-      isNotNull(recruitmentEmailEvents.applicationId),
-      or(
-        like(recruitmentEmailEvents.payload, CONFIRMATION_PAYLOAD_PATTERN),
-        exists(linkedConfirmationAttempt),
-      ),
-      beforeId === null ? undefined : lt(recruitmentEmailEvents.id, beforeId),
-    ))
+    .where(
+      and(
+        eq(recruitmentEmailEvents.eventType, "email.failed"),
+        isNotNull(recruitmentEmailEvents.applicationId),
+        or(
+          like(recruitmentEmailEvents.payload, CONFIRMATION_PAYLOAD_PATTERN),
+          exists(linkedConfirmationAttempt)
+        ),
+        beforeId === null ? undefined : lt(recruitmentEmailEvents.id, beforeId)
+      )
+    )
     .orderBy(desc(recruitmentEmailEvents.id))
     .limit(RETRY_SCAN_PAGE_SIZE);
 }
 
 async function loadConfirmationRetryCursor(db: RecruitmentDb) {
-  const [row] = await db.select({ payload: recruitmentEmailEvents.payload })
+  const [row] = await db
+    .select({ payload: recruitmentEmailEvents.payload })
     .from(recruitmentEmailEvents)
     .where(eq(recruitmentEmailEvents.providerEventId, RETRY_CURSOR_EVENT_ID))
     .limit(1);
   if (!row?.payload) return null;
   try {
-    const id = (JSON.parse(row.payload) as { lastScannedFailedEventId?: unknown }).lastScannedFailedEventId;
-    return typeof id === "number" && Number.isSafeInteger(id) && id > 0 ? id : null;
+    const id = (
+      JSON.parse(row.payload) as { lastScannedFailedEventId?: unknown }
+    ).lastScannedFailedEventId;
+    return typeof id === "number" && Number.isSafeInteger(id) && id > 0
+      ? id
+      : null;
   } catch {
     return null;
   }
 }
 
-async function saveConfirmationRetryCursor(db: RecruitmentDb, lastScannedFailedEventId: number | null, now: Date) {
+async function saveConfirmationRetryCursor(
+  db: RecruitmentDb,
+  lastScannedFailedEventId: number | null,
+  now: Date
+) {
   const payload = JSON.stringify({ lastScannedFailedEventId });
   // This operational checkpoint contains no candidate identity or email. It
   // lets bounded cron runs reach older failures without a schema migration.
-  await db.insert(recruitmentEmailEvents).values({
-    providerEventId: RETRY_CURSOR_EVENT_ID,
-    providerEmailId: null,
-    campaignRecipientId: null,
-    applicationId: null,
-    eventType: "internal.cursor",
-    recipientEmail: null,
-    payload,
-    occurredAt: now,
-  }).onConflictDoUpdate({
-    target: recruitmentEmailEvents.providerEventId,
-    set: { payload, occurredAt: now },
-  });
+  await db
+    .insert(recruitmentEmailEvents)
+    .values({
+      providerEventId: RETRY_CURSOR_EVENT_ID,
+      providerEmailId: null,
+      campaignRecipientId: null,
+      applicationId: null,
+      eventType: "internal.cursor",
+      recipientEmail: null,
+      payload,
+      occurredAt: now,
+    })
+    .onConflictDoUpdate({
+      target: recruitmentEmailEvents.providerEventId,
+      set: { payload, occurredAt: now },
+    });
 }
 
 export async function retryCvConfirmationEmail(
   applicationId: number,
-  options: { requireDue?: boolean; now?: Date; allowUntracked?: boolean } = {},
+  options: { requireDue?: boolean; now?: Date; allowUntracked?: boolean } = {}
 ) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  const [application] = await db.select({
-    id: cvApplications.id,
-    firstName: cvApplications.firstName,
-    lastName: cvApplications.lastName,
-    email: cvApplications.email,
-    trackingId: cvApplications.trackingId,
-    specialty: cvApplications.specialty,
-    targetCountries: cvApplications.targetCountries,
-  }).from(cvApplications).where(eq(cvApplications.id, applicationId)).limit(1);
+  const [application] = await db
+    .select({
+      id: cvApplications.id,
+      firstName: cvApplications.firstName,
+      email: cvApplications.email,
+      trackingId: cvApplications.trackingId,
+      language: cvApplications.language,
+    })
+    .from(cvApplications)
+    .where(eq(cvApplications.id, applicationId))
+    .limit(1);
   if (!application) return { outcome: "not_found" as const, attempted: false };
 
-  const current = resolveCvConfirmationDelivery(await loadConfirmationEvents(applicationId));
-  if (current.eventType === "email.sent" || current.eventType === "email.delivered") {
+  const current = resolveCvConfirmationDelivery(
+    await loadConfirmationEvents(applicationId)
+  );
+  if (
+    current.eventType === "email.sent" ||
+    current.eventType === "email.delivered"
+  ) {
     return { outcome: "already_sent" as const, attempted: false, current };
   }
   if (current.eventType && TERMINAL_DELIVERY_EVENTS.has(current.eventType)) {
@@ -366,42 +532,53 @@ export async function retryCvConfirmationEmail(
   if (current.eventType !== "email.failed" && !maySendUntracked) {
     return { outcome: "untracked" as const, attempted: false, current };
   }
-  if (current.eventType === "email.failed" && current.attempts >= MAX_CONFIRMATION_ATTEMPTS) {
+  if (
+    current.eventType === "email.failed" &&
+    current.attempts >= MAX_CONFIRMATION_ATTEMPTS
+  ) {
     return { outcome: "exhausted" as const, attempted: false, current };
   }
-  if (current.eventType === "email.failed" && options.requireDue && !canRetryCvConfirmation(current, options.now)) {
+  if (
+    current.eventType === "email.failed" &&
+    options.requireDue &&
+    !canRetryCvConfirmation(current, options.now)
+  ) {
     return { outcome: "not_due" as const, attempted: false, current };
   }
 
-  let targetCountries = "Non précisé";
-  try {
-    const parsed = JSON.parse(application.targetCountries);
-    if (Array.isArray(parsed)) targetCountries = parsed.filter(value => typeof value === "string").join(", ") || targetCountries;
-  } catch {
-    // Keep a neutral fallback; malformed legacy metadata must not block delivery.
-  }
-  const publicOrigin = process.env.PUBLIC_APP_ORIGIN?.trim() || "https://drahmedbenlallahom.com";
+  const publicOrigin =
+    process.env.PUBLIC_APP_ORIGIN?.trim() || "https://drahmedbenlallahom.com";
   const delivery = await sendTrackedCvApplicationConfirmationEmail({
     applicationId: application.id,
     candidateEmail: application.email,
-    candidateName: `${application.firstName} ${application.lastName}`,
+    candidateFirstName: application.firstName,
     trackingId: application.trackingId,
-    specialty: application.specialty,
-    targetCountries,
     candidatePortalInviteUrl: `${publicOrigin}/candidate/access?invite=${encodeURIComponent(createCandidateInvitationToken(application.id))}`,
     // Reuse attempt 1 for an untracked submission so Resend can deduplicate a
     // previous, unrecorded request during its idempotency window.
-    deliveryAttempt: current.eventType === "email.failed" ? current.attempts + 1 : 1,
+    deliveryAttempt:
+      current.eventType === "email.failed" ? current.attempts + 1 : 1,
+    language: application.language,
   });
-  return { outcome: cvConfirmationRetryOutcome(delivery), attempted: true, delivery };
+  return {
+    outcome: cvConfirmationRetryOutcome(delivery),
+    attempted: true,
+    delivery,
+  };
 }
 
 /** Durable cron retry based on the existing email-event ledger; no candidate data is copied. */
-export async function retryDueFailedCvConfirmationEmails(limit = 3, now = new Date()) {
+export async function retryDueFailedCvConfirmationEmails(
+  limit = 3,
+  now = new Date()
+) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
   const cursor = await loadConfirmationRetryCursor(db);
-  const failedEvents = await buildFailedConfirmationRetryCandidateQuery(db, cursor);
+  const failedEvents = await buildFailedConfirmationRetryCandidateQuery(
+    db,
+    cursor
+  );
   const seenApplicationIds = new Set<number>();
   const results = [];
   let attempted = 0;
@@ -410,9 +587,16 @@ export async function retryDueFailedCvConfirmationEmails(limit = 3, now = new Da
   for (const event of failedEvents) {
     if (attempted >= maxToAttempt) break;
     lastScannedFailedEventId = event.id;
-    if (typeof event.applicationId !== "number" || seenApplicationIds.has(event.applicationId)) continue;
+    if (
+      typeof event.applicationId !== "number" ||
+      seenApplicationIds.has(event.applicationId)
+    )
+      continue;
     seenApplicationIds.add(event.applicationId);
-    const result = await retryCvConfirmationEmail(event.applicationId, { requireDue: true, now });
+    const result = await retryCvConfirmationEmail(event.applicationId, {
+      requireDue: true,
+      now,
+    });
     results.push(result);
     if (result.attempted) attempted += 1;
   }
@@ -420,9 +604,16 @@ export async function retryDueFailedCvConfirmationEmails(limit = 3, now = new Da
   // wrap to the newest events on the next run; a crash before this write simply
   // repeats a page and cannot permanently skip a candidate.
   const nextCursor = lastScannedFailedEventId ?? null;
-  if (nextCursor !== cursor) await saveConfirmationRetryCursor(db, nextCursor, now);
+  if (nextCursor !== cursor)
+    await saveConfirmationRetryCursor(db, nextCursor, now);
   const failed = results.filter(result => result.outcome === "failed").length;
-  const exhausted = results.filter(result => result.outcome === "exhausted").length;
-  if (failed) console.warn("[RecruitmentConfirmation] unresolved delivery failures", { failed, exhausted });
+  const exhausted = results.filter(
+    result => result.outcome === "exhausted"
+  ).length;
+  if (failed)
+    console.warn("[RecruitmentConfirmation] unresolved delivery failures", {
+      failed,
+      exhausted,
+    });
   return { processed: attempted, failed, exhausted };
 }

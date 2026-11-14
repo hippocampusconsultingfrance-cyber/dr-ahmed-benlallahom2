@@ -14,7 +14,8 @@ import { BOOKING_PATIENT_REFUND_DEADLINE_HOURS } from "../shared/bookingPolicy";
  * - CONSULTATION_MODALITY_TEXT: how the consultation takes place (phone call,
  *   video link…), printed in the confirmation and the reminder when set.
  */
-export const DEFAULT_TRANSACTIONAL_FROM = "Hippocampus Consulting <recrutement@drahmedbenlallahom.com>";
+export const DEFAULT_TRANSACTIONAL_FROM =
+  "Hippocampus Consulting <recrutement@drahmedbenlallahom.com>";
 
 export type ConsultationContact = {
   from: string;
@@ -27,7 +28,8 @@ export type ConsultationContact = {
 type Env = Record<string, string | undefined>;
 
 const EMAIL_PATTERN = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
-const SENDER_PATTERN = /^(?:[^<>]{1,120}<[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+>|[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+)$/;
+const SENDER_PATTERN =
+  /^(?:[^<>]{1,120}<[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+>|[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+)$/;
 
 function envValue(env: Env, key: string, pattern?: RegExp): string | null {
   const value = env[key]?.trim();
@@ -39,10 +41,15 @@ function envValue(env: Env, key: string, pattern?: RegExp): string | null {
   return value.slice(0, 500);
 }
 
-export function resolveConsultationContact(env: Env = process.env): ConsultationContact {
+export function resolveConsultationContact(
+  env: Env = process.env
+): ConsultationContact {
   return {
-    from: envValue(env, "CONSULTATION_FROM_EMAIL", SENDER_PATTERN) ?? DEFAULT_TRANSACTIONAL_FROM,
-    replyTo: envValue(env, "CONSULTATION_REPLY_TO", EMAIL_PATTERN) ?? siteConfig.email,
+    from:
+      envValue(env, "CONSULTATION_FROM_EMAIL", SENDER_PATTERN) ??
+      DEFAULT_TRANSACTIONAL_FROM,
+    replyTo:
+      envValue(env, "CONSULTATION_REPLY_TO", EMAIL_PATTERN) ?? siteConfig.email,
     email: siteConfig.email,
     phone: siteConfig.phone,
     modalityText: envValue(env, "CONSULTATION_MODALITY_TEXT"),
@@ -51,3 +58,6 @@ export function resolveConsultationContact(env: Env = process.env): Consultation
 
 /** Same rule as the booking page: full refund more than 24 h before, none after. */
 export const PATIENT_CANCELLATION_POLICY = `Annulation : remboursement intégral si vous annulez plus de ${BOOKING_PATIENT_REFUND_DEADLINE_HOURS} heures avant le rendez-vous ; passé ce délai, la réservation n’est pas remboursable. Pour annuler, contactez-nous en indiquant votre référence.`;
+
+/** Same policy in the emails of a booking made in another language (EN-01). */
+export const PATIENT_CANCELLATION_POLICY_EN = `Cancellation: full refund if you cancel more than ${BOOKING_PATIENT_REFUND_DEADLINE_HOURS} hours before the appointment; after that, the booking cannot be refunded. To cancel, contact us quoting your reference.`;

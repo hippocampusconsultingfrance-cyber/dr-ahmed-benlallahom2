@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { getMenuFocusIndex, isNavigationDismissKey } from "./navigationKeyboard";
+import {
+  getMenuFocusIndex,
+  isNavigationDismissKey,
+} from "./navigationKeyboard";
 
 describe("clavier de navigation", () => {
   it("déplace le focus dans le menu de langue avec retour circulaire", () => {

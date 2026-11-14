@@ -1,5 +1,6 @@
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { appointmentInvoices } from "../drizzle/schema";
+import { PARIS_TIME_ZONE } from "../shared/parisTime";
 import { getDb } from "./db";
 
 type Database = NonNullable<Awaited<ReturnType<typeof getDb>>>;
@@ -10,7 +11,6 @@ export type AppointmentInvoiceRecord = {
   paidAt: Date;
 };
 
-const PARIS_TIME_ZONE = "Europe/Paris";
 const INVOICE_NUMBER_PREFIX = "FAC";
 const INVOICE_SEQUENCE_DIGITS = 6;
 const MAX_ALLOCATION_ATTEMPTS = 5;
@@ -21,7 +21,10 @@ const MAX_ALLOCATION_ATTEMPTS = 5;
  * figurant dans le numéro (FAC-2026-000001).
  */
 export function invoiceSeriesFor(date: Date): string {
-  const year = new Intl.DateTimeFormat("en-US", { timeZone: PARIS_TIME_ZONE, year: "numeric" }).format(date);
+  const year = new Intl.DateTimeFormat("en-US", {
+    timeZone: PARIS_TIME_ZONE,
+    year: "numeric",
+  }).format(date);
   return `${INVOICE_NUMBER_PREFIX}-${year}`;
 }
 
@@ -72,7 +75,11 @@ export const APPOINTMENT_INVOICE_SCHEMA_OBJECTS = [
 const CONCURRENT_CREATION_CODES = new Set(["42P07", "42710", "23505"]);
 
 function postgresErrorCode(error: unknown): string | null {
-  for (let current: unknown = error, depth = 0; current && typeof current === "object" && depth < 4; depth += 1) {
+  for (
+    let current: unknown = error, depth = 0;
+    current && typeof current === "object" && depth < 4;
+    depth += 1
+  ) {
     const code = (current as { code?: unknown }).code;
     if (typeof code === "string") return code;
     current = (current as { cause?: unknown }).cause;
@@ -80,9 +87,16 @@ function postgresErrorCode(error: unknown): string | null {
   return null;
 }
 
-async function existingInvoiceSchemaObjects(db: Database): Promise<Set<string>> {
-  const names = sql.join(APPOINTMENT_INVOICE_SCHEMA_OBJECTS.map(name => sql`${name}`), sql`, `);
-  const result = await db.execute(sql`SELECT name FROM unnest(ARRAY[${names}]::text[]) AS name WHERE to_regclass(name) IS NOT NULL`);
+async function existingInvoiceSchemaObjects(
+  db: Database
+): Promise<Set<string>> {
+  const names = sql.join(
+    APPOINTMENT_INVOICE_SCHEMA_OBJECTS.map(name => sql`${name}`),
+    sql`, `
+  );
+  const result = await db.execute(
+    sql`SELECT name FROM unnest(ARRAY[${names}]::text[]) AS name WHERE to_regclass(name) IS NOT NULL`
+  );
   const rows = (result as { rows?: Array<{ name?: unknown }> }).rows ?? [];
   return new Set(rows.map(row => String(row.name)));
 }
@@ -107,7 +121,8 @@ export function ensureInvoiceSchema(db: Database): Promise<void> {
       try {
         await db.execute(statement);
       } catch (error) {
-        if (!CONCURRENT_CREATION_CODES.has(postgresErrorCode(error) ?? "")) throw error;
+        if (!CONCURRENT_CREATION_CODES.has(postgresErrorCode(error) ?? ""))
+          throw error;
         if (!(await existingInvoiceSchemaObjects(db)).has(name)) throw error;
       }
     }
@@ -124,20 +139,57 @@ export function resetInvoiceSchemaMemo() {
 }
 
 function isUniqueViolation(error: unknown): boolean {
-  for (let current: unknown = error, depth = 0; current && typeof current === "object" && depth < 4; depth += 1) {
+  for (
+    let current: unknown = error, depth = 0;
+    current && typeof current === "object" && depth < 4;
+    depth += 1
+  ) {
     if ((current as { code?: unknown }).code === "23505") return true;
     current = (current as { cause?: unknown }).cause;
   }
   return false;
 }
 
-async function findAppointmentInvoice(db: Database, appointmentId: number): Promise<AppointmentInvoiceRecord | null> {
+async function findAppointmentInvoice(
+  db: Database,
+  appointmentId: number
+): Promise<AppointmentInvoiceRecord | null> {
   const [row] = await db
-    .select({ invoiceNumber: appointmentInvoices.invoiceNumber, issuedAt: appointmentInvoices.issuedAt, paidAt: appointmentInvoices.paidAt })
+    .select({
+      invoiceNumber: appointmentInvoices.invoiceNumber,
+      issuedAt: appointmentInvoices.issuedAt,
+      paidAt: appointmentInvoices.paidAt,
+    })
     .from(appointmentInvoices)
     .where(eq(appointmentInvoices.appointmentId, appointmentId))
     .limit(1);
   return row ?? null;
+}
+
+/**
+ * Factures déjà émises pour ces rendez-vous, par rendez-vous. N’attribue
+ * aucun numéro : le tableau de bord affiche et régénère une facture existante
+ * sans jamais en créer une (EXPL-02).
+ */
+export async function findAppointmentInvoices(
+  appointmentIds: number[]
+): Promise<Map<number, AppointmentInvoiceRecord>> {
+  if (appointmentIds.length === 0) return new Map();
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  await ensureInvoiceSchema(db);
+  const rows = await db
+    .select({
+      appointmentId: appointmentInvoices.appointmentId,
+      invoiceNumber: appointmentInvoices.invoiceNumber,
+      issuedAt: appointmentInvoices.issuedAt,
+      paidAt: appointmentInvoices.paidAt,
+    })
+    .from(appointmentInvoices)
+    .where(inArray(appointmentInvoices.appointmentId, appointmentIds));
+  return new Map(
+    rows.map(({ appointmentId, ...record }) => [appointmentId, record])
+  );
 }
 
 /**
@@ -146,27 +198,30 @@ async function findAppointmentInvoice(db: Database, appointmentId: number): Prom
  * numéro, la date d’émission et la date de paiement déjà enregistrés : la
  * facture régénérée est identique. Deux attributions concurrentes ne peuvent
  * pas obtenir le même numéro (index unique série + rang) ; la perdante réessaie.
+ * `issuedNow` : le numéro vient d’être attribué par cet appel, la facture n’a
+ * donc encore aucune copie archivée (EXPL-02).
  */
 export async function allocateAppointmentInvoice(input: {
   appointmentId: number;
   paidAt: Date;
   now?: Date;
-}): Promise<AppointmentInvoiceRecord> {
+}): Promise<AppointmentInvoiceRecord & { issuedNow: boolean }> {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
   await ensureInvoiceSchema(db);
 
   const existing = await findAppointmentInvoice(db, input.appointmentId);
-  if (existing) return existing;
+  if (existing) return { ...existing, issuedNow: false };
 
   const issuedAt = input.now ?? new Date();
   const series = invoiceSeriesFor(issuedAt);
   for (let attempt = 1; attempt <= MAX_ALLOCATION_ATTEMPTS; attempt += 1) {
+    let inserted: { rows?: unknown[] };
     try {
       // Timestamps are passed as ISO-8601 UTC strings: PostgreSQL drops the
       // offset for `timestamp` columns, so the stored value is UTC whatever the
       // process time zone.
-      await db.execute(sql`
+      inserted = await db.execute(sql`
         INSERT INTO "appointment_invoices" ("appointment_id", "invoice_series", "invoice_sequence", "invoice_number", "issued_at", "paid_at")
         SELECT ${input.appointmentId}, ${series}, next_value.sequence,
                ${series} || '-' || lpad(next_value.sequence::text, GREATEST(${INVOICE_SEQUENCE_DIGITS}, length(next_value.sequence::text)), '0'),
@@ -177,13 +232,17 @@ export async function allocateAppointmentInvoice(input: {
           WHERE "invoice_series" = ${series}
         ) AS next_value
         ON CONFLICT ("appointment_id") DO NOTHING
+        RETURNING "invoice_number"
       `);
     } catch (error) {
-      if (isUniqueViolation(error) && attempt < MAX_ALLOCATION_ATTEMPTS) continue;
+      if (isUniqueViolation(error) && attempt < MAX_ALLOCATION_ATTEMPTS)
+        continue;
       throw error;
     }
     const allocated = await findAppointmentInvoice(db, input.appointmentId);
-    if (allocated) return allocated;
+    // Aucune ligne rendue : une attribution concurrente l’a émise avant celle-ci.
+    if (allocated)
+      return { ...allocated, issuedNow: (inserted.rows?.length ?? 0) > 0 };
   }
   throw new Error("invoice_number_allocation_failed");
 }

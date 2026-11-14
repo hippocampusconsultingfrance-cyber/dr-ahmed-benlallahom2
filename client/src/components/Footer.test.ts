@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { readFile } from "node:fs/promises";
 import { footerBrandLogoAltCopy, getHomeSectionHref } from "./Footer";
 
+// Titres et liens rendus dans les quatre langues : Footer.dom.test.ts.
 describe("liens de navigation du pied de page", () => {
   it("redirige chaque section de l’accueil via un fragment d’URL portable", () => {
     expect(getHomeSectionHref("experience")).toBe("/#experience");
@@ -11,17 +11,14 @@ describe("liens de navigation du pied de page", () => {
   });
 
   it("propose une alternative de marque dans les quatre langues actives", () => {
-    expect(Object.keys(footerBrandLogoAltCopy)).toEqual(["fr", "en", "de", "zh"]);
+    expect(Object.keys(footerBrandLogoAltCopy)).toEqual([
+      "fr",
+      "en",
+      "de",
+      "zh",
+    ]);
     for (const alt of Object.values(footerBrandLogoAltCopy)) {
       expect(alt.trim()).not.toHaveLength(0);
     }
-  });
-
-  it("réutilise le libellé de contact localisé pour le titre partagé", async () => {
-    const source = await readFile(new URL("./Footer.tsx", import.meta.url), "utf8");
-    // Titres de colonnes en h2 (ordre des titres, PUB-A11Y-02).
-    expect(source).toContain("{content.nav.contact}</h2>");
-    expect(source).not.toContain(">Contact</h2>");
-    expect(source).not.toContain("<h4");
   });
 });

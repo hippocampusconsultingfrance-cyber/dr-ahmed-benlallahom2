@@ -3,22 +3,28 @@ import { deflateRawSync } from "node:zlib";
 
 const CRC_TABLE = Array.from({ length: 256 }, (_, index) => {
   let value = index;
-  for (let bit = 0; bit < 8; bit += 1) value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+  for (let bit = 0; bit < 8; bit += 1)
+    value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
   return value >>> 0;
 });
 
 function crc32(data: Buffer) {
   let crc = 0xffffffff;
-  for (let index = 0; index < data.length; index += 1) crc = CRC_TABLE[(crc ^ data[index]!) & 0xff]! ^ (crc >>> 8);
+  for (let index = 0; index < data.length; index += 1)
+    crc = CRC_TABLE[(crc ^ data[index]!) & 0xff]! ^ (crc >>> 8);
   return (crc ^ 0xffffffff) >>> 0;
 }
 
-export function buildZip(entries: Array<{ name: string; content: Buffer | string; store?: boolean }>) {
+export function buildZip(
+  entries: Array<{ name: string; content: Buffer | string; store?: boolean }>
+) {
   const locals: Buffer[] = [];
   const centrals: Buffer[] = [];
   let offset = 0;
   for (const entry of entries) {
-    const content = Buffer.isBuffer(entry.content) ? entry.content : Buffer.from(entry.content, "utf8");
+    const content = Buffer.isBuffer(entry.content)
+      ? entry.content
+      : Buffer.from(entry.content, "utf8");
     const data = entry.store ? content : deflateRawSync(content);
     const name = Buffer.from(entry.name, "utf8");
     const crc = crc32(content);
@@ -56,12 +62,22 @@ export function buildZip(entries: Array<{ name: string; content: Buffer | string
   return Buffer.concat([...locals, directory, end]);
 }
 
-const CONTENT_TYPES = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>';
-const ROOT_RELS = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>';
+const CONTENT_TYPES =
+  '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>';
+const ROOT_RELS =
+  '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>';
 
 /** A real, minimal DOCX that mammoth can read. */
-export function buildDocx(paragraphs: string[], extra: Array<{ name: string; content: Buffer | string; store?: boolean }> = []) {
-  const body = paragraphs.map(text => `<w:p><w:r><w:t xml:space="preserve">${text.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</w:t></w:r></w:p>`).join("");
+export function buildDocx(
+  paragraphs: string[],
+  extra: Array<{ name: string; content: Buffer | string; store?: boolean }> = []
+) {
+  const body = paragraphs
+    .map(
+      text =>
+        `<w:p><w:r><w:t xml:space="preserve">${text.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</w:t></w:r></w:p>`
+    )
+    .join("");
   const document = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}</w:body></w:document>`;
   return buildZip([
     { name: "[Content_Types].xml", content: CONTENT_TYPES },

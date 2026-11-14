@@ -7,8 +7,9 @@ import { isPublicTestimonialsEnabled } from "./publicFeatures";
  *  - server/routeSeo.ts → <head> pré-rendu au build (scripts/prerender-route-seo.ts),
  *    servi tel quel par Vercel et lu par les robots d'aperçu (LinkedIn, WhatsApp…) ;
  *  - client/src/components/SEOHead.tsx → <head> après hydratation (lu par Google).
- * En français (langue par défaut et seule langue indexée), titre, description, mots-clés,
- * canonique, robots et image de partage sont donc identiques dans les deux cas. Les props
+ * En français (langue par défaut et seule langue indexée), titre, description, canonique,
+ * robots et image de partage sont donc identiques dans les deux cas. Ni l'un ni l'autre
+ * n'émet de balise meta keywords, que Google ignore (SEOP-05). Les props
  * de SEOHead ne servent plus qu'aux autres langues et aux routes dynamiques (/venture/*,
  * pages privées), dont les valeurs FR sont générées depuis les mêmes données.
  */
@@ -21,7 +22,13 @@ export const ROBOTS_NOINDEX = "noindex, follow";
 /** Pages privées hors table (espace candidat, confirmation…) : rien à suivre ni archiver. */
 export const ROBOTS_PRIVATE = "noindex, nofollow, noarchive";
 
-export type ShareImage = { url: string; width: number; height: number; type: string; alt: string };
+export type ShareImage = {
+  url: string;
+  width: number;
+  height: number;
+  type: string;
+  alt: string;
+};
 
 /** Image de partage raster 1200x630 (SEO-01) : LinkedIn, Facebook, WhatsApp et X n'affichent pas les SVG. */
 export const DEFAULT_SHARE_IMAGE: ShareImage = {
@@ -35,38 +42,35 @@ export const DEFAULT_SHARE_IMAGE: ShareImage = {
 export type RouteMetadata = {
   title: string;
   description: string;
-  keywords?: string;
   noIndex?: boolean;
-  /** URL canonique d'un alias (ex. /vvip-offshore → /recruitment/vvip-offshore). */
-  canonicalPath?: string;
 };
 
 /** Routes publiques statiques. Les pages /venture/:slug sont ajoutées par server/routeSeo.ts depuis ventures-fr.ts. */
 export const STATIC_ROUTE_METADATA: Readonly<Record<string, RouteMetadata>> = {
   "/": {
     title: "Dr. Ahmed Ben Lallahom | Médecine et Conseil",
-    description: "Anesthésiste-réanimateur, entrepreneur en santé et consultant médical basé en France.",
-    keywords: "anesthésiste, réanimateur, consultant médical, santé, France",
+    description:
+      "Anesthésiste-réanimateur, entrepreneur en santé et consultant médical basé en France.",
   },
   "/booking": {
     title: "Réserver une consultation | Dr. Ben Lallahom",
-    description: "Réservez en ligne une consultation de conseil en santé avec le Dr. Ahmed Ben Lallahom.",
-    keywords: "réservation consultation santé, téléconsultation, conseil médical",
+    description:
+      "Réservez en ligne une consultation de conseil en santé avec le Dr. Ahmed Ben Lallahom.",
   },
   "/questions-anesthesie": {
     title: "Questions santé | Anesthésie et opération",
-    description: "Posez une question générale sur l’anesthésie ou une opération et recevez une réponse relue par email.",
-    keywords: "questions anesthésie, information opération, information santé, préparation intervention",
+    description:
+      "Posez une question générale sur l’anesthésie ou une opération et recevez une réponse relue par email.",
   },
   "/recruitment": {
     title: "Recrutement santé international | Hippocampus",
-    description: "Découvrez les opportunités internationales pour professionnels médicaux et paramédicaux.",
-    keywords: "recrutement médical international, recrutement paramédical, Hippocampus Consulting",
+    description:
+      "Découvrez les opportunités internationales pour professionnels médicaux et paramédicaux.",
   },
   "/recruitment/standard": {
     title: "Candidature santé internationale | Hippocampus",
-    description: "Déposez votre candidature pour des opportunités médicales et paramédicales internationales.",
-    keywords: "candidature médicale, emploi paramédical, mobilité internationale",
+    description:
+      "Déposez votre candidature pour des opportunités médicales et paramédicales internationales.",
   },
   "/recruitment/unsubscribe": {
     title: "Préférences recrutement | Hippocampus Consulting",
@@ -75,53 +79,53 @@ export const STATIC_ROUTE_METADATA: Readonly<Record<string, RouteMetadata>> = {
   },
   "/recruitment/vvip-offshore": {
     title: "Missions santé offshore et Moyen-Orient | Hippocampus",
-    description: "Postulez pour des missions médicales spécialisées offshore, industrielles et au Moyen-Orient.",
-    keywords: "mission médicale offshore, santé Moyen-Orient, plateforme pétrolière",
-  },
-  "/vvip-offshore": {
-    title: "Missions santé offshore et Moyen-Orient | Hippocampus",
-    description: "Postulez pour des missions médicales spécialisées offshore, industrielles et au Moyen-Orient.",
-    keywords: "mission médicale offshore, santé Moyen-Orient, plateforme pétrolière",
-    canonicalPath: "/recruitment/vvip-offshore",
+    description:
+      "Postulez pour des missions médicales spécialisées offshore, industrielles et au Moyen-Orient.",
   },
   "/employers": {
     title: "Recruter des soignants | Hippocampus Consulting",
-    description: "Confiez votre besoin de recrutement médical ou paramédical international à Hippocampus Consulting.",
-    keywords: "recrutement soignants, recrutement médical, recrutement paramédical",
+    description:
+      "Confiez votre besoin de recrutement médical ou paramédical international à Hippocampus Consulting.",
   },
   "/why-hippocampus": {
     title: "Pourquoi Hippocampus Consulting | Employeurs",
-    description: "Méthode, confidentialité et accompagnement pour vos recrutements médicaux internationaux.",
-    keywords: "cabinet recrutement médical, méthode recrutement santé, Hippocampus Consulting",
+    description:
+      "Méthode, confidentialité et accompagnement pour vos recrutements médicaux internationaux.",
   },
   // Publiée uniquement si les témoignages sont réactivés (LEGAL-08, shared/publicFeatures.ts).
   ...(isPublicTestimonialsEnabled()
     ? {
         "/testimonials": {
           title: "Témoignages de partenaires | Dr. Ben Lallahom",
-          description: "Découvrez les témoignages de partenaires ayant collaboré avec le Dr. Ahmed Ben Lallahom.",
+          description:
+            "Découvrez les témoignages de partenaires ayant collaboré avec le Dr. Ahmed Ben Lallahom.",
         },
       }
     : {}),
   "/gdpr": {
     title: "Protection des données | Dr. Ben Lallahom",
-    description: "Consultez les informations de protection des données personnelles et RGPD du site.",
+    description:
+      "Consultez les informations de protection des données personnelles et RGPD du site.",
   },
   "/legal": {
     title: "Mentions légales | Dr. Ben Lallahom",
-    description: "Consultez les mentions légales et conditions d’utilisation du site Dr. Ahmed Ben Lallahom.",
+    description:
+      "Consultez les mentions légales et conditions d’utilisation du site Dr. Ahmed Ben Lallahom.",
   },
   "/faq": {
     title: "Questions fréquentes | Dr. Ben Lallahom",
-    description: "Retrouvez les informations pratiques sur la consultation, la réservation et Hippocampus Consulting.",
+    description:
+      "Retrouvez les informations pratiques sur la consultation, la réservation et Hippocampus Consulting.",
   },
   "/resources": {
     title: "Ressources médicales institutionnelles | Dr. Ben Lallahom",
-    description: "Une sélection de portails institutionnels de santé pour prolonger votre information, sans remplacer un avis médical.",
+    description:
+      "Une sélection de portails institutionnels de santé pour prolonger votre information, sans remplacer un avis médical.",
   },
   "/press": {
     title: "Presse et publications | Dr. Ben Lallahom",
-    description: "Informations institutionnelles vérifiables sur le parcours et les activités du Dr. Ahmed Ben Lallahom.",
+    description:
+      "Informations institutionnelles vérifiables sur le parcours et les activités du Dr. Ahmed Ben Lallahom.",
   },
   "/search": {
     title: "Recherche | Dr. Ben Lallahom",
@@ -148,16 +152,17 @@ export function canonicalUrlFor(path: string): string {
   return `${SITE_ORIGIN}${path}`;
 }
 
-export function getStaticRouteMetadata(url: string): (RouteMetadata & { canonicalPath: string }) | null {
+export function getStaticRouteMetadata(
+  url: string
+): (RouteMetadata & { canonicalPath: string }) | null {
   const pathname = normalizePathname(url);
   const known = STATIC_ROUTE_METADATA[pathname];
-  return known ? { ...known, canonicalPath: known.canonicalPath ?? pathname } : null;
+  return known ? { ...known, canonicalPath: pathname } : null;
 }
 
 export type ClientSeoProps = {
   title: string;
   description: string;
-  keywords?: string;
   ogImage?: string;
   ogUrl?: string;
   noIndex?: boolean;
@@ -166,7 +171,6 @@ export type ClientSeoProps = {
 export type ResolvedSeo = {
   title: string;
   description: string;
-  keywords?: string;
   robots: string;
   /** Absente pour une page privée sans URL explicite : jamais l'accueil comme canonique. */
   canonicalUrl?: string;
@@ -178,8 +182,14 @@ export type ResolvedSeo = {
  * <head> appliqué par SEOHead après hydratation. Pour une route publique connue, la table
  * ci-dessus fait foi (en français) ; sinon les props de la page sont utilisées.
  */
-export function resolveClientSeo(pathname: string, language: string, props: ClientSeoProps): ResolvedSeo {
-  const image = props.ogImage ? { ...DEFAULT_SHARE_IMAGE, url: props.ogImage } : DEFAULT_SHARE_IMAGE;
+export function resolveClientSeo(
+  pathname: string,
+  language: string,
+  props: ClientSeoProps
+): ResolvedSeo {
+  const image = props.ogImage
+    ? { ...DEFAULT_SHARE_IMAGE, url: props.ogImage }
+    : DEFAULT_SHARE_IMAGE;
   const meta = getStaticRouteMetadata(pathname);
   if (meta) {
     const french = language === "fr";
@@ -187,7 +197,6 @@ export function resolveClientSeo(pathname: string, language: string, props: Clie
     return {
       title: french ? meta.title : props.title,
       description: french ? meta.description : props.description,
-      keywords: french ? meta.keywords : props.keywords,
       robots: meta.noIndex ? ROBOTS_NOINDEX : ROBOTS_INDEX,
       canonicalUrl,
       ogUrl: canonicalUrl,
@@ -198,7 +207,6 @@ export function resolveClientSeo(pathname: string, language: string, props: Clie
   return {
     title: props.title,
     description: props.description,
-    keywords: props.keywords,
     robots: props.noIndex ? ROBOTS_PRIVATE : ROBOTS_INDEX,
     canonicalUrl: props.ogUrl ?? (props.noIndex ? undefined : homeUrl),
     ogUrl: props.ogUrl ?? homeUrl,

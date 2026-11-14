@@ -20,6 +20,8 @@ export const PUBLIC_FEATURES: Readonly<PublicFeatureFlags> = Object.freeze({
   testimonials: false,
 });
 
-export function isPublicTestimonialsEnabled(flags: Readonly<PublicFeatureFlags> = PUBLIC_FEATURES): boolean {
+export function isPublicTestimonialsEnabled(
+  flags: Readonly<PublicFeatureFlags> = PUBLIC_FEATURES
+): boolean {
   return flags.testimonials === true;
 }

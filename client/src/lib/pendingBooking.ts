@@ -21,8 +21,8 @@ export type BookingDraft = {
   name: string;
   email: string;
   phone: string;
-  dateText: string;
-  timeText: string;
+  /** Start of the slot chosen in the grid (ISO instant), "" when none. */
+  appointmentDate: string;
   details: string;
 };
 
@@ -65,13 +65,15 @@ function remove(key: string) {
 function isPendingBooking(value: unknown): value is PendingBooking {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Record<string, unknown>;
-  return typeof candidate.trackingId === "string"
-    && typeof candidate.checkoutSessionId === "string"
-    && typeof candidate.customerName === "string"
-    && typeof candidate.customerEmail === "string"
-    && typeof candidate.finalPrice === "number"
-    && typeof candidate.appointmentDate === "string"
-    && typeof candidate.holdExpiresAt === "string";
+  return (
+    typeof candidate.trackingId === "string" &&
+    typeof candidate.checkoutSessionId === "string" &&
+    typeof candidate.customerName === "string" &&
+    typeof candidate.customerEmail === "string" &&
+    typeof candidate.finalPrice === "number" &&
+    typeof candidate.appointmentDate === "string" &&
+    typeof candidate.holdExpiresAt === "string"
+  );
 }
 
 /** The pending booking, or null when none is stored or its hold has expired (then it is forgotten). */
@@ -94,10 +96,18 @@ export function savePendingBooking(value: PendingBooking) {
 }
 
 /** Forgets the pending booking (all of them, or only the one with this reference / session). */
-export function clearPendingBooking(match?: { trackingId?: string | null; checkoutSessionId?: string | null }) {
+export function clearPendingBooking(match?: {
+  trackingId?: string | null;
+  checkoutSessionId?: string | null;
+}) {
   if (match && (match.trackingId || match.checkoutSessionId)) {
     const value = read<PendingBooking>(PENDING_KEY);
-    if (value && value.trackingId !== match.trackingId && value.checkoutSessionId !== match.checkoutSessionId) return;
+    if (
+      value &&
+      value.trackingId !== match.trackingId &&
+      value.checkoutSessionId !== match.checkoutSessionId
+    )
+      return;
   }
   remove(PENDING_KEY);
 }
@@ -105,8 +115,15 @@ export function clearPendingBooking(match?: { trackingId?: string | null; checko
 export function loadBookingDraft(): BookingDraft | null {
   const value = read<Partial<BookingDraft>>(DRAFT_KEY);
   if (!value || typeof value !== "object") return null;
-  const field = (key: keyof BookingDraft) => (typeof value[key] === "string" ? (value[key] as string).slice(0, 5000) : "");
-  return { name: field("name"), email: field("email"), phone: field("phone"), dateText: field("dateText"), timeText: field("timeText"), details: field("details") };
+  const field = (key: keyof BookingDraft) =>
+    typeof value[key] === "string" ? (value[key] as string).slice(0, 5000) : "";
+  return {
+    name: field("name"),
+    email: field("email"),
+    phone: field("phone"),
+    appointmentDate: field("appointmentDate"),
+    details: field("details"),
+  };
 }
 
 export function saveBookingDraft(value: BookingDraft) {

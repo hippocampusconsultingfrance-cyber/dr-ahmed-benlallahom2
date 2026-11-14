@@ -37,7 +37,7 @@ function safeApplicationReference(value: string) {
  */
 export function buildResendApplicationTags(
   applicationReference: string,
-  emailKind: ResendApplicationEmailKind = RESEND_APPLICATION_CONFIRMATION_KIND,
+  emailKind: ResendApplicationEmailKind = RESEND_APPLICATION_CONFIRMATION_KIND
 ) {
   const reference = safeApplicationReference(applicationReference);
   return reference
@@ -49,17 +49,65 @@ export function buildResendApplicationTags(
 }
 
 /** Accept both Resend's webhook object shape and the API request array shape. */
-export function resendApplicationReferenceFromTags(tags: unknown): string | null {
+export function resendApplicationReferenceFromTags(
+  tags: unknown
+): string | null {
   const emailKind = resendTagValue(tags, "email_kind");
-  if (!emailKind || !RESEND_APPLICATION_EMAIL_KINDS.has(emailKind as ResendApplicationEmailKind)) return null;
+  if (
+    !emailKind ||
+    !RESEND_APPLICATION_EMAIL_KINDS.has(emailKind as ResendApplicationEmailKind)
+  )
+    return null;
   const reference = resendTagValue(tags, "application_ref");
   return reference ? safeApplicationReference(reference) : null;
 }
 
+/**
+ * The patient emails of a booking (EXPL-13), each tagged with its kind and the
+ * booking reference, already in the subject and body of the same email: a
+ * bounce reported by Resend's webhook is traced back to the appointment.
+ */
+const RESEND_APPOINTMENT_EMAIL_KINDS = {
+  confirmation: "appointment_confirmation",
+  invoice: "appointment_invoice",
+  reminder: "appointment_reminder",
+  refund: "appointment_refund",
+} as const;
+
+export type ResendAppointmentEmail =
+  keyof typeof RESEND_APPOINTMENT_EMAIL_KINDS;
+
+export function buildResendAppointmentTags(
+  trackingId: string,
+  email: ResendAppointmentEmail
+) {
+  const reference = safeApplicationReference(trackingId);
+  return [
+    { name: "email_kind", value: RESEND_APPOINTMENT_EMAIL_KINDS[email] },
+    ...(reference ? [{ name: "appointment_ref", value: reference }] : []),
+  ];
+}
+
+/** The booking email a webhook event is about, from its tags (both shapes, as above); null for any other email. */
+export function resendAppointmentEmailFromTags(
+  tags: unknown
+): { email: ResendAppointmentEmail; trackingId: string } | null {
+  const emailKind = resendTagValue(tags, "email_kind");
+  const email = (
+    Object.keys(RESEND_APPOINTMENT_EMAIL_KINDS) as ResendAppointmentEmail[]
+  ).find(key => RESEND_APPOINTMENT_EMAIL_KINDS[key] === emailKind);
+  const reference = resendTagValue(tags, "appointment_ref");
+  const trackingId = reference ? safeApplicationReference(reference) : null;
+  return email && trackingId ? { email, trackingId } : null;
+}
+
 export function resendRecipientMatchesApplication(
   recipientEmail: string | null,
-  applicationEmail: string | null | undefined,
+  applicationEmail: string | null | undefined
 ) {
   if (!recipientEmail || !applicationEmail) return false;
-  return recipientEmail.trim().toLowerCase() === applicationEmail.trim().toLowerCase();
+  return (
+    recipientEmail.trim().toLowerCase() ===
+    applicationEmail.trim().toLowerCase()
+  );
 }

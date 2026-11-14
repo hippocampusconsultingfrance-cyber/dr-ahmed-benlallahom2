@@ -7,7 +7,9 @@ import { defineConfig } from "drizzle-kit";
 // `drizzle-kit generate` n'a pas besoin de base : sans DATABASE_URL, une adresse
 // factice non joignable est utilisée, si bien que `drizzle-kit migrate` échoue
 // au lieu de viser une base par erreur.
-const connectionString = process.env.DATABASE_URL?.trim() || "postgresql://unset:unset@127.0.0.1:1/unset";
+const connectionString =
+  process.env.DATABASE_URL?.trim() ||
+  "postgresql://unset:unset@127.0.0.1:1/unset";
 
 export default defineConfig({
   schema: "./drizzle/schema.ts",

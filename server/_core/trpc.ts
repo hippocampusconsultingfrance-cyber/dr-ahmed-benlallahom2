@@ -1,30 +1,102 @@
-import { NOT_ADMIN_ERR_MSG, UNAUTHED_ERR_MSG } from '@shared/const';
+import { NOT_ADMIN_ERR_MSG, UNAUTHED_ERR_MSG } from "@shared/const";
 import { randomUUID } from "node:crypto";
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import type { TrpcContext } from "./context";
+import { logError, runWithRequestLog } from "./logError";
 import { isAdminMfaVerified } from "../adminMfa";
+import {
+  CHECK_VIOLATION,
+  FOREIGN_KEY_VIOLATION,
+  postgresConstraintName,
+  UNIQUE_VIOLATION,
+} from "../databaseConstraints";
+import { postgresErrorCode } from "../languageColumns";
+import type { DatabaseRefusalReason } from "@shared/databaseRefusalReasons";
+import {
+  refusesTextInputCharacters,
+  TEXT_INPUT_INVALID_CHARACTERS,
+  TEXT_INPUT_INVALID_CHARACTERS_MESSAGE,
+} from "@shared/textInput";
 
-export const GENERIC_INTERNAL_ERROR_MESSAGE = "Une erreur interne est survenue. Veuillez réessayer dans quelques instants.";
+export const GENERIC_INTERNAL_ERROR_MESSAGE =
+  "Une erreur interne est survenue. Veuillez réessayer dans quelques instants.";
+
+// Generic server messages, in French like GENERIC_INTERNAL_ERROR_MESSAGE, for
+// refusals no procedure answers itself (reasons duplicate_record,
+// related_record_invalid and value_not_allowed, shared/databaseRefusalReasons.ts):
+// a public page in another language shows its own generic message for a
+// reason it does not know, the mission screen its translation, the rest of
+// the admin this one.
+export const DATABASE_DUPLICATE_MESSAGE =
+  "Cet enregistrement existe déjà : rechargez la page pour voir son état actuel.";
+export const DATABASE_REFERENCE_MESSAGE =
+  "Cette opération vise un élément qui n’existe plus, ou qui est encore utilisé ailleurs : rechargez la page, puis réessayez.";
+export const DATABASE_VALUE_MESSAGE =
+  "Cette valeur n’est pas acceptée pour cet enregistrement : rien n’a été modifié. Rechargez la page, puis réessayez.";
+
+/**
+ * Stable, language-neutral reason of a deliberate refusal (EN-06), passed as
+ * the `cause` of a TRPCError and sent to the client as `data.reason`: the page
+ * shows its own translation, the French message stays for any other client.
+ * `date` (YYYY-MM-DD), sent as `data.date`, is the day the refusal names, for
+ * the page to write it in its language.
+ */
+export class PublicErrorReason extends Error {
+  constructor(
+    readonly reason: string,
+    readonly date?: string
+  ) {
+    super(reason);
+    this.name = "PublicErrorReason";
+  }
+}
+
+type ErrorShapeWithReason<TShape extends { data: object }> = TShape & {
+  data: TShape["data"] & { reason?: string; date?: string };
+};
+
+/** Short reference of an unexpected error, given to the caller and logged with the error. */
+export function internalErrorReference(): string {
+  return randomUUID().slice(0, 8);
+}
 
 /**
  * Unexpected errors (anything that is not a deliberate TRPCError: database,
  * provider, programming errors) reach the client as a generic French message
  * with a short reference; the original is only logged on the server. tRPC
  * wraps such errors as INTERNAL_SERVER_ERROR with the original as `cause`;
- * deliberate TRPCErrors carry no cause and keep their message.
+ * deliberate TRPCErrors carry no cause and keep their message, or a
+ * PublicErrorReason cause whose reason is added to the data.
  */
-export function formatTrpcErrorShape<TShape extends { message: string; data: { code: string; stack?: string } }>(
+export function formatTrpcErrorShape<
+  TShape extends { message: string; data: { code: string; stack?: string } },
+>(
   shape: TShape,
   error: { code: string; cause?: unknown },
-  reference: () => string = () => randomUUID().slice(0, 8),
-): TShape {
-  if (error.code !== "INTERNAL_SERVER_ERROR" || error.cause === undefined) return shape;
+  reference: () => string = internalErrorReference,
+  req?: TrpcContext["req"]
+): ErrorShapeWithReason<TShape> {
+  if (error.cause instanceof PublicErrorReason)
+    return {
+      ...shape,
+      data: {
+        ...shape.data,
+        reason: error.cause.reason,
+        ...(error.cause.date ? { date: error.cause.date } : {}),
+      },
+    };
+  // INTL-05: a field refused for its characters (shared/textInput.ts), by its stable reason rather than the validation's JSON.
+  if (error.code === "BAD_REQUEST" && refusesTextInputCharacters(error.cause))
+    return {
+      ...shape,
+      message: TEXT_INPUT_INVALID_CHARACTERS_MESSAGE,
+      data: { ...shape.data, reason: TEXT_INPUT_INVALID_CHARACTERS },
+    };
+  if (error.code !== "INTERNAL_SERVER_ERROR" || error.cause === undefined)
+    return shape as ErrorShapeWithReason<TShape>;
   const ref = reference();
-  const cause = error.cause instanceof Error ? error.cause : null;
-  // Query parameters (personal data) are left out of the log line.
-  const summary = cause ? `${cause.name}: ${cause.message.split("\nparams:")[0].slice(0, 500)}` : "UnknownError";
-  console.error(`[tRPC] Internal error ref=${ref}`, summary);
+  logError("[tRPC] Internal error", error.cause, { ref, req });
   return {
     ...shape,
     message: `${GENERIC_INTERNAL_ERROR_MESSAGE} (réf. ${ref})`,
@@ -32,13 +104,75 @@ export function formatTrpcErrorShape<TShape extends { message: string; data: { c
   };
 }
 
+/**
+ * A write refused by a database constraint the procedure did not handle
+ * itself (DATA-01): a duplicate (23505), a row missing or still referenced
+ * (23503) or a value a CHECK refuses (23514, a status outside its list) is a
+ * refusal with a stable reason, not an internal error. Only errors tRPC
+ * wrapped (thrown by the database) are concerned: a deliberate TRPCError,
+ * even INTERNAL_SERVER_ERROR, has no database cause and is kept.
+ */
+export function databaseConstraintRefusal(error: TRPCError): TRPCError | null {
+  if (error.code !== "INTERNAL_SERVER_ERROR") return null;
+  const code = postgresErrorCode(error.cause);
+  if (
+    code !== UNIQUE_VIOLATION &&
+    code !== FOREIGN_KEY_VIOLATION &&
+    code !== CHECK_VIOLATION
+  )
+    return null;
+  // The constraint's name only: the error's detail holds the row's values.
+  console.warn(
+    `[tRPC] Database constraint refusal ${code}`,
+    postgresConstraintName(error.cause) ?? ""
+  );
+  if (code === UNIQUE_VIOLATION)
+    return new TRPCError({
+      code: "CONFLICT",
+      message: DATABASE_DUPLICATE_MESSAGE,
+      cause: new PublicErrorReason(
+        "duplicate_record" satisfies DatabaseRefusalReason
+      ),
+    });
+  return code === FOREIGN_KEY_VIOLATION
+    ? new TRPCError({
+        code: "BAD_REQUEST",
+        message: DATABASE_REFERENCE_MESSAGE,
+        cause: new PublicErrorReason(
+          "related_record_invalid" satisfies DatabaseRefusalReason
+        ),
+      })
+    : new TRPCError({
+        code: "BAD_REQUEST",
+        message: DATABASE_VALUE_MESSAGE,
+        cause: new PublicErrorReason(
+          "value_not_allowed" satisfies DatabaseRefusalReason
+        ),
+      });
+}
+
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
-  errorFormatter: ({ shape, error }) => formatTrpcErrorShape(shape, error),
+  errorFormatter: ({ shape, error, ctx }) =>
+    formatTrpcErrorShape(shape, error, internalErrorReference, ctx?.req),
 });
 
+// The lines logged during a call carry its request's x-vercel-id (EXPL-11).
+const requestLog = t.middleware(({ ctx, next }) =>
+  runWithRequestLog(ctx.req, () => next())
+);
+
+const databaseConstraintRefusals = t.middleware(async ({ next }) => {
+  const result = await next();
+  const refusal = result.ok ? null : databaseConstraintRefusal(result.error);
+  if (refusal) throw refusal;
+  return result;
+});
+
+const procedure = t.procedure.use(requestLog).use(databaseConstraintRefusals);
+
 export const router = t.router;
-export const publicProcedure = t.procedure;
+export const publicProcedure = procedure;
 
 const requireUser = t.middleware(async opts => {
   const { ctx, next } = opts;
@@ -55,18 +189,21 @@ const requireUser = t.middleware(async opts => {
   });
 });
 
-export const protectedProcedure = t.procedure.use(requireUser);
+export const protectedProcedure = procedure.use(requireUser);
 
-export const adminProcedure = t.procedure.use(
+export const adminProcedure = procedure.use(
   t.middleware(async opts => {
     const { ctx, next } = opts;
 
-    if (!ctx.user || ctx.user.role !== 'admin') {
+    if (!ctx.user || ctx.user.role !== "admin") {
       throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
     }
 
     if (!(await isAdminMfaVerified(ctx.req, ctx.user.openId))) {
-      throw new TRPCError({ code: "FORBIDDEN", message: "Validation de sécurité administrateur requise (10003)" });
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "Validation de sécurité administrateur requise (10003)",
+      });
     }
 
     return next({
@@ -75,5 +212,5 @@ export const adminProcedure = t.procedure.use(
         user: ctx.user,
       },
     });
-  }),
+  })
 );

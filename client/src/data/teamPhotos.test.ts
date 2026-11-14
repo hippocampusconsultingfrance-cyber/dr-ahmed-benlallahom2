@@ -7,12 +7,22 @@ describe("logos et portraits des ventures", () => {
     const publicRoot = resolve(import.meta.dirname, "../../public");
     for (const file of ["ventures-fr.ts", "ventures-en.ts"]) {
       const source = await readFile(resolve(import.meta.dirname, file), "utf8");
-      const images = source.match(/\/assets\/(?:team|logos)\/[a-z0-9-]+\.webp/g) ?? [];
+      const images =
+        source.match(/\/assets\/(?:team|logos)\/[a-z0-9-]+\.webp/g) ?? [];
 
-      expect(images.some(image => image.startsWith("/assets/team/")), file).toBe(true);
-      expect(images.some(image => image.startsWith("/assets/logos/")), file).toBe(true);
+      expect(
+        images.some(image => image.startsWith("/assets/team/")),
+        file
+      ).toBe(true);
+      expect(
+        images.some(image => image.startsWith("/assets/logos/")),
+        file
+      ).toBe(true);
       for (const image of new Set(images)) {
-        await expect(access(resolve(publicRoot, image.slice(1))), image).resolves.toBeUndefined();
+        await expect(
+          access(resolve(publicRoot, image.slice(1))),
+          image
+        ).resolves.toBeUndefined();
       }
     }
   });

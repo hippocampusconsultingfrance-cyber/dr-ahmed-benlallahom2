@@ -17,7 +17,12 @@ import {
 
 const dialect = new PgDialect();
 
-function fakeDatabase(options: { selects: unknown[][]; executeFailures?: unknown[] }) {
+/** `concurrentInsert`: another allocation inserted the appointment's row first (ON CONFLICT DO NOTHING inserts none). */
+function fakeDatabase(options: {
+  selects: unknown[][];
+  executeFailures?: unknown[];
+  concurrentInsert?: boolean;
+}) {
   const selects = [...options.selects];
   const failures = [...(options.executeFailures ?? [])];
   const executed: string[] = [];
@@ -25,18 +30,28 @@ function fakeDatabase(options: { selects: unknown[][]; executeFailures?: unknown
     execute: vi.fn(async (query: Parameters<PgDialect["sqlToQuery"]>[0]) => {
       const text = dialect.sqlToQuery(query).sql;
       executed.push(text);
-      if (text.includes("INSERT INTO") && failures.length) throw failures.shift();
+      if (text.includes("INSERT INTO") && failures.length)
+        throw failures.shift();
+      // RETURNING gives the inserted row.
+      if (text.includes("INSERT INTO") && !options.concurrentInsert)
+        return { rows: [{ invoice_number: record.invoiceNumber }] };
       return { rows: [] };
     }),
     select: vi.fn(() => ({
-      from: () => ({ where: () => ({ limit: async () => selects.shift() ?? [] }) }),
+      from: () => ({
+        where: () => ({ limit: async () => selects.shift() ?? [] }),
+      }),
     })),
   };
   database.getDb.mockResolvedValue(db);
   return { db, executed };
 }
 
-const record = { invoiceNumber: "FAC-2026-000001", issuedAt: new Date("2026-10-11T22:46:00Z"), paidAt: new Date("2026-10-11T22:45:00Z") };
+const record = {
+  invoiceNumber: "FAC-2026-000001",
+  issuedAt: new Date("2026-10-11T22:46:00Z"),
+  paidAt: new Date("2026-10-11T22:45:00Z"),
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -52,11 +67,17 @@ describe("numérotation séquentielle des factures", () => {
   });
 
   it("crée la table de façon idempotente, sans migration manuelle, à l’identique du schéma Drizzle", () => {
-    const statements = APPOINTMENT_INVOICE_DDL.map(statement => dialect.sqlToQuery(statement).sql);
-    expect(statements.every(statement => /IF NOT EXISTS/.test(statement))).toBe(true);
+    const statements = APPOINTMENT_INVOICE_DDL.map(
+      statement => dialect.sqlToQuery(statement).sql
+    );
+    expect(statements.every(statement => /IF NOT EXISTS/.test(statement))).toBe(
+      true
+    );
     const config = getTableConfig(appointmentInvoices);
-    for (const column of config.columns) expect(statements[0]).toContain(`"${column.name}"`);
-    for (const index of config.indexes) expect(statements.join("\n")).toContain(`"${index.config.name}"`);
+    for (const column of config.columns)
+      expect(statements[0]).toContain(`"${column.name}"`);
+    for (const index of config.indexes)
+      expect(statements.join("\n")).toContain(`"${index.config.name}"`);
   });
 
   it("n’envoie aucune DDL quand la table et ses index existent (rôle sans droit CREATE ni propriété)", async () => {
@@ -65,8 +86,14 @@ describe("numérotation séquentielle des factures", () => {
       execute: vi.fn(async (query: Parameters<PgDialect["sqlToQuery"]>[0]) => {
         const text = dialect.sqlToQuery(query).sql;
         executed.push(text);
-        if (text.startsWith("CREATE")) throw Object.assign(new Error("must be owner of table appointment_invoices"), { code: "42501" });
-        return { rows: APPOINTMENT_INVOICE_SCHEMA_OBJECTS.map(name => ({ name })) };
+        if (text.startsWith("CREATE"))
+          throw Object.assign(
+            new Error("must be owner of table appointment_invoices"),
+            { code: "42501" }
+          );
+        return {
+          rows: APPOINTMENT_INVOICE_SCHEMA_OBJECTS.map(name => ({ name })),
+        };
       }),
     };
     await expect(ensureInvoiceSchema(db as never)).resolves.toBeUndefined();
@@ -79,46 +106,86 @@ describe("numérotation séquentielle des factures", () => {
       resetInvoiceSchemaMemo();
       let created = false;
       const db = {
-        execute: vi.fn(async (query: Parameters<PgDialect["sqlToQuery"]>[0]) => {
-          const text = dialect.sqlToQuery(query).sql;
-          if (text.startsWith("CREATE TABLE")) {
-            created = existsAfter;
-            throw Object.assign(new Error("Failed query"), { cause: failure });
+        execute: vi.fn(
+          async (query: Parameters<PgDialect["sqlToQuery"]>[0]) => {
+            const text = dialect.sqlToQuery(query).sql;
+            if (text.startsWith("CREATE TABLE")) {
+              created = existsAfter;
+              throw Object.assign(new Error("Failed query"), {
+                cause: failure,
+              });
+            }
+            if (text.startsWith("CREATE")) return { rows: [] };
+            return { rows: created ? [{ name: "appointment_invoices" }] : [] };
           }
-          if (text.startsWith("CREATE")) return { rows: [] };
-          return { rows: created ? [{ name: "appointment_invoices" }] : [] };
-        }),
+        ),
       };
       return ensureInvoiceSchema(db as never);
     };
-    for (const code of ["42P07", "42710", "23505"]) await expect(run({ code }, true)).resolves.toBeUndefined();
+    for (const code of ["42P07", "42710", "23505"])
+      await expect(run({ code }, true)).resolves.toBeUndefined();
     await expect(run({ code: "42P07" }, false)).rejects.toThrow("Failed query");
     await expect(run({ code: "42501" }, true)).rejects.toThrow("Failed query");
   });
 
-  it("attribue le numéro une seule fois et le relit ensuite", async () => {
+  it("attribue le numéro une seule fois et le relit ensuite ; seule l’attribution dit la facture émise à l’instant (EXPL-02)", async () => {
     const { executed } = fakeDatabase({ selects: [[], [record]] });
-    const first = await allocateAppointmentInvoice({ appointmentId: 7, paidAt: record.paidAt, now: record.issuedAt });
-    expect(first).toEqual(record);
-    const inserts = executed.filter(statement => statement.includes("INSERT INTO"));
+    const first = await allocateAppointmentInvoice({
+      appointmentId: 7,
+      paidAt: record.paidAt,
+      now: record.issuedAt,
+    });
+    expect(first).toEqual({ ...record, issuedNow: true });
+    const inserts = executed.filter(statement =>
+      statement.includes("INSERT INTO")
+    );
     expect(inserts).toHaveLength(1);
     expect(inserts[0]).toContain('COALESCE(MAX("invoice_sequence"), 0) + 1');
     expect(inserts[0]).toContain('ON CONFLICT ("appointment_id") DO NOTHING');
 
     const second = fakeDatabase({ selects: [[record]] });
-    await expect(allocateAppointmentInvoice({ appointmentId: 7, paidAt: new Date(), now: new Date() })).resolves.toEqual(record);
-    expect(second.executed.filter(statement => statement.includes("INSERT INTO"))).toHaveLength(0);
+    await expect(
+      allocateAppointmentInvoice({
+        appointmentId: 7,
+        paidAt: new Date(),
+        now: new Date(),
+      })
+    ).resolves.toEqual({ ...record, issuedNow: false });
+    expect(
+      second.executed.filter(statement => statement.includes("INSERT INTO"))
+    ).toHaveLength(0);
   });
 
   it("réessaie quand une attribution concurrente a pris le même rang", async () => {
-    const conflict = Object.assign(new Error("Failed query"), { cause: { code: "23505" } });
-    const { executed } = fakeDatabase({ selects: [[], [record]], executeFailures: [conflict] });
-    await expect(allocateAppointmentInvoice({ appointmentId: 7, paidAt: record.paidAt })).resolves.toEqual(record);
-    expect(executed.filter(statement => statement.includes("INSERT INTO"))).toHaveLength(2);
+    const conflict = Object.assign(new Error("Failed query"), {
+      cause: { code: "23505" },
+    });
+    const { executed } = fakeDatabase({
+      selects: [[], [record]],
+      executeFailures: [conflict],
+    });
+    await expect(
+      allocateAppointmentInvoice({ appointmentId: 7, paidAt: record.paidAt })
+    ).resolves.toEqual({ ...record, issuedNow: true });
+    expect(
+      executed.filter(statement => statement.includes("INSERT INTO"))
+    ).toHaveLength(2);
+  });
+
+  it("une attribution concurrente qui a émis la facture du même rendez-vous juste avant : le numéro relu n’est pas émis par cet appel", async () => {
+    fakeDatabase({ selects: [[], [record]], concurrentInsert: true });
+    await expect(
+      allocateAppointmentInvoice({ appointmentId: 7, paidAt: record.paidAt })
+    ).resolves.toEqual({ ...record, issuedNow: false });
   });
 
   it("propage les autres erreurs pour que le job soit réessayé", async () => {
-    fakeDatabase({ selects: [[]], executeFailures: [new Error("connection reset")] });
-    await expect(allocateAppointmentInvoice({ appointmentId: 7, paidAt: record.paidAt })).rejects.toThrow("connection reset");
+    fakeDatabase({
+      selects: [[]],
+      executeFailures: [new Error("connection reset")],
+    });
+    await expect(
+      allocateAppointmentInvoice({ appointmentId: 7, paidAt: record.paidAt })
+    ).rejects.toThrow("connection reset");
   });
 });

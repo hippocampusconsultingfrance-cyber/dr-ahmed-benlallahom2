@@ -3,14 +3,21 @@ import { useLocation } from "wouter";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { resolveClientSeo } from "@shared/routeMetadata";
 
+/** og:locale of the language shown, fr_FR in the prerendered page (server/routeSeo.ts); the English texts are British. */
+export const OG_LOCALES: Record<string, string> = {
+  fr: "fr_FR",
+  en: "en_GB",
+  de: "de_DE",
+  zh: "zh_CN",
+};
+
 interface SEOHeadProps {
   title: string;
   description: string;
-  keywords?: string;
   ogImage?: string;
   ogUrl?: string;
   twitterHandle?: string;
-  structuredData?: Record<string, any>;
+  structuredData?: Record<string, unknown>;
   noIndex?: boolean;
 }
 
@@ -25,7 +32,6 @@ interface SEOHeadProps {
 export function SEOHead({
   title,
   description,
-  keywords,
   ogImage,
   ogUrl,
   // Aucun compte X/Twitter officiel n'est connu : twitter:site et
@@ -38,7 +44,13 @@ export function SEOHead({
   const { language } = useLanguage();
 
   useEffect(() => {
-    const seo = resolveClientSeo(location, language, { title, description, keywords, ogImage, ogUrl, noIndex });
+    const seo = resolveClientSeo(location, language, {
+      title,
+      description,
+      ogImage,
+      ogUrl,
+      noIndex,
+    });
 
     // Update title
     document.title = seo.title;
@@ -64,9 +76,6 @@ export function SEOHead({
 
     // Standard meta tags
     updateMeta("description", seo.description);
-    if (seo.keywords) {
-      updateMeta("keywords", seo.keywords);
-    }
     updateMeta("robots", seo.robots);
 
     // Open Graph tags
@@ -79,6 +88,7 @@ export function SEOHead({
     updateMeta("og:image:alt", seo.image.alt, true);
     updateMeta("og:url", seo.ogUrl, true);
     updateMeta("og:type", "website", true);
+    updateMeta("og:locale", OG_LOCALES[language] ?? OG_LOCALES.fr, true);
 
     // Twitter tags
     updateMeta("twitter:card", "summary_large_image");
@@ -91,12 +101,16 @@ export function SEOHead({
       updateMeta("twitter:creator", twitterHandle);
     } else {
       document
-        .querySelectorAll('meta[name="twitter:site"], meta[name="twitter:creator"]')
+        .querySelectorAll(
+          'meta[name="twitter:site"], meta[name="twitter:creator"]'
+        )
         .forEach(element => element.remove());
     }
 
     // Canonical URL
-    let canonical = document.querySelector("link[rel='canonical']") as HTMLLinkElement | null;
+    let canonical = document.querySelector(
+      "link[rel='canonical']"
+    ) as HTMLLinkElement | null;
     if (seo.canonicalUrl) {
       if (!canonical) {
         canonical = document.createElement("link");
@@ -111,7 +125,9 @@ export function SEOHead({
     // Structured Data (JSON-LD): keep the document-level schemas intact and
     // update only the page-specific schema owned by this component.
     const structuredDataId = "seo-head-structured-data";
-    let script = document.getElementById(structuredDataId) as HTMLScriptElement | null;
+    let script = document.getElementById(
+      structuredDataId
+    ) as HTMLScriptElement | null;
     if (structuredData) {
       if (!script) {
         script = document.createElement("script");
@@ -123,7 +139,17 @@ export function SEOHead({
     } else if (script) {
       script.remove();
     }
-  }, [location, language, title, description, keywords, ogImage, ogUrl, twitterHandle, structuredData, noIndex]);
+  }, [
+    location,
+    language,
+    title,
+    description,
+    ogImage,
+    ogUrl,
+    twitterHandle,
+    structuredData,
+    noIndex,
+  ]);
 
   return null;
 }

@@ -4,40 +4,85 @@ Site de [drahmedbenlallahom.com](https://drahmedbenlallahom.com) : présentation
 
 ## Stack
 
-| Couche | Technologies |
-| --- | --- |
-| Front | React 19, Vite 7, Tailwind CSS 4, Radix UI, wouter, TanStack Query |
-| API | Express 4 + tRPC 11 (`server/`), zod 4 |
-| Données | PostgreSQL Neon via Drizzle ORM (`drizzle/schema.ts`, driver `neon-http`) |
-| Auth admin | Clerk + MFA serveur (`server/adminMfa.ts`) |
-| Paiement | Stripe Checkout + webhook signé |
-| Emails | Resend (+ webhook Svix) |
-| Fichiers | Vercel Blob ; documents candidats chiffrés AES-256 |
-| Anti-robot | Cloudflare Turnstile |
-| Hébergement | Vercel : SPA statique + une fonction serverless (`api/index.js`) |
+| Couche      | Technologies                                                              |
+| ----------- | ------------------------------------------------------------------------- |
+| Front       | React 19, Vite 7, Tailwind CSS 4, Radix UI, wouter, TanStack Query        |
+| API         | Express 4 + tRPC 11 (`server/`), zod 4                                    |
+| Données     | PostgreSQL Neon via Drizzle ORM (`drizzle/schema.ts`, driver `neon-http`) |
+| Auth admin  | Clerk + MFA serveur (`server/adminMfa.ts`)                                |
+| Paiement    | Stripe Checkout + webhook signé                                           |
+| Emails      | Resend (+ webhook Svix)                                                   |
+| Fichiers    | Vercel Blob ; documents candidats chiffrés AES-256                        |
+| Anti-robot  | Cloudflare Turnstile                                                      |
+| Hébergement | Vercel : SPA statique + une fonction serverless (`api/index.js`)          |
 
 ## Démarrage local
 
-Prérequis : Node.js 22 et pnpm 10 (version figée par le champ `packageManager`).
+Prérequis : Node.js 22 (`.nvmrc`, lu par la CI ; `nvm use`) et pnpm 10 (version figée par le champ `packageManager`).
 
 ```bash
 pnpm install --frozen-lockfile
-cp .env.example .env      # puis remplir les valeurs (voir le fichier)
+cp .env.example .env      # puis remplir les valeurs (voir le fichier et « Mode local » ci-dessous)
 pnpm dev                  # http://localhost:3000 (Express + Vite en mode middleware)
 ```
 
+### Mode local, sans les comptes de production
+
+`pnpm dev` démarre sans Neon, Clerk, Resend ni Stripe (CODE-15). Il suffit d'une base PostgreSQL sur la machine :
+
+```bash
+docker run --name drahmed-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=drahmed -p 5432:5432 -d postgres:16
+```
+
+Dans `.env` : `DATABASE_URL=postgresql://postgres:postgres@localhost:5432/drahmed`, `PUBLIC_APP_ORIGIN=http://localhost:3000`, `CANDIDATE_AUTH_PEPPER` (32 caractères aléatoires ou plus) et `CANDIDATE_DOCUMENT_ENCRYPTION_KEY` (`openssl rand -base64 32`). Pour les formulaires protégés, les clés de test publiées par Cloudflare, qui laissent toujours passer : `VITE_TURNSTILE_SITE_KEY=1x00000000000000000000AA`, `TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA`. Laisser vides les clés Clerk, Resend et Stripe. Puis créer le schéma et ouvrir l'agenda (l'administration, fermée sans Clerk, ne peut pas le faire) :
+
+```bash
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/drahmed pnpm exec drizzle-kit migrate
+psql postgresql://postgres:postgres@localhost:5432/drahmed -c "INSERT INTO availability_slots (day_of_week, start_time, end_time, is_active) SELECT d, '08:00', '20:00', 1 FROM generate_series(0, 6) d"
+pnpm dev
+```
+
+Au démarrage, la console liste les raccourcis actifs (`[Local mode] local_database, clerk_optional, console_emails, console_payments`) :
+
+- **base locale** : une `DATABASE_URL` sur cette machine (`localhost`, `127.x.x.x`, `[::1]`) passe par node-postgres au lieu du proxy HTTP de Neon (`server/db.ts`) ; la base doit être en UTF8 ;
+- **Clerk facultatif** : sans les clés Clerk, le site public répond et personne n'est administrateur ; `/admin` affiche que la clé n'est pas configurée ;
+- **emails dans la console** : sans `RESEND_API_KEY`, chaque email est écrit dans la console (`[Email local] À : … — Objet : …`, puis son texte) au lieu d'être envoyé ;
+- **paiements dans la console** : sans `STRIPE_SECRET_KEY`, une réservation mène à une page de paiement de test locale, dont l'adresse est écrite dans la console (`[Paiement local] …`) ; « Payer » confirme le rendez-vous comme le ferait le webhook de Stripe, « Annuler » revient sur la page d'annulation.
+
+Ces raccourcis ne s'activent qu'avec `NODE_ENV=development` et hors de Vercel (ni `VERCEL` ni `VERCEL_ENV`) : `pnpm start`, le serveur construit et la fonction Vercel n'en activent aucun, quelle que soit leur configuration (`localDevelopmentShortcuts`, `server/_core/env.ts`, testé dans `server/localDevelopment.test.ts`). Restent hors du mode local : le stockage Vercel Blob (dépôt d'un CV, copie des factures), l'analyse IA et Google Drive. Pour eux, ou pour se connecter à l'administration, utiliser des comptes de développement, jamais ceux de production : une branche Neon (_Neon > Branches > Create branch_, depuis `main`, dont l'adresse va dans `DATABASE_URL`), une instance Clerk _Development_ (clés `pk_test_…` et `sk_test_…`, `CLERK_OWNER_USER_ID` de votre utilisateur de test), un magasin Blob de préproduction et le mode test de Stripe.
+
+### Tests de bout en bout
+
+Sept scénarios Playwright (`e2e/`, CODE-22) parcourent le serveur construit, comme `pnpm start` le lance, avec une base PostgreSQL vidée à chaque passage et des doubles locaux de chaque service extérieur : Stripe Checkout, Resend, Turnstile, Clerk, Vercel Blob, l'AI Gateway et Google Drive (`e2e/support/doubles.ts`). Aucun appel réel : toute connexion du serveur vers une autre machine est refusée et fait échouer le scénario, comme toute requête du navigateur vers une autre adresse que le site et ses doubles. Les scénarios : réservation et paiement jusqu'à la facture, question santé, message de contact, demande RGPD, candidature avec son CV analysé par la tâche planifiée, administration (session Clerk, double authentification par code envoyé par email, connexion de Google Drive, export d'une candidature), et espace candidat (invitation envoyée par l'administration, accès créé depuis son lien, activation par email avec le choix du mot de passe, document déposé chiffré dans le coffre puis relu par le candidat).
+
+```bash
+VITE_TURNSTILE_SITE_KEY=1x00000000000000000000AA pnpm build
+E2E_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/e2e pnpm test:e2e
+```
+
+La base de `E2E_DATABASE_URL` (en UTF8, sur cette machine seulement) est effacée à chaque passage : jamais celle du mode local. Chromium : celui de Playwright (`pnpm exec playwright install chromium`) ou celui que nomme `CHROMIUM` (`/usr/bin/google-chrome` en CI). En CI, le job « End-to-end scenarios » les lance à chaque pull request vers `main`, avec son propre PostgreSQL.
+
 ## Commandes
 
-| Commande | Rôle |
-| --- | --- |
-| `pnpm dev` | Serveur de développement |
-| `pnpm check` | Vérification TypeScript |
-| `pnpm test` | Suite Vitest complète (certains tests exigent des variables d'environnement, voir `.github/workflows/ci.yml`) |
-| `pnpm test:ci` | Suite utilisée par la CI |
-| `pnpm build` | Build Vite, pré-rendu SEO par page (`scripts/prerender-route-seo.ts`), bundle serveur `dist/index.js` et fonction Vercel `api/index.js` |
-| `pnpm start` | Lance le build Express (hébergement hors Vercel) |
-| `pnpm test:visual` | Régression visuelle (Playwright) |
-| `pnpm check:performance` | Build + budgets de performance |
+| Commande                                    | Rôle                                                                                                                                                                                                                                                                                                                                         |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm dev`                                  | Serveur de développement                                                                                                                                                                                                                                                                                                                     |
+| `pnpm check`                                | Vérification TypeScript, fichiers de test compris                                                                                                                                                                                                                                                                                            |
+| `pnpm lint`                                 | ESLint (`eslint.config.js`) sur `client/src`, `server`, `shared`, `scripts`, `e2e`, `drizzle/schema.ts` et les fichiers de configuration de la racine, en échec au moindre avertissement (CI)                                                                                                                                                |
+| `pnpm format:check`                         | Mise en forme Prettier vérifiée (`.prettierrc`, `.prettierignore`), sans rien réécrire (CI) ; `pnpm format` la réécrit                                                                                                                                                                                                                       |
+| `pnpm test`                                 | Suite Vitest complète, sans aucun secret : `vitest.config.ts` donne aux tests les valeurs factices de la CI, une valeur posée dans l'environnement restant celle utilisée                                                                                                                                                                    |
+| `pnpm test:ci`                              | Suite utilisée par la CI, la même : aucun fichier de test écarté                                                                                                                                                                                                                                                                             |
+| `pnpm build`                                | Build Vite, pré-rendu SEO par page (`scripts/prerender-route-seo.ts`), bundle serveur `dist/index.js` et fonction Vercel `dist/vercel/index.js`, re-exportée par `api/index.js` (versionné, inchangé par le build)                                                                                                                           |
+| `pnpm start`                                | Lance le build Express (hébergement hors Vercel)                                                                                                                                                                                                                                                                                             |
+| `pnpm test:visual`                          | Pages publiques dans un vrai navigateur (`client/src/publicPages.browser.test.ts`, aussi lancé par `pnpm test:ci`) : mise en page, focus, contrastes mesurés et axe-core en thème clair et sombre, ordinateur et téléphone (Chromium trouvé seul ou donné par `CHROMIUM` ; sans lui, la commande échoue au lieu de passer)                   |
+| `pnpm validate:precheckpoint`               | Avant un checkpoint : `pnpm test:visual`, la gouvernance graphique et `pnpm check`                                                                                                                                                                                                                                                           |
+| `pnpm test:e2e`                             | Scénarios de bout en bout sur le serveur construit (voir « Tests de bout en bout ») ; `pnpm check:e2e` vérifie leurs types                                                                                                                                                                                                                   |
+| `pnpm check:performance`                    | Build + budgets de performance                                                                                                                                                                                                                                                                                                               |
+| `node scripts/smoke-built-server.mjs`       | Après `pnpm build` : démarre `api/index.js` et `dist/index.js` avec des variables factices, sans lire `.env` ni joindre d'autre machine, vérifie que chaque paquet chargé à la demande se résout, puis appelle `/api/health`, une requête tRPC anonyme, le prix d'une réservation, les webhooks Stripe et Resend et une tâche planifiée (CI) |
+| `node scripts/check-migrations-in-sync.mjs` | Vérifie que `drizzle/pg` décrit exactement `drizzle/schema.ts` (CI)                                                                                                                                                                                                                                                                          |
+| `node scripts/check-google-drive-oauth.mjs` | Contrôle manuel, hors CI : Google reconnaît `GOOGLE_DRIVE_CLIENT_ID` et `GOOGLE_DRIVE_CLIENT_SECRET` (environnement ou `.env`), sans émettre de jeton                                                                                                                                                                                        |
+
+Avant de pousser : `pnpm lint` et `pnpm format:check`, que la CI lance aussi. Le commit qui a mis tout le dépôt en forme est listé dans `.git-blame-ignore-revs` : `git config blame.ignoreRevsFile .git-blame-ignore-revs` le fait ignorer par `git blame`.
 
 ## Structure
 
@@ -45,19 +90,39 @@ pnpm dev                  # http://localhost:3000 (Express + Vite en mode middle
 client/            SPA React (pages, composants, données statiques, public/)
 server/            API Express/tRPC, webhooks, tâches planifiées, sécurité
 server/_core/      démarrage Express, auth, emails, en-têtes, hébergement statique
+server/routes/     routes Express hors tRPC (webhooks Stripe et Resend, brief employeur, candidature, coffre candidat, tâches planifiées)
+server/routers/    procédures tRPC, un fichier par domaine (admin/ pour l'administration), assemblées dans server/routers.ts
 shared/            types et constantes partagés client/serveur
 drizzle/           schéma et migrations SQL (source de vérité : drizzle/MIGRATION_SOURCE_OF_TRUTH.md)
-scripts/           pré-rendu SEO, régression visuelle, budgets de performance
+scripts/           pré-rendu SEO, régression visuelle, budgets de performance, contrôles de la CI
 docs/audits/       rapports d'audit
+docs/EXPLOITATION.md  référence d'exploitation : tâches, variables, alertes, procédures
+docs/archive/      rapports et notes d'août 2026, gardés pour l'historique (ne font pas foi)
 ```
 
 ## Déploiement (Vercel)
 
+- Exploitation courante (horaires des tâches, variables, alertes, webhook Stripe, panne Resend, Google Drive, document bloqué, retour arrière) : [docs/EXPLOITATION.md](docs/EXPLOITATION.md).
 - La production est servie par Vercel ; la configuration (build, en-têtes, réécritures, crons) est dans `vercel.json`.
 - L'installation utilise `pnpm install --frozen-lockfile` : toute modification de dépendance doit être commitée avec son `pnpm-lock.yaml`.
 - Les pages publiques sont pré-rendues avec leur `<title>`, description, canonical et balises Open Graph ; les routes privées et inconnues passent par `/_spa-fallback` (noindex).
 - Les tâches planifiées sont des **Vercel Cron** quotidiens (`vercel.json > crons`) qui appellent `GET /api/scheduled/*` avec `Authorization: Bearer $CRON_SECRET`. **`CRON_SECRET` doit être défini** dans les variables d'environnement Vercel, sinon aucune tâche ne s'exécute (rappels, confirmations et factures, purge RGPD, analyse des documents…).
+- Chaque tâche signale ses passages à un service de surveillance externe, voir ci-dessous.
+- Formulaires protégés par Turnstile (contact, demande RGPD, questions médicales, candidature, espace candidat, et réservation quand le défi anti-robot y est demandé) en préproduction : le serveur n'accepte que les jetons émis pour le site et pour `localhost`, si bien que sur un déploiement Preview l'envoi est refusé (« vérification de sécurité »). Pour les essayer jusqu'à l'envoi, renseigner `TURNSTILE_EXTRA_HOSTNAMES` **dans l'environnement Preview de Vercel seulement**, avec l'hôte exact d'une adresse stable de la préproduction (alias de branche, par exemple `mon-projet-git-main-equipe.vercel.app`, ou domaine de préproduction ; plusieurs hôtes séparés par des virgules), puis redéployer. Jamais de joker : une entrée comme `*.vercel.app` est ignorée, pour qu'aucun autre déploiement `vercel.app` ne soit accepté. Vérifier aussi que cet hôte fait partie des domaines autorisés du widget dans Cloudflare Turnstile. Laisser la variable vide en production : sur Vercel, elle y est ignorée (`VERCEL_ENV=production`), avec un avertissement dans les journaux ; un serveur lancé hors de Vercel, sans `VERCEL_ENV`, la lirait.
 - Variables requises en production : voir `.env.example` (les marquées `[requis prod]` bloquent le démarrage du serveur Express ; sur Vercel, elles sont signalées dans les journaux et dans `/admin` ; `GET /api/health` en donne l’état au public et les noms seulement avec `Authorization: Bearer $CRON_SECRET`).
+
+## Surveillance des tâches planifiées
+
+Vercel ne relance pas une tâche en échec et ne garde ses journaux qu'environ une heure. Après chaque passage, la tâche appelle donc l'URL de ping d'un service externe (gratuit) qui vous alerte, sans dépendre de Resend ni de Vercel, quand un ping manque ou signale un échec (`server/_core/scheduledJobMonitor.ts`).
+
+- **Une variable par tâche** : `HEALTHCHECK_URL_<TÂCHE>`, où `<TÂCHE>` est la fin du chemin `/api/scheduled/<tâche>` en majuscules, tirets remplacés par `_` (liste complète dans `.env.example`). Une variable vide désactive le ping de cette tâche.
+- **Ce qui est envoyé** : un `GET` sans corps ni paramètre sur l'URL après un passage réussi, sur l'URL suivie de `/fail` après un échec (exception, ou réponse d'erreur comme le 503 de la revue de sécurité sans base) : le service alerte aussitôt au lieu d'attendre la fin du délai de grâce. Aucune donnée de patient ou de candidat. Délai de 3 s (1,5 s pour le traitement des CV, dont les analyses occupent presque toute la limite de 60 s) ; si le service ne répond pas, la tâche n'est pas affectée (un avertissement `[ScheduledJobMonitor]` est journalisé, sans l'URL).
+- **Création des contrôles** (une fois par tâche, 7 au total) :
+  - _healthchecks.io_ : _Add Check_, nom = la tâche, _Period_ **1 day**, _Grace Time_ **2 hours** ; copier l'URL de ping (`https://hc-ping.com/…`).
+  - _Better Stack_ : _Uptime > Heartbeats > Create heartbeat_, _Expect a heartbeat every_ **1 day**, _with a grace period of_ **2 hours** ; copier l'URL (`https://uptime.betterstack.com/api/v1/heartbeat/…`).
+  - Dans le service, choisir le canal d'alerte (application mobile, SMS, Telegram, email d'une autre boîte que celle des alertes Resend).
+  - Coller chaque URL dans Vercel > Settings > Environment Variables (Production) sous le nom de sa tâche, puis redéployer.
+- **Vérifier** : après le prochain passage de chaque tâche (horaires dans `vercel.json`), le contrôle passe à « up » ; sinon, voir le journal Vercel de la tâche.
 
 ## Base de données
 
@@ -66,3 +131,14 @@ Base PostgreSQL (Neon). Les migrations de référence sont dans `drizzle/pg/` (`
 ## Sécurité
 
 Signalement de vulnérabilité : voir [SECURITY.md](SECURITY.md).
+
+### Politique de sécurité du contenu (CSP) : retrait de `'unsafe-inline'`
+
+La CSP appliquée (`server/_core/contentSecurityPolicy.ts` et, à l'identique, `vercel.json`) autorise encore les scripts inline (`'unsafe-inline'` dans `script-src`) par précaution pour Clerk, Stripe et Turnstile : le code du site n'en a aucun (seulement des blocs de données `application/ld+json`). Une seconde politique, `Content-Security-Policy-Report-Only`, identique mais sans `'unsafe-inline'` dans `script-src` (et sans `upgrade-insecure-requests`, ignoré dans ce mode), ne bloque rien : le navigateur signale à `POST /api/csp-report` chaque script qu'elle aurait bloqué.
+
+- **Lire les rapports** : Vercel > projet > _Logs_, filtrer sur `[CspReport]`. Une ligne par violation : `directive` (`script-src-elem`, `script-src-attr`…), `blocked` réduit à son origine (`inline`, `eval`, `https://exemple.com`), `page` sans paramètres et `source`, l'origine du fichier en cause. Ni IP, ni paramètres d'URL, ni extrait de script. Vercel ne garde ces journaux qu'environ une heure (un jour en offre Pro) et les rapports ne sont conservés nulle part ailleurs : les lire juste après chaque essai. En production, une lecture quotidienne ne voit tous les rapports qu'en offre Pro, lue au moins toutes les 24 heures, ou avec un Log Drain (Vercel > _Settings_ > _Drains_, selon l'offre) vers un service qui garde les journaux ; sinon, l'absence de rapport en production ne prouve rien. Pendant un essai, la console du navigateur (F12) affiche aussi `[Report Only] Refused to execute…`, et Chrome liste l'envoi des rapports vers `csp-endpoint` dans _Application > Reporting API_.
+- **Bruit à ignorer** : `source` en `chrome-extension:`, `moz-extension:` ou `safari-web-extension:` (extension du visiteur), la barre d'outils Vercel (`vercel.live`) des déploiements de préproduction, et une même IP au-delà de 30 rapports en 10 minutes (la route répond alors 429 sans journaliser).
+- **Rapport légitime** : `blocked: "inline"` avec une `source` Clerk (`clerk.drahmedbenlallahom.com`, `*.clerk.com`, `*.clerk.accounts.dev`), Stripe (`js.stripe.com`), Cloudflare (`challenges.cloudflare.com`) ou une page du site sans extension en cause. Ne pas basculer, et selon la directive :
+  - `script-src-elem` (balise `<script>` inline) : ajouter l'empreinte `'sha256-…'` que donne la console du navigateur à `OBSERVED_INLINE_SCRIPT_HASHES` dans le module et au `script-src` de la valeur `Content-Security-Policy-Report-Only` de `vercel.json`, **pas** à la politique appliquée : à côté de `'unsafe-inline'`, une empreinte le fait ignorer par les navigateurs, qui bloqueraient aussitôt tous les autres scripts inline. Redéployer et reprendre l'observation. Si l'empreinte change d'un chargement à l'autre (contenu variable), elle ne suffit pas : ne pas basculer.
+  - `script-src-attr` (gestionnaire inline, `onclick="…"` par exemple) : une empreinte seule ne l'autorise pas, il faudrait aussi `'unsafe-hashes'`, qui autorise ce même code dans n'importe quel attribut de n'importe quelle page. Ne pas basculer tant que le code qui ajoute ce gestionnaire n'a pas été corrigé : `addEventListener` à la place de l'attribut s'il vient du site, mise à jour de la bibliothèque s'il vient d'un tiers.
+- **Quand basculer** : après avoir essayé en préproduction, console du navigateur ouverte et journaux lus dans l'heure, la connexion à l'administration (Clerk et double authentification), un paiement de consultation jusqu'à la page Stripe et les formulaires protégés par Turnstile (contact, demande RGPD, questions médicales, candidature, espace candidat, et réservation quand le défi anti-robot y est demandé), sans rapport légitime en suspens ; puis, si les journaux de production sont gardés entre deux lectures (offre Pro lue chaque jour ou Log Drain), **2 semaines de production sans rapport légitime**. Sans cela, seuls les essais de préproduction font foi : les refaire juste avant de basculer, et lire les journaux de près les jours suivants. Pour basculer, retirer `'unsafe-inline'` de `script-src` dans `CONTENT_SECURITY_POLICY_DIRECTIVES` et dans la valeur `Content-Security-Policy` de `vercel.json`, y ajouter les empreintes de `OBSERVED_INLINE_SCRIPT_HASHES` (`server/securityHeaders.test.ts` vérifie que le module et `vercel.json` restent identiques), sans toucher à `style-src`. `pnpm dev` n'en dépend pas : en développement, Express garde les scripts inline autorisés (`contentSecurityPolicyHeaders`), sans quoi le script inline de Vite (React refresh) serait bloqué et la page resterait blanche. La politique Report-Only peut ensuite rester pour signaler une éventuelle injection.

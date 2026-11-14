@@ -5,8 +5,8 @@ export function useScrollReveal() {
 
   useEffect(() => {
     const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
+      entries => {
+        entries.forEach(entry => {
           if (entry.isIntersecting) {
             entry.target.classList.add("visible");
           }
@@ -18,7 +18,7 @@ export function useScrollReveal() {
     const el = ref.current;
     if (el) {
       const children = el.querySelectorAll(".fade-in-up, .parallax-subtle");
-      children.forEach((child) => observer.observe(child));
+      children.forEach(child => observer.observe(child));
     }
 
     return () => observer.disconnect();

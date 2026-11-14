@@ -3,10 +3,9 @@ import Footer from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
 // Adresse de contact publique unique du site (PUB-CONTACT-01), aussi utilisée par la facture et le JSON-LD.
 import { siteConfig } from "@/data/site-config";
-import { ArrowLeft } from "lucide-react";
-import { Link, useSearch } from "wouter";
+import { Link, useSearchParams } from "wouter";
 import { SEOHead } from "@/components/SEOHead";
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import Breadcrumb from "@/components/Breadcrumb";
 // Source unique de l’identité légale, partagée avec la facture PDF.
 import { HIPPOCAMPUS_LEGAL } from "@shared/legalIdentity";
@@ -29,16 +28,7 @@ export default function LegalPage() {
 }
 
 function LegalPageFr() {
-  const search = useSearch();
-  const params = new URLSearchParams(search);
-  const tabParam = params.get("tab") as "legal" | "privacy" | "terms" | null;
-  const [activeTab, setActiveTab] = useState<"legal" | "privacy" | "terms">(tabParam || "legal");
-
-  useEffect(() => {
-    if (tabParam) {
-      setActiveTab(tabParam);
-    }
-  }, [tabParam]);
+  const [activeTab, setActiveTab] = useLegalTab();
 
   return (
     <div className="min-h-screen bg-background">
@@ -58,13 +48,16 @@ function LegalPageFr() {
             Mentions Légales
           </h1>
 
-          {/* Onglets interactifs */}
+          {/* Boutons de section (A11Y-11) : sans rôles tab, faute de panneaux et de flèches ; la section affichée, écrite dans ?tab=, porte aria-current. */}
           <div className="mb-12">
-            <div role="tablist" aria-label="Sections juridiques" className="legal-tabs flex gap-4 mb-8 border-b border-border overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+            <div
+              role="group"
+              aria-label="Sections juridiques"
+              className="legal-tabs flex gap-4 mb-8 border-b border-border overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0"
+            >
               <button
                 type="button"
-                role="tab"
-                aria-selected={activeTab === "legal"}
+                aria-current={activeTab === "legal" ? "page" : undefined}
                 onClick={() => setActiveTab("legal")}
                 className={`shrink-0 pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "legal"
@@ -76,8 +69,7 @@ function LegalPageFr() {
               </button>
               <button
                 type="button"
-                role="tab"
-                aria-selected={activeTab === "privacy"}
+                aria-current={activeTab === "privacy" ? "page" : undefined}
                 onClick={() => setActiveTab("privacy")}
                 className={`shrink-0 pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "privacy"
@@ -89,8 +81,7 @@ function LegalPageFr() {
               </button>
               <button
                 type="button"
-                role="tab"
-                aria-selected={activeTab === "terms"}
+                aria-current={activeTab === "terms" ? "page" : undefined}
                 onClick={() => setActiveTab("terms")}
                 className={`shrink-0 pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "terms"
@@ -105,38 +96,92 @@ function LegalPageFr() {
             {/* Contenu Informations Légales */}
             {activeTab === "legal" && (
               <section className="space-y-6 animate-in fade-in duration-300">
-                <h2 className="text-2xl font-bold text-foreground">Informations Légales</h2>
-                
+                <h2 className="text-2xl font-bold text-foreground">
+                  Informations Légales
+                </h2>
+
                 <div className="text-muted-foreground space-y-6">
                   <div>
-                    <h3 className="font-semibold text-foreground mb-3">Éditeur du site</h3>
+                    <h3 className="font-semibold text-foreground mb-3">
+                      Éditeur du site
+                    </h3>
                     <div className="space-y-2">
-                      <p><strong>Dénomination :</strong> {HIPPOCAMPUS_LEGAL.name}</p>
-                      <p><strong>Forme juridique :</strong> Société à responsabilité limitée (SARL)</p>
-                      <p><strong>Capital social :</strong> {HIPPOCAMPUS_LEGAL.capital}</p>
-                      <p><strong>Immatriculation :</strong> {HIPPOCAMPUS_LEGAL.rcs}</p>
-                      <p><strong>Siège social :</strong> {HIPPOCAMPUS_LEGAL.registeredOffice}</p>
-                      <p><strong>Directeur de la publication et gérant :</strong> {HIPPOCAMPUS_LEGAL.director}</p>
-                      <p><strong>Email :</strong> <a href={`mailto:${siteConfig.email}`} className="text-primary underline-offset-2 hover:underline">{siteConfig.email}</a></p>
+                      <p>
+                        <strong>Dénomination :</strong> {HIPPOCAMPUS_LEGAL.name}
+                      </p>
+                      <p>
+                        <strong>Forme juridique :</strong> Société à
+                        responsabilité limitée (SARL)
+                      </p>
+                      <p>
+                        <strong>Capital social :</strong>{" "}
+                        {HIPPOCAMPUS_LEGAL.capital}
+                      </p>
+                      <p>
+                        <strong>Immatriculation :</strong>{" "}
+                        {HIPPOCAMPUS_LEGAL.rcs}
+                      </p>
+                      <p>
+                        <strong>Siège social :</strong>{" "}
+                        {HIPPOCAMPUS_LEGAL.registeredOffice}
+                      </p>
+                      <p>
+                        <strong>Directeur de la publication et gérant :</strong>{" "}
+                        {HIPPOCAMPUS_LEGAL.director}
+                      </p>
+                      <p>
+                        <strong>Email :</strong>{" "}
+                        <a
+                          href={`mailto:${siteConfig.email}`}
+                          className="text-primary underline-offset-2 hover:underline"
+                        >
+                          {siteConfig.email}
+                        </a>
+                      </p>
                     </div>
                   </div>
 
                   <div>
-                    <h3 className="font-semibold text-foreground mb-3">Hébergeur</h3>
+                    <h3 className="font-semibold text-foreground mb-3">
+                      Hébergeur
+                    </h3>
                     <div className="space-y-2">
-                      <p><strong>Service :</strong> Vercel Inc.</p>
-                      <p><strong>Rôle :</strong> Hébergement, déploiement, réseau de diffusion et fonctions serveur du site</p>
-                      <p><strong>Informations du prestataire :</strong> <a className="text-primary underline" href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noreferrer">politique de confidentialité Vercel</a></p>
+                      <p>
+                        <strong>Service :</strong> Vercel Inc.
+                      </p>
+                      <p>
+                        <strong>Rôle :</strong> Hébergement, déploiement, réseau
+                        de diffusion et fonctions serveur du site
+                      </p>
+                      <p>
+                        <strong>Informations du prestataire :</strong>{" "}
+                        <a
+                          className="text-primary underline"
+                          href="https://vercel.com/legal/privacy-policy"
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          politique de confidentialité Vercel
+                        </a>
+                      </p>
                     </div>
                   </div>
 
                   <div>
-                    <h3 className="font-semibold text-foreground mb-3">Propriété Intellectuelle</h3>
+                    <h3 className="font-semibold text-foreground mb-3">
+                      Propriété Intellectuelle
+                    </h3>
                     <p className="mb-4">
-                      L'ensemble du contenu de ce site (textes, images, logos, vidéos, etc.) est protégé par les lois sur la propriété intellectuelle. Toute reproduction, distribution ou utilisation du contenu sans autorisation écrite préalable est strictement interdite.
+                      L'ensemble du contenu de ce site (textes, images, logos,
+                      vidéos, etc.) est protégé par les lois sur la propriété
+                      intellectuelle. Toute reproduction, distribution ou
+                      utilisation du contenu sans autorisation écrite préalable
+                      est strictement interdite.
                     </p>
                     <p>
-                      Les logos des entreprises partenaires sont la propriété de leurs propriétaires respectifs et sont utilisés avec permission.
+                      Les logos des entreprises partenaires sont la propriété de
+                      leurs propriétaires respectifs et sont utilisés avec
+                      permission.
                     </p>
                   </div>
                 </div>
@@ -146,10 +191,22 @@ function LegalPageFr() {
             {/* Contenu Politique de Confidentialité */}
             {activeTab === "privacy" && (
               <section className="space-y-6 animate-in fade-in duration-300">
-                <h2 className="text-2xl font-bold text-foreground">Politique de Confidentialité</h2>
+                <h2 className="text-2xl font-bold text-foreground">
+                  Politique de Confidentialité
+                </h2>
                 <div className="text-muted-foreground space-y-4">
-                  <h3 className="font-semibold text-foreground">1. Collecte de données personnelles</h3>
-                  <p>Ce site traite des données personnelles dans le cadre des formulaires de contact, des candidatures et du portail candidat, du recrutement pour les établissements, de la réservation et du paiement d’une consultation, de l’émission de factures, du service gratuit de questions-réponses sur l’anesthésie et l’opération, et du traitement des demandes RGPD. Les données collectées incluent :</p>
+                  <h3 className="font-semibold text-foreground">
+                    1. Collecte de données personnelles
+                  </h3>
+                  <p>
+                    Ce site traite des données personnelles dans le cadre des
+                    formulaires de contact, des candidatures et du portail
+                    candidat, du recrutement pour les établissements, de la
+                    réservation et du paiement d’une consultation, de l’émission
+                    de factures, du service gratuit de questions-réponses sur
+                    l’anesthésie et l’opération, et du traitement des demandes
+                    RGPD. Les données collectées incluent :
+                  </p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
                     <li>Nom complet</li>
                     <li>Adresse email</li>
@@ -157,23 +214,56 @@ function LegalPageFr() {
                     <li>Contenu du message</li>
                     <li>Adresse IP (automatiquement collectée)</li>
                     <li>Cookies de session</li>
-                    <li>Date et heure souhaitées, demande de consultation et référence de réservation</li>
-                    <li>Informations nécessaires à la facture ; les données de carte sont traitées directement par Stripe</li>
-                    <li>Données de candidature : CV, spécialité, pays de diplôme, expériences, langues, certifications, mobilité et préférences de mission</li>
-                    <li>Documents déposés volontairement dans le portail candidat, protégés par des mesures techniques adaptées</li>
-                    <li>Pour le service gratuit de questions : nom, prénom, email, téléphone, question libre, consentements et version éventuelle anonymisée destinée à la publication</li>
+                    <li>
+                      Date et heure souhaitées, demande de consultation et
+                      référence de réservation
+                    </li>
+                    <li>
+                      Informations nécessaires à la facture ; les données de
+                      carte sont traitées directement par Stripe
+                    </li>
+                    <li>
+                      Données de candidature : CV, spécialité, pays de diplôme,
+                      expériences, langues, certifications, mobilité et
+                      préférences de mission
+                    </li>
+                    <li>
+                      Documents déposés volontairement dans le portail candidat,
+                      protégés par des mesures techniques adaptées
+                    </li>
+                    <li>
+                      Pour le service gratuit de questions : nom, prénom, email,
+                      téléphone, question libre, consentements et version
+                      éventuelle anonymisée destinée à la publication
+                    </li>
                   </ul>
 
-                  <h3 className="font-semibold text-foreground mt-4">2. Base légale du traitement</h3>
-                  <p>Le traitement de vos données personnelles est basé sur :</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    2. Base légale du traitement
+                  </h3>
+                  <p>
+                    Le traitement de vos données personnelles est basé sur :
+                  </p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
-                    <li>Votre consentement explicite (article 6.1.a du RGPD)</li>
-                    <li>L'exécution d'une demande de contact (article 6.1.b du RGPD)</li>
-                    <li>L'intérêt légitime du responsable du traitement (article 6.1.f du RGPD)</li>
+                    <li>
+                      Votre consentement explicite (article 6.1.a du RGPD)
+                    </li>
+                    <li>
+                      L'exécution d'une demande de contact (article 6.1.b du
+                      RGPD)
+                    </li>
+                    <li>
+                      L'intérêt légitime du responsable du traitement (article
+                      6.1.f du RGPD)
+                    </li>
                   </ul>
 
-                  <h3 className="font-semibold text-foreground mt-4">3. Utilisation des données</h3>
-                  <p>Les données personnelles sont utilisées uniquement pour :</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    3. Utilisation des données
+                  </h3>
+                  <p>
+                    Les données personnelles sont utilisées uniquement pour :
+                  </p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
                     <li>Répondre à vos demandes de contact et questions</li>
                     <li>Vous fournir les informations ou services demandés</li>
@@ -181,22 +271,66 @@ function LegalPageFr() {
                     <li>Respecter les obligations légales et réglementaires</li>
                     <li>Prévenir la fraude et les abus</li>
                   </ul>
-                  <p className="mt-4"><strong>Aucune vente ni utilisation commerciale :</strong> Vos données ne sont pas vendues ni utilisées à des fins commerciales. Elles peuvent être transmises aux sous-traitants strictement nécessaires au fonctionnement du service, conformément à la section dédiée ci-dessous.</p>
-                  <p className="mt-4"><strong>Recrutement et IA :</strong> l’analyse automatisée des candidatures sert uniquement d’aide à la lecture et au rapprochement de profils. Elle ne produit aucune décision d’embauche ou de rejet sans revue humaine.</p>
-                  <p className="mt-4"><strong>Questions médicales et IA :</strong> le service gratuit fournit uniquement une information générale. La réponse est rédigée et validée par le médecin ; l’assistance IA peut améliorer la syntaxe d’un brouillon administrateur sans répondre directement à la personne, ajouter un contenu médical nouveau, ni déclencher un envoi ou une publication automatique. Les coordonnées ne sont pas transmises à cette assistance.</p>
+                  <p className="mt-4">
+                    <strong>Aucune vente ni utilisation commerciale :</strong>{" "}
+                    Vos données ne sont pas vendues ni utilisées à des fins
+                    commerciales. Elles peuvent être transmises aux
+                    sous-traitants strictement nécessaires au fonctionnement du
+                    service, conformément à la section dédiée ci-dessous.
+                  </p>
+                  <p className="mt-4">
+                    <strong>Recrutement et IA :</strong> l’analyse automatisée
+                    des candidatures sert uniquement d’aide à la lecture et au
+                    rapprochement de profils. Elle ne produit aucune décision
+                    d’embauche ou de rejet sans revue humaine.
+                  </p>
+                  <p className="mt-4">
+                    <strong>Questions médicales et IA :</strong> le service
+                    gratuit fournit uniquement une information générale. La
+                    réponse est rédigée et validée par le médecin ; l’assistance
+                    IA peut améliorer la syntaxe d’un brouillon administrateur
+                    sans répondre directement à la personne, ajouter un contenu
+                    médical nouveau, ni déclencher un envoi ou une publication
+                    automatique. Les coordonnées ne sont pas transmises à cette
+                    assistance.
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">4. Durée de conservation</h3>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    4. Durée de conservation
+                  </h3>
                   <p>Les données personnelles sont conservées :</p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
-                    <li><strong>Données de contact :</strong> 3 ans après votre dernier contact ou jusqu'à votre demande de suppression</li>
-                    <li><strong>Questions médicales gratuites :</strong> 3 ans après le dernier échange ou jusqu’à l’exercice du droit de suppression ; les versions publiques ne sont conservées qu’avec accord distinct et peuvent être retirées sur demande</li>
-                    <li><strong>Logs d'accès :</strong> 90 jours maximum</li>
-                    <li><strong>Cookies :</strong> Selon votre consentement (jusqu'à 13 mois)</li>
+                    <li>
+                      <strong>Données de contact :</strong> 3 ans après votre
+                      dernier contact ou jusqu'à votre demande de suppression
+                    </li>
+                    <li>
+                      <strong>Questions médicales gratuites :</strong> 3 ans
+                      après le dernier échange ou jusqu’à l’exercice du droit de
+                      suppression ; les versions publiques ne sont conservées
+                      qu’avec accord distinct et peuvent être retirées sur
+                      demande
+                    </li>
+                    <li>
+                      <strong>Logs d'accès :</strong> 90 jours maximum
+                    </li>
+                    <li>
+                      <strong>Cookies :</strong> Selon votre consentement
+                      (jusqu'à 13 mois)
+                    </li>
                   </ul>
-                  <p className="mt-4">Après cette période, vos données sont supprimées ou anonymisées de manière irréversible.</p>
+                  <p className="mt-4">
+                    Après cette période, vos données sont supprimées ou
+                    anonymisées de manière irréversible.
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">5. Sécurité des données</h3>
-                  <p>Nous mettons en œuvre des mesures de sécurité appropriées pour protéger vos données :</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    5. Sécurité des données
+                  </h3>
+                  <p>
+                    Nous mettons en œuvre des mesures de sécurité appropriées
+                    pour protéger vos données :
+                  </p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
                     <li>Chiffrement SSL/TLS pour les transmissions</li>
                     <li>Accès restreint aux données personnelles</li>
@@ -205,57 +339,237 @@ function LegalPageFr() {
                     <li>Conformité aux normes de sécurité de l'industrie</li>
                   </ul>
 
-                  <h3 className="font-semibold text-foreground mt-4">6. Vos droits RGPD</h3>
-                  <p>Conformément au Règlement Général sur la Protection des Données (RGPD), vous disposez des droits suivants :</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    6. Vos droits RGPD
+                  </h3>
+                  <p>
+                    Conformément au Règlement Général sur la Protection des
+                    Données (RGPD), vous disposez des droits suivants :
+                  </p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
-                    <li><strong>Droit d'accès :</strong> Obtenir une copie de vos données personnelles</li>
-                    <li><strong>Droit de rectification :</strong> Corriger les données inexactes ou incomplètes</li>
-                    <li><strong>Droit à l'oubli :</strong> Demander la suppression de vos données</li>
-                    <li><strong>Droit à la limitation du traitement :</strong> Limiter l'utilisation de vos données</li>
-                    <li><strong>Droit à la portabilité :</strong> Recevoir vos données dans un format structuré</li>
-                    <li><strong>Droit d'opposition :</strong> Vous opposer au traitement de vos données</li>
-                    <li><strong>Droit de ne pas être soumis à une décision automatisée :</strong> Droit à une intervention humaine</li>
+                    <li>
+                      <strong>Droit d'accès :</strong> Obtenir une copie de vos
+                      données personnelles
+                    </li>
+                    <li>
+                      <strong>Droit de rectification :</strong> Corriger les
+                      données inexactes ou incomplètes
+                    </li>
+                    <li>
+                      <strong>Droit à l'oubli :</strong> Demander la suppression
+                      de vos données
+                    </li>
+                    <li>
+                      <strong>Droit à la limitation du traitement :</strong>{" "}
+                      Limiter l'utilisation de vos données
+                    </li>
+                    <li>
+                      <strong>Droit à la portabilité :</strong> Recevoir vos
+                      données dans un format structuré
+                    </li>
+                    <li>
+                      <strong>Droit d'opposition :</strong> Vous opposer au
+                      traitement de vos données
+                    </li>
+                    <li>
+                      <strong>
+                        Droit de ne pas être soumis à une décision automatisée :
+                      </strong>{" "}
+                      Droit à une intervention humaine
+                    </li>
                   </ul>
-                  <p className="mt-4">Pour exercer ces droits, utilisez le formulaire dédié <Link href="/gdpr" className="text-primary underline underline-offset-2">Exercer mes droits RGPD</Link> ou écrivez-nous à <a href={`mailto:${siteConfig.email}`} className="text-primary underline-offset-2 hover:underline">{siteConfig.email}</a>.</p>
+                  <p className="mt-4">
+                    Pour exercer ces droits, utilisez le formulaire dédié{" "}
+                    <Link
+                      href="/gdpr"
+                      className="text-primary underline underline-offset-2"
+                    >
+                      Exercer mes droits RGPD
+                    </Link>{" "}
+                    ou écrivez-nous à{" "}
+                    <a
+                      href={`mailto:${siteConfig.email}`}
+                      className="text-primary underline-offset-2 hover:underline"
+                    >
+                      {siteConfig.email}
+                    </a>
+                    .
+                  </p>
 
-                  <h3 id="cookies" className="font-semibold text-foreground mt-4 scroll-mt-28">7. Cookies et technologies de suivi</h3>
+                  <h3
+                    id="cookies"
+                    className="font-semibold text-foreground mt-4 scroll-mt-4"
+                  >
+                    7. Cookies et technologies de suivi
+                  </h3>
                   <p>Ce site utilise :</p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
-                    <li><strong>Traceurs essentiels (sans consentement) :</strong> mémorisation de votre choix en matière de cookies, protection anti-robot des formulaires (Cloudflare Turnstile), session de l’espace candidat et, uniquement sur l’espace d’administration, l’authentification Clerk.</li>
-                    <li><strong>Préférences d’affichage (sans consentement) :</strong> la langue, le thème et les réglages de lisibilité que vous choisissez sont enregistrés sur votre appareil pour fournir le service demandé. Ce stockage fonctionnel ne sert à aucun suivi.</li>
-                    <li><strong>Mesure d’audience (avec votre consentement) :</strong> statistiques de fréquentation, désactivées par défaut et activées uniquement si vous les acceptez.</li>
+                    <li>
+                      <strong>Traceurs essentiels (sans consentement) :</strong>{" "}
+                      mémorisation de votre choix en matière de cookies,
+                      protection anti-robot des formulaires (Cloudflare
+                      Turnstile), session de l’espace candidat et, uniquement
+                      sur l’espace d’administration, l’authentification Clerk.
+                    </li>
+                    <li>
+                      <strong>
+                        Préférences d’affichage (sans consentement) :
+                      </strong>{" "}
+                      la langue, le thème et les réglages de lisibilité que vous
+                      choisissez sont enregistrés sur votre appareil pour
+                      fournir le service demandé. Ce stockage fonctionnel ne
+                      sert à aucun suivi.
+                    </li>
+                    <li>
+                      <strong>
+                        Mesure d’audience (avec votre consentement) :
+                      </strong>{" "}
+                      statistiques de fréquentation, désactivées par défaut et
+                      activées uniquement si vous les acceptez.
+                    </li>
                   </ul>
-                  <p className="mt-4">Votre choix est conservé 13 mois en cas d’accord et 6 mois en cas de refus, puis il vous est redemandé. Vous pouvez modifier votre choix à tout moment via le bouton « Préférences cookies » en bas de page.</p>
+                  <p className="mt-4">
+                    Votre choix est conservé 13 mois en cas d’accord et 6 mois
+                    en cas de refus, puis il vous est redemandé. Vous pouvez
+                    modifier votre choix à tout moment via « Gérer les cookies
+                    », en bas de page.
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">8. Responsable du traitement</h3>
-                  <p><strong>Responsable :</strong> {HIPPOCAMPUS_LEGAL.name}<br /><strong>Siège social :</strong> {HIPPOCAMPUS_LEGAL.registeredOffice}<br /><strong>Gérant :</strong> {HIPPOCAMPUS_LEGAL.director}<br /><strong>Contact :</strong> <a href={`mailto:${siteConfig.email}`} className="text-primary underline-offset-2 hover:underline">{siteConfig.email}</a></p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    8. Responsable du traitement
+                  </h3>
+                  <p>
+                    <strong>Responsable :</strong> {HIPPOCAMPUS_LEGAL.name}
+                    <br />
+                    <strong>Siège social :</strong>{" "}
+                    {HIPPOCAMPUS_LEGAL.registeredOffice}
+                    <br />
+                    <strong>Gérant :</strong> {HIPPOCAMPUS_LEGAL.director}
+                    <br />
+                    <strong>Contact :</strong>{" "}
+                    <a
+                      href={`mailto:${siteConfig.email}`}
+                      className="text-primary underline-offset-2 hover:underline"
+                    >
+                      {siteConfig.email}
+                    </a>
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">9. Sous-traitants et transferts de données</h3>
-                  <p>Nous utilisons les sous-traitants suivants pour traiter vos données :</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    9. Sous-traitants et transferts de données
+                  </h3>
+                  <p>
+                    Nous utilisons les sous-traitants suivants pour traiter vos
+                    données :
+                  </p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
-                    <li><strong>Vercel :</strong> Hébergement, déploiement, fonctions serveur, réseau de diffusion et stockage de fichiers Vercel Blob</li>
-                    <li><strong>Neon :</strong> Hébergement de la base de données applicative PostgreSQL</li>
-                    <li><strong>Clerk :</strong> Authentification et gestion sécurisée des comptes administrateur</li>
-                    <li><strong>Cloudflare Turnstile :</strong> Protection anti-abus et vérification anti-robot des formulaires</li>
-                    <li><strong>Resend :</strong> Service d'envoi d'emails transactionnels (confirmations, factures, rappels)</li>
-                    <li><strong>Stripe :</strong> Plateforme de paiement pour les réservations de consultations</li>
-                    <li><strong>Google Drive :</strong> Le cas échéant, copie privée, journalisée et contrôlée des CV déposés, après autorisation du responsable</li>
+                    <li>
+                      <strong>Vercel :</strong> Hébergement, déploiement,
+                      fonctions serveur, réseau de diffusion et stockage de
+                      fichiers Vercel Blob
+                    </li>
+                    <li>
+                      <strong>Neon :</strong> Hébergement de la base de données
+                      applicative PostgreSQL
+                    </li>
+                    <li>
+                      <strong>Clerk :</strong> Authentification et gestion
+                      sécurisée des comptes administrateur
+                    </li>
+                    <li>
+                      <strong>Cloudflare Turnstile :</strong> Protection
+                      anti-abus et vérification anti-robot des formulaires
+                    </li>
+                    <li>
+                      <strong>Resend :</strong> Service d'envoi d'emails
+                      transactionnels (confirmations, factures, rappels)
+                    </li>
+                    <li>
+                      <strong>Stripe :</strong> Plateforme de paiement pour les
+                      réservations de consultations
+                    </li>
+                    <li>
+                      <strong>Google Drive :</strong> Le cas échéant, copie
+                      privée, journalisée et contrôlée des CV déposés, après
+                      autorisation du responsable
+                    </li>
                   </ul>
-                  <p className="mt-4">Ces sous-traitants traitent uniquement les catégories nécessaires : données techniques pour l’hébergement et la sécurité, données de compte pour l’authentification, coordonnées et références de réservation pour la gestion des rendez-vous et des communications, informations de facturation et statut de paiement pour Stripe, ainsi que CV et documents de candidature pour leur stockage privé. Pour le service gratuit de questions, toute éventuelle assistance rédactionnelle reçoit exclusivement un brouillon administrateur sans coordonnées. Selon l'infrastructure utilisée par chaque prestataire, un traitement peut avoir lieu hors de l'Espace économique européen. Les garanties applicables sont celles prévues par leurs engagements contractuels et leurs accords de traitement, y compris les clauses contractuelles types lorsqu'elles sont requises. Les données de carte bancaire ne sont pas stockées par ce site.</p>
+                  <p className="mt-4">
+                    Ces sous-traitants traitent uniquement les catégories
+                    nécessaires : données techniques pour l’hébergement et la
+                    sécurité, données de compte pour l’authentification,
+                    coordonnées et références de réservation pour la gestion des
+                    rendez-vous et des communications, informations de
+                    facturation et statut de paiement pour Stripe, ainsi que CV
+                    et documents de candidature pour leur stockage privé. Pour
+                    le service gratuit de questions, toute éventuelle assistance
+                    rédactionnelle reçoit exclusivement un brouillon
+                    administrateur sans coordonnées. Selon l'infrastructure
+                    utilisée par chaque prestataire, un traitement peut avoir
+                    lieu hors de l'Espace économique européen. Les garanties
+                    applicables sont celles prévues par leurs engagements
+                    contractuels et leurs accords de traitement, y compris les
+                    clauses contractuelles types lorsqu'elles sont requises. Les
+                    données de carte bancaire ne sont pas stockées par ce site.
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">10. Registre des traitements</h3>
-                  <p>Conformément aux exigences de la CNIL, nous maintenons un registre des traitements de données personnelles :</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    10. Registre des traitements
+                  </h3>
+                  <p>
+                    Conformément aux exigences de la CNIL, nous maintenons un
+                    registre des traitements de données personnelles :
+                  </p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
-                    <li><strong>Traitement 1 - Formulaire de contact :</strong> Collecte du nom, email, téléphone et message. Base légale : consentement. Durée : 3 ans.</li>
-                    <li><strong>Traitement 2 - Réservation de consultation :</strong> Collecte des données de contact et de paiement. Base légale : exécution du contrat. Durée : 3 ans.</li>
-                    <li><strong>Traitement 3 - Demande GDPR :</strong> Collecte des données pour traiter les demandes d'accès, rectification ou suppression. Base légale : obligation légale. Durée : 1 an.</li>
-                    <li><strong>Traitement 4 - Logs d'accès :</strong> Collecte automatique de l'adresse IP et des données de navigation. Base légale : intérêt légitime. Durée : 90 jours.</li>
-                    <li><strong>Traitement 5 - Cookies :</strong> Stockage des préférences utilisateur (langue, thème). Base légale : consentement. Durée : 13 mois.</li>
-                    <li><strong>Traitement 6 - Questions médicales gratuites :</strong> Collecte des coordonnées, question, consentements et réponse afin de transmettre une information générale par email. Base légale : consentement explicite ; la publication d’une version anonymisée repose sur un consentement séparé. Durée : 3 ans après le dernier échange ou jusqu’à suppression.</li>
+                    <li>
+                      <strong>Traitement 1 - Formulaire de contact :</strong>{" "}
+                      Collecte du nom, email, téléphone et message. Base légale
+                      : consentement. Durée : 3 ans.
+                    </li>
+                    <li>
+                      <strong>
+                        Traitement 2 - Réservation de consultation :
+                      </strong>{" "}
+                      Collecte des données de contact et de paiement. Base
+                      légale : exécution du contrat. Durée : 3 ans.
+                    </li>
+                    <li>
+                      <strong>Traitement 3 - Demande GDPR :</strong> Collecte
+                      des données pour traiter les demandes d'accès,
+                      rectification ou suppression. Base légale : obligation
+                      légale. Durée : 1 an.
+                    </li>
+                    <li>
+                      <strong>Traitement 4 - Logs d'accès :</strong> Collecte
+                      automatique de l'adresse IP et des données de navigation.
+                      Base légale : intérêt légitime. Durée : 90 jours.
+                    </li>
+                    <li>
+                      <strong>Traitement 5 - Cookies :</strong> Stockage des
+                      préférences utilisateur (langue, thème). Base légale :
+                      consentement. Durée : 13 mois.
+                    </li>
+                    <li>
+                      <strong>
+                        Traitement 6 - Questions médicales gratuites :
+                      </strong>{" "}
+                      Collecte des coordonnées, question, consentements et
+                      réponse afin de transmettre une information générale par
+                      email. Base légale : consentement explicite ; la
+                      publication d’une version anonymisée repose sur un
+                      consentement séparé. Durée : 3 ans après le dernier
+                      échange ou jusqu’à suppression.
+                    </li>
                   </ul>
 
-                  <h3 className="font-semibold text-foreground mt-4">11. Droit de plainte</h3>
-                  <p>Si vous estimez que vos droits RGPD ne sont pas respectés, vous avez le droit de déposer une plainte auprès de la CNIL (Commission Nationale de l'Informatique et des Libertés).</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    11. Droit de plainte
+                  </h3>
+                  <p>
+                    Si vous estimez que vos droits RGPD ne sont pas respectés,
+                    vous avez le droit de déposer une plainte auprès de la CNIL
+                    (Commission Nationale de l'Informatique et des Libertés).
+                  </p>
                 </div>
               </section>
             )}
@@ -263,50 +577,156 @@ function LegalPageFr() {
             {/* Contenu Conditions Générales d'Utilisation */}
             {activeTab === "terms" && (
               <section className="space-y-6 animate-in fade-in duration-300">
-                <h2 className="text-2xl font-bold text-foreground">Conditions Générales d'Utilisation</h2>
+                <h2 className="text-2xl font-bold text-foreground">
+                  Conditions Générales d'Utilisation
+                </h2>
                 <div className="text-muted-foreground space-y-4">
-                  <h3 className="font-semibold text-foreground">1. Acceptation des conditions</h3>
-                  <p>En accédant et en utilisant ce site, vous acceptez pleinement et sans réserve les présentes conditions générales d'utilisation. Si vous n'acceptez pas ces conditions, veuillez ne pas utiliser ce site.</p>
+                  <h3 className="font-semibold text-foreground">
+                    1. Acceptation des conditions
+                  </h3>
+                  <p>
+                    En accédant et en utilisant ce site, vous acceptez
+                    pleinement et sans réserve les présentes conditions
+                    générales d'utilisation. Si vous n'acceptez pas ces
+                    conditions, veuillez ne pas utiliser ce site.
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">2. Description du service</h3>
-                  <p>Ce site présente les activités de conseil, recrutement, accompagnement, formation et services numériques de Hippocampus Consulting SARL, ainsi que les informations professionnelles associées. Les contenus médicaux sont fournis à titre informatif et ne remplacent pas un avis médical personnalisé.</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    2. Description du service
+                  </h3>
+                  <p>
+                    Ce site présente les activités de conseil, recrutement,
+                    accompagnement, formation et services numériques de
+                    Hippocampus Consulting SARL, ainsi que les informations
+                    professionnelles associées. Les contenus médicaux sont
+                    fournis à titre informatif et ne remplacent pas un avis
+                    médical personnalisé.
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">3. Utilisation acceptable</h3>
-                  <p>Vous acceptez d'utiliser ce site uniquement à des fins légales et conformément à toutes les lois et réglementations applicables. Vous vous engagez à ne pas :</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    3. Utilisation acceptable
+                  </h3>
+                  <p>
+                    Vous acceptez d'utiliser ce site uniquement à des fins
+                    légales et conformément à toutes les lois et réglementations
+                    applicables. Vous vous engagez à ne pas :
+                  </p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
-                    <li>Utiliser le site à des fins illégales, frauduleuses ou non autorisées</li>
-                    <li>Reproduire, distribuer ou transmettre le contenu sans autorisation écrite préalable</li>
-                    <li>Accéder ou tenter d'accéder à des zones non autorisées du site</li>
-                    <li>Transmettre des virus, chevaux de Troie ou logiciels malveillants</li>
-                    <li>Harceler, menacer, diffamer ou intimider d'autres utilisateurs</li>
-                    <li>Collecter ou suivre les informations personnelles d'autres utilisateurs</li>
-                    <li>Utiliser des robots, scrapers ou outils automatisés pour accéder au site</li>
-                    <li>Surcharger ou interrompre le fonctionnement normal du site</li>
+                    <li>
+                      Utiliser le site à des fins illégales, frauduleuses ou non
+                      autorisées
+                    </li>
+                    <li>
+                      Reproduire, distribuer ou transmettre le contenu sans
+                      autorisation écrite préalable
+                    </li>
+                    <li>
+                      Accéder ou tenter d'accéder à des zones non autorisées du
+                      site
+                    </li>
+                    <li>
+                      Transmettre des virus, chevaux de Troie ou logiciels
+                      malveillants
+                    </li>
+                    <li>
+                      Harceler, menacer, diffamer ou intimider d'autres
+                      utilisateurs
+                    </li>
+                    <li>
+                      Collecter ou suivre les informations personnelles d'autres
+                      utilisateurs
+                    </li>
+                    <li>
+                      Utiliser des robots, scrapers ou outils automatisés pour
+                      accéder au site
+                    </li>
+                    <li>
+                      Surcharger ou interrompre le fonctionnement normal du site
+                    </li>
                   </ul>
 
-                  <h3 className="font-semibold text-foreground mt-4">4. Propriété intellectuelle</h3>
-                  <p>L'ensemble du contenu de ce site (textes, images, logos, vidéos, graphiques, etc.) est protégé par les lois sur la propriété intellectuelle et les droits d'auteur. Vous n'avez le droit d'utiliser ce contenu que pour votre usage personnel et non commercial.</p>
-                  <p className="mt-4"><strong>Restrictions :</strong> Vous ne pouvez pas reproduire, copier, modifier, adapter, vendre ou distribuer le contenu.</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    4. Propriété intellectuelle
+                  </h3>
+                  <p>
+                    L'ensemble du contenu de ce site (textes, images, logos,
+                    vidéos, graphiques, etc.) est protégé par les lois sur la
+                    propriété intellectuelle et les droits d'auteur. Vous n'avez
+                    le droit d'utiliser ce contenu que pour votre usage
+                    personnel et non commercial.
+                  </p>
+                  <p className="mt-4">
+                    <strong>Restrictions :</strong> Vous ne pouvez pas
+                    reproduire, copier, modifier, adapter, vendre ou distribuer
+                    le contenu.
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">5. Limitation de responsabilité</h3>
-                  <p><strong>Clause de non-responsabilité médicale :</strong> Les informations fournies sur ce site sont à titre informatif uniquement et ne constituent pas un avis médical professionnel. Elles ne remplacent pas une consultation avec un professionnel de santé qualifié.</p>
-                  <p className="mt-4"><strong>Exactitude des informations :</strong> Bien que nous nous efforçons de maintenir l'exactitude des informations, nous ne garantissons pas l'absence d'erreurs ou d'omissions.</p>
-                  <p className="mt-4"><strong>Absence de garantie :</strong> Le site est fourni "tel quel" sans garantie d'aucune sorte, expresse ou implicite.</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    5. Limitation de responsabilité
+                  </h3>
+                  <p>
+                    <strong>Clause de non-responsabilité médicale :</strong> Les
+                    informations fournies sur ce site sont à titre informatif
+                    uniquement et ne constituent pas un avis médical
+                    professionnel. Elles ne remplacent pas une consultation avec
+                    un professionnel de santé qualifié.
+                  </p>
+                  <p className="mt-4">
+                    <strong>Exactitude des informations :</strong> Bien que nous
+                    nous efforçons de maintenir l'exactitude des informations,
+                    nous ne garantissons pas l'absence d'erreurs ou d'omissions.
+                  </p>
+                  <p className="mt-4">
+                    <strong>Absence de garantie :</strong> Le site est fourni
+                    "tel quel" sans garantie d'aucune sorte, expresse ou
+                    implicite.
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">6. Liens externes</h3>
-                  <p>Ce site peut contenir des liens vers des sites externes. Nous ne sommes pas responsables du contenu, de l'exactitude ou des pratiques de confidentialité de ces sites externes.</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    6. Liens externes
+                  </h3>
+                  <p>
+                    Ce site peut contenir des liens vers des sites externes.
+                    Nous ne sommes pas responsables du contenu, de l'exactitude
+                    ou des pratiques de confidentialité de ces sites externes.
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">7. Disponibilité du site</h3>
-                  <p>Nous nous efforçons de maintenir le site disponible 24h/24, 7j/7. Cependant, nous ne garantissons pas une disponibilité ininterrompue. Le site peut être temporairement indisponible pour maintenance ou raisons techniques.</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    7. Disponibilité du site
+                  </h3>
+                  <p>
+                    Nous nous efforçons de maintenir le site disponible 24h/24,
+                    7j/7. Cependant, nous ne garantissons pas une disponibilité
+                    ininterrompue. Le site peut être temporairement indisponible
+                    pour maintenance ou raisons techniques.
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">8. Modifications des conditions</h3>
-                  <p>Nous nous réservons le droit de modifier ces conditions générales à tout moment. Les modifications seront effectives dès leur publication sur le site.</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    8. Modifications des conditions
+                  </h3>
+                  <p>
+                    Nous nous réservons le droit de modifier ces conditions
+                    générales à tout moment. Les modifications seront effectives
+                    dès leur publication sur le site.
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">9. Loi applicable</h3>
-                  <p>Ces conditions générales sont régies par la loi française. Tout litige découlant de l'utilisation du site sera soumis à la juridiction exclusive des tribunaux français.</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    9. Loi applicable
+                  </h3>
+                  <p>
+                    Ces conditions générales sont régies par la loi française.
+                    Tout litige découlant de l'utilisation du site sera soumis à
+                    la juridiction exclusive des tribunaux français.
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">10. Contact</h3>
-                  <p>Pour toute question concernant ces conditions générales, veuillez nous contacter via le formulaire de contact sur le site.</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    10. Contact
+                  </h3>
+                  <p>
+                    Pour toute question concernant ces conditions générales,
+                    veuillez nous contacter via le formulaire de contact sur le
+                    site.
+                  </p>
                 </div>
               </section>
             )}
@@ -326,16 +746,7 @@ function LegalPageFr() {
 }
 
 function LegalPageEn() {
-  const search = useSearch();
-  const params = new URLSearchParams(search);
-  const tabParam = params.get("tab") as "legal" | "privacy" | "terms" | null;
-  const [activeTab, setActiveTab] = useState<"legal" | "privacy" | "terms">(tabParam || "legal");
-
-  useEffect(() => {
-    if (tabParam) {
-      setActiveTab(tabParam);
-    }
-  }, [tabParam]);
+  const [activeTab, setActiveTab] = useLegalTab();
 
   return (
     <div className="min-h-screen bg-background">
@@ -355,13 +766,16 @@ function LegalPageEn() {
             Legal Notice
           </h1>
 
-          {/* Interactive Tabs */}
+          {/* Section buttons (A11Y-11): see the French page. */}
           <div className="mb-12">
-            <div role="tablist" aria-label="Legal sections" className="legal-tabs flex gap-4 mb-8 border-b border-border overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+            <div
+              role="group"
+              aria-label="Legal sections"
+              className="legal-tabs flex gap-4 mb-8 border-b border-border overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0"
+            >
               <button
                 type="button"
-                role="tab"
-                aria-selected={activeTab === "legal"}
+                aria-current={activeTab === "legal" ? "page" : undefined}
                 onClick={() => setActiveTab("legal")}
                 className={`shrink-0 pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "legal"
@@ -373,8 +787,7 @@ function LegalPageEn() {
               </button>
               <button
                 type="button"
-                role="tab"
-                aria-selected={activeTab === "privacy"}
+                aria-current={activeTab === "privacy" ? "page" : undefined}
                 onClick={() => setActiveTab("privacy")}
                 className={`shrink-0 pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "privacy"
@@ -386,8 +799,7 @@ function LegalPageEn() {
               </button>
               <button
                 type="button"
-                role="tab"
-                aria-selected={activeTab === "terms"}
+                aria-current={activeTab === "terms" ? "page" : undefined}
                 onClick={() => setActiveTab("terms")}
                 className={`shrink-0 pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "terms"
@@ -402,38 +814,89 @@ function LegalPageEn() {
             {/* Legal Information Content */}
             {activeTab === "legal" && (
               <section className="space-y-6 animate-in fade-in duration-300">
-                <h2 className="text-2xl font-bold text-foreground">Legal Information</h2>
-                
+                <h2 className="text-2xl font-bold text-foreground">
+                  Legal Information
+                </h2>
+
                 <div className="text-muted-foreground space-y-6">
                   <div>
-                    <h3 className="font-semibold text-foreground mb-3">Website Editor</h3>
+                    <h3 className="font-semibold text-foreground mb-3">
+                      Website Editor
+                    </h3>
                     <div className="space-y-2">
-                      <p><strong>Company:</strong> {HIPPOCAMPUS_LEGAL.name}</p>
-                      <p><strong>Legal form:</strong> French limited liability company (SARL)</p>
-                      <p><strong>Share capital:</strong> {HIPPOCAMPUS_LEGAL.capital}</p>
-                      <p><strong>Registration:</strong> {HIPPOCAMPUS_LEGAL.rcs}</p>
-                      <p><strong>Registered office:</strong> {HIPPOCAMPUS_LEGAL.registeredOffice}</p>
-                      <p><strong>Publication director and manager:</strong> {HIPPOCAMPUS_LEGAL.director}</p>
-                      <p><strong>Email:</strong> <a href={`mailto:${siteConfig.email}`} className="text-primary underline-offset-2 hover:underline">{siteConfig.email}</a></p>
+                      <p>
+                        <strong>Company:</strong> {HIPPOCAMPUS_LEGAL.name}
+                      </p>
+                      <p>
+                        <strong>Legal form:</strong> French limited liability
+                        company (SARL)
+                      </p>
+                      <p>
+                        <strong>Share capital:</strong>{" "}
+                        {HIPPOCAMPUS_LEGAL.capital}
+                      </p>
+                      <p>
+                        <strong>Registration:</strong> {HIPPOCAMPUS_LEGAL.rcs}
+                      </p>
+                      <p>
+                        <strong>Registered office:</strong>{" "}
+                        {HIPPOCAMPUS_LEGAL.registeredOffice}
+                      </p>
+                      <p>
+                        <strong>Publication director and manager:</strong>{" "}
+                        {HIPPOCAMPUS_LEGAL.director}
+                      </p>
+                      <p>
+                        <strong>Email:</strong>{" "}
+                        <a
+                          href={`mailto:${siteConfig.email}`}
+                          className="text-primary underline-offset-2 hover:underline"
+                        >
+                          {siteConfig.email}
+                        </a>
+                      </p>
                     </div>
                   </div>
 
                   <div>
-                    <h3 className="font-semibold text-foreground mb-3">Hosting Provider</h3>
+                    <h3 className="font-semibold text-foreground mb-3">
+                      Hosting Provider
+                    </h3>
                     <div className="space-y-2">
-                      <p><strong>Service:</strong> Vercel Inc.</p>
-                      <p><strong>Role:</strong> Website hosting, deployment, content delivery network and server functions</p>
-                      <p><strong>Provider information:</strong> <a className="text-primary underline" href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noreferrer">Vercel privacy policy</a></p>
+                      <p>
+                        <strong>Service:</strong> Vercel Inc.
+                      </p>
+                      <p>
+                        <strong>Role:</strong> Website hosting, deployment,
+                        content delivery network and server functions
+                      </p>
+                      <p>
+                        <strong>Provider information:</strong>{" "}
+                        <a
+                          className="text-primary underline"
+                          href="https://vercel.com/legal/privacy-policy"
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Vercel privacy policy
+                        </a>
+                      </p>
                     </div>
                   </div>
 
                   <div>
-                    <h3 className="font-semibold text-foreground mb-3">Intellectual Property</h3>
+                    <h3 className="font-semibold text-foreground mb-3">
+                      Intellectual Property
+                    </h3>
                     <p className="mb-4">
-                      All content on this website (texts, images, logos, videos, etc.) is protected by intellectual property laws. Any reproduction, distribution, or use of content without prior written authorization is strictly prohibited.
+                      All content on this website (texts, images, logos, videos,
+                      etc.) is protected by intellectual property laws. Any
+                      reproduction, distribution, or use of content without
+                      prior written authorization is strictly prohibited.
                     </p>
                     <p>
-                      Partner company logos are the property of their respective owners and are used with permission.
+                      Partner company logos are the property of their respective
+                      owners and are used with permission.
                     </p>
                   </div>
                 </div>
@@ -443,10 +906,22 @@ function LegalPageEn() {
             {/* Privacy Policy Content */}
             {activeTab === "privacy" && (
               <section className="space-y-6 animate-in fade-in duration-300">
-                <h2 className="text-2xl font-bold text-foreground">Privacy Policy</h2>
+                <h2 className="text-2xl font-bold text-foreground">
+                  Privacy Policy
+                </h2>
+                <PrivacyReferenceVersionNotice language="en" />
                 <div className="text-muted-foreground space-y-4">
-                  <h3 className="font-semibold text-foreground">1. Collection of personal data</h3>
-                  <p>This website processes personal data through the contact form, consultation booking and payment, invoice issuance, and GDPR rights requests. Collected data includes:</p>
+                  <h3 className="font-semibold text-foreground">
+                    1. Collection of personal data
+                  </h3>
+                  <p>
+                    This website processes personal data through the contact
+                    forms, applications and the candidate portal, recruitment
+                    for facilities, consultation booking and payment, invoice
+                    issuance, the free question-and-answer service on
+                    anaesthesia and surgery, and the handling of GDPR requests.
+                    Collected data includes:
+                  </p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
                     <li>Full name</li>
                     <li>Email address</li>
@@ -454,19 +929,49 @@ function LegalPageEn() {
                     <li>Message content</li>
                     <li>IP address (automatically collected)</li>
                     <li>Session cookies</li>
-                    <li>Requested date and time, consultation request, and booking reference</li>
-                    <li>Invoice information; card data is handled directly by Stripe</li>
+                    <li>
+                      Requested date and time, consultation request, and booking
+                      reference
+                    </li>
+                    <li>
+                      Invoice information; card data is handled directly by
+                      Stripe
+                    </li>
+                    <li>
+                      Application data: CV, specialty, country of qualification,
+                      experience, languages, certifications, mobility and
+                      assignment preferences
+                    </li>
+                    <li>
+                      Documents voluntarily uploaded to the candidate portal,
+                      protected by appropriate technical measures
+                    </li>
+                    <li>
+                      For the free question service: last name, first name,
+                      email, phone number, free-text question, consents and,
+                      where applicable, an anonymised version intended for
+                      publication
+                    </li>
                   </ul>
 
-                  <h3 className="font-semibold text-foreground mt-4">2. Legal basis for processing</h3>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    2. Legal basis for processing
+                  </h3>
                   <p>The processing of your personal data is based on:</p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
                     <li>Your explicit consent (Article 6.1.a of GDPR)</li>
-                    <li>Execution of a contact request (Article 6.1.b of GDPR)</li>
-                    <li>Legitimate interest of the data controller (Article 6.1.f of GDPR)</li>
+                    <li>
+                      Execution of a contact request (Article 6.1.b of GDPR)
+                    </li>
+                    <li>
+                      Legitimate interest of the data controller (Article 6.1.f
+                      of GDPR)
+                    </li>
                   </ul>
 
-                  <h3 className="font-semibold text-foreground mt-4">3. Data usage</h3>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    3. Data usage
+                  </h3>
                   <p>Personal data is used only for:</p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
                     <li>Responding to your contact requests and questions</li>
@@ -475,19 +980,63 @@ function LegalPageEn() {
                     <li>Complying with legal and regulatory obligations</li>
                     <li>Preventing fraud and abuse</li>
                   </ul>
-                  <p className="mt-4"><strong>No sale or commercial use:</strong> Your data is not sold or used for commercial purposes. It may be transmitted to the processors strictly required to operate the service, as described in the dedicated section below.</p>
+                  <p className="mt-4">
+                    <strong>No sale or commercial use:</strong> Your data is not
+                    sold or used for commercial purposes. It may be transmitted
+                    to the processors strictly required to operate the service,
+                    as described in the dedicated section below.
+                  </p>
+                  <p className="mt-4">
+                    <strong>Recruitment and AI:</strong> the automated analysis
+                    of applications is used only as an aid to reading
+                    applications and matching profiles. It produces no hiring or
+                    rejection decision without human review.
+                  </p>
+                  <p className="mt-4">
+                    <strong>Medical questions and AI:</strong> the free service
+                    provides general information only. The answer is written and
+                    validated by the doctor; AI assistance may improve the
+                    syntax of an administrator’s draft, without answering the
+                    person directly, adding new medical content, or triggering
+                    any automatic sending or publication. Contact details are
+                    not passed to this assistance.
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">4. Data retention</h3>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    4. Data retention
+                  </h3>
                   <p>Personal data is retained for:</p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
-                    <li><strong>Contact data:</strong> 3 years after your last contact or until your deletion request</li>
-                    <li><strong>Access logs:</strong> Maximum 90 days</li>
-                    <li><strong>Cookies:</strong> According to your consent (up to 13 months)</li>
+                    <li>
+                      <strong>Contact data:</strong> 3 years after your last
+                      contact or until your deletion request
+                    </li>
+                    <li>
+                      <strong>Free medical questions:</strong> 3 years after the
+                      last exchange or until you exercise your right to erasure;
+                      public versions are kept only with separate consent and
+                      can be withdrawn on request
+                    </li>
+                    <li>
+                      <strong>Access logs:</strong> Maximum 90 days
+                    </li>
+                    <li>
+                      <strong>Cookies:</strong> According to your consent (up to
+                      13 months)
+                    </li>
                   </ul>
-                  <p className="mt-4">After this period, your data is deleted or anonymized irreversibly.</p>
+                  <p className="mt-4">
+                    After this period, your data is deleted or anonymized
+                    irreversibly.
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">5. Data security</h3>
-                  <p>We implement appropriate security measures to protect your data:</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    5. Data security
+                  </h3>
+                  <p>
+                    We implement appropriate security measures to protect your
+                    data:
+                  </p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
                     <li>SSL/TLS encryption for transmissions</li>
                     <li>Restricted access to personal data</li>
@@ -496,36 +1045,223 @@ function LegalPageEn() {
                     <li>Compliance with industry security standards</li>
                   </ul>
 
-                  <h3 className="font-semibold text-foreground mt-4">6. Your GDPR rights</h3>
-                  <p>Under the General Data Protection Regulation (GDPR), you have the following rights:</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    6. Your GDPR rights
+                  </h3>
+                  <p>
+                    Under the General Data Protection Regulation (GDPR), you
+                    have the following rights:
+                  </p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
-                    <li><strong>Right of access:</strong> Obtain a copy of your personal data</li>
-                    <li><strong>Right of rectification:</strong> Correct inaccurate or incomplete data</li>
-                    <li><strong>Right to be forgotten:</strong> Request deletion of your data</li>
-                    <li><strong>Right to restrict processing:</strong> Limit the use of your data</li>
-                    <li><strong>Right to data portability:</strong> Receive your data in a structured format</li>
-                    <li><strong>Right to object:</strong> Object to the processing of your data</li>
-                    <li><strong>Right not to be subject to automated decision-making:</strong> Right to human intervention</li>
+                    <li>
+                      <strong>Right of access:</strong> Obtain a copy of your
+                      personal data
+                    </li>
+                    <li>
+                      <strong>Right of rectification:</strong> Correct
+                      inaccurate or incomplete data
+                    </li>
+                    <li>
+                      <strong>Right to be forgotten:</strong> Request deletion
+                      of your data
+                    </li>
+                    <li>
+                      <strong>Right to restrict processing:</strong> Limit the
+                      use of your data
+                    </li>
+                    <li>
+                      <strong>Right to data portability:</strong> Receive your
+                      data in a structured format
+                    </li>
+                    <li>
+                      <strong>Right to object:</strong> Object to the processing
+                      of your data
+                    </li>
+                    <li>
+                      <strong>
+                        Right not to be subject to automated decision-making:
+                      </strong>{" "}
+                      Right to human intervention
+                    </li>
                   </ul>
-                  <p className="mt-4">To exercise these rights, use the dedicated form <Link href="/gdpr" className="text-primary underline underline-offset-2">Exercise my GDPR rights</Link> or write to <a href={`mailto:${siteConfig.email}`} className="text-primary underline-offset-2 hover:underline">{siteConfig.email}</a>.</p>
+                  <p className="mt-4">
+                    To exercise these rights, use the dedicated form{" "}
+                    <Link
+                      href="/gdpr"
+                      className="text-primary underline underline-offset-2"
+                    >
+                      Exercise my GDPR rights
+                    </Link>{" "}
+                    or write to{" "}
+                    <a
+                      href={`mailto:${siteConfig.email}`}
+                      className="text-primary underline-offset-2 hover:underline"
+                    >
+                      {siteConfig.email}
+                    </a>
+                    .
+                  </p>
 
-                  <h3 id="cookies" className="font-semibold text-foreground mt-4 scroll-mt-28">7. Cookies and tracking technologies</h3>
+                  <h3
+                    id="cookies"
+                    className="font-semibold text-foreground mt-4 scroll-mt-4"
+                  >
+                    7. Cookies and tracking technologies
+                  </h3>
                   <p>This website uses:</p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
-                    <li><strong>Essential trackers (no consent needed):</strong> remembering your cookie choice, bot protection of forms (Cloudflare Turnstile), the candidate area session and, on the administration area only, Clerk authentication.</li>
-                    <li><strong>Display preferences (no consent needed):</strong> the language, theme and readability settings you choose are stored on your device to provide the service you asked for. This functional storage is never used for tracking.</li>
-                    <li><strong>Audience measurement (with your consent):</strong> traffic statistics, off by default and enabled only if you accept them.</li>
+                    <li>
+                      <strong>Essential trackers (no consent needed):</strong>{" "}
+                      remembering your cookie choice, bot protection of forms
+                      (Cloudflare Turnstile), the candidate area session and, on
+                      the administration area only, Clerk authentication.
+                    </li>
+                    <li>
+                      <strong>Display preferences (no consent needed):</strong>{" "}
+                      the language, theme and readability settings you choose
+                      are stored on your device to provide the service you asked
+                      for. This functional storage is never used for tracking.
+                    </li>
+                    <li>
+                      <strong>Audience measurement (with your consent):</strong>{" "}
+                      traffic statistics, off by default and enabled only if you
+                      accept them.
+                    </li>
                   </ul>
-                  <p className="mt-4">Your choice is kept for 13 months if you accept and 6 months if you refuse, after which you are asked again. You can change your choice at any time with the “Cookie preferences” button at the bottom of the page.</p>
+                  <p className="mt-4">
+                    Your choice is kept for 13 months if you accept and 6 months
+                    if you refuse, after which you are asked again. You can
+                    change your choice at any time with “Manage cookies” at the
+                    bottom of the page.
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">8. Data controller</h3>
-                  <p><strong>Controller:</strong> {HIPPOCAMPUS_LEGAL.name}<br /><strong>Registered office:</strong> {HIPPOCAMPUS_LEGAL.registeredOffice}<br /><strong>Manager:</strong> {HIPPOCAMPUS_LEGAL.director}<br /><strong>Contact:</strong> <a href={`mailto:${siteConfig.email}`} className="text-primary underline-offset-2 hover:underline">{siteConfig.email}</a></p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    8. Data controller
+                  </h3>
+                  <p>
+                    <strong>Controller:</strong> {HIPPOCAMPUS_LEGAL.name}
+                    <br />
+                    <strong>Registered office:</strong>{" "}
+                    {HIPPOCAMPUS_LEGAL.registeredOffice}
+                    <br />
+                    <strong>Manager:</strong> {HIPPOCAMPUS_LEGAL.director}
+                    <br />
+                    <strong>Contact:</strong>{" "}
+                    <a
+                      href={`mailto:${siteConfig.email}`}
+                      className="text-primary underline-offset-2 hover:underline"
+                    >
+                      {siteConfig.email}
+                    </a>
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">9. Processors and international transfers</h3>
-                  <p>Vercel provides hosting, deployment, server functions, content delivery and Vercel Blob file storage; Neon hosts the PostgreSQL application database; Clerk provides administrator authentication; Cloudflare Turnstile protects forms against abuse; Resend sends transactional emails; Stripe processes consultation payments; and Google Drive may store controlled private CV copies after authorisation by the controller. Depending on the provider infrastructure, processing may take place outside the European Economic Area. The applicable safeguards are those provided by the providers' data processing agreements, including Standard Contractual Clauses where required. Only data necessary for booking, invoicing, recruitment, authentication, hosting, security and communications is shared, and this website does not store card data. AI-supported recruitment analysis is subject to human review and does not make automated hiring decisions.</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    9. Processors and international transfers
+                  </h3>
+                  <p>We use the following processors to process your data:</p>
+                  <ul className="list-disc list-inside space-y-2 ml-2">
+                    <li>
+                      <strong>Vercel:</strong> Hosting, deployment, server
+                      functions, content delivery network and Vercel Blob file
+                      storage
+                    </li>
+                    <li>
+                      <strong>Neon:</strong> Hosting of the PostgreSQL
+                      application database
+                    </li>
+                    <li>
+                      <strong>Clerk:</strong> Secure authentication and
+                      management of administrator accounts
+                    </li>
+                    <li>
+                      <strong>Cloudflare Turnstile:</strong> Abuse protection
+                      and bot verification for forms
+                    </li>
+                    <li>
+                      <strong>Resend:</strong> Transactional email service
+                      (confirmations, invoices, reminders)
+                    </li>
+                    <li>
+                      <strong>Stripe:</strong> Payment platform for consultation
+                      bookings
+                    </li>
+                    <li>
+                      <strong>Google Drive:</strong> Where applicable, a
+                      private, logged and controlled copy of uploaded CVs, after
+                      authorisation by the controller
+                    </li>
+                  </ul>
+                  <p className="mt-4">
+                    These processors only process the categories they need:
+                    technical data for hosting and security, account data for
+                    authentication, contact details and booking references for
+                    managing appointments and communications, billing
+                    information and payment status for Stripe, and CVs and
+                    application documents for their private storage. For the
+                    free question service, any writing assistance receives only
+                    an administrator’s draft without contact details. Depending
+                    on each provider's infrastructure, processing may take place
+                    outside the European Economic Area. The applicable
+                    safeguards are those provided by their contractual
+                    commitments and data processing agreements, including
+                    Standard Contractual Clauses where required. Card data is
+                    not stored by this website.
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">10. Right to lodge a complaint</h3>
-                  <p>If you believe your GDPR rights are not being respected, you have the right to lodge a complaint with the competent supervisory authority.</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    10. Record of processing activities
+                  </h3>
+                  <p>
+                    In accordance with CNIL requirements, we maintain a record
+                    of personal data processing activities:
+                  </p>
+                  <ul className="list-disc list-inside space-y-2 ml-2">
+                    <li>
+                      <strong>Processing 1 - Contact form:</strong> Collection
+                      of name, email, phone number and message. Legal basis:
+                      consent. Retention: 3 years.
+                    </li>
+                    <li>
+                      <strong>Processing 2 - Consultation booking:</strong>{" "}
+                      Collection of contact and payment data. Legal basis:
+                      performance of the contract. Retention: 3 years.
+                    </li>
+                    <li>
+                      <strong>Processing 3 - GDPR request:</strong> Collection
+                      of the data needed to handle access, rectification or
+                      erasure requests. Legal basis: legal obligation.
+                      Retention: 1 year.
+                    </li>
+                    <li>
+                      <strong>Processing 4 - Access logs:</strong> Automatic
+                      collection of the IP address and browsing data. Legal
+                      basis: legitimate interest. Retention: 90 days.
+                    </li>
+                    <li>
+                      <strong>Processing 5 - Cookies:</strong> Storage of user
+                      preferences (language, theme). Legal basis: consent.
+                      Retention: 13 months.
+                    </li>
+                    <li>
+                      <strong>Processing 6 - Free medical questions:</strong>{" "}
+                      Collection of contact details, the question, consents and
+                      the answer in order to send general information by email.
+                      Legal basis: explicit consent; publication of an
+                      anonymised version relies on a separate consent.
+                      Retention: 3 years after the last exchange or until
+                      erasure.
+                    </li>
+                  </ul>
+
+                  <h3 className="font-semibold text-foreground mt-4">
+                    11. Right to lodge a complaint
+                  </h3>
+                  <p>
+                    If you believe your GDPR rights are not being respected, you
+                    have the right to lodge a complaint with the CNIL
+                    (Commission Nationale de l'Informatique et des Libertés),
+                    the French supervisory authority.
+                  </p>
                 </div>
               </section>
             )}
@@ -533,50 +1269,140 @@ function LegalPageEn() {
             {/* Terms of Use Content */}
             {activeTab === "terms" && (
               <section className="space-y-6 animate-in fade-in duration-300">
-                <h2 className="text-2xl font-bold text-foreground">Terms of Use</h2>
+                <h2 className="text-2xl font-bold text-foreground">
+                  Terms of Use
+                </h2>
                 <div className="text-muted-foreground space-y-4">
-                  <h3 className="font-semibold text-foreground">1. Acceptance of terms</h3>
-                  <p>By accessing and using this website, you fully accept these terms of use. If you do not accept these terms, please do not use this website.</p>
+                  <h3 className="font-semibold text-foreground">
+                    1. Acceptance of terms
+                  </h3>
+                  <p>
+                    By accessing and using this website, you fully accept these
+                    terms of use. If you do not accept these terms, please do
+                    not use this website.
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">2. Service description</h3>
-                  <p>This website provides professional information and consultation on anesthesiology-intensive care, healthcare entrepreneurship and related services. The website is provided for informational purposes only.</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    2. Service description
+                  </h3>
+                  <p>
+                    This website provides professional information and
+                    consultation on anesthesiology-intensive care, healthcare
+                    entrepreneurship and related services. The website is
+                    provided for informational purposes only.
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">3. Acceptable use</h3>
-                  <p>You agree to use this website only for legal purposes and in compliance with all applicable laws and regulations. You agree not to:</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    3. Acceptable use
+                  </h3>
+                  <p>
+                    You agree to use this website only for legal purposes and in
+                    compliance with all applicable laws and regulations. You
+                    agree not to:
+                  </p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
-                    <li>Use the website for illegal, fraudulent or unauthorized purposes</li>
-                    <li>Reproduce, distribute or transmit content without prior written authorization</li>
-                    <li>Access or attempt to access unauthorized areas of the website</li>
+                    <li>
+                      Use the website for illegal, fraudulent or unauthorized
+                      purposes
+                    </li>
+                    <li>
+                      Reproduce, distribute or transmit content without prior
+                      written authorization
+                    </li>
+                    <li>
+                      Access or attempt to access unauthorized areas of the
+                      website
+                    </li>
                     <li>Transmit viruses, Trojans or malicious software</li>
                     <li>Harass, threaten, defame or intimidate other users</li>
-                    <li>Collect or track personal information of other users</li>
-                    <li>Use robots, scrapers or automated tools to access the website</li>
+                    <li>
+                      Collect or track personal information of other users
+                    </li>
+                    <li>
+                      Use robots, scrapers or automated tools to access the
+                      website
+                    </li>
                     <li>Overload or disrupt normal website operation</li>
                   </ul>
 
-                  <h3 className="font-semibold text-foreground mt-4">4. Intellectual property</h3>
-                  <p>All website content (texts, images, logos, videos, graphics, etc.) is protected by intellectual property and copyright laws. You may only use this content for your personal, non-commercial use.</p>
-                  <p className="mt-4"><strong>Restrictions:</strong> You may not reproduce, copy, modify, adapt, sell or distribute the content.</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    4. Intellectual property
+                  </h3>
+                  <p>
+                    All website content (texts, images, logos, videos, graphics,
+                    etc.) is protected by intellectual property and copyright
+                    laws. You may only use this content for your personal,
+                    non-commercial use.
+                  </p>
+                  <p className="mt-4">
+                    <strong>Restrictions:</strong> You may not reproduce, copy,
+                    modify, adapt, sell or distribute the content.
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">5. Limitation of liability</h3>
-                  <p><strong>Medical disclaimer:</strong> The information provided on this website is for informational purposes only and does not constitute professional medical advice. It does not replace a consultation with a qualified healthcare professional.</p>
-                  <p className="mt-4"><strong>Accuracy of information:</strong> While we strive to maintain the accuracy of information, we do not guarantee the absence of errors or omissions.</p>
-                  <p className="mt-4"><strong>No warranty:</strong> The website is provided "as is" without any warranty of any kind, express or implied.</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    5. Limitation of liability
+                  </h3>
+                  <p>
+                    <strong>Medical disclaimer:</strong> The information
+                    provided on this website is for informational purposes only
+                    and does not constitute professional medical advice. It does
+                    not replace a consultation with a qualified healthcare
+                    professional.
+                  </p>
+                  <p className="mt-4">
+                    <strong>Accuracy of information:</strong> While we strive to
+                    maintain the accuracy of information, we do not guarantee
+                    the absence of errors or omissions.
+                  </p>
+                  <p className="mt-4">
+                    <strong>No warranty:</strong> The website is provided "as
+                    is" without any warranty of any kind, express or implied.
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">6. External links</h3>
-                  <p>This website may contain links to external websites. We are not responsible for the content, accuracy or privacy practices of these external websites.</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    6. External links
+                  </h3>
+                  <p>
+                    This website may contain links to external websites. We are
+                    not responsible for the content, accuracy or privacy
+                    practices of these external websites.
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">7. Website availability</h3>
-                  <p>We strive to maintain the website available 24/7. However, we do not guarantee uninterrupted availability. The website may be temporarily unavailable for maintenance or technical reasons.</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    7. Website availability
+                  </h3>
+                  <p>
+                    We strive to maintain the website available 24/7. However,
+                    we do not guarantee uninterrupted availability. The website
+                    may be temporarily unavailable for maintenance or technical
+                    reasons.
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">8. Modifications to terms</h3>
-                  <p>We reserve the right to modify these terms of use at any time. Modifications will be effective upon publication on the website.</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    8. Modifications to terms
+                  </h3>
+                  <p>
+                    We reserve the right to modify these terms of use at any
+                    time. Modifications will be effective upon publication on
+                    the website.
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">9. Applicable law</h3>
-                  <p>These terms of use are governed by French law. Any dispute arising from the use of the website will be subject to the exclusive jurisdiction of French courts.</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    9. Applicable law
+                  </h3>
+                  <p>
+                    These terms of use are governed by French law. Any dispute
+                    arising from the use of the website will be subject to the
+                    exclusive jurisdiction of French courts.
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">10. Contact</h3>
-                  <p>For any questions regarding these terms of use, please contact us via the contact form on the website.</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    10. Contact
+                  </h3>
+                  <p>
+                    For any questions regarding these terms of use, please
+                    contact us via the contact form on the website.
+                  </p>
                 </div>
               </section>
             )}
@@ -596,16 +1422,7 @@ function LegalPageEn() {
 }
 
 function LegalPageDe() {
-  const search = useSearch();
-  const params = new URLSearchParams(search);
-  const tabParam = params.get("tab") as "legal" | "privacy" | "terms" | null;
-  const [activeTab, setActiveTab] = useState<"legal" | "privacy" | "terms">(tabParam || "legal");
-
-  useEffect(() => {
-    if (tabParam) {
-      setActiveTab(tabParam);
-    }
-  }, [tabParam]);
+  const [activeTab, setActiveTab] = useLegalTab();
 
   return (
     <div className="min-h-screen bg-background">
@@ -625,13 +1442,16 @@ function LegalPageDe() {
             Rechtliche Hinweise
           </h1>
 
-          {/* Interactive Tabs */}
+          {/* Section buttons (A11Y-11): see the French page. */}
           <div className="mb-12">
-            <div role="tablist" aria-label="Rechtliche Bereiche" className="legal-tabs flex gap-4 mb-8 border-b border-border overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+            <div
+              role="group"
+              aria-label="Rechtliche Bereiche"
+              className="legal-tabs flex gap-4 mb-8 border-b border-border overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0"
+            >
               <button
                 type="button"
-                role="tab"
-                aria-selected={activeTab === "legal"}
+                aria-current={activeTab === "legal" ? "page" : undefined}
                 onClick={() => setActiveTab("legal")}
                 className={`shrink-0 pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "legal"
@@ -643,8 +1463,7 @@ function LegalPageDe() {
               </button>
               <button
                 type="button"
-                role="tab"
-                aria-selected={activeTab === "privacy"}
+                aria-current={activeTab === "privacy" ? "page" : undefined}
                 onClick={() => setActiveTab("privacy")}
                 className={`shrink-0 pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "privacy"
@@ -656,8 +1475,7 @@ function LegalPageDe() {
               </button>
               <button
                 type="button"
-                role="tab"
-                aria-selected={activeTab === "terms"}
+                aria-current={activeTab === "terms" ? "page" : undefined}
                 onClick={() => setActiveTab("terms")}
                 className={`shrink-0 pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "terms"
@@ -672,38 +1490,93 @@ function LegalPageDe() {
             {/* Legal Information Content */}
             {activeTab === "legal" && (
               <section className="space-y-6 animate-in fade-in duration-300">
-                <h2 className="text-2xl font-bold text-foreground">Rechtliche Informationen</h2>
-                
+                <h2 className="text-2xl font-bold text-foreground">
+                  Rechtliche Informationen
+                </h2>
+
                 <div className="text-muted-foreground space-y-6">
                   <div>
-                    <h3 className="font-semibold text-foreground mb-3">Website-Herausgeber</h3>
+                    <h3 className="font-semibold text-foreground mb-3">
+                      Website-Herausgeber
+                    </h3>
                     <div className="space-y-2">
-                      <p><strong>Unternehmen:</strong> {HIPPOCAMPUS_LEGAL.name}</p>
-                      <p><strong>Rechtsform:</strong> Französische Gesellschaft mit beschränkter Haftung (SARL)</p>
-                      <p><strong>Stammkapital:</strong> {HIPPOCAMPUS_LEGAL.capital}</p>
-                      <p><strong>Handelsregister:</strong> {HIPPOCAMPUS_LEGAL.rcs}</p>
-                      <p><strong>Sitz:</strong> {HIPPOCAMPUS_LEGAL.registeredOffice}</p>
-                      <p><strong>Veröffentlichungsleiter und Geschäftsführer:</strong> {HIPPOCAMPUS_LEGAL.director}</p>
-                      <p><strong>E-Mail:</strong> <a href={`mailto:${siteConfig.email}`} className="text-primary underline-offset-2 hover:underline">{siteConfig.email}</a></p>
+                      <p>
+                        <strong>Unternehmen:</strong> {HIPPOCAMPUS_LEGAL.name}
+                      </p>
+                      <p>
+                        <strong>Rechtsform:</strong> Französische Gesellschaft
+                        mit beschränkter Haftung (SARL)
+                      </p>
+                      <p>
+                        <strong>Stammkapital:</strong>{" "}
+                        {HIPPOCAMPUS_LEGAL.capital}
+                      </p>
+                      <p>
+                        <strong>Handelsregister:</strong>{" "}
+                        {HIPPOCAMPUS_LEGAL.rcs}
+                      </p>
+                      <p>
+                        <strong>Sitz:</strong>{" "}
+                        {HIPPOCAMPUS_LEGAL.registeredOffice}
+                      </p>
+                      <p>
+                        <strong>
+                          Veröffentlichungsleiter und Geschäftsführer:
+                        </strong>{" "}
+                        {HIPPOCAMPUS_LEGAL.director}
+                      </p>
+                      <p>
+                        <strong>E-Mail:</strong>{" "}
+                        <a
+                          href={`mailto:${siteConfig.email}`}
+                          className="text-primary underline-offset-2 hover:underline"
+                        >
+                          {siteConfig.email}
+                        </a>
+                      </p>
                     </div>
                   </div>
 
                   <div>
-                    <h3 className="font-semibold text-foreground mb-3">Hosting-Anbieter</h3>
+                    <h3 className="font-semibold text-foreground mb-3">
+                      Hosting-Anbieter
+                    </h3>
                     <div className="space-y-2">
-                      <p><strong>Service:</strong> Vercel Inc.</p>
-                      <p><strong>Rolle:</strong> Website-Hosting, Bereitstellung, Inhaltsauslieferung und Serverfunktionen</p>
-                      <p><strong>Informationen zum Anbieter:</strong> <a className="text-primary underline" href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noreferrer">Vercel-Datenschutzerklärung</a></p>
+                      <p>
+                        <strong>Service:</strong> Vercel Inc.
+                      </p>
+                      <p>
+                        <strong>Rolle:</strong> Website-Hosting, Bereitstellung,
+                        Inhaltsauslieferung und Serverfunktionen
+                      </p>
+                      <p>
+                        <strong>Informationen zum Anbieter:</strong>{" "}
+                        <a
+                          className="text-primary underline"
+                          href="https://vercel.com/legal/privacy-policy"
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Vercel-Datenschutzerklärung
+                        </a>
+                      </p>
                     </div>
                   </div>
 
                   <div>
-                    <h3 className="font-semibold text-foreground mb-3">Geistiges Eigentum</h3>
+                    <h3 className="font-semibold text-foreground mb-3">
+                      Geistiges Eigentum
+                    </h3>
                     <p className="mb-4">
-                      Alle Inhalte dieser Website (Texte, Bilder, Logos, Videos usw.) sind durch Gesetze zum Schutz des geistigen Eigentums geschützt. Jede Vervielfältigung, Verbreitung oder Nutzung von Inhalten ohne vorherige schriftliche Genehmigung ist streng verboten.
+                      Alle Inhalte dieser Website (Texte, Bilder, Logos, Videos
+                      usw.) sind durch Gesetze zum Schutz des geistigen
+                      Eigentums geschützt. Jede Vervielfältigung, Verbreitung
+                      oder Nutzung von Inhalten ohne vorherige schriftliche
+                      Genehmigung ist streng verboten.
                     </p>
                     <p>
-                      Logos von Partnerunternehmen sind Eigentum ihrer jeweiligen Besitzer und werden mit Genehmigung verwendet.
+                      Logos von Partnerunternehmen sind Eigentum ihrer
+                      jeweiligen Besitzer und werden mit Genehmigung verwendet.
                     </p>
                   </div>
                 </div>
@@ -713,10 +1586,20 @@ function LegalPageDe() {
             {/* Privacy Policy Content */}
             {activeTab === "privacy" && (
               <section className="space-y-6 animate-in fade-in duration-300">
-                <h2 className="text-2xl font-bold text-foreground">Datenschutzrichtlinie</h2>
+                <h2 className="text-2xl font-bold text-foreground">
+                  Datenschutzrichtlinie
+                </h2>
+                <PrivacyReferenceVersionNotice language="de" />
                 <div className="text-muted-foreground space-y-4">
-                  <h3 className="font-semibold text-foreground">1. Erfassung personenbezogener Daten</h3>
-                  <p>Diese Website verarbeitet personenbezogene Daten über das Kontaktformular, die Buchung und Zahlung einer Konsultation, die Ausstellung von Rechnungen und die Bearbeitung von DSGVO-Anfragen. Zu den Daten gehören:</p>
+                  <h3 className="font-semibold text-foreground">
+                    1. Erfassung personenbezogener Daten
+                  </h3>
+                  <p>
+                    Diese Website verarbeitet personenbezogene Daten über das
+                    Kontaktformular, die Buchung und Zahlung einer Konsultation,
+                    die Ausstellung von Rechnungen und die Bearbeitung von
+                    DSGVO-Anfragen. Zu den Daten gehören:
+                  </p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
                     <li>Vollständiger Name</li>
                     <li>E-Mail-Adresse</li>
@@ -724,40 +1607,91 @@ function LegalPageDe() {
                     <li>Nachrichteninhalt</li>
                     <li>IP-Adresse (automatisch erfasst)</li>
                     <li>Sitzungs-Cookies</li>
-                    <li>Gewünschtes Datum und Uhrzeit, Konsultationsanfrage und Buchungsreferenz</li>
-                    <li>Rechnungsdaten; Kartendaten werden direkt von Stripe verarbeitet</li>
+                    <li>
+                      Gewünschtes Datum und Uhrzeit, Konsultationsanfrage und
+                      Buchungsreferenz
+                    </li>
+                    <li>
+                      Rechnungsdaten; Kartendaten werden direkt von Stripe
+                      verarbeitet
+                    </li>
                   </ul>
 
-                  <h3 className="font-semibold text-foreground mt-4">2. Rechtsgrundlage für die Verarbeitung</h3>
-                  <p>Die Verarbeitung Ihrer personenbezogenen Daten basiert auf:</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    2. Rechtsgrundlage für die Verarbeitung
+                  </h3>
+                  <p>
+                    Die Verarbeitung Ihrer personenbezogenen Daten basiert auf:
+                  </p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
-                    <li>Ihre ausdrückliche Zustimmung (Artikel 6.1.a der DSGVO)</li>
-                    <li>Erfüllung einer Kontaktanfrage (Artikel 6.1.b der DSGVO)</li>
-                    <li>Berechtigtes Interesse des Datenverantwortlichen (Artikel 6.1.f der DSGVO)</li>
+                    <li>
+                      Ihre ausdrückliche Zustimmung (Artikel 6.1.a der DSGVO)
+                    </li>
+                    <li>
+                      Erfüllung einer Kontaktanfrage (Artikel 6.1.b der DSGVO)
+                    </li>
+                    <li>
+                      Berechtigtes Interesse des Datenverantwortlichen (Artikel
+                      6.1.f der DSGVO)
+                    </li>
                   </ul>
 
-                  <h3 className="font-semibold text-foreground mt-4">3. Datennutzung</h3>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    3. Datennutzung
+                  </h3>
                   <p>Personenbezogene Daten werden nur verwendet für:</p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
                     <li>Beantwortung Ihrer Kontaktanfragen und Fragen</li>
-                    <li>Bereitstellung angeforderte Informationen oder Dienstleistungen</li>
+                    <li>
+                      Bereitstellung angeforderte Informationen oder
+                      Dienstleistungen
+                    </li>
                     <li>Verbesserung der Servicequalität und Leistung</li>
-                    <li>Einhaltung gesetzlicher und behördlicher Verpflichtungen</li>
+                    <li>
+                      Einhaltung gesetzlicher und behördlicher Verpflichtungen
+                    </li>
                     <li>Betrugsprävention und Missbrauchsbekämpfung</li>
                   </ul>
-                  <p className="mt-4"><strong>Kein Verkauf oder keine kommerzielle Nutzung:</strong> Ihre Daten werden nicht verkauft oder für kommerzielle Zwecke genutzt. Sie können an die für den Betrieb des Dienstes unbedingt erforderlichen Auftragsverarbeiter übermittelt werden, wie im entsprechenden Abschnitt beschrieben.</p>
+                  <p className="mt-4">
+                    <strong>
+                      Kein Verkauf oder keine kommerzielle Nutzung:
+                    </strong>{" "}
+                    Ihre Daten werden nicht verkauft oder für kommerzielle
+                    Zwecke genutzt. Sie können an die für den Betrieb des
+                    Dienstes unbedingt erforderlichen Auftragsverarbeiter
+                    übermittelt werden, wie im entsprechenden Abschnitt
+                    beschrieben.
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">4. Datenspeicherung</h3>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    4. Datenspeicherung
+                  </h3>
                   <p>Personenbezogene Daten werden gespeichert für:</p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
-                    <li><strong>Kontaktdaten:</strong> 3 Jahre nach Ihrem letzten Kontakt oder bis zu Ihrer Löschanfrage</li>
-                    <li><strong>Zugriffsprotokolle:</strong> Maximal 90 Tage</li>
-                    <li><strong>Cookies:</strong> Gemäß Ihrer Zustimmung (bis zu 13 Monaten)</li>
+                    <li>
+                      <strong>Kontaktdaten:</strong> 3 Jahre nach Ihrem letzten
+                      Kontakt oder bis zu Ihrer Löschanfrage
+                    </li>
+                    <li>
+                      <strong>Zugriffsprotokolle:</strong> Maximal 90 Tage
+                    </li>
+                    <li>
+                      <strong>Cookies:</strong> Gemäß Ihrer Zustimmung (bis zu
+                      13 Monaten)
+                    </li>
                   </ul>
-                  <p className="mt-4">Nach diesem Zeitraum werden Ihre Daten gelöscht oder unwiederbringlich anonymisiert.</p>
+                  <p className="mt-4">
+                    Nach diesem Zeitraum werden Ihre Daten gelöscht oder
+                    unwiederbringlich anonymisiert.
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">5. Datensicherheit</h3>
-                  <p>Wir implementieren angemessene Sicherheitsmaßnahmen zum Schutz Ihrer Daten:</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    5. Datensicherheit
+                  </h3>
+                  <p>
+                    Wir implementieren angemessene Sicherheitsmaßnahmen zum
+                    Schutz Ihrer Daten:
+                  </p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
                     <li>SSL/TLS-Verschlüsselung für Übertragungen</li>
                     <li>Eingeschränkter Zugriff auf personenbezogene Daten</li>
@@ -766,36 +1700,153 @@ function LegalPageDe() {
                     <li>Einhaltung von Branchensicherheitsstandards</li>
                   </ul>
 
-                  <h3 className="font-semibold text-foreground mt-4">6. Ihre DSGVO-Rechte</h3>
-                  <p>Gemäß der Datenschutz-Grundverordnung (DSGVO) haben Sie folgende Rechte:</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    6. Ihre DSGVO-Rechte
+                  </h3>
+                  <p>
+                    Gemäß der Datenschutz-Grundverordnung (DSGVO) haben Sie
+                    folgende Rechte:
+                  </p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
-                    <li><strong>Auskunftsrecht:</strong> Erhalten Sie eine Kopie Ihrer personenbezogenen Daten</li>
-                    <li><strong>Recht auf Berichtigung:</strong> Korrigieren Sie ungenaue oder unvollständige Daten</li>
-                    <li><strong>Recht auf Vergessenwerden:</strong> Fordern Sie die Löschung Ihrer Daten an</li>
-                    <li><strong>Recht auf Einschränkung der Verarbeitung:</strong> Beschränken Sie die Nutzung Ihrer Daten</li>
-                    <li><strong>Recht auf Datenportabilität:</strong> Erhalten Sie Ihre Daten in strukturiertem Format</li>
-                    <li><strong>Widerspruchsrecht:</strong> Widersprechen Sie der Verarbeitung Ihrer Daten</li>
-                    <li><strong>Recht nicht automatisierter Entscheidungsfindung:</strong> Recht auf menschliche Intervention</li>
+                    <li>
+                      <strong>Auskunftsrecht:</strong> Erhalten Sie eine Kopie
+                      Ihrer personenbezogenen Daten
+                    </li>
+                    <li>
+                      <strong>Recht auf Berichtigung:</strong> Korrigieren Sie
+                      ungenaue oder unvollständige Daten
+                    </li>
+                    <li>
+                      <strong>Recht auf Vergessenwerden:</strong> Fordern Sie
+                      die Löschung Ihrer Daten an
+                    </li>
+                    <li>
+                      <strong>Recht auf Einschränkung der Verarbeitung:</strong>{" "}
+                      Beschränken Sie die Nutzung Ihrer Daten
+                    </li>
+                    <li>
+                      <strong>Recht auf Datenportabilität:</strong> Erhalten Sie
+                      Ihre Daten in strukturiertem Format
+                    </li>
+                    <li>
+                      <strong>Widerspruchsrecht:</strong> Widersprechen Sie der
+                      Verarbeitung Ihrer Daten
+                    </li>
+                    <li>
+                      <strong>
+                        Recht nicht automatisierter Entscheidungsfindung:
+                      </strong>{" "}
+                      Recht auf menschliche Intervention
+                    </li>
                   </ul>
-                  <p className="mt-4">Um diese Rechte auszuüben, nutzen Sie das eigene Formular <Link href="/gdpr" className="text-primary underline underline-offset-2">Meine DSGVO-Rechte ausüben</Link> oder schreiben Sie an <a href={`mailto:${siteConfig.email}`} className="text-primary underline-offset-2 hover:underline">{siteConfig.email}</a>.</p>
+                  <p className="mt-4">
+                    Um diese Rechte auszuüben, nutzen Sie das eigene Formular{" "}
+                    <Link
+                      href="/gdpr"
+                      className="text-primary underline underline-offset-2"
+                    >
+                      Meine DSGVO-Rechte ausüben
+                    </Link>{" "}
+                    oder schreiben Sie an{" "}
+                    <a
+                      href={`mailto:${siteConfig.email}`}
+                      className="text-primary underline-offset-2 hover:underline"
+                    >
+                      {siteConfig.email}
+                    </a>
+                    .
+                  </p>
 
-                  <h3 id="cookies" className="font-semibold text-foreground mt-4 scroll-mt-28">7. Cookies und Tracking-Technologien</h3>
+                  <h3
+                    id="cookies"
+                    className="font-semibold text-foreground mt-4 scroll-mt-4"
+                  >
+                    7. Cookies und Tracking-Technologien
+                  </h3>
                   <p>Diese Website verwendet:</p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
-                    <li><strong>Essenzielle Tracker (ohne Einwilligung):</strong> Speicherung Ihrer Cookie-Auswahl, Bot-Schutz der Formulare (Cloudflare Turnstile), Sitzung des Kandidatenbereichs und, nur im Administrationsbereich, die Clerk-Authentifizierung.</li>
-                    <li><strong>Anzeigeeinstellungen (ohne Einwilligung):</strong> Die von Ihnen gewählte Sprache, das Design und die Lesbarkeit werden auf Ihrem Gerät gespeichert, um den gewünschten Dienst zu erbringen. Diese funktionale Speicherung dient keinem Tracking.</li>
-                    <li><strong>Reichweitenmessung (mit Ihrer Einwilligung):</strong> Besuchsstatistiken, standardmäßig deaktiviert und nur aktiv, wenn Sie zustimmen.</li>
+                    <li>
+                      <strong>Essenzielle Tracker (ohne Einwilligung):</strong>{" "}
+                      Speicherung Ihrer Cookie-Auswahl, Bot-Schutz der Formulare
+                      (Cloudflare Turnstile), Sitzung des Kandidatenbereichs
+                      und, nur im Administrationsbereich, die
+                      Clerk-Authentifizierung.
+                    </li>
+                    <li>
+                      <strong>Anzeigeeinstellungen (ohne Einwilligung):</strong>{" "}
+                      Die von Ihnen gewählte Sprache, das Design und die
+                      Lesbarkeit werden auf Ihrem Gerät gespeichert, um den
+                      gewünschten Dienst zu erbringen. Diese funktionale
+                      Speicherung dient keinem Tracking.
+                    </li>
+                    <li>
+                      <strong>
+                        Reichweitenmessung (mit Ihrer Einwilligung):
+                      </strong>{" "}
+                      Besuchsstatistiken, standardmäßig deaktiviert und nur
+                      aktiv, wenn Sie zustimmen.
+                    </li>
                   </ul>
-                  <p className="mt-4">Ihre Auswahl wird bei Zustimmung 13 Monate und bei Ablehnung 6 Monate gespeichert und danach erneut abgefragt. Sie können Ihre Auswahl jederzeit über die Schaltfläche „Cookie-Präferenzen“ unten auf der Seite ändern.</p>
+                  <p className="mt-4">
+                    Ihre Auswahl wird bei Zustimmung 13 Monate und bei Ablehnung
+                    6 Monate gespeichert und danach erneut abgefragt. Sie können
+                    Ihre Auswahl jederzeit über „Cookies verwalten“ unten auf
+                    der Seite ändern.
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">8. Datenverantwortlicher</h3>
-                  <p><strong>Verantwortlicher:</strong> {HIPPOCAMPUS_LEGAL.name}<br /><strong>Sitz:</strong> {HIPPOCAMPUS_LEGAL.registeredOffice}<br /><strong>Geschäftsführer:</strong> {HIPPOCAMPUS_LEGAL.director}<br /><strong>Kontakt:</strong> <a href={`mailto:${siteConfig.email}`} className="text-primary underline-offset-2 hover:underline">{siteConfig.email}</a></p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    8. Datenverantwortlicher
+                  </h3>
+                  <p>
+                    <strong>Verantwortlicher:</strong> {HIPPOCAMPUS_LEGAL.name}
+                    <br />
+                    <strong>Sitz:</strong> {HIPPOCAMPUS_LEGAL.registeredOffice}
+                    <br />
+                    <strong>Geschäftsführer:</strong>{" "}
+                    {HIPPOCAMPUS_LEGAL.director}
+                    <br />
+                    <strong>Kontakt:</strong>{" "}
+                    <a
+                      href={`mailto:${siteConfig.email}`}
+                      className="text-primary underline-offset-2 hover:underline"
+                    >
+                      {siteConfig.email}
+                    </a>
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">9. Auftragsverarbeiter und internationale Übermittlungen</h3>
-                  <p>Vercel stellt Hosting, Bereitstellung, Serverfunktionen, Inhaltsauslieferung und Vercel-Blob-Dateispeicher bereit; Neon hostet die PostgreSQL-Anwendungsdatenbank; Clerk übernimmt die Administrator-Authentifizierung; Cloudflare Turnstile schützt Formulare vor Missbrauch; Resend versendet Transaktions-E-Mails; Stripe verarbeitet Zahlungen; und Google Drive kann nach Autorisierung des Verantwortlichen kontrollierte private CV-Kopien speichern. Je nach Infrastruktur des jeweiligen Anbieters kann eine Verarbeitung außerhalb des Europäischen Wirtschaftsraums erfolgen. Die geltenden Garantien ergeben sich aus den Auftragsverarbeitungsverträgen der Anbieter, einschließlich Standardvertragsklauseln, sofern erforderlich. Es werden nur für Buchung, Rechnungsstellung, Recruiting, Authentifizierung, Hosting, Sicherheit und Kommunikation erforderliche Daten weitergegeben; diese Website speichert keine Kartendaten. Die KI-gestützte Bewerbungsanalyse wird menschlich überprüft und trifft keine automatisierten Einstellungsentscheidungen.</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    9. Auftragsverarbeiter und internationale Übermittlungen
+                  </h3>
+                  <p>
+                    Vercel stellt Hosting, Bereitstellung, Serverfunktionen,
+                    Inhaltsauslieferung und Vercel-Blob-Dateispeicher bereit;
+                    Neon hostet die PostgreSQL-Anwendungsdatenbank; Clerk
+                    übernimmt die Administrator-Authentifizierung; Cloudflare
+                    Turnstile schützt Formulare vor Missbrauch; Resend versendet
+                    Transaktions-E-Mails; Stripe verarbeitet Zahlungen; und
+                    Google Drive kann nach Autorisierung des Verantwortlichen
+                    kontrollierte private CV-Kopien speichern. Je nach
+                    Infrastruktur des jeweiligen Anbieters kann eine
+                    Verarbeitung außerhalb des Europäischen Wirtschaftsraums
+                    erfolgen. Die geltenden Garantien ergeben sich aus den
+                    Auftragsverarbeitungsverträgen der Anbieter, einschließlich
+                    Standardvertragsklauseln, sofern erforderlich. Es werden nur
+                    für Buchung, Rechnungsstellung, Recruiting,
+                    Authentifizierung, Hosting, Sicherheit und Kommunikation
+                    erforderliche Daten weitergegeben; diese Website speichert
+                    keine Kartendaten. Die KI-gestützte Bewerbungsanalyse wird
+                    menschlich überprüft und trifft keine automatisierten
+                    Einstellungsentscheidungen.
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">10. Beschwerderecht</h3>
-                  <p>Wenn Sie der Ansicht sind, dass Ihre DSGVO-Rechte nicht respektiert werden, haben Sie das Recht, eine Beschwerde bei der zuständigen Aufsichtsbehörde einzureichen.</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    10. Beschwerderecht
+                  </h3>
+                  <p>
+                    Wenn Sie der Ansicht sind, dass Ihre DSGVO-Rechte nicht
+                    respektiert werden, haben Sie das Recht, eine Beschwerde bei
+                    der zuständigen Aufsichtsbehörde einzureichen.
+                  </p>
                 </div>
               </section>
             )}
@@ -803,50 +1854,153 @@ function LegalPageDe() {
             {/* Terms of Use Content */}
             {activeTab === "terms" && (
               <section className="space-y-6 animate-in fade-in duration-300">
-                <h2 className="text-2xl font-bold text-foreground">Nutzungsbedingungen</h2>
+                <h2 className="text-2xl font-bold text-foreground">
+                  Nutzungsbedingungen
+                </h2>
                 <div className="text-muted-foreground space-y-4">
-                  <h3 className="font-semibold text-foreground">1. Zustimmung zu den Bedingungen</h3>
-                  <p>Durch den Zugriff auf und die Nutzung dieser Website akzeptieren Sie vollständig diese Nutzungsbedingungen. Wenn Sie diese Bedingungen nicht akzeptieren, verwenden Sie diese Website bitte nicht.</p>
+                  <h3 className="font-semibold text-foreground">
+                    1. Zustimmung zu den Bedingungen
+                  </h3>
+                  <p>
+                    Durch den Zugriff auf und die Nutzung dieser Website
+                    akzeptieren Sie vollständig diese Nutzungsbedingungen. Wenn
+                    Sie diese Bedingungen nicht akzeptieren, verwenden Sie diese
+                    Website bitte nicht.
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">2. Dienstbeschreibung</h3>
-                  <p>Diese Website bietet professionelle Informationen und Beratung zu Anästhesiologie-Intensivmedizin, Healthcare-Unternehmertum und verwandten Dienstleistungen. Die Website wird nur zu Informationszwecken bereitgestellt.</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    2. Dienstbeschreibung
+                  </h3>
+                  <p>
+                    Diese Website bietet professionelle Informationen und
+                    Beratung zu Anästhesiologie-Intensivmedizin,
+                    Healthcare-Unternehmertum und verwandten Dienstleistungen.
+                    Die Website wird nur zu Informationszwecken bereitgestellt.
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">3. Akzeptable Nutzung</h3>
-                  <p>Sie erklären sich damit einverstanden, diese Website nur für rechtmäßige Zwecke und in Übereinstimmung mit allen geltenden Gesetzen und Vorschriften zu nutzen. Sie verpflichten sich nicht zu:</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    3. Akzeptable Nutzung
+                  </h3>
+                  <p>
+                    Sie erklären sich damit einverstanden, diese Website nur für
+                    rechtmäßige Zwecke und in Übereinstimmung mit allen
+                    geltenden Gesetzen und Vorschriften zu nutzen. Sie
+                    verpflichten sich nicht zu:
+                  </p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
-                    <li>Nutzen Sie die Website für illegale, betrügerische oder nicht autorisierte Zwecke</li>
-                    <li>Reproduzieren, verteilen oder übertragen Sie Inhalte ohne vorherige schriftliche Genehmigung</li>
-                    <li>Greifen Sie auf nicht autorisierte Bereiche der Website zu oder versuchen Sie dies</li>
+                    <li>
+                      Nutzen Sie die Website für illegale, betrügerische oder
+                      nicht autorisierte Zwecke
+                    </li>
+                    <li>
+                      Reproduzieren, verteilen oder übertragen Sie Inhalte ohne
+                      vorherige schriftliche Genehmigung
+                    </li>
+                    <li>
+                      Greifen Sie auf nicht autorisierte Bereiche der Website zu
+                      oder versuchen Sie dies
+                    </li>
                     <li>Übertragen Sie Viren, Trojaner oder Malware</li>
-                    <li>Belästigen, bedrohen, verleumden oder bedrohen Sie andere Benutzer</li>
-                    <li>Sammeln oder verfolgen Sie persönliche Informationen anderer Benutzer</li>
-                    <li>Verwenden Sie Bots, Scraper oder automatisierte Tools für den Website-Zugriff</li>
-                    <li>Überlasten oder unterbrechen Sie den normalen Website-Betrieb</li>
+                    <li>
+                      Belästigen, bedrohen, verleumden oder bedrohen Sie andere
+                      Benutzer
+                    </li>
+                    <li>
+                      Sammeln oder verfolgen Sie persönliche Informationen
+                      anderer Benutzer
+                    </li>
+                    <li>
+                      Verwenden Sie Bots, Scraper oder automatisierte Tools für
+                      den Website-Zugriff
+                    </li>
+                    <li>
+                      Überlasten oder unterbrechen Sie den normalen
+                      Website-Betrieb
+                    </li>
                   </ul>
 
-                  <h3 className="font-semibold text-foreground mt-4">4. Geistiges Eigentum</h3>
-                  <p>Alle Website-Inhalte (Texte, Bilder, Logos, Videos, Grafiken usw.) sind durch Gesetze zum Schutz des geistigen Eigentums und Urheberrechte geschützt. Sie dürfen diese Inhalte nur für Ihre persönliche, nicht-kommerzielle Nutzung verwenden.</p>
-                  <p className="mt-4"><strong>Einschränkungen:</strong> Sie dürfen die Inhalte nicht vervielfältigen, kopieren, ändern, anpassen, verkaufen oder verteilen.</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    4. Geistiges Eigentum
+                  </h3>
+                  <p>
+                    Alle Website-Inhalte (Texte, Bilder, Logos, Videos, Grafiken
+                    usw.) sind durch Gesetze zum Schutz des geistigen Eigentums
+                    und Urheberrechte geschützt. Sie dürfen diese Inhalte nur
+                    für Ihre persönliche, nicht-kommerzielle Nutzung verwenden.
+                  </p>
+                  <p className="mt-4">
+                    <strong>Einschränkungen:</strong> Sie dürfen die Inhalte
+                    nicht vervielfältigen, kopieren, ändern, anpassen, verkaufen
+                    oder verteilen.
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">5. Haftungsbeschränkung</h3>
-                  <p><strong>Medizinischer Haftungsausschluss:</strong> Die auf dieser Website bereitgestellten Informationen dienen nur zu Informationszwecken und stellen keine professionelle medizinische Beratung dar. Sie ersetzen keine Konsultation mit einem qualifizierten Gesundheitsfachmann.</p>
-                  <p className="mt-4"><strong>Genauigkeit der Informationen:</strong> Obwohl wir uns bemühen, die Genauigkeit der Informationen zu gewährleisten, garantieren wir nicht das Fehlen von Fehlern oder Auslassungen.</p>
-                  <p className="mt-4"><strong>Keine Garantie:</strong> Die Website wird "wie besehen" ohne jegliche Garantie, ausdrücklich oder stillschweigend, bereitgestellt.</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    5. Haftungsbeschränkung
+                  </h3>
+                  <p>
+                    <strong>Medizinischer Haftungsausschluss:</strong> Die auf
+                    dieser Website bereitgestellten Informationen dienen nur zu
+                    Informationszwecken und stellen keine professionelle
+                    medizinische Beratung dar. Sie ersetzen keine Konsultation
+                    mit einem qualifizierten Gesundheitsfachmann.
+                  </p>
+                  <p className="mt-4">
+                    <strong>Genauigkeit der Informationen:</strong> Obwohl wir
+                    uns bemühen, die Genauigkeit der Informationen zu
+                    gewährleisten, garantieren wir nicht das Fehlen von Fehlern
+                    oder Auslassungen.
+                  </p>
+                  <p className="mt-4">
+                    <strong>Keine Garantie:</strong> Die Website wird "wie
+                    besehen" ohne jegliche Garantie, ausdrücklich oder
+                    stillschweigend, bereitgestellt.
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">6. Externe Links</h3>
-                  <p>Diese Website kann Links zu externen Websites enthalten. Wir sind nicht verantwortlich für den Inhalt, die Genauigkeit oder die Datenschutzpraktiken dieser externen Websites.</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    6. Externe Links
+                  </h3>
+                  <p>
+                    Diese Website kann Links zu externen Websites enthalten. Wir
+                    sind nicht verantwortlich für den Inhalt, die Genauigkeit
+                    oder die Datenschutzpraktiken dieser externen Websites.
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">7. Website-Verfügbarkeit</h3>
-                  <p>Wir bemühen uns, die Website 24/7 verfügbar zu halten. Wir garantieren jedoch keine ununterbrochene Verfügbarkeit. Die Website kann vorübergehend für Wartungs- oder technische Gründe nicht verfügbar sein.</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    7. Website-Verfügbarkeit
+                  </h3>
+                  <p>
+                    Wir bemühen uns, die Website 24/7 verfügbar zu halten. Wir
+                    garantieren jedoch keine ununterbrochene Verfügbarkeit. Die
+                    Website kann vorübergehend für Wartungs- oder technische
+                    Gründe nicht verfügbar sein.
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">8. Änderungen der Bedingungen</h3>
-                  <p>Wir behalten uns das Recht vor, diese Nutzungsbedingungen jederzeit zu ändern. Änderungen werden wirksam, sobald sie auf der Website veröffentlicht werden.</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    8. Änderungen der Bedingungen
+                  </h3>
+                  <p>
+                    Wir behalten uns das Recht vor, diese Nutzungsbedingungen
+                    jederzeit zu ändern. Änderungen werden wirksam, sobald sie
+                    auf der Website veröffentlicht werden.
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">9. Anwendbares Recht</h3>
-                  <p>Diese Nutzungsbedingungen unterliegen französischem Recht. Alle Streitigkeiten, die sich aus der Nutzung der Website ergeben, unterliegen der ausschließlichen Gerichtsbarkeit französischer Gerichte.</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    9. Anwendbares Recht
+                  </h3>
+                  <p>
+                    Diese Nutzungsbedingungen unterliegen französischem Recht.
+                    Alle Streitigkeiten, die sich aus der Nutzung der Website
+                    ergeben, unterliegen der ausschließlichen Gerichtsbarkeit
+                    französischer Gerichte.
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">10. Kontakt</h3>
-                  <p>Bei Fragen zu diesen Nutzungsbedingungen kontaktieren Sie uns bitte über das Kontaktformular auf der Website.</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    10. Kontakt
+                  </h3>
+                  <p>
+                    Bei Fragen zu diesen Nutzungsbedingungen kontaktieren Sie
+                    uns bitte über das Kontaktformular auf der Website.
+                  </p>
                 </div>
               </section>
             )}
@@ -866,16 +2020,7 @@ function LegalPageDe() {
 }
 
 function LegalPageZh() {
-  const search = useSearch();
-  const params = new URLSearchParams(search);
-  const tabParam = params.get("tab") as "legal" | "privacy" | "terms" | null;
-  const [activeTab, setActiveTab] = useState<"legal" | "privacy" | "terms">(tabParam || "legal");
-
-  useEffect(() => {
-    if (tabParam) {
-      setActiveTab(tabParam);
-    }
-  }, [tabParam]);
+  const [activeTab, setActiveTab] = useLegalTab();
 
   return (
     <div className="min-h-screen bg-background">
@@ -895,13 +2040,16 @@ function LegalPageZh() {
             法律声明
           </h1>
 
-          {/* Interactive Tabs */}
+          {/* Section buttons (A11Y-11): see the French page. */}
           <div className="mb-12">
-            <div role="tablist" aria-label="法律栏目" className="legal-tabs flex gap-4 mb-8 border-b border-border overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+            <div
+              role="group"
+              aria-label="法律栏目"
+              className="legal-tabs flex gap-4 mb-8 border-b border-border overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0"
+            >
               <button
                 type="button"
-                role="tab"
-                aria-selected={activeTab === "legal"}
+                aria-current={activeTab === "legal" ? "page" : undefined}
                 onClick={() => setActiveTab("legal")}
                 className={`shrink-0 pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "legal"
@@ -913,8 +2061,7 @@ function LegalPageZh() {
               </button>
               <button
                 type="button"
-                role="tab"
-                aria-selected={activeTab === "privacy"}
+                aria-current={activeTab === "privacy" ? "page" : undefined}
                 onClick={() => setActiveTab("privacy")}
                 className={`shrink-0 pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "privacy"
@@ -926,8 +2073,7 @@ function LegalPageZh() {
               </button>
               <button
                 type="button"
-                role="tab"
-                aria-selected={activeTab === "terms"}
+                aria-current={activeTab === "terms" ? "page" : undefined}
                 onClick={() => setActiveTab("terms")}
                 className={`shrink-0 pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "terms"
@@ -943,38 +2089,82 @@ function LegalPageZh() {
             {activeTab === "legal" && (
               <section className="space-y-6 animate-in fade-in duration-300">
                 <h2 className="text-2xl font-bold text-foreground">法律信息</h2>
-                
+
                 <div className="text-muted-foreground space-y-6">
                   <div>
-                    <h3 className="font-semibold text-foreground mb-3">网站编辑</h3>
+                    <h3 className="font-semibold text-foreground mb-3">
+                      网站编辑
+                    </h3>
                     <div className="space-y-2">
-                      <p><strong>公司：</strong>{HIPPOCAMPUS_LEGAL.name}</p>
-                      <p><strong>法律形式：</strong>法国有限责任公司（SARL）</p>
-                      <p><strong>注册资本：</strong>{HIPPOCAMPUS_LEGAL.capital}</p>
-                      <p><strong>商业登记：</strong>{HIPPOCAMPUS_LEGAL.rcs}</p>
-                      <p><strong>注册地址：</strong>{HIPPOCAMPUS_LEGAL.registeredOffice}</p>
-                      <p><strong>出版负责人及经理：</strong>{HIPPOCAMPUS_LEGAL.director}</p>
-                      <p><strong>电子邮件：</strong><a href={`mailto:${siteConfig.email}`} className="text-primary underline-offset-2 hover:underline">{siteConfig.email}</a></p>
+                      <p>
+                        <strong>公司：</strong>
+                        {HIPPOCAMPUS_LEGAL.name}
+                      </p>
+                      <p>
+                        <strong>法律形式：</strong>法国有限责任公司（SARL）
+                      </p>
+                      <p>
+                        <strong>注册资本：</strong>
+                        {HIPPOCAMPUS_LEGAL.capital}
+                      </p>
+                      <p>
+                        <strong>商业登记：</strong>
+                        {HIPPOCAMPUS_LEGAL.rcs}
+                      </p>
+                      <p>
+                        <strong>注册地址：</strong>
+                        {HIPPOCAMPUS_LEGAL.registeredOffice}
+                      </p>
+                      <p>
+                        <strong>出版负责人及经理：</strong>
+                        {HIPPOCAMPUS_LEGAL.director}
+                      </p>
+                      <p>
+                        <strong>电子邮件：</strong>
+                        <a
+                          href={`mailto:${siteConfig.email}`}
+                          className="text-primary underline-offset-2 hover:underline"
+                        >
+                          {siteConfig.email}
+                        </a>
+                      </p>
                     </div>
                   </div>
 
                   <div>
-                    <h3 className="font-semibold text-foreground mb-3">托管服务商</h3>
+                    <h3 className="font-semibold text-foreground mb-3">
+                      托管服务商
+                    </h3>
                     <div className="space-y-2">
-                      <p><strong>服务：</strong>Vercel Inc.</p>
-                      <p><strong>角色：</strong>网站托管、部署、内容分发网络和服务器功能</p>
-                      <p><strong>服务商信息：</strong><a className="text-primary underline" href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noreferrer">Vercel 隐私政策</a></p>
+                      <p>
+                        <strong>服务：</strong>Vercel Inc.
+                      </p>
+                      <p>
+                        <strong>角色：</strong>
+                        网站托管、部署、内容分发网络和服务器功能
+                      </p>
+                      <p>
+                        <strong>服务商信息：</strong>
+                        <a
+                          className="text-primary underline"
+                          href="https://vercel.com/legal/privacy-policy"
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Vercel 隐私政策
+                        </a>
+                      </p>
                     </div>
                   </div>
 
                   <div>
-                    <h3 className="font-semibold text-foreground mb-3">知识产权</h3>
+                    <h3 className="font-semibold text-foreground mb-3">
+                      知识产权
+                    </h3>
                     <p className="mb-4">
                       本网站上的所有内容（文本、图像、徽标、视频等）均受知识产权法保护。未经事先书面授权，严禁复制、分发或使用任何内容。
                     </p>
-                    <p>
-                      合作公司的徽标是其各自所有者的财产，经许可使用。
-                    </p>
+                    <p>合作公司的徽标是其各自所有者的财产，经许可使用。</p>
                   </div>
                 </div>
               </section>
@@ -984,9 +2174,15 @@ function LegalPageZh() {
             {activeTab === "privacy" && (
               <section className="space-y-6 animate-in fade-in duration-300">
                 <h2 className="text-2xl font-bold text-foreground">隐私政策</h2>
+                <PrivacyReferenceVersionNotice language="zh" />
                 <div className="text-muted-foreground space-y-4">
-                  <h3 className="font-semibold text-foreground">1. 个人数据收集</h3>
-                  <p>本网站会在联系表格、咨询预约与付款、发票开具以及 GDPR 权利请求的范围内处理个人数据。收集的数据包括：</p>
+                  <h3 className="font-semibold text-foreground">
+                    1. 个人数据收集
+                  </h3>
+                  <p>
+                    本网站会在联系表格、咨询预约与付款、发票开具以及 GDPR
+                    权利请求的范围内处理个人数据。收集的数据包括：
+                  </p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
                     <li>全名</li>
                     <li>电子邮件地址</li>
@@ -998,7 +2194,9 @@ function LegalPageZh() {
                     <li>发票所需信息；银行卡数据由 Stripe 直接处理</li>
                   </ul>
 
-                  <h3 className="font-semibold text-foreground mt-4">2. 数据处理的法律依据</h3>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    2. 数据处理的法律依据
+                  </h3>
                   <p>您个人数据的处理基于：</p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
                     <li>您的明确同意（GDPR第6.1.a条）</li>
@@ -1006,7 +2204,9 @@ function LegalPageZh() {
                     <li>数据控制者的合法利益（GDPR第6.1.f条）</li>
                   </ul>
 
-                  <h3 className="font-semibold text-foreground mt-4">3. 数据使用</h3>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    3. 数据使用
+                  </h3>
                   <p>个人数据仅用于：</p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
                     <li>回复您的联系请求和问题</li>
@@ -1015,18 +2215,34 @@ function LegalPageZh() {
                     <li>遵守法律和监管义务</li>
                     <li>防止欺诈和滥用</li>
                   </ul>
-                  <p className="mt-4"><strong>不出售或商业使用：</strong>我们不会出售您的数据，也不会将其用于商业目的。为提供服务所必需的数据可能会按照下方专门章节的说明提供给相关处理者。</p>
+                  <p className="mt-4">
+                    <strong>不出售或商业使用：</strong>
+                    我们不会出售您的数据，也不会将其用于商业目的。为提供服务所必需的数据可能会按照下方专门章节的说明提供给相关处理者。
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">4. 数据保留</h3>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    4. 数据保留
+                  </h3>
                   <p>个人数据保留：</p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
-                    <li><strong>联系数据：</strong> 自您最后联系之日起3年或直到您的删除请求</li>
-                    <li><strong>访问日志：</strong> 最多90天</li>
-                    <li><strong>Cookie：</strong> 根据您的同意（最多13个月）</li>
+                    <li>
+                      <strong>联系数据：</strong>{" "}
+                      自您最后联系之日起3年或直到您的删除请求
+                    </li>
+                    <li>
+                      <strong>访问日志：</strong> 最多90天
+                    </li>
+                    <li>
+                      <strong>Cookie：</strong> 根据您的同意（最多13个月）
+                    </li>
                   </ul>
-                  <p className="mt-4">此期限后，您的数据将被不可逆地删除或匿名化。</p>
+                  <p className="mt-4">
+                    此期限后，您的数据将被不可逆地删除或匿名化。
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">5. 数据安全</h3>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    5. 数据安全
+                  </h3>
                   <p>我们实施适当的安全措施来保护您的数据：</p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
                     <li>传输的SSL/TLS加密</li>
@@ -1036,36 +2252,122 @@ function LegalPageZh() {
                     <li>符合行业安全标准</li>
                   </ul>
 
-                  <h3 className="font-semibold text-foreground mt-4">6. 您的GDPR权利</h3>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    6. 您的GDPR权利
+                  </h3>
                   <p>根据《通用数据保护条例》(GDPR)，您拥有以下权利：</p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
-                    <li><strong>访问权：</strong> 获取您个人数据的副本</li>
-                    <li><strong>更正权：</strong> 更正不准确或不完整的数据</li>
-                    <li><strong>被遗忘权：</strong> 请求删除您的数据</li>
-                    <li><strong>处理限制权：</strong> 限制您数据的使用</li>
-                    <li><strong>数据可携带权：</strong> 以结构化格式接收您的数据</li>
-                    <li><strong>反对权：</strong> 反对您数据的处理</li>
-                    <li><strong>不受自动决策约束的权利：</strong> 获得人工干预的权利</li>
+                    <li>
+                      <strong>访问权：</strong> 获取您个人数据的副本
+                    </li>
+                    <li>
+                      <strong>更正权：</strong> 更正不准确或不完整的数据
+                    </li>
+                    <li>
+                      <strong>被遗忘权：</strong> 请求删除您的数据
+                    </li>
+                    <li>
+                      <strong>处理限制权：</strong> 限制您数据的使用
+                    </li>
+                    <li>
+                      <strong>数据可携带权：</strong> 以结构化格式接收您的数据
+                    </li>
+                    <li>
+                      <strong>反对权：</strong> 反对您数据的处理
+                    </li>
+                    <li>
+                      <strong>不受自动决策约束的权利：</strong>{" "}
+                      获得人工干预的权利
+                    </li>
                   </ul>
-                  <p className="mt-4">如需行使这些权利，请使用专用表格<Link href="/gdpr" className="text-primary underline underline-offset-2">行使我的 GDPR 权利</Link>，或发送邮件至 <a href={`mailto:${siteConfig.email}`} className="text-primary underline-offset-2 hover:underline">{siteConfig.email}</a>。</p>
+                  <p className="mt-4">
+                    如需行使这些权利，请使用专用表格
+                    <Link
+                      href="/gdpr"
+                      className="text-primary underline underline-offset-2"
+                    >
+                      行使我的 GDPR 权利
+                    </Link>
+                    ，或发送邮件至{" "}
+                    <a
+                      href={`mailto:${siteConfig.email}`}
+                      className="text-primary underline-offset-2 hover:underline"
+                    >
+                      {siteConfig.email}
+                    </a>
+                    。
+                  </p>
 
-                  <h3 id="cookies" className="font-semibold text-foreground mt-4 scroll-mt-28">7. Cookie和跟踪技术</h3>
+                  <h3
+                    id="cookies"
+                    className="font-semibold text-foreground mt-4 scroll-mt-4"
+                  >
+                    7. Cookie和跟踪技术
+                  </h3>
                   <p>本网站使用：</p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
-                    <li><strong>必要跟踪器（无需同意）：</strong> 记住您的 Cookie 选择、表单防机器人保护（Cloudflare Turnstile）、候选人空间会话，以及仅在管理后台使用的 Clerk 身份验证。</li>
-                    <li><strong>显示偏好（无需同意）：</strong> 您选择的语言、主题和可读性设置保存在您的设备上，用于提供您所请求的服务。此类功能性存储不用于任何跟踪。</li>
-                    <li><strong>访问量统计（需您同意）：</strong> 网站访问统计，默认关闭，仅在您接受后启用。</li>
+                    <li>
+                      <strong>必要跟踪器（无需同意）：</strong> 记住您的 Cookie
+                      选择、表单防机器人保护（Cloudflare
+                      Turnstile）、候选人空间会话，以及仅在管理后台使用的 Clerk
+                      身份验证。
+                    </li>
+                    <li>
+                      <strong>显示偏好（无需同意）：</strong>{" "}
+                      您选择的语言、主题和可读性设置保存在您的设备上，用于提供您所请求的服务。此类功能性存储不用于任何跟踪。
+                    </li>
+                    <li>
+                      <strong>访问量统计（需您同意）：</strong>{" "}
+                      网站访问统计，默认关闭，仅在您接受后启用。
+                    </li>
                   </ul>
-                  <p className="mt-4">如您同意，您的选择保留 13 个月；如您拒绝，则保留 6 个月，之后会再次询问。您可随时通过页面底部的“Cookie 偏好设置”按钮更改选择。</p>
+                  <p className="mt-4">
+                    如您同意，您的选择保留 13 个月；如您拒绝，则保留 6
+                    个月，之后会再次询问。您可随时通过页面底部的“管理
+                    Cookie”更改选择。
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">8. 数据控制者</h3>
-                  <p><strong>控制者：</strong>{HIPPOCAMPUS_LEGAL.name}<br /><strong>注册地址：</strong>{HIPPOCAMPUS_LEGAL.registeredOffice}<br /><strong>经理：</strong>{HIPPOCAMPUS_LEGAL.director}<br /><strong>联系：</strong><a href={`mailto:${siteConfig.email}`} className="text-primary underline-offset-2 hover:underline">{siteConfig.email}</a></p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    8. 数据控制者
+                  </h3>
+                  <p>
+                    <strong>控制者：</strong>
+                    {HIPPOCAMPUS_LEGAL.name}
+                    <br />
+                    <strong>注册地址：</strong>
+                    {HIPPOCAMPUS_LEGAL.registeredOffice}
+                    <br />
+                    <strong>经理：</strong>
+                    {HIPPOCAMPUS_LEGAL.director}
+                    <br />
+                    <strong>联系：</strong>
+                    <a
+                      href={`mailto:${siteConfig.email}`}
+                      className="text-primary underline-offset-2 hover:underline"
+                    >
+                      {siteConfig.email}
+                    </a>
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">9. 处理者与国际传输</h3>
-                  <p>Vercel 提供托管、部署、服务器功能、内容分发和 Vercel Blob 文件存储；Neon 托管 PostgreSQL 应用数据库；Clerk 提供管理员身份验证；Cloudflare Turnstile 保护表单免受滥用；Resend 发送交易邮件；Stripe 处理付款；Google Drive 可在控制者授权后保存受控的私有 CV 副本。根据各服务商使用的基础设施，数据可能在欧洲经济区以外处理。适用的保障措施以服务商的数据处理协议为准；在需要时包括标准合同条款。仅共享预约、发票、招聘、身份验证、托管、安全和通信所必需的数据；本网站不保存银行卡数据。AI 辅助的候选人分析始终经人工复核，不作出自动招聘决定。</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    9. 处理者与国际传输
+                  </h3>
+                  <p>
+                    Vercel 提供托管、部署、服务器功能、内容分发和 Vercel Blob
+                    文件存储；Neon 托管 PostgreSQL 应用数据库；Clerk
+                    提供管理员身份验证；Cloudflare Turnstile
+                    保护表单免受滥用；Resend 发送交易邮件；Stripe
+                    处理付款；Google Drive 可在控制者授权后保存受控的私有 CV
+                    副本。根据各服务商使用的基础设施，数据可能在欧洲经济区以外处理。适用的保障措施以服务商的数据处理协议为准；在需要时包括标准合同条款。仅共享预约、发票、招聘、身份验证、托管、安全和通信所必需的数据；本网站不保存银行卡数据。AI
+                    辅助的候选人分析始终经人工复核，不作出自动招聘决定。
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">10. 投诉权</h3>
-                  <p>如果您认为您的GDPR权利未得到尊重，您有权向主管监管机构提出投诉。</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    10. 投诉权
+                  </h3>
+                  <p>
+                    如果您认为您的GDPR权利未得到尊重，您有权向主管监管机构提出投诉。
+                  </p>
                 </div>
               </section>
             )}
@@ -1076,13 +2378,23 @@ function LegalPageZh() {
                 <h2 className="text-2xl font-bold text-foreground">使用条款</h2>
                 <div className="text-muted-foreground space-y-4">
                   <h3 className="font-semibold text-foreground">1. 条款接受</h3>
-                  <p>通过访问和使用本网站，您完全接受这些使用条款。如果您不接受这些条款，请不要使用本网站。</p>
+                  <p>
+                    通过访问和使用本网站，您完全接受这些使用条款。如果您不接受这些条款，请不要使用本网站。
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">2. 服务描述</h3>
-                  <p>本网站提供有关麻醉学-重症监护、医疗保健创业和相关服务的专业信息和咨询。该网站仅供信息之用。</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    2. 服务描述
+                  </h3>
+                  <p>
+                    本网站提供有关麻醉学-重症监护、医疗保健创业和相关服务的专业信息和咨询。该网站仅供信息之用。
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">3. 可接受的使用</h3>
-                  <p>您同意仅出于合法目的并符合所有适用的法律和法规使用本网站。您同意不：</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    3. 可接受的使用
+                  </h3>
+                  <p>
+                    您同意仅出于合法目的并符合所有适用的法律和法规使用本网站。您同意不：
+                  </p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
                     <li>为非法、欺诈或未授权目的使用网站</li>
                     <li>未经事先书面授权复制、分发或传输内容</li>
@@ -1094,29 +2406,67 @@ function LegalPageZh() {
                     <li>过载或中断网站的正常运行</li>
                   </ul>
 
-                  <h3 className="font-semibold text-foreground mt-4">4. 知识产权</h3>
-                  <p>本网站上的所有内容（文本、图像、徽标、视频、图形等）均受知识产权和版权法保护。您只能将此内容用于个人、非商业用途。</p>
-                  <p className="mt-4"><strong>限制：</strong> 您不能复制、复制、修改、改编、销售或分发内容。</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    4. 知识产权
+                  </h3>
+                  <p>
+                    本网站上的所有内容（文本、图像、徽标、视频、图形等）均受知识产权和版权法保护。您只能将此内容用于个人、非商业用途。
+                  </p>
+                  <p className="mt-4">
+                    <strong>限制：</strong>{" "}
+                    您不能复制、复制、修改、改编、销售或分发内容。
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">5. 责任限制</h3>
-                  <p><strong>医学免责声明：</strong> 本网站上提供的信息仅供信息之用，不构成专业医学建议。它不能替代与合格医疗专业人士的咨询。</p>
-                  <p className="mt-4"><strong>信息准确性：</strong> 虽然我们努力保持信息的准确性，但我们不保证不存在错误或遗漏。</p>
-                  <p className="mt-4"><strong>无保证：</strong> 网站按"原样"提供，不提供任何形式的保证，无论是明示的还是暗示的。</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    5. 责任限制
+                  </h3>
+                  <p>
+                    <strong>医学免责声明：</strong>{" "}
+                    本网站上提供的信息仅供信息之用，不构成专业医学建议。它不能替代与合格医疗专业人士的咨询。
+                  </p>
+                  <p className="mt-4">
+                    <strong>信息准确性：</strong>{" "}
+                    虽然我们努力保持信息的准确性，但我们不保证不存在错误或遗漏。
+                  </p>
+                  <p className="mt-4">
+                    <strong>无保证：</strong>{" "}
+                    网站按"原样"提供，不提供任何形式的保证，无论是明示的还是暗示的。
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">6. 外部链接</h3>
-                  <p>本网站可能包含指向外部网站的链接。我们不对这些外部网站的内容、准确性或隐私惯例负责。</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    6. 外部链接
+                  </h3>
+                  <p>
+                    本网站可能包含指向外部网站的链接。我们不对这些外部网站的内容、准确性或隐私惯例负责。
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">7. 网站可用性</h3>
-                  <p>我们努力保持网站24/7可用。但是，我们不保证不间断的可用性。网站可能因维护或技术原因而暂时不可用。</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    7. 网站可用性
+                  </h3>
+                  <p>
+                    我们努力保持网站24/7可用。但是，我们不保证不间断的可用性。网站可能因维护或技术原因而暂时不可用。
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">8. 条款修改</h3>
-                  <p>我们保留随时修改这些使用条款的权利。修改将在网站上发布后生效。</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    8. 条款修改
+                  </h3>
+                  <p>
+                    我们保留随时修改这些使用条款的权利。修改将在网站上发布后生效。
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">9. 适用法律</h3>
-                  <p>这些使用条款受法国法律管辖。因使用网站而引起的任何争议将受法国法院的专属管辖权。</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    9. 适用法律
+                  </h3>
+                  <p>
+                    这些使用条款受法国法律管辖。因使用网站而引起的任何争议将受法国法院的专属管辖权。
+                  </p>
 
-                  <h3 className="font-semibold text-foreground mt-4">10. 联系</h3>
-                  <p>如有任何关于这些使用条款的问题，请通过网站上的联系表格与我们联系。</p>
+                  <h3 className="font-semibold text-foreground mt-4">
+                    10. 联系
+                  </h3>
+                  <p>
+                    如有任何关于这些使用条款的问题，请通过网站上的联系表格与我们联系。
+                  </p>
                 </div>
               </section>
             )}
@@ -1124,9 +2474,7 @@ function LegalPageZh() {
 
           {/* Last update date */}
           <section className="pt-8 border-t border-border">
-            <p className="text-sm text-muted-foreground">
-              最后更新：2026年8月
-            </p>
+            <p className="text-sm text-muted-foreground">最后更新：2026年8月</p>
           </section>
         </div>
       </main>
@@ -1135,12 +2483,105 @@ function LegalPageZh() {
   );
 }
 
+/**
+ * Politique de confidentialité en français, ouverte dans cette langue (?lang=, EN-03) : un lien
+ * complet, que LanguageProvider lit au chargement.
+ */
+export const FRENCH_PRIVACY_POLICY_HREF = "/legal?tab=privacy&lang=fr";
+
+/**
+ * Encadré des traductions (RGPD-01) : le texte français fait foi. L’anglais en est la
+ * traduction ; l’allemand et le chinois ne couvrent pas encore tous les traitements.
+ */
+export const privacyReferenceVersionCopy = {
+  en: {
+    title: "Reference version: French",
+    text: "The French version of this privacy policy is the reference text; this English translation is provided for information.",
+    link: "Read the French version",
+    switchNote: "(the site will be shown in French)",
+  },
+  de: {
+    title: "Referenzfassung: Französisch",
+    text: "Maßgeblich ist die französische Fassung dieser Datenschutzrichtlinie. Diese Übersetzung ist noch unvollständig: Insbesondere die Bewerbungen, der Kandidatenbereich mit seinem Dokumentenspeicher, die medizinischen Fragen und deren Speicherfristen sind nur in der französischen Fassung vollständig beschrieben.",
+    link: "Französische Fassung lesen",
+    switchNote: "(die Website wird auf Französisch angezeigt)",
+  },
+  zh: {
+    title: "参考版本：法语",
+    text: "本隐私政策以法语版本为准。本译文尚不完整：招聘申请、候选人空间及其文件库、医疗问题服务及其保存期限仅在法语版本中有完整说明。",
+    link: "阅读法语版本",
+    switchNote: "（网站将以法语显示）",
+  },
+} as const;
+
+export function PrivacyReferenceVersionNotice({
+  language,
+}: {
+  language: keyof typeof privacyReferenceVersionCopy;
+}) {
+  const copy = privacyReferenceVersionCopy[language];
+  return (
+    <aside
+      role="note"
+      aria-label={copy.title}
+      className="rounded-lg border border-primary/30 bg-primary/5 p-4 text-sm text-muted-foreground"
+    >
+      <p className="font-semibold text-foreground">{copy.title}</p>
+      <p className="mt-1">
+        {copy.text}{" "}
+        <a
+          href={FRENCH_PRIVACY_POLICY_HREF}
+          hrefLang="fr"
+          className="text-primary underline underline-offset-2"
+        >
+          {copy.link}
+        </a>{" "}
+        {copy.switchNote}
+      </p>
+    </aside>
+  );
+}
+
+const LEGAL_TABS = ["legal", "privacy", "terms"] as const;
+type LegalTab = (typeof LEGAL_TABS)[number];
+
+/**
+ * L’onglet que nomme l’adresse (?tab=), les informations légales quand elle
+ * n’en nomme pas ou en nomme un qui n’existe pas (?tab=foo, retour arrière de
+ * ?tab=privacy vers /legal). Un onglet choisi à la main s’inscrit dans
+ * l’adresse, sans nouvelle entrée d’historique : un lien de la page vers un
+ * autre onglet (« Politique de confidentialité » du pied de page) l’ouvre
+ * donc toujours, même après le choix d’un autre onglet. Les autres paramètres
+ * (?lang=) restent.
+ */
+function useLegalTab(): [LegalTab, (tab: LegalTab) => void] {
+  const [params, setParams] = useSearchParams();
+  const named = params.get("tab");
+  const activeTab = LEGAL_TABS.find(tab => tab === named) ?? "legal";
+  const selectTab = (tab: LegalTab) =>
+    setParams(
+      current => {
+        const next = new URLSearchParams(current);
+        if (tab === "legal") next.delete("tab");
+        else next.set("tab", tab);
+        return next;
+      },
+      { replace: true }
+    );
+  return [activeTab, selectTab];
+}
+
 /** Fait défiler jusqu'à l'ancre de l'URL (ex. /legal?tab=privacy#cookies depuis le bandeau cookies). */
 function useScrollToHashTarget() {
   useEffect(() => {
     const id = decodeURIComponent(window.location.hash.slice(1));
     if (!id) return;
-    const timers = [0, 150, 400].map(delay => window.setTimeout(() => document.getElementById(id)?.scrollIntoView({ block: "start" }), delay));
+    const timers = [0, 150, 400].map(delay =>
+      window.setTimeout(
+        () => document.getElementById(id)?.scrollIntoView({ block: "start" }),
+        delay
+      )
+    );
     return () => timers.forEach(timer => window.clearTimeout(timer));
   }, []);
 }

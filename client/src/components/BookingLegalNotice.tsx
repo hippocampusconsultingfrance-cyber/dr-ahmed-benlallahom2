@@ -12,21 +12,24 @@ import { BOOKING_TERMS_OF_SALE_HREF } from "@shared/bookingPolicy";
  */
 export const bookingLegalNoticeCopy = {
   fr: {
-    purpose: "Vos informations servent à gérer votre réservation, votre paiement (traité par Stripe) et votre facture.",
+    purpose:
+      "Vos informations servent à gérer votre réservation, votre paiement (traité par Stripe) et votre facture.",
     privacy: "Politique de confidentialité",
     legal: "Mentions légales",
     termsOfSale: "Conditions générales de vente",
     label: "Informations légales de la réservation",
   },
   en: {
-    purpose: "Your information is used to manage your booking, your payment (processed by Stripe) and your invoice.",
+    purpose:
+      "Your information is used to manage your booking, your payment (processed by Stripe) and your invoice.",
     privacy: "Privacy policy",
     legal: "Legal notice",
     termsOfSale: "Terms of sale",
     label: "Booking legal information",
   },
   de: {
-    purpose: "Ihre Angaben dienen der Verwaltung Ihrer Buchung, Ihrer Zahlung (über Stripe abgewickelt) und Ihrer Rechnung.",
+    purpose:
+      "Ihre Angaben dienen der Verwaltung Ihrer Buchung, Ihrer Zahlung (über Stripe abgewickelt) und Ihrer Rechnung.",
     privacy: "Datenschutzerklärung",
     legal: "Impressum",
     termsOfSale: "Allgemeine Verkaufsbedingungen",
@@ -41,17 +44,37 @@ export const bookingLegalNoticeCopy = {
   },
 } as const;
 
-export default function BookingLegalNotice({ className = "", showPurpose = true }: { className?: string; showPurpose?: boolean }) {
+export default function BookingLegalNotice({
+  className = "",
+  showPurpose = true,
+}: {
+  className?: string;
+  showPurpose?: boolean;
+}) {
   const { language } = useLanguage();
-  const copy = bookingLegalNoticeCopy[language as keyof typeof bookingLegalNoticeCopy] ?? bookingLegalNoticeCopy.fr;
-  const linkClass = "text-primary underline underline-offset-2 hover:text-primary/80";
+  const copy =
+    bookingLegalNoticeCopy[language as keyof typeof bookingLegalNoticeCopy] ??
+    bookingLegalNoticeCopy.fr;
+  const linkClass =
+    "text-primary underline underline-offset-2 hover:text-primary/80";
   return (
-    <nav aria-label={copy.label} className={`text-xs leading-5 text-muted-foreground ${className}`}>
+    <nav
+      aria-label={copy.label}
+      className={`text-xs leading-5 text-muted-foreground ${className}`}
+    >
       {showPurpose && <p>{copy.purpose}</p>}
       <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
-        <Link href="/legal?tab=privacy" className={linkClass}>{copy.privacy}</Link>
-        <Link href="/legal" className={linkClass}>{copy.legal}</Link>
-        {BOOKING_TERMS_OF_SALE_HREF && <Link href={BOOKING_TERMS_OF_SALE_HREF} className={linkClass}>{copy.termsOfSale}</Link>}
+        <Link href="/legal?tab=privacy" className={linkClass}>
+          {copy.privacy}
+        </Link>
+        <Link href="/legal" className={linkClass}>
+          {copy.legal}
+        </Link>
+        {BOOKING_TERMS_OF_SALE_HREF && (
+          <Link href={BOOKING_TERMS_OF_SALE_HREF} className={linkClass}>
+            {copy.termsOfSale}
+          </Link>
+        )}
       </p>
     </nav>
   );

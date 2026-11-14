@@ -1,0 +1,810 @@
+{
+  "objet": "Plan du lot 6 : constats de l'audit du 24 octobre restés hors des lots 1 à 5, triés dans le code et répartis en unités de travail par vague. Le détail de chaque constat (preuve, recommandation) est dans AUDIT_AMELIORATIONS_2026-10-24.constats.json, à son identifiant. Les parties d'un constat qui attendent une décision du propriétaire restent hors code.",
+  "vagues": [
+    {
+      "vague": 1,
+      "statut": "fusionnée",
+      "unites": [
+        "reservation-parcours",
+        "formulaires-accuses",
+        "admin-confirmations",
+        "portail-candidat",
+        "rdv-agenda-envois"
+      ]
+    },
+    {
+      "vague": 2,
+      "statut": "fusionnée",
+      "unites": [
+        "ia-robustesse",
+        "taches-fiabilite",
+        "admin-recrutement",
+        "recrutement-formulaire",
+        "admin-vue-ensemble",
+        "saisies-liens-sujets",
+        "navigation-langue",
+        "entetes-seo-securite"
+      ]
+    },
+    {
+      "vague": 3,
+      "statut": "fusionnée",
+      "unites": [
+        "emails-gabarit",
+        "admin-finitions",
+        "faq-recherche-404",
+        "tests-typage",
+        "perf-premier-affichage"
+      ]
+    },
+    {
+      "vague": 4,
+      "statut": "fusionnée",
+      "unites": [
+        "accueil-i18n",
+        "campagnes-email",
+        "exploitation-journaux",
+        "bundle-serveur"
+      ]
+    },
+    {
+      "vague": 5,
+      "statut": "fusionnée",
+      "unites": [
+        "intl-pays-fichiers",
+        "tarif-heure-paris",
+        "rgpd-effacement-schema",
+        "admin-securite",
+        "ci-e2e-dev-local"
+      ]
+    },
+    {
+      "vague": 6,
+      "statut": "fusionnée",
+      "unites": [
+        "lint-format"
+      ]
+    }
+  ],
+  "unites": [
+    {
+      "cle": "reservation-parcours",
+      "vague": 1,
+      "constats": [
+        "RES-10",
+        "INTL-09",
+        "A11Y-10",
+        "RES-08"
+      ],
+      "fichiersPrevus": [
+        "client/src/pages/BookingPage.tsx",
+        "client/src/pages/BookingPage.browser.test.ts",
+        "client/src/pages/BookingPage.dom.test.ts",
+        "client/src/pages/BookingPage.localization.test.ts",
+        "shared/bookingPolicy.ts",
+        "server/routers/appointments.ts",
+        "server/routers/publicForms.ts",
+        "server/appointments.refusalReasons.test.ts",
+        "server/appointments.cancelPending.test.ts"
+      ]
+    },
+    {
+      "cle": "formulaires-accuses",
+      "vague": 1,
+      "constats": [
+        "PUB-09",
+        "REC-12",
+        "A11Y-09",
+        "PUB-22",
+        "A11Y-16"
+      ],
+      "fichiersPrevus": [
+        "server/_core/notification.ts",
+        "server/publicFormAcknowledgements.ts",
+        "server/routers/contact.ts",
+        "server/routes/clientBriefs.ts",
+        "client/src/components/ContactSection.tsx",
+        "client/src/lib/publicFormCopy.ts",
+        "client/src/pages/EmployersPage.tsx",
+        "client/src/components/TurnstileWidget.tsx",
+        "client/src/components/GDPRRequestForm.tsx",
+        "client/src/pages/MedicalQuestionsPage.tsx",
+        "server/contact.test.ts"
+      ]
+    },
+    {
+      "cle": "admin-confirmations",
+      "vague": 1,
+      "constats": [
+        "ADM-11",
+        "ADM-10",
+        "ADM-23"
+      ],
+      "fichiersPrevus": [
+        "client/src/components/MedicalQuestionsAdminTab.tsx",
+        "client/src/components/AvailabilityTab.tsx",
+        "client/src/components/CandidateDocumentsAdminTab.tsx",
+        "client/src/components/RecruitmentTab.tsx",
+        "client/src/main.tsx",
+        "client/src/components/ContactsTab.tsx",
+        "client/src/components/TestimonialsTab.tsx",
+        "client/src/components/AdminStatePanel.tsx",
+        "server/medicalQuestionsRouter.ts"
+      ]
+    },
+    {
+      "cle": "portail-candidat",
+      "vague": 1,
+      "constats": [
+        "REC-15",
+        "REC-17",
+        "A11Y-19",
+        "REC-18"
+      ],
+      "fichiersPrevus": [
+        "server/candidateDocumentValidation.ts",
+        "shared/candidateDocumentLimits.ts",
+        "client/src/pages/CandidatePortalPage.tsx",
+        "client/src/pages/CandidateVerifyPage.tsx",
+        "client/src/pages/CandidateAccessPage.tsx",
+        "client/src/components/CandidateLegalFooter.tsx",
+        "server/candidatePortalRouter.ts"
+      ]
+    },
+    {
+      "cle": "rdv-agenda-envois",
+      "vague": 1,
+      "constats": [
+        "ADM-18",
+        "EXPL-13",
+        "RES-12"
+      ],
+      "fichiersPrevus": [
+        "server/routers/admin/appointments.ts",
+        "client/src/components/AppointmentsTab.tsx",
+        "client/src/pages/appointmentsAgenda.ts",
+        "server/appointmentCalendar.ts",
+        "server/_core/notifications.ts",
+        "server/appointmentFulfillment.ts",
+        "server/resendWebhookEvents.ts",
+        "server/resendWebhookCorrelation.ts",
+        "client/src/components/AppointmentDeliveries.tsx",
+        "server/routers/admin/attention.ts",
+        "client/src/components/AdminAttentionPanel.tsx",
+        "server/scheduledJobs.ts",
+        "drizzle/schema.ts"
+      ]
+    },
+    {
+      "cle": "ia-robustesse",
+      "vague": 2,
+      "constats": [
+        "IA-04",
+        "IA-05",
+        "IA-06",
+        "IA-07",
+        "IA-09"
+      ],
+      "fichiersPrevus": [
+        "server/recruitmentAnalysis.ts",
+        "server/recruitmentAnalysis.test.ts",
+        "server/recruitmentInvisibleText.test.ts",
+        "server/candidateDocumentAnalysis.ts",
+        "server/candidateDocumentAnalysis.test.ts",
+        "client/src/components/CandidateDocumentsAdminTab.tsx",
+        "client/src/components/recruitmentEvidenceLabels.ts",
+        "client/src/components/recruitmentEvidenceLabels.test.ts"
+      ]
+    },
+    {
+      "cle": "taches-fiabilite",
+      "vague": 2,
+      "constats": [
+        "EXPL-12",
+        "DATA-06",
+        "DATA-12",
+        "DATA-14",
+        "EXPL-17"
+      ],
+      "fichiersPrevus": [
+        "server/candidateDocumentProcessing.ts",
+        "server/scheduledJobs.ts",
+        "server/_core/llm.ts",
+        "server/routes/candidateDocuments.ts",
+        "shared/candidateDocumentReanalysis.ts",
+        "server/routers/admin/candidateDocuments.ts",
+        "server/googleDriveExport.ts",
+        "server/googleDriveExport.test.ts",
+        "scripts/db-invariants.sql"
+      ]
+    },
+    {
+      "cle": "admin-recrutement",
+      "vague": 2,
+      "constats": [
+        "REC-14",
+        "ADM-13",
+        "ADM-20",
+        "INTL-12",
+        "ADM-26",
+        "INTL-10"
+      ],
+      "fichiersPrevus": [
+        "client/src/components/RecruitmentTab.tsx",
+        "server/routers/admin/recruitmentCandidate.ts",
+        "server/recruitmentEmailTrace.ts",
+        "client/src/components/Candidate360Dialog.tsx",
+        "client/src/components/RecruitmentDashboardPanel.tsx",
+        "server/routers/admin/recruitment.ts",
+        "server/routers/admin/recruitmentCampaigns.ts",
+        "server/routers/admin/recruitmentPool.ts",
+        "server/adminSearch.ts",
+        "server/candidateAuth.ts",
+        "client/src/components/adminSearch.ts"
+      ]
+    },
+    {
+      "cle": "recrutement-formulaire",
+      "vague": 2,
+      "constats": [
+        "REC-22",
+        "A11Y-11",
+        "PUB-17",
+        "PUB-18",
+        "A11Y-08",
+        "PUB-19"
+      ],
+      "fichiersPrevus": [
+        "client/src/pages/RecruitmentPage.tsx",
+        "client/src/pages/LegalPage.tsx",
+        "client/src/pages/LegalPage.accessibility.test.ts",
+        "client/src/pages/LegalPage.tabs.dom.test.ts",
+        "client/src/pages/RecruitmentPage.browser.test.ts",
+        "client/src/pages/ServiceStatusPage.tsx",
+        "client/src/pages/RecruitmentHubPage.tsx",
+        "client/src/components/HeroSection.tsx",
+        "client/src/index.css"
+      ]
+    },
+    {
+      "cle": "admin-vue-ensemble",
+      "vague": 2,
+      "constats": [
+        "ADM-06",
+        "EXPL-20"
+      ],
+      "fichiersPrevus": [
+        "server/routers/admin/stats.ts",
+        "server/routers/admin/attention.ts",
+        "client/src/components/OverviewTab.tsx",
+        "client/src/components/AdminAttentionPanel.tsx",
+        "server/_core/env.ts",
+        "server/_core/health.ts",
+        "server/_core/systemRouter.ts",
+        "client/src/components/AdminConfigurationBanner.tsx"
+      ]
+    },
+    {
+      "cle": "saisies-liens-sujets",
+      "vague": 2,
+      "constats": [
+        "ADM-09",
+        "INTL-11",
+        "INTL-05",
+        "ADM-08",
+        "DATA-13",
+        "RGPD-17"
+      ],
+      "fichiersPrevus": [
+        "client/src/pages/AdminDashboard.tsx",
+        "client/src/pages/AdminRoot.tsx",
+        "client/src/pages/adminDashboardMobileTabs.ts",
+        "server/adminLinks.ts",
+        "shared/textInput.ts",
+        "server/medicalQuestionsRouter.ts",
+        "server/routes/clientBriefs.ts",
+        "server/clientBriefNotification.ts",
+        "server/routers/contact.ts",
+        "server/routers/gdpr.ts",
+        "server/routes/recruitmentApply.ts",
+        "server/routers/appointments.ts",
+        "server/candidatePortalRouter.ts",
+        "server/_core/notification.ts",
+        "server/_core/notifications.ts",
+        "server/medicalQuestionEmails.ts",
+        "server/appointmentFulfillment.ts"
+      ]
+    },
+    {
+      "cle": "navigation-langue",
+      "vague": 2,
+      "constats": [
+        "PUB-08",
+        "PUB-12",
+        "ADM-16",
+        "EN-10",
+        "EN-08",
+        "A11Y-18"
+      ],
+      "fichiersPrevus": [
+        "client/src/components/Navigation.tsx",
+        "client/src/components/Footer.tsx",
+        "client/src/components/CookieConsent.tsx",
+        "client/src/App.tsx",
+        "client/src/components/WhatsAppButton.tsx",
+        "client/src/components/AnalyticsConsent.tsx",
+        "client/src/lib/privateAreaRoutes.ts",
+        "client/src/contexts/LanguageContext.tsx",
+        "client/src/components/LanguageMenu.tsx",
+        "client/src/contexts/userPreferences.ts",
+        "client/src/components/navigationAccessibilityCopy.ts",
+        "client/src/components/navigationAccessibilityCopy.test.ts",
+        "client/src/data/content-fr.ts",
+        "client/src/data/content-en.ts",
+        "client/src/data/content-de.ts",
+        "client/src/data/content-zh.ts"
+      ]
+    },
+    {
+      "cle": "entetes-seo-securite",
+      "vague": 2,
+      "constats": [
+        "SECU-03",
+        "SECU-04",
+        "SECU-08",
+        "SEOP-11",
+        "SEOP-05"
+      ],
+      "fichiersPrevus": [
+        "server/_core/contentSecurityPolicy.ts",
+        "vercel.json",
+        "server/securityHeaders.test.ts",
+        "server/_core/index.ts",
+        "server/_core/storageProxy.ts",
+        "shared/routeMetadata.ts",
+        "server/routeSeo.ts",
+        "client/src/components/SEOHead.tsx",
+        "client/index.html"
+      ]
+    },
+    {
+      "cle": "emails-gabarit",
+      "vague": 3,
+      "constats": [
+        "MAIL-07",
+        "MAIL-09",
+        "MAIL-10",
+        "MAIL-11",
+        "MAIL-12",
+        "A11Y-21",
+        "RGPD-24"
+      ],
+      "fichiersPrevus": [
+        "server/_core/notifications.ts",
+        "server/_core/notification.ts",
+        "server/medicalQuestionEmails.ts",
+        "server/invoice.ts",
+        "server/_core/publicOrigin.ts",
+        "server/routes/routeHelpers.ts",
+        "server/_core/notifications.brand.test.ts",
+        "server/_core/notifications.cv-confirmation.test.ts"
+      ]
+    },
+    {
+      "cle": "admin-finitions",
+      "vague": 3,
+      "constats": [
+        "ADM-07",
+        "A11Y-12",
+        "ADM-19",
+        "ADM-21"
+      ],
+      "fichiersPrevus": [
+        "client/src/components/TestimonialsTab.tsx",
+        "client/src/components/Candidate360Dialog.tsx",
+        "client/src/components/ContactsTab.tsx",
+        "client/src/components/MedicalQuestionsAdminTab.tsx",
+        "client/src/components/AppointmentsTab.tsx",
+        "client/src/components/adminDateFormat.ts",
+        "client/src/components/AvailabilityTab.tsx",
+        "client/src/components/GdprTab.tsx",
+        "client/src/components/SecurityOperationsTab.tsx",
+        "client/src/pages/AdminDashboard.tsx",
+        "server/routers/admin/candidateDocuments.ts",
+        "client/src/components/CandidateDocumentsAdminTab.tsx",
+        "server/routers/admin/availability.ts"
+      ]
+    },
+    {
+      "cle": "faq-recherche-404",
+      "vague": 3,
+      "constats": [
+        "SEOP-03",
+        "PUB-14",
+        "A11Y-15",
+        "PUB-28",
+        "A11Y-20",
+        "A11Y-17"
+      ],
+      "fichiersPrevus": [
+        "client/src/pages/FAQPage.tsx",
+        "client/src/components/ui/accordion.tsx",
+        "client/src/pages/faqContent.ts",
+        "server/routeSeo.ts",
+        "client/src/lib/publicSearchIndex.ts",
+        "client/src/pages/SearchPage.tsx",
+        "client/src/pages/NotFound.tsx",
+        "client/src/pages/ResourcesPage.tsx",
+        "client/src/pages/EmployersPage.tsx",
+        "client/src/pages/VvipOffshorePage.tsx",
+        "client/src/pages/CandidatePortalPage.tsx",
+        "client/src/components/PageTransition.tsx",
+        "client/src/components/Navigation.tsx",
+        "client/src/pages/ServiceStatusPage.tsx"
+      ]
+    },
+    {
+      "cle": "tests-typage",
+      "vague": 3,
+      "constats": [
+        "CODE-03",
+        "CODE-11",
+        "CODE-17",
+        "CODE-10"
+      ],
+      "fichiersPrevus": [
+        "tsconfig.json",
+        "tsconfig.test.json",
+        "package.json",
+        "server/testSupport/trpcContext.ts",
+        "server/appointments.bookingProtection.test.ts",
+        "server/appointments.bookingWindow.test.ts",
+        "server/appointments.cancelPending.test.ts",
+        "server/appointments.holdAbuse.test.ts",
+        "server/appointments.refusalReasons.test.ts",
+        "server/availabilityAdmin.test.ts",
+        "server/bookingPaymentStatus.test.ts",
+        "server/contact.test.ts",
+        "server/publicForms.refusalReasons.test.ts",
+        "server/publicTestimonialsHidden.test.ts",
+        "server/recruitmentAdminAccess.test.ts",
+        "server/stripePaymentReconciliation.test.ts",
+        ".github/workflows/ci.yml",
+        "vitest.config.ts",
+        "server/resend.test.ts",
+        "server/turnstileSecret.test.ts",
+        "server/googleDriveOAuthCredentials.test.ts",
+        "server/googleDriveExport.test.ts",
+        "server/ciWorkflow.test.ts",
+        "scripts/run-cv-worker.mjs",
+        "scripts/verify-google-drive-export.mjs",
+        "scripts/visual-regression.mjs",
+        "client/src/components/visualRegressionHarness.test.ts",
+        "README.md",
+        "server/routers/publicForms.ts",
+        "server/candidateSecurity.ts",
+        "server/candidateAuth.ts",
+        "server/candidatePortal.integration.test.ts"
+      ]
+    },
+    {
+      "cle": "perf-premier-affichage",
+      "vague": 3,
+      "constats": [
+        "SEOP-07"
+      ],
+      "fichiersPrevus": [
+        "client/src/main.tsx",
+        "client/src/App.tsx",
+        "client/src/lib/lazyPage.ts",
+        "scripts/prerender-route-seo.ts",
+        "client/src/fonts.css",
+        "vite.config.ts"
+      ]
+    },
+    {
+      "cle": "accueil-i18n",
+      "vague": 4,
+      "constats": [
+        "EN-07",
+        "A11Y-13",
+        "A11Y-14",
+        "A11Y-07",
+        "PUB-15",
+        "EN-15"
+      ],
+      "fichiersPrevus": [
+        "client/src/components/SkipToContent.tsx",
+        "client/src/pages/Home.tsx",
+        "client/src/components/HeroSection.tsx",
+        "client/src/components/ContactSection.tsx",
+        "client/src/pages/SearchPage.tsx",
+        "client/src/pages/RecruitmentUnsubscribePage.tsx",
+        "client/src/pages/MedicalQuestionsPage.tsx",
+        "client/src/App.tsx",
+        "client/src/data/content-fr.ts",
+        "client/src/data/content-en.ts",
+        "client/src/data/content-de.ts",
+        "client/src/data/content-zh.ts",
+        "client/src/components/AboutSection.tsx",
+        "client/src/components/ValuesSection.tsx",
+        "client/src/components/ExperienceSection.tsx",
+        "client/src/components/EducationSection.tsx",
+        "client/src/data/ventures-fr.ts",
+        "client/src/pages/VvipOffshorePage.tsx",
+        "client/src/pages/ResourcesPage.tsx",
+        "client/src/publicPagesEnglish.dom.test.ts"
+      ]
+    },
+    {
+      "cle": "campagnes-email",
+      "vague": 4,
+      "constats": [
+        "EXPL-08",
+        "RGPD-19",
+        "MAIL-13"
+      ],
+      "fichiersPrevus": [
+        "server/routers/admin/recruitmentCampaigns.ts",
+        "server/_core/notifications.ts",
+        "server/_core/resendDelivery.ts",
+        "client/src/components/MailingTab.tsx",
+        "server/routers/recruitmentPreferences.ts",
+        "server/routes/recruitmentUnsubscribe.ts",
+        "server/_core/index.ts",
+        "client/src/components/RecruitmentTab.tsx",
+        "server/routers/admin/recruitment.ts",
+        "scripts/emails-preview.mts"
+      ]
+    },
+    {
+      "cle": "exploitation-journaux",
+      "vague": 4,
+      "constats": [
+        "EXPL-11",
+        "EXPL-19"
+      ],
+      "fichiersPrevus": [
+        "server/candidatePortalRouter.ts",
+        "server/db.ts",
+        "server/_core/context.ts",
+        "server/googleDriveOAuthRoutes.ts",
+        "server/_core/trpc.ts",
+        "server/_core/logError.ts",
+        "README.md",
+        "docs/EXPLOITATION.md",
+        "docs/archive/",
+        "RECRUITMENT_PIPELINE_OPERATIONS.md",
+        "REMINDER_JOB_VERIFICATION.md",
+        "ANNUAL_REVIEW_CALENDAR.md"
+      ]
+    },
+    {
+      "cle": "bundle-serveur",
+      "vague": 4,
+      "constats": [
+        "EXPL-15",
+        "CODE-13",
+        "SEOP-14",
+        "CODE-23"
+      ],
+      "fichiersPrevus": [
+        "server/recruitmentAnalysis.ts",
+        "server/recruitmentAnalysisVersion.ts",
+        "server/routers/admin/recruitmentShared.ts",
+        "server/appointmentFulfillment.ts",
+        "server/invoice.ts",
+        "server/storage.ts",
+        "server/routes/resendWebhook.ts",
+        "server/vercelBundle.test.ts",
+        "vercel.json",
+        "api/index.js",
+        "package.json",
+        "pnpm-lock.yaml",
+        "scripts/smoke-built-server.mjs",
+        "server/smokeBuiltServer.test.ts",
+        ".gitignore",
+        ".github/dependabot.yml"
+      ]
+    },
+    {
+      "cle": "intl-pays-fichiers",
+      "vague": 5,
+      "constats": [
+        "REC-11",
+        "PUB-26",
+        "EN-11",
+        "INTL-07"
+      ],
+      "fichiersPrevus": [
+        "client/src/pages/VvipOffshorePage.tsx",
+        "client/src/pages/RecruitmentPage.tsx",
+        "client/src/lib/countrySubmission.ts",
+        "client/src/lib/countrySubmission.test.ts",
+        "server/routes/recruitmentApply.ts",
+        "client/src/components/RecruitmentTab.tsx",
+        "client/src/components/Candidate360Dialog.tsx",
+        "drizzle/pg/0005_country_codes.sql",
+        "drizzle/pg/meta/_journal.json",
+        "server/routes/routeHelpers.ts",
+        "server/candidateDocumentValidation.ts",
+        "server/googleDriveExport.ts",
+        "server/routes/candidateDocuments.ts"
+      ]
+    },
+    {
+      "cle": "tarif-heure-paris",
+      "vague": 5,
+      "constats": [
+        "CODE-08",
+        "CODE-09",
+        "RES-14"
+      ],
+      "fichiersPrevus": [
+        "shared/parisTime.ts",
+        "server/routers/parisTime.ts",
+        "client/src/pages/BookingPage.tsx",
+        "server/invoice.ts",
+        "server/invoiceNumbering.ts",
+        "shared/bookingPolicy.ts",
+        "server/routers/appointments.ts",
+        "client/src/pages/faqContent.ts",
+        "server/appointments.audit.test.ts",
+        "client/src/pages/BookingPage.test.ts"
+      ]
+    },
+    {
+      "cle": "rgpd-effacement-schema",
+      "vague": 5,
+      "constats": [
+        "DATA-08",
+        "DATA-09",
+        "CODE-16",
+        "RGPD-13"
+      ],
+      "fichiersPrevus": [
+        "drizzle/schema.ts",
+        "server/recruitmentErasure.ts",
+        "server/recruitmentRetention.ts",
+        "server/routers/admin/recruitment.ts",
+        "server/routers/gdpr.ts",
+        "client/src/components/GDPRRequestForm.tsx",
+        "client/src/components/gdprRequestAdmin.ts",
+        "client/src/components/GdprTab.tsx",
+        "client/src/data/content-fr.ts",
+        "client/src/data/content-en.ts",
+        "server/publicFormAcknowledgements.ts"
+      ]
+    },
+    {
+      "cle": "admin-securite",
+      "vague": 5,
+      "constats": [
+        "ADM-14",
+        "ADM-15",
+        "MAIL-04"
+      ],
+      "fichiersPrevus": [
+        "server/adminMfa.ts",
+        "server/routers/adminSecurity.ts",
+        "client/src/components/SecurityOperationsTab.tsx",
+        "client/src/components/securityOperationsCopy.ts",
+        "shared/securityEventLabels.ts",
+        "docs/PROCEDURE_ACCES_ADMIN_SECOURS.md",
+        "server/appointmentPaymentWebhook.ts",
+        "server/candidateSecurity.ts",
+        "server/googleDriveOAuthRoutes.ts"
+      ]
+    },
+    {
+      "cle": "ci-e2e-dev-local",
+      "vague": 5,
+      "constats": [
+        "A11Y-22",
+        "CODE-22",
+        "CODE-15"
+      ],
+      "fichiersPrevus": [
+        ".github/workflows/ci.yml",
+        "package.json",
+        "pnpm-lock.yaml",
+        "client/src/publicPages.browser.test.ts",
+        "client/src/lib/contrast.test.ts",
+        "EXTERNAL_VALIDATION_REGISTER.md",
+        "e2e/",
+        "playwright.e2e.config.ts",
+        "scripts/smoke-built-server.mjs",
+        "server/ciWorkflow.test.ts",
+        "server/db.ts",
+        "server/_core/index.ts",
+        "server/_core/env.ts",
+        "README.md",
+        ".env.example"
+      ]
+    },
+    {
+      "cle": "lint-format",
+      "vague": 6,
+      "constats": [
+        "CODE-04"
+      ],
+      "fichiersPrevus": [
+        "eslint.config.js",
+        "package.json",
+        "pnpm-lock.yaml",
+        ".github/workflows/ci.yml",
+        "server/ciWorkflow.test.ts",
+        ".prettierrc",
+        ".prettierignore",
+        "server/invoice.ts",
+        "client/src/",
+        "server/",
+        "shared/"
+      ]
+    }
+  ],
+  "ecartsDuPlan": [
+    {
+      "constat": "DATA-12",
+      "detail": "La colonne appointments.paid_at (date du paiement lue dans l'évènement Stripe, imprimée sur la facture) est prête mais n'est pas fusionnée : elle demande une migration de production, que le plan regroupe avec la 0005 des codes pays (vague 5) après la décision du propriétaire. D'ici là, une facture reprise par la tâche quotidienne porte la date de création de sa tâche."
+    }
+  ],
+  "decisionsConnues": [
+    {
+      "ids": [
+        "PUB-08",
+        "PUB-15",
+        "SEOP-05"
+      ],
+      "question": "Libellés et marque : renommer « Leadership » en « Parcours », sort de « Business Advisory », « Venture » et « shortlist », titres et descriptions SEO, H1 du hub recrutement, des employeurs et de why-hippocampus (pays et types de postes réellement couverts, sans superlatifs).",
+      "recommandation": "Renommer en « Parcours », écrire « Entreprises » et « présélection » en français, fournir la liste des pays et des postes couverts ; la réécriture de (…)"
+    },
+    {
+      "ids": [
+        "PUB-19",
+        "RGPD-19",
+        "A11Y-09"
+      ],
+      "question": "Adresses : créer une adresse courte contact@, une adresse de désinscription (recrutement@) pour le mailto, choisir les coordonnées de secours quand l'anti-robot échoue, et dire si des CV peuvent être reçus par email.",
+      "recommandation": "Créer contact@ et recrutement@ (boîtes et vérification Resend) ; ne pas accepter de CV par email (hors coffre, conséquences RGPD) : le secours renvoie vers le téléphone et l'email général, déjà en place dans (…)"
+    },
+    {
+      "ids": [
+        "REC-24",
+        "INTL-10",
+        "EXPL-14"
+      ],
+      "question": "Formats de fichiers : nommage des CV dans Drive (nom du candidat visible ?) et classement, export pour les employeurs étrangers (CSV international ou xlsx), export mensuel pour le comptable.",
+      "recommandation": "Drive : « AAAA-MM-JJ – NOM Prénom – Spécialité – CVxxxx » classé par mois ; employeurs : CSV international (virgule, en-têtes anglais, dates ISO) ; comptable : lui demander CSV seul ou CSV + ZIP des PDF."
+    },
+    {
+      "ids": [
+        "IA-07",
+        "IA-08"
+      ],
+      "question": "IA : aucun score ou score plafonné pour les CV scannés avant confirmation humaine ; sort de « Autre spécialité » (exclue du matching ou rapprochée à la main).",
+      "recommandation": "Aucun score avant confirmation pour les CV lus par la vision ; « Autre » exclue du matching avec rapprochement manuel, puis une unité M (liste partagée, specialtyDetail, migration)."
+    },
+    {
+      "ids": [
+        "ADM-07",
+        "ADM-08",
+        "ADM-12",
+        "ADM-13",
+        "ADM-24"
+      ],
+      "question": "Organisation de l'admin : admin en français seulement ou traductions gardées, regroupement des 13 onglets, évènements en email immédiat ou en récapitulatif quotidien (et heure), sort des modèles d'offres, du blog et de l'onglet Témoignages.",
+      "recommandation": "Garder les traductions existantes ; rubriques Consultations, Patients et RGPD, Recrutement, Système ; récapitulatif vers 7 h (candidatures, briefs, documents, questi (…)"
+    },
+    {
+      "ids": [
+        "REC-11",
+        "DATA-12",
+        "DATA-13"
+      ],
+      "question": "Production : appliquer les migrations à venir (colonne pathway des candidatures, colonne paid_at des rendez-vous) et lancer une fois SHOW timezone dans l'éditeur SQL Neon.",
+      "recommandation": "Regrouper les migrations dans une même fenêtre avec sauvegarde Neon (procédure drizzle/MIGRATION_SOURCE_OF_TRUTH.md) ; la 0005 du lot 6 (codes pays) en fait partie."
+    }
+  ],
+  "noteDecisions": "Liste partielle : les décisions de chaque vague sont reprises dans le rapport (section 6, « À faire de votre côté », et suivi du lot 6)."
+}

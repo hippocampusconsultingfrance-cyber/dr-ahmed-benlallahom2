@@ -41,8 +41,8 @@ export const venturesFr: VentureDetail[] = [
     ],
     highlights: [
       { label: "Statut", value: "CEO & Fondateur" },
-      { label: "Secteur", value: "Conseil en Stratégie" },
-      { label: "Orientation", value: "Export International" },
+      { label: "Secteur", value: "Conseil en stratégie" },
+      { label: "Orientation", value: "Export international" },
       { label: "Siège", value: "France" },
     ],
     services: [
@@ -52,10 +52,10 @@ export const venturesFr: VentureDetail[] = [
       "Accompagnement à la croissance durable",
       "Audit stratégique et opérationnel",
     ],
-    tags: ["Stratégie", "Transformation Digitale", "Croissance", "Export"],
+    tags: ["Stratégie", "Transformation digitale", "Croissance", "Export"],
     team: [
       {
-        name: "Dr. Ahmed Ben Lallahom",
+        name: "Dr Ahmed Ben Lallahom",
         role: "CEO & Fondateur",
         linkedin: siteConfig.linkedin,
         photo: "/assets/team/ahmed-ben-lallahom.webp",
@@ -74,12 +74,12 @@ export const venturesFr: VentureDetail[] = [
       },
       {
         name: "Lotfi Ben Lallahom",
-        role: "Consultant Santé",
+        role: "Consultant santé",
         photo: "/assets/team/lotfi-ben-lallahom.webp",
       },
       {
         name: "Monia Ben Lallahom",
-        role: "Consultante Santé",
+        role: "Consultante santé",
         photo: "/assets/team/monia-ben-lallahom.webp",
       },
     ],
@@ -98,8 +98,8 @@ export const venturesFr: VentureDetail[] = [
     ],
     highlights: [
       { label: "Statut", value: "Co-Fondateur" },
-      { label: "Secteur", value: "Recrutement Santé" },
-      { label: "Spécialité", value: "Médical & Paramédical" },
+      { label: "Secteur", value: "Recrutement santé" },
+      { label: "Spécialité", value: "Médical & paramédical" },
       { label: "Services", value: "CDI, CDD, Intérim" },
     ],
     services: [
@@ -109,7 +109,7 @@ export const venturesFr: VentureDetail[] = [
       "Conseil RH pour établissements de santé",
       "Sourcing international de talents médicaux",
     ],
-    tags: ["Recrutement Médical", "Intérim", "RH Santé"],
+    tags: ["Recrutement médical", "Intérim", "RH santé"],
     team: [
       {
         name: "Amine Hachicha",
@@ -119,13 +119,13 @@ export const venturesFr: VentureDetail[] = [
       },
       {
         name: "Sonia Siala",
-        role: "Directrice Générale",
+        role: "Directrice générale",
         linkedin: "https://www.linkedin.com/in/sonia-siala-3412251b8/",
         photo: "/assets/team/sonia-siala.webp",
       },
       {
-        name: "Dr. Ahmed Ben Lallahom",
-        role: "Directeur Médical",
+        name: "Dr Ahmed Ben Lallahom",
+        role: "Directeur médical",
         linkedin: siteConfig.linkedin,
         photo: "/assets/team/ahmed-ben-lallahom.webp",
       },
@@ -144,9 +144,9 @@ export const venturesFr: VentureDetail[] = [
     ],
     highlights: [
       { label: "Statut", value: "Co-Fondateur" },
-      { label: "Secteur", value: "Staffing Médical" },
+      { label: "Secteur", value: "Staffing médical" },
       { label: "Marché", value: "Tunisie" },
-      { label: "Focus", value: "Hôpitaux & Cliniques" },
+      { label: "Focus", value: "Hôpitaux & cliniques" },
     ],
     services: [
       "Staffing médical hospitalier",
@@ -164,13 +164,13 @@ export const venturesFr: VentureDetail[] = [
       },
       {
         name: "Sonia Siala",
-        role: "Directrice Générale",
+        role: "Directrice générale",
         linkedin: "https://www.linkedin.com/in/sonia-siala-3412251b8/",
         photo: "/assets/team/sonia-siala.webp",
       },
       {
-        name: "Dr. Ahmed Ben Lallahom",
-        role: "Directeur Médical",
+        name: "Dr Ahmed Ben Lallahom",
+        role: "Directeur médical",
         linkedin: siteConfig.linkedin,
         photo: "/assets/team/ahmed-ben-lallahom.webp",
       },
@@ -180,7 +180,7 @@ export const venturesFr: VentureDetail[] = [
     slug: "octopus-talent",
     company: "Octopus Talent",
     role: "Co-Fondateur",
-    tagline: "Conseil en IT, Data, IA et Cybersécurité",
+    tagline: "Conseil en IT, Data, IA et cybersécurité",
     website: "https://www.octopustalent.io/",
     logo: "/assets/logos/octopus-talent.webp",
     description: [
@@ -190,7 +190,7 @@ export const venturesFr: VentureDetail[] = [
     ],
     highlights: [
       { label: "Statut", value: "Co-Fondateur" },
-      { label: "Secteur", value: "Tech & Conseil" },
+      { label: "Secteur", value: "Tech & conseil" },
       { label: "Spécialités", value: "IA, Data, Cyber" },
       { label: "Siège", value: "Paris" },
     ],
@@ -204,7 +204,7 @@ export const venturesFr: VentureDetail[] = [
     tags: ["IT", "IA", "Cybersécurité", "Data"],
     team: [
       {
-        name: "Dr. Ahmed Ben Lallahom",
+        name: "Dr Ahmed Ben Lallahom",
         role: "Consultant",
         linkedin: siteConfig.linkedin,
         photo: "/assets/team/ahmed-ben-lallahom.webp",
@@ -242,9 +242,9 @@ export const venturesFr: VentureDetail[] = [
     ],
     highlights: [
       { label: "Statut", value: "Co-Fondateur" },
-      { label: "Secteur", value: "Conseil & Coaching" },
+      { label: "Secteur", value: "Conseil & coaching" },
       { label: "Portée", value: "International" },
-      { label: "Approche", value: "Business & Humain" },
+      { label: "Approche", value: "Business & humain" },
     ],
     services: [
       "Conseil en développement business",
@@ -252,13 +252,13 @@ export const venturesFr: VentureDetail[] = [
       "Coaching de dirigeants",
       "Stratégie internationale",
     ],
-    tags: ["Conseil International", "Business Advisory", "Coaching"],
+    tags: ["Conseil international", "Business Advisory", "Coaching"],
     team: [
       {
         name: "Wafa Dahmeni",
         role: "CEO",
         linkedin: "https://www.linkedin.com/in/wafadahmeni/",
-        photo: "/manus-storage/photo-wafa-clean_fe6f20ad.png",
+        // Photo à fournir : l’ancienne, hébergée chez Manus, n’existe plus (CODE-05).
       },
       {
         name: "Amine Hachicha",
@@ -273,7 +273,7 @@ export const venturesFr: VentureDetail[] = [
         photo: "/assets/team/sonia-siala.webp",
       },
       {
-        name: "Dr. Ahmed Ben Lallahom",
+        name: "Dr Ahmed Ben Lallahom",
         role: "Consultant",
         linkedin: siteConfig.linkedin,
         photo: "/assets/team/ahmed-ben-lallahom.webp",
@@ -291,7 +291,7 @@ export const venturesFr: VentureDetail[] = [
       "Fort de plus de 10 ans d'expérience clinique, il allie expertise technique de pointe et approche centrée sur le patient pour garantir la sécurité et la qualité des soins dans des contextes chirurgicaux complexes.",
     ],
     highlights: [
-      { label: "Spécialité", value: "Anesthésie-Réanimation" },
+      { label: "Spécialité", value: "Anesthésie-réanimation" },
       { label: "Expérience", value: "10+ ans" },
       { label: "Certification", value: "DESAIC" },
       { label: "Lieu", value: "France" },

@@ -4,6 +4,7 @@ import { type Server } from "http";
 import { nanoid } from "nanoid";
 import path from "path";
 import { getRouteSeo, renderRouteSeoHead } from "../routeSeo";
+import { registerPageRedirects } from "./static";
 
 export async function setupVite(app: Express, server: Server) {
   // Vite and Rollup are development-only dependencies. Loading them lazily
@@ -23,6 +24,7 @@ export async function setupVite(app: Express, server: Server) {
     appType: "custom",
   });
 
+  registerPageRedirects(app);
   app.use(vite.middlewares);
   app.use("*", async (req, res, next) => {
     const url = req.originalUrl;
@@ -46,7 +48,10 @@ export async function setupVite(app: Express, server: Server) {
         "<!--route-seo-->",
         () => renderRouteSeoHead(url)
       );
-      res.status(seo.notFound ? 404 : 200).set({ "Content-Type": "text/html" }).end(page);
+      res
+        .status(seo.notFound ? 404 : 200)
+        .set({ "Content-Type": "text/html" })
+        .end(page);
     } catch (e) {
       vite.ssrFixStacktrace(e as Error);
       next(e);
@@ -72,11 +77,19 @@ export function serveStatic(app: Express) {
   // on every public route while preserving the client-rendered application.
   app.use("*", async (req, res, next) => {
     try {
-      const template = await fs.promises.readFile(path.resolve(distPath, "index.html"), "utf-8");
-      const seo = getRouteSeo(req.originalUrl);
-      res.status(seo.notFound ? 404 : 200).set({ "Content-Type": "text/html" }).end(
-        template.replace("<!--route-seo-->", () => renderRouteSeoHead(req.originalUrl))
+      const template = await fs.promises.readFile(
+        path.resolve(distPath, "index.html"),
+        "utf-8"
       );
+      const seo = getRouteSeo(req.originalUrl);
+      res
+        .status(seo.notFound ? 404 : 200)
+        .set({ "Content-Type": "text/html" })
+        .end(
+          template.replace("<!--route-seo-->", () =>
+            renderRouteSeoHead(req.originalUrl)
+          )
+        );
     } catch (error) {
       next(error);
     }

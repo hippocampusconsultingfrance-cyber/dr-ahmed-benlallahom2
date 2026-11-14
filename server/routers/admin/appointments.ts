@@ -1,0 +1,359 @@
+import { adminProcedure, router } from "../../_core/trpc";
+import { TRPCError } from "@trpc/server";
+import { z } from "zod";
+import { getDb } from "../../db";
+import { appointments } from "../../../drizzle/schema";
+import { isLastingStorageError } from "../../storage";
+import {
+  eq,
+  and,
+  sql,
+  desc,
+  gte,
+  inArray,
+  isNotNull,
+  lt,
+  ne,
+  or,
+} from "drizzle-orm";
+import { adminSearchCondition, adminSearchInput } from "../../adminSearch";
+import { getStripeClient, bookingCustomerEmail } from "../appointments";
+import { calendarDateInput, getParisDateRange } from "../parisTime";
+
+/** Paris days the agenda reads at most at once: the 30-day view, and a month to print (ADM-18). */
+const AGENDA_MAX_DAYS = 31;
+/** Far above a month of 30-minute consultations; past it, the agenda says it is cut. */
+const AGENDA_MAX_ROWS = 500;
+
+/**
+ * Bookings that never became one (ADM-18), hidden from the list by default: a
+ * slot held without payment, a failed payment, or a pending payment for which
+ * Stripe never sent one. A payment received without a confirmed slot (« Paiement
+ * à régulariser ») stays listed.
+ */
+const notAbandoned = and(
+  ne(appointments.appointmentStatus, "held"),
+  ne(appointments.paymentStatus, "failed"),
+  or(
+    ne(appointments.paymentStatus, "pending"),
+    isNotNull(appointments.stripePaymentIntentId)
+  )
+);
+
+// List all appointments with pagination
+export const adminAppointmentsRouter = router({
+  list: adminProcedure
+    .input(
+      z.object({
+        limit: z.number().min(1).max(100).optional().default(50),
+        offset: z.number().min(0).optional().default(0),
+        status: z
+          .enum(["pending", "completed", "failed", "refunded"])
+          .optional(),
+        /** The list's default view (ADM-18): without the bookings that never became one. */
+        excludeAbandoned: z.boolean().optional(),
+        /** Patient name, email or booking reference (ADM-02). */
+        search: adminSearchInput,
+      })
+    )
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return { items: [], total: 0 };
+
+      const conditions = [];
+      if (input.status) {
+        conditions.push(eq(appointments.paymentStatus, input.status));
+      }
+      if (input.excludeAbandoned) conditions.push(notAbandoned);
+      const search = adminSearchCondition(
+        input.search,
+        [
+          appointments.customerName,
+          appointments.customerEmail,
+          appointments.trackingId,
+        ],
+        { fullName: appointments.customerName }
+      );
+      if (search) conditions.push(search);
+
+      const whereClause =
+        conditions.length > 0 ? and(...conditions) : undefined;
+
+      const rows = await db
+        .select()
+        .from(appointments)
+        .where(whereClause)
+        .orderBy(desc(appointments.createdAt))
+        .limit(input.limit)
+        .offset(input.offset);
+
+      const countResult = await db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(appointments)
+        .where(whereClause);
+
+      // Post-payment emails and the issued invoice of each appointment (EXPL-02).
+      const { getAppointmentDeliveries } = await import(
+        "../../appointmentFulfillment"
+      );
+      const { findAppointmentInvoices } = await import(
+        "../../invoiceNumbering"
+      );
+      const appointmentIds = rows.map(row => row.id);
+      const deliveries = await getAppointmentDeliveries(appointmentIds);
+      const invoices = await findAppointmentInvoices(appointmentIds).catch(
+        error => {
+          console.error(
+            "[Admin] Issued invoices could not be read",
+            error instanceof Error ? error.name : "UnknownError"
+          );
+          return new Map<number, { invoiceNumber: string }>();
+        }
+      );
+      const items = rows.map(row => ({
+        ...row,
+        deliveries: deliveries.get(row.id) ?? [],
+        invoiceNumber: invoices.get(row.id)?.invoiceNumber ?? null,
+      }));
+
+      return { items, total: Number(countResult[0]?.count ?? 0) };
+    }),
+
+  /**
+   * Agenda of the consultations (ADM-18), read by consultation date over
+   * whole Paris days, from `from` to `to` included (today, 7 or 30 days in
+   * the dashboard): the paid appointments still held, done or missed, never a
+   * slot held without payment, a cancellation or a refund, whenever they were
+   * booked.
+   */
+  agenda: adminProcedure
+    .input(
+      z
+        .object({ from: calendarDateInput, to: calendarDateInput })
+        .refine(({ from, to }) => from <= to, {
+          message: "La date de fin doit suivre la date de début.",
+          path: ["to"],
+        })
+        // Calendar days, whatever the clock change in between.
+        .refine(
+          ({ from, to }) =>
+            Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`) <
+            AGENDA_MAX_DAYS * 86_400_000,
+          {
+            message: `L’agenda couvre au plus ${AGENDA_MAX_DAYS} jours.`,
+            path: ["to"],
+          }
+        )
+    )
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return { items: [], truncated: false, limit: AGENDA_MAX_ROWS };
+      const rows = await db
+        .select({
+          id: appointments.id,
+          trackingId: appointments.trackingId,
+          customerName: appointments.customerName,
+          customerPhone: appointments.customerPhone,
+          appointmentDate: appointments.appointmentDate,
+          duration: appointments.duration,
+          appointmentStatus: appointments.appointmentStatus,
+          language: appointments.language,
+        })
+        .from(appointments)
+        .where(
+          and(
+            eq(appointments.paymentStatus, "completed"),
+            inArray(appointments.appointmentStatus, [
+              "confirmed",
+              "completed",
+              "no_show",
+            ]),
+            gte(
+              appointments.appointmentDate,
+              getParisDateRange(input.from).start
+            ),
+            lt(appointments.appointmentDate, getParisDateRange(input.to).end)
+          )
+        )
+        .orderBy(appointments.appointmentDate, appointments.id)
+        .limit(AGENDA_MAX_ROWS + 1);
+      return {
+        items: rows.slice(0, AGENDA_MAX_ROWS),
+        truncated: rows.length > AGENDA_MAX_ROWS,
+        limit: AGENDA_MAX_ROWS,
+      };
+    }),
+
+  /** « Renvoyer » : relance tout de suite les envois après paiement qui n’ont pas abouti (EXPL-02). */
+  retryFulfillment: adminProcedure
+    .input(z.object({ trackingId: z.string().min(1).max(20) }))
+    .mutation(async ({ input }) => {
+      const { retryAppointmentFulfillment } = await import(
+        "../../appointmentFulfillment"
+      );
+      const result = await retryAppointmentFulfillment(input.trackingId);
+      if (result.outcome === "not_found")
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Rendez-vous introuvable.",
+        });
+      if (result.outcome === "not_paid")
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message:
+            "Ce rendez-vous n’est pas payé : aucun envoi après paiement à relancer.",
+        });
+      return {
+        requeued: result.requeued,
+        requeuedJobTypes: result.requeuedJobTypes,
+        deliveries: result.deliveries,
+      };
+    }),
+
+  /**
+   * Corrige l’adresse du patient après un envoi refusé (EXPL-02), avec la
+   * règle de la réservation, et seulement après un tel refus, comme la
+   * fiche ; « Renvoyer » écrit ensuite à la nouvelle adresse, la facture
+   * déjà émise gardant ses mentions. Tracé dans le journal de sécurité,
+   * sans les adresses.
+   */
+  updateCustomerEmail: adminProcedure
+    // No length limit here: an address too long gets the same clear message
+    // as any other invalid one, not Zod's raw report (bounded by the JSON body limit).
+    .input(
+      z.object({
+        trackingId: z.string().min(1).max(20),
+        customerEmail: z.string(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      // Stored as the booking stores it: without what a paste leaves at either end (INTL-05).
+      const parsedEmail = bookingCustomerEmail.safeParse(input.customerEmail);
+      if (!parsedEmail.success) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "Adresse email invalide : saisissez une adresse complète, par exemple prenom.nom@exemple.fr.",
+        });
+      }
+      const customerEmail = parsedEmail.data;
+      const { updateAppointmentCustomerEmailByAdmin } = await import(
+        "../../appointmentAdminActions"
+      );
+      // The correction is traced with it, both or neither (DATA-01).
+      return updateAppointmentCustomerEmailByAdmin({
+        trackingId: input.trackingId,
+        customerEmail,
+        actorOpenId: ctx.user.openId,
+      });
+    }),
+
+  /** Facture déjà émise : la copie archivée à son émission, celle envoyée au patient ; n’attribue jamais de numéro (EXPL-02). */
+  invoicePdf: adminProcedure
+    .input(z.object({ trackingId: z.string().min(1).max(20) }))
+    .mutation(async ({ input }) => {
+      const { regenerateAppointmentInvoice } = await import(
+        "../../appointmentFulfillment"
+      );
+      let invoice: Awaited<ReturnType<typeof regenerateAppointmentInvoice>>;
+      try {
+        invoice = await regenerateAppointmentInvoice(input.trackingId);
+      } catch (error) {
+        // The copy stored at its issue could not be checked or read (storage
+        // outage, EXPL-02): the invoice is not rebuilt in its place. A
+        // storage failure is named, lasting (to fix in Vercel) or passing.
+        const message = error instanceof Error ? error.message : "";
+        const code = (error as { code?: unknown } | null)?.code;
+        const storageFailure = message.startsWith("storage_");
+        console.error(
+          "[AppointmentFulfillment] Invoice download failed",
+          storageFailure
+            ? { message, code }
+            : error instanceof Error
+              ? error.name
+              : "UnknownError"
+        );
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: !storageFailure
+            ? "La facture n’a pas pu être préparée pour l’instant : réessayez dans un instant."
+            : isLastingStorageError(code)
+              ? "La facture archivée est inaccessible : le stockage des factures (Vercel Blob) refuse l’accès (store suspendu ou introuvable, jeton BLOB_READ_WRITE_TOKEN absent ou invalide). Vérifiez-le dans Vercel, puis réessayez."
+              : "La facture archivée n’a pas pu être lue : le stockage des factures (Vercel Blob) ne répond pas pour l’instant ; réessayez dans un instant.",
+        });
+      }
+      if (!invoice)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Aucune facture n’a encore été émise pour ce rendez-vous.",
+        });
+      return {
+        invoiceNumber: invoice.invoiceNumber,
+        filename: `Facture-${invoice.invoiceNumber}.pdf`,
+        contentBase64: invoice.buffer.toString("base64"),
+      };
+    }),
+
+  updateStatus: adminProcedure
+    .input(
+      z.object({
+        trackingId: z.string().min(1).max(20),
+        appointmentStatus: z.enum([
+          "confirmed",
+          "cancelled",
+          "completed",
+          "no_show",
+        ]),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const { updateAppointmentStatusByAdmin } = await import(
+        "../../appointmentAdminActions"
+      );
+      return updateAppointmentStatusByAdmin(input);
+    }),
+
+  /**
+   * Remboursement intégral. « patient » : annulation demandée par le patient,
+   * possible jusqu’à 24 h avant. « practitioner » : annulation (ou geste) du
+   * praticien, toujours possible, motif obligatoire communiqué au patient.
+   */
+  refund: adminProcedure
+    .input(
+      z.object({
+        trackingId: z.string().min(1).max(20),
+        reason: z
+          .string()
+          .trim()
+          .min(3, "Indiquez le motif du remboursement.")
+          .max(500),
+        initiator: z.enum(["patient", "practitioner"]).default("patient"),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const { refundAppointmentPayment } = await import(
+        "../../appointmentAdminActions"
+      );
+      return refundAppointmentPayment(getStripeClient(), input);
+    }),
+
+  /** Paiement Stripe reçu mais non rattachable au rendez-vous (session indiquée dans l’alerte). */
+  refundUnconfirmedSession: adminProcedure
+    .input(
+      z.object({
+        sessionId: z
+          .string()
+          .trim()
+          .regex(
+            /^cs_[A-Za-z0-9_]{6,250}$/,
+            "Identifiant de session Stripe invalide (cs_…)"
+          ),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const { refundUnconfirmedCheckoutSession } = await import(
+        "../../appointmentAdminActions"
+      );
+      return refundUnconfirmedCheckoutSession(getStripeClient(), input);
+    }),
+});

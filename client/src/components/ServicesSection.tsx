@@ -1,4 +1,5 @@
 import { useLanguage } from "@/contexts/LanguageContext";
+import { ArrowUpRight } from "lucide-react";
 
 export default function ServicesSection() {
   const { content } = useLanguage();
@@ -25,7 +26,9 @@ export default function ServicesSection() {
       <div className="container relative z-10">
         {/* Header — left-aligned with oversized number accent */}
         <div className="section-heading flex items-end gap-6 mb-16">
-          <span className="font-display text-8xl sm:text-9xl font-bold text-primary/10 leading-none hidden lg:block">06</span>
+          <span className="font-display text-8xl sm:text-9xl font-bold text-primary/10 leading-none hidden lg:block">
+            06
+          </span>
           <div className="max-w-xl">
             <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-bold text-foreground mb-4">
               {content.services.title}
@@ -68,6 +71,14 @@ export default function ServicesSection() {
               </div>
             </div>
           ))}
+        </div>
+
+        {/* Réservation à la fin des services (PUB-02) */}
+        <div className="mt-14 sm:mt-16">
+          <a href="/booking" className="cta-primary">
+            {content.hero.bookConsultation}
+            <ArrowUpRight aria-hidden="true" className="h-4 w-4" />
+          </a>
         </div>
       </div>
 

@@ -1,6 +1,10 @@
 export type CampaignLanguage = "fr" | "en";
 
-export type RecruitmentCampaignTemplateId = "europe" | "canada" | "middle_east" | "offshore";
+export type RecruitmentCampaignTemplateId =
+  | "europe"
+  | "canada"
+  | "middle_east"
+  | "offshore";
 
 type LocalizedTemplate = {
   title: string;
@@ -49,7 +53,10 @@ export const RECRUITMENT_CAMPAIGN_TEMPLATES: RecruitmentCampaignTemplate[] = [
   },
   {
     id: "middle_east",
-    label: { fr: "Mission médicale – Moyen-Orient", en: "Medical mission – Middle East" },
+    label: {
+      fr: "Mission médicale – Moyen-Orient",
+      en: "Medical mission – Middle East",
+    },
     content: {
       fr: {
         title: "Recrutement médical – Moyen-Orient",
@@ -81,6 +88,12 @@ export const RECRUITMENT_CAMPAIGN_TEMPLATES: RecruitmentCampaignTemplate[] = [
   },
 ];
 
-export function getRecruitmentCampaignTemplate(id: string, language: CampaignLanguage) {
-  return RECRUITMENT_CAMPAIGN_TEMPLATES.find(template => template.id === id)?.content[language] ?? null;
+export function getRecruitmentCampaignTemplate(
+  id: string,
+  language: CampaignLanguage
+) {
+  return (
+    RECRUITMENT_CAMPAIGN_TEMPLATES.find(template => template.id === id)
+      ?.content[language] ?? null
+  );
 }

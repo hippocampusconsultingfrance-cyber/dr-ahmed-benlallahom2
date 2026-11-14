@@ -1,17 +1,20 @@
 import { venturesFr } from "../client/src/data/ventures-fr";
+import { getFaqContent } from "../client/src/pages/faqContent";
 import {
   DEFAULT_SHARE_IMAGE,
   ROBOTS_INDEX,
   ROBOTS_NOINDEX,
   SITE_NAME,
-  SITE_ORIGIN,
   STATIC_ROUTE_METADATA,
   canonicalUrlFor,
   normalizePathname,
   type RouteMetadata,
   type ShareImage,
 } from "../shared/routeMetadata";
-import { buildSiteStructuredData, renderStructuredDataScripts } from "../shared/siteStructuredData";
+import {
+  buildSiteStructuredData,
+  renderStructuredDataScripts,
+} from "../shared/siteStructuredData";
 
 /** Marqueur de client/index.html remplacé par le <head> propre à chaque route. */
 export const ROUTE_SEO_MARKER = "<!--route-seo-->";
@@ -46,9 +49,8 @@ const VENTURE_ROUTES: Record<string, RouteMetadata> = Object.fromEntries(
     {
       title: `${venture.company} — ${venture.role} | ${SITE_NAME}`,
       description: ventureDescription(venture.description),
-      keywords: venture.tags.join(", "),
     },
-  ]),
+  ])
 );
 
 // Table statique partagée avec SEOHead (shared/routeMetadata.ts) + pages /venture/*.
@@ -70,9 +72,14 @@ const escapeHtml = (value: string) =>
 export function getRouteSeo(url: string): RouteSeo {
   const pathname = normalizePathname(url);
   const known = PUBLIC_ROUTES[pathname];
-  if (known) return { ...known, canonicalPath: known.canonicalPath ?? pathname };
+  if (known) return { ...known, canonicalPath: pathname };
 
-  if (pathname === "/booking/confirmation" || PRIVATE_PREFIXES.some(prefix => pathname === prefix.slice(0, -1) || pathname.startsWith(prefix))) {
+  if (
+    pathname === "/booking/confirmation" ||
+    PRIVATE_PREFIXES.some(
+      prefix => pathname === prefix.slice(0, -1) || pathname.startsWith(prefix)
+    )
+  ) {
     return {
       title: `${SITE_NAME} | Espace sécurisé`,
       description: "Espace sécurisé du site Dr. Ahmed Ben Lallahom.",
@@ -83,7 +90,8 @@ export function getRouteSeo(url: string): RouteSeo {
 
   return {
     title: SITE_NAME,
-    description: "Anesthésiste-réanimateur, entrepreneur en santé et consultant médical basé en France.",
+    description:
+      "Anesthésiste-réanimateur, entrepreneur en santé et consultant médical basé en France.",
     canonicalPath: pathname,
     noIndex: true,
     notFound: true,
@@ -100,20 +108,23 @@ export function getPrerenderRoutes(): string[] {
 }
 
 /**
- * Routes du sitemap.xml (SEO-03) : routes pré-rendues indexables, sans les alias
- * dont la canonique pointe vers une autre URL. Généré au build, jamais à la main.
+ * Routes du sitemap.xml (SEO-03) : routes pré-rendues indexables, chacune sa
+ * propre canonique (une ancienne adresse est redirigée, jamais pré-rendue).
+ * Généré au build, jamais à la main.
  */
 export function getSitemapRoutes(): string[] {
   return getPrerenderRoutes().filter(route => {
     const seo = getRouteSeo(route);
-    return !seo.noIndex && !seo.notFound && seo.canonicalPath === route;
+    return !seo.noIndex && !seo.notFound;
   });
 }
 
 export function renderSitemapXml(lastmod: string): string {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(lastmod)) throw new Error(`lastmod invalide : ${lastmod}`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(lastmod))
+    throw new Error(`lastmod invalide : ${lastmod}`);
   const urls = getSitemapRoutes().map(route => {
-    const priority = route === "/" ? "1.0" : route.split("/").length > 2 ? "0.6" : "0.8";
+    const priority =
+      route === "/" ? "1.0" : route.split("/").length > 2 ? "0.6" : "0.8";
     return [
       "  <url>",
       `    <loc>${escapeHtml(canonicalUrlFor(route))}</loc>`,
@@ -129,7 +140,6 @@ export function renderSitemapXml(lastmod: string): string {
 type HeadInput = {
   title: string;
   description: string;
-  keywords?: string;
   noIndex?: boolean;
   /** Absent pour la page de repli SPA : aucune URL canonique ni og:url. */
   canonicalUrl?: string;
@@ -140,8 +150,9 @@ type HeadInput = {
 function renderHead(input: HeadInput): string {
   const title = escapeHtml(input.title);
   const description = escapeHtml(input.description);
-  const canonical = input.canonicalUrl ? escapeHtml(input.canonicalUrl) : undefined;
-  const keywords = input.keywords ? `<meta name="keywords" content="${escapeHtml(input.keywords)}" />` : "";
+  const canonical = input.canonicalUrl
+    ? escapeHtml(input.canonicalUrl)
+    : undefined;
   const robots = input.noIndex ? ROBOTS_NOINDEX : ROBOTS_INDEX;
   const image = input.image ?? DEFAULT_SHARE_IMAGE;
   const imageUrl = escapeHtml(image.url);
@@ -150,7 +161,6 @@ function renderHead(input: HeadInput): string {
   return [
     `<title>${title}</title>`,
     `<meta name="description" content="${description}" />`,
-    keywords,
     `<meta name="robots" content="${robots}" />`,
     `<meta property="og:type" content="website" />`,
     canonical ? `<meta property="og:url" content="${canonical}" />` : "",
@@ -170,8 +180,41 @@ function renderHead(input: HeadInput): string {
     `<meta name="twitter:image" content="${imageUrl}" />`,
     `<meta name="twitter:image:alt" content="${imageAlt}" />`,
     canonical ? `<link rel="canonical" href="${canonical}" />` : "",
-    input.structuredData?.length ? renderStructuredDataScripts(input.structuredData) : "",
-  ].filter(Boolean).join("\n    ");
+    input.structuredData?.length
+      ? renderStructuredDataScripts(input.structuredData)
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n    ");
+}
+
+/**
+ * FAQPage (SEOP-03) : les questions et réponses de /faq, en français comme tout le HTML pré-rendu,
+ * prises dans faqContent.ts que la page affiche : le balisage reste celui des réponses visibles.
+ */
+function buildFaqStructuredData(): Record<string, unknown>[] {
+  return [
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      inLanguage: "fr-FR",
+      mainEntity: getFaqContent("fr").entries.map(entry => ({
+        "@type": "Question",
+        name: entry.question,
+        acceptedAnswer: { "@type": "Answer", text: entry.answer },
+      })),
+    },
+  ];
+}
+
+// Données structurées du site sur l'accueil, celles de la FAQ sur /faq ; aucune sur les pages non indexables.
+function routeStructuredData(
+  seo: RouteSeo
+): Record<string, unknown>[] | undefined {
+  if (seo.noIndex) return undefined;
+  if (seo.canonicalPath === "/") return buildSiteStructuredData();
+  if (seo.canonicalPath === "/faq") return buildFaqStructuredData();
+  return undefined;
 }
 
 export function renderRouteSeoHead(url: string): string {
@@ -179,10 +222,12 @@ export function renderRouteSeoHead(url: string): string {
   return renderHead({
     ...seo,
     canonicalUrl: canonicalUrlFor(seo.canonicalPath),
-    // Données structurées du site uniquement sur l'accueil (pas sur les pages non indexables).
-    structuredData: seo.canonicalPath === "/" && !seo.noIndex ? buildSiteStructuredData() : undefined,
+    structuredData: routeStructuredData(seo),
   });
 }
+
+const FALLBACK_DESCRIPTION =
+  "Anesthésiste-réanimateur, entrepreneur en santé et consultant médical basé en France.";
 
 /**
  * <head> de la page de repli SPA servie par Vercel pour toute URL sans
@@ -192,8 +237,68 @@ export function renderRouteSeoHead(url: string): string {
 export function renderFallbackSeoHead(): string {
   return renderHead({
     title: SITE_NAME,
-    description: "Anesthésiste-réanimateur, entrepreneur en santé et consultant médical basé en France.",
+    description: FALLBACK_DESCRIPTION,
     noIndex: true,
   });
 }
 
+/** Liens principaux du contenu sans JavaScript, en français comme tout le HTML pré-rendu. */
+const NOSCRIPT_LINKS: readonly { href: string; label: string }[] = [
+  { href: "/", label: "Accueil" },
+  { href: "/booking", label: "Réserver une consultation" },
+  { href: "/questions-anesthesie", label: "Questions santé" },
+  { href: "/recruitment", label: "Recrutement" },
+  { href: "/employers", label: "Employeurs" },
+  { href: "/faq", label: "Questions fréquentes" },
+  { href: "/legal", label: "Mentions légales" },
+  { href: "/gdpr", label: "Protection des données" },
+];
+
+function renderNoscript(input: {
+  title: string;
+  description: string;
+  pathname?: string;
+}): string {
+  const links = NOSCRIPT_LINKS.map(link => {
+    const current = link.href === input.pathname ? ' aria-current="page"' : "";
+    return `        <li><a href="${link.href}"${current}>${escapeHtml(link.label)}</a></li>`;
+  });
+  return [
+    "<noscript>",
+    '  <main class="noscript-page">',
+    `    <h1>${escapeHtml(input.title)}</h1>`,
+    `    <p>${escapeHtml(input.description)}</p>`,
+    "    <p>Activez JavaScript dans votre navigateur pour afficher cette page en entier.</p>",
+    // Seule phrase en anglais : un visiteur anglophone sans JavaScript sait comment voir la page.
+    '    <p lang="en">Enable JavaScript in your browser to view this page in full.</p>',
+    '    <nav aria-label="Liens principaux">',
+    "      <ul>",
+    ...links,
+    "      </ul>",
+    "    </nav>",
+    "  </main>",
+    "</noscript>",
+  ].join("\n    ");
+}
+
+/**
+ * Contenu d'une page pré-rendue pour les visiteurs et les robots sans JavaScript
+ * (SEOP-01) : titre, description et liens principaux de la route. Placé hors de
+ * #root, il n'est affiché que si JavaScript est désactivé : React ne le voit pas.
+ */
+export function renderRouteNoscript(url: string): string {
+  const seo = getRouteSeo(url);
+  return renderNoscript({
+    title: seo.title,
+    description: seo.description,
+    pathname: normalizePathname(url),
+  });
+}
+
+/** Contenu sans JavaScript de la page de repli SPA, générique comme son <head>. */
+export function renderFallbackNoscript(): string {
+  return renderNoscript({
+    title: SITE_NAME,
+    description: FALLBACK_DESCRIPTION,
+  });
+}

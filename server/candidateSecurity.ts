@@ -3,25 +3,43 @@ import { and, eq, gt, gte, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { candidateSecurityRateLimits, securityEvents } from "../drizzle/schema";
 import { getDb } from "./db";
 import { notifyOwner } from "./_core/notification";
+import { alertSendSlot, deferAlertToNextRun } from "./_core/resendDelivery";
+import { adminLink } from "./adminLinks";
+import { securityEventLabel } from "../shared/securityEventLabels";
+import { PARIS_TIME_ZONE } from "../shared/parisTime";
 
 const HIBP_CACHE_TTL_MS = 10 * 60 * 1000;
-const pwnedSuffixCache = new Map<string, { expiresAt: number; suffixes: Set<string> }>();
+const pwnedSuffixCache = new Map<
+  string,
+  { expiresAt: number; suffixes: Set<string> }
+>();
 
 function securityPepper() {
-  return process.env.CANDIDATE_AUTH_PEPPER || process.env.JWT_SECRET || "security-pepper-unavailable";
+  return (
+    process.env.CANDIDATE_AUTH_PEPPER ||
+    process.env.JWT_SECRET ||
+    "security-pepper-unavailable"
+  );
 }
 
 export function hashSecurityValue(value: string): string {
-  return createHash("sha256").update(`${securityPepper()}:${value.trim().toLowerCase()}`).digest("hex");
+  return createHash("sha256")
+    .update(`${securityPepper()}:${value.trim().toLowerCase()}`)
+    .digest("hex");
 }
 
 export function requestIpHash(headers: Record<string, unknown>): string | null {
   const forwarded = headers["x-forwarded-for"];
-  const ip = typeof forwarded === "string" ? forwarded.split(",")[0]?.trim() : typeof headers["x-real-ip"] === "string" ? headers["x-real-ip"] : null;
+  const ip =
+    typeof forwarded === "string"
+      ? forwarded.split(",")[0]?.trim()
+      : typeof headers["x-real-ip"] === "string"
+        ? headers["x-real-ip"]
+        : null;
   return ip ? hashSecurityValue(ip) : null;
 }
 
-export async function logSecurityEvent(input: {
+type SecurityEvent = {
   actorKind: "candidate" | "admin" | "anonymous" | "system";
   actorReference?: string | null;
   category: string;
@@ -29,36 +47,102 @@ export async function logSecurityEvent(input: {
   severity?: "info" | "warning" | "high" | "critical";
   ipHash?: string | null;
   metadata?: Record<string, unknown>;
-}) {
-  const db = await getDb();
-  if (!db) return;
-  const category = input.category.slice(0, 100);
-  await db.insert(securityEvents).values({
+};
+
+/**
+ * The insert of this event, not yet sent: for a db.batch that writes it with
+ * the change it traces (an admin's deletion), both or neither (DATA-01). It
+ * sends no alert: for an event allowed, which none is sent for.
+ */
+export function securityEventInsert(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  input: SecurityEvent
+) {
+  return db.insert(securityEvents).values({
     actorKind: input.actorKind,
     actorReference: input.actorReference ?? null,
-    category,
+    category: input.category.slice(0, 100),
     outcome: input.outcome,
     severity: input.severity ?? "info",
     ipHash: input.ipHash ?? null,
     metadata: input.metadata ? JSON.stringify(input.metadata) : null,
   });
-  if ((input.severity === "high" || input.severity === "critical") && input.outcome !== "allowed") {
-    await notifyOwnerOfSecurityAlert({ ...input, category }).catch((error: unknown) => {
-      console.error("security_alert_notification_failed", error instanceof Error ? error.name : "UnknownError");
-    });
+}
+
+export async function logSecurityEvent(input: SecurityEvent) {
+  const db = await getDb();
+  if (!db) return;
+  const category = input.category.slice(0, 100);
+  await securityEventInsert(db, input);
+  if (
+    (input.severity === "high" || input.severity === "critical") &&
+    input.outcome !== "allowed"
+  ) {
+    await notifyOwnerOfSecurityAlert({ ...input, category }).catch(
+      (error: unknown) => {
+        console.error(
+          "security_alert_notification_failed",
+          error instanceof Error ? error.name : "UnknownError"
+        );
+      }
+    );
   }
 }
 
 /** At most one owner alert email per event category in this window (CAND-15). */
 export const SECURITY_ALERT_EMAIL_WINDOW_MS = 30 * 60 * 1000;
 
-function describeSecurityActor(input: { actorKind: string; actorReference?: string | null }): string {
-  if (!input.actorReference) return input.actorKind === "system" ? "système" : "non identifié";
-  if (input.actorKind === "candidate") return `compte candidat n° ${input.actorReference}`;
-  if (input.actorKind === "admin") return `administrateur ${input.actorReference.slice(0, 32)}`;
-  // Anonymous references are already pseudonymised hashes: show a short prefix only.
-  return `empreinte ${input.actorReference.slice(0, 12)}…`;
+/**
+ * Who caused the last event, in words, or whose account it aimed at: the
+ * administrator's Clerk identifier and the hashes stay out of it (MAIL-04).
+ */
+function describeSecurityActor(input: {
+  actorKind: string;
+  actorReference?: string | null;
+  category: string;
+}): string {
+  if (input.actorKind === "admin") return "par votre compte administrateur";
+  // A refused candidate sign-in is someone trying that account's password, not its candidate.
+  if (input.actorKind === "candidate")
+    return `${input.category === "candidate_login" ? "sur" : "par"} ${input.actorReference ? `le compte candidat n° ${input.actorReference}` : "un compte candidat"}`;
+  if (input.actorKind === "system") return "par le site lui-même";
+  return "par un visiteur non connecté";
 }
+
+/**
+ * The failures in a row of a candidate's sign-in, which the event that raises
+ * the alert carries: only every tenth is high, the others being warnings that
+ * the alert's count of high events would leave out (MAIL-04).
+ */
+function consecutiveFailedLogins(input: SecurityAlertInput): number | null {
+  const count =
+    input.category === "candidate_login"
+      ? input.metadata?.failedLoginCount
+      : undefined;
+  return typeof count === "number" && count > 1 ? count : null;
+}
+
+/**
+ * What the owner does on the alert of each category that can raise one (a
+ * high-severity event refused or failed, logSecurityEvent): from the code
+ * that raises it, and from docs/EXPLOITATION.md for the used-up quota.
+ */
+const SECURITY_ALERT_ADVICE: Record<string, string> = {
+  admin_mfa_verify:
+    "Ces codes ont été saisis après une connexion réussie à votre compte administrateur : si ce n’est pas vous, votre mot de passe est connu. Changez-le dans Clerk, puis, dans l’onglet « Sécurité », cliquez sur « Révoquer toutes les autres sessions ».",
+  candidate_login:
+    "Quelqu’un essaie des mots de passe sur ce compte candidat ; le site freine ces essais de lui-même (blocage temporaire, puis vérification anti-robot). Rien à faire si cela cesse ; sinon, consultez le journal de sécurité.",
+  candidate_login_challenge_enabled:
+    "La vérification anti-robot est désormais demandée pour se connecter à ce compte candidat. Rien à faire si les essais cessent ; sinon, consultez le journal de sécurité.",
+  resend_quota_exceeded:
+    "Plus aucun email ne part, ni les codes de sécurité de l’administration ni les emails après paiement : vérifiez le quota dans Resend. Une fois rétabli : « Renvoyer » sur les rendez-vous signalés (onglet « Réservations »), « Relancer les échecs » sur une campagne (onglet « Mailing »).",
+};
+
+const PARIS_ALERT_TIME = new Intl.DateTimeFormat("fr-FR", {
+  timeZone: PARIS_TIME_ZONE,
+  dateStyle: "long",
+  timeStyle: "short",
+});
 
 /**
  * Aggregates high-severity alerts: the first event of a category in a window
@@ -66,41 +150,243 @@ function describeSecurityActor(input: { actorKind: string; actorReference?: stri
  * actor and a pseudonymised network; later events of that category are only
  * recorded until the window has passed. A burst of N failures therefore sends
  * one email instead of N, and the daily posture review still counts them all.
+ * An email that could not leave is sent by the next event of the category
+ * a few minutes later (sendOwnerAlertOncePerWindow).
  */
-async function notifyOwnerOfSecurityAlert(input: {
+async function notifyOwnerOfSecurityAlert(input: SecurityAlertInput) {
+  await sendOwnerAlertOncePerWindow(
+    securityAlertWindow(input.category),
+    async () => {
+      // Raised during a processing that spaces its sends (a used-up quota met by
+      // a post-payment email or alert, ABUS-03): the alert takes its send slot, a
+      // pause after the email Resend just refused, rather than reach Resend a few
+      // milliseconds after it. When that slot would come after the end of the
+      // immediate budget, it is not sent now: the event stays recorded and the
+      // processing queues the alert for its next run (sendQueuedSecurityAlert),
+      // so that it is not left to the next event of its category, which may not
+      // come once the quota is back; the next event may still send it first.
+      if (!(await alertSendSlot())) {
+        await deferAlertToNextRun(input.category);
+        return null;
+      }
+      const delivered = await sendSecurityAlertEmail(input).catch(() => false);
+      // Refused in turn, the used-up quota's own alert by that very quota: queued
+      // the same way, its next run sends it once the quota is back, after the
+      // new try that follows a failure (OWNER_ALERT_RETRY_AFTER_FAILURE_MS).
+      if (!delivered) await deferAlertToNextRun(input.category);
+      return delivered;
+    }
+  );
+}
+
+type SecurityAlertInput = {
   actorKind: string;
   actorReference?: string | null;
   category: string;
   outcome: string;
   severity?: string;
   ipHash?: string | null;
-}) {
-  const slot = await recordPersistentRateLimitAttempt({
+  metadata?: Record<string, unknown>;
+};
+
+/** One alert email per category and window, whether it leaves at once or from the queue. */
+function securityAlertWindow(category: string) {
+  return {
     action: "security_alert_email",
-    subject: input.category,
-    maxAttempts: 1,
+    subject: category,
     windowMs: SECURITY_ALERT_EMAIL_WINDOW_MS,
     blockMs: SECURITY_ALERT_EMAIL_WINDOW_MS,
-  });
-  if (slot.blocked || slot.attemptCount > 1) return;
+  };
+}
+
+/**
+ * The owner's alert email of a security event, with the number of similar
+ * events: of the last hour, or of the last day for an alert that waited in
+ * the queue, sent by the scheduled run up to a day later.
+ */
+async function sendSecurityAlertEmail(
+  input: SecurityAlertInput,
+  options: { queued?: boolean } = {}
+) {
   const db = await getDb();
-  if (!db) return;
-  const since = new Date(Date.now() - 2 * SECURITY_ALERT_EMAIL_WINDOW_MS);
-  const recent = await db.select({ id: securityEvents.id }).from(securityEvents).where(and(
-    eq(securityEvents.category, input.category),
-    gte(securityEvents.createdAt, since),
-    inArray(securityEvents.severity, ["high", "critical"]),
-  )).limit(10_000);
+  if (!db) return false;
+  const since = new Date(
+    Date.now() -
+      (options.queued
+        ? 24 * 60 * 60 * 1000
+        : 2 * SECURITY_ALERT_EMAIL_WINDOW_MS)
+  );
+  const recent = await db
+    .select({ id: securityEvents.id, createdAt: securityEvents.createdAt })
+    .from(securityEvents)
+    .where(
+      and(
+        eq(securityEvents.category, input.category),
+        gte(securityEvents.createdAt, since),
+        inArray(securityEvents.severity, ["high", "critical"])
+      )
+    )
+    .limit(10_000);
   const windowMinutes = Math.round(SECURITY_ALERT_EMAIL_WINDOW_MS / 60_000);
-  await notifyOwner({
-    title: `Alerte sécurité — ${input.category} — Hippocampus Consulting`,
+  const lastAt =
+    recent.reduce<Date | null>((latest, event) => {
+      const at = asDate(event.createdAt);
+      return at && (!latest || at > latest) ? at : latest;
+    }, null) ?? new Date();
+  // MAIL-04: what happens, when (Paris time) and what to do, then where to look; the codes last.
+  const label = securityEventLabel(input.category, input.outcome, "fr");
+  const failedLogins = options.queued ? null : consecutiveFailedLogins(input);
+  const lastAtParis = `le dernier le ${PARIS_ALERT_TIME.format(lastAt)} (heure de Paris)`;
+  const technical = [
+    `code ${input.category}`,
+    ...(input.ipHash ? [`réseau ${input.ipHash.slice(0, 12)}…`] : []),
+    // Anonymous references are already pseudonymised hashes: a short prefix only.
+    ...(input.actorKind === "anonymous" && input.actorReference
+      ? [`empreinte ${input.actorReference.slice(0, 12)}…`]
+      : []),
+  ];
+  return notifyOwner({
+    title: `Alerte sécurité — ${label} — Hippocampus Consulting`,
     content: [
-      `Catégorie : ${input.category} · ${input.outcome} (gravité ${input.severity ?? "high"}).`,
-      `Événements de ce type sur la dernière heure : ${recent.length}.`,
-      `Dernier acteur : ${describeSecurityActor(input)}${input.ipHash ? ` · réseau ${input.ipHash.slice(0, 12)}…` : ""}.`,
-      `Les événements suivants de cette catégorie sont enregistrés sans nouvel email pendant au moins ${windowMinutes} minutes ; consultez le journal de sécurité de l’administration.`,
+      ...(options.queued
+        ? [
+            "Alerte reportée : levée pendant les envois qui suivent un paiement, elle ne pouvait pas partir avant leur réponse ; elle part au passage suivant, que l’incident dure encore ou non.",
+          ]
+        : []),
+      // A queued alert no longer knows who caused its last event.
+      failedLogins
+        ? `${failedLogins} échecs de connexion consécutifs ${describeSecurityActor(input)} (« ${label} »), ${lastAtParis}.`
+        : `${recent.length} évènement${recent.length > 1 ? "s" : ""} « ${label} » sur ${options.queued ? "les dernières 24 heures" : "la dernière heure"}, ${lastAtParis}${options.queued ? "" : `, ${describeSecurityActor(input)}`}.`,
+      SECURITY_ALERT_ADVICE[input.category] ??
+        "Consultez le journal de sécurité de l’administration.",
+      `Journal de sécurité : ${adminLink("security")}`,
+      `Les évènements suivants de ce type sont enregistrés sans nouvel email pendant au moins ${windowMinutes} minutes.`,
+      `Pour le journal : ${technical.join(" · ")}.`,
     ].join("\n"),
   });
+}
+
+/**
+ * The owner's security alert of a category that its send slot kept from
+ * leaving during a processing (ABUS-03), queued then by that processing
+ * (deferAlertToNextRun) and sent by its next run, in the same window as the
+ * alerts sent at once: one alert per window, whichever sends it. "covered":
+ * an alert of the category was delivered since and its window still runs,
+ * so it was told. False when it did not leave now (Resend did not take it, or
+ * the window is held by an alert being sent or refused a few minutes ago): it
+ * is tried again later.
+ */
+export async function sendQueuedSecurityAlert(
+  category: string
+): Promise<"sent" | "covered" | false> {
+  // Read before this attempt: made while another alert of the window is still
+  // being sent, it holds the window as long as a delivered alert would, and
+  // that send may still fail. Only a delivered alert holds it longer than the
+  // new try after a failure.
+  const db = await getDb();
+  const [slot] = db
+    ? await db
+        .select({ blockedUntil: candidateSecurityRateLimits.blockedUntil })
+        .from(candidateSecurityRateLimits)
+        .where(
+          and(
+            eq(candidateSecurityRateLimits.action, "security_alert_email"),
+            eq(
+              candidateSecurityRateLimits.subjectHash,
+              hashSecurityValue(category)
+            )
+          )
+        )
+        .limit(1)
+    : [];
+  const blockedUntil = asDate(slot?.blockedUntil);
+  if (
+    blockedUntil &&
+    blockedUntil.getTime() - Date.now() > OWNER_ALERT_RETRY_AFTER_FAILURE_MS
+  )
+    return "covered";
+  const delivered = await sendOwnerAlertOncePerWindow(
+    securityAlertWindow(category),
+    () =>
+      sendSecurityAlertEmail(
+        { actorKind: "system", category, outcome: "failed", severity: "high" },
+        { queued: true }
+      )
+  );
+  return delivered ? "sent" : false;
+}
+
+/**
+ * Wait before an owner alert that could not be delivered is tried again:
+ * short next to the alerts' windows (30 minutes to a day), so the alert is not
+ * lost for the whole window, and long enough that a flood of requests during a
+ * Resend outage (or a used-up quota) costs one new attempt every few minutes,
+ * not one per request.
+ */
+export const OWNER_ALERT_RETRY_AFTER_FAILURE_MS = 5 * 60 * 1000;
+
+/**
+ * Sends an owner alert at most once per window (CAND-15, ABUS-01, ABUS-02,
+ * REC-08, REC-09). The slot is taken before the email, so simultaneous callers
+ * never send it twice, and settled after it: a delivered alert holds it for
+ * the whole window (blockMs from the delivery); when `send` reports a failure
+ * (Resend down, still rate-limited after its retry, quota used up), it opens
+ * again OWNER_ALERT_RETRY_AFTER_FAILURE_MS later, whatever simultaneous callers
+ * counted meanwhile, and the next caller sends the alert. When `send` reports
+ * null, the alert was not tried (its send slot came too late): it opens again
+ * at once, for the next caller. Returns whether this call delivered it.
+ */
+export async function sendOwnerAlertOncePerWindow(
+  slot: Omit<PersistentRateLimitPolicy, "maxAttempts">,
+  send: () => Promise<boolean | null>
+): Promise<boolean> {
+  const policy = { ...slot, maxAttempts: 1 };
+  const state = await recordPersistentRateLimitAttempt(policy);
+  if (state.blocked || state.attemptCount > 1) return false;
+  const delivered = await send().catch(() => false);
+  const db = await getDb();
+  const now = new Date();
+  await db
+    ?.update(candidateSecurityRateLimits)
+    .set({
+      attemptCount: policy.maxAttempts + 1,
+      blockedUntil: new Date(
+        now.getTime() +
+          (delivered === null
+            ? 0
+            : delivered
+              ? policy.blockMs
+              : OWNER_ALERT_RETRY_AFTER_FAILURE_MS)
+      ),
+      lastAttemptAt: now,
+    })
+    .where(
+      and(
+        eq(candidateSecurityRateLimits.action, policy.action),
+        eq(
+          candidateSecurityRateLimits.subjectHash,
+          hashSecurityValue(policy.subject)
+        )
+      )
+    );
+  return delivered === true;
+}
+
+/**
+ * Resend idempotency key of an owner alert sent at most once a day (ABUS-01,
+ * ABUS-02, REC-08): an attempt Resend took without a clear answer (5xx,
+ * timeout) is tried again under the same key, and Resend does not send it a
+ * second time. Resend keeps a key 24 hours: the key names the day (UTC) of
+ * the attempt, so the attempts of one day share it, and the next alert, sent
+ * at least 24 hours after the previous one was delivered, never meets a key
+ * Resend still keeps. The alert's content must stay the same within the day
+ * (Resend refuses a key reused with another content).
+ */
+export function dailyOwnerAlertIdempotencyKey(
+  action: string,
+  now = new Date()
+) {
+  return `owner-alert-${action}-${now.toISOString().slice(0, 10)}`;
 }
 
 export type PersistentRateLimitPolicy = {
@@ -112,7 +398,12 @@ export type PersistentRateLimitPolicy = {
 };
 
 /** newlyBlocked is true only for the attempt that created the current block. */
-export type PersistentRateLimitState = { attemptCount: number; blockedUntil: Date | null; blocked: boolean; newlyBlocked: boolean };
+export type PersistentRateLimitState = {
+  attemptCount: number;
+  blockedUntil: Date | null;
+  blocked: boolean;
+  newlyBlocked: boolean;
+};
 
 function asDate(value: unknown): Date | null {
   if (value === null || value === undefined) return null;
@@ -137,72 +428,171 @@ function timestampValue(value: Date) {
  * A block created under an older, lower threshold is not kept once the policy
  * is relaxed (attemptCount > maxAttempts is re-checked with the new value).
  */
-export async function recordPersistentRateLimitAttempt(input: PersistentRateLimitPolicy): Promise<PersistentRateLimitState> {
+export async function recordPersistentRateLimitAttempt(
+  input: PersistentRateLimitPolicy
+): Promise<PersistentRateLimitState> {
   const db = await getDb();
   if (!db) throw new Error("candidate_security_database_unavailable");
   const table = candidateSecurityRateLimits;
   const subjectHash = hashSecurityValue(input.subject);
   const now = new Date();
-  const blockedNow = and(isNotNull(table.blockedUntil), gt(table.blockedUntil, now), gt(table.attemptCount, input.maxAttempts));
-  const expiredBlock = and(isNotNull(table.blockedUntil), lte(table.blockedUntil, now));
-  const sameWindow = gt(table.windowStartedAt, new Date(now.getTime() - input.windowMs));
+  const blockedNow = and(
+    isNotNull(table.blockedUntil),
+    gt(table.blockedUntil, now),
+    gt(table.attemptCount, input.maxAttempts)
+  );
+  const expiredBlock = and(
+    isNotNull(table.blockedUntil),
+    lte(table.blockedUntil, now)
+  );
+  const sameWindow = gt(
+    table.windowStartedAt,
+    new Date(now.getTime() - input.windowMs)
+  );
   const nextCount = sql`CASE WHEN ${expiredBlock} THEN 1 WHEN ${sameWindow} THEN ${table.attemptCount} + 1 ELSE 1 END`;
-  const subjectRow = and(eq(table.action, input.action), eq(table.subjectHash, subjectHash));
-  const returning = { attemptCount: table.attemptCount, blockedUntil: table.blockedUntil };
-  const increment = () => db.update(table).set({
-    attemptCount: sql`CASE WHEN ${blockedNow} THEN ${table.attemptCount} ELSE ${nextCount} END`,
-    windowStartedAt: sql`CASE WHEN ${blockedNow} THEN ${table.windowStartedAt} WHEN ${expiredBlock} THEN ${timestampValue(now)} WHEN ${sameWindow} THEN ${table.windowStartedAt} ELSE ${timestampValue(now)} END`,
-    blockedUntil: sql`CASE WHEN ${blockedNow} THEN ${table.blockedUntil} WHEN (${nextCount}) > ${input.maxAttempts} THEN ${timestampValue(new Date(now.getTime() + input.blockMs))} ELSE NULL END`,
-    lastAttemptAt: now,
-  }).where(subjectRow).returning(returning);
+  const subjectRow = and(
+    eq(table.action, input.action),
+    eq(table.subjectHash, subjectHash)
+  );
+  const returning = {
+    attemptCount: table.attemptCount,
+    blockedUntil: table.blockedUntil,
+  };
+  const increment = () =>
+    db
+      .update(table)
+      .set({
+        attemptCount: sql`CASE WHEN ${blockedNow} THEN ${table.attemptCount} ELSE ${nextCount} END`,
+        windowStartedAt: sql`CASE WHEN ${blockedNow} THEN ${table.windowStartedAt} WHEN ${expiredBlock} THEN ${timestampValue(now)} WHEN ${sameWindow} THEN ${table.windowStartedAt} ELSE ${timestampValue(now)} END`,
+        blockedUntil: sql`CASE WHEN ${blockedNow} THEN ${table.blockedUntil} WHEN (${nextCount}) > ${input.maxAttempts} THEN ${timestampValue(new Date(now.getTime() + input.blockMs))} ELSE NULL END`,
+        lastAttemptAt: now,
+      })
+      .where(subjectRow)
+      .returning(returning);
 
   let rows = await increment();
   if (rows.length === 0) {
-    const firstBlock = 1 > input.maxAttempts ? new Date(now.getTime() + input.blockMs) : null;
-    rows = await db.insert(table)
-      .values({ action: input.action, subjectHash, windowStartedAt: now, attemptCount: 1, blockedUntil: firstBlock, lastAttemptAt: now })
+    const firstBlock =
+      1 > input.maxAttempts ? new Date(now.getTime() + input.blockMs) : null;
+    rows = await db
+      .insert(table)
+      .values({
+        action: input.action,
+        subjectHash,
+        windowStartedAt: now,
+        attemptCount: 1,
+        blockedUntil: firstBlock,
+        lastAttemptAt: now,
+      })
       .onConflictDoNothing()
       .returning(returning);
     // Lost the race for the first row: count on the row the other request created.
     if (rows.length === 0) rows = await increment();
   }
   // Several rows can only exist if the unique index is missing; the strictest one wins.
-  const row = rows.reduce((strictest, candidate) => Number(candidate.attemptCount) > Number(strictest.attemptCount) ? candidate : strictest, rows[0]);
+  const row = rows.reduce(
+    (strictest, candidate) =>
+      Number(candidate.attemptCount) > Number(strictest.attemptCount)
+        ? candidate
+        : strictest,
+    rows[0]
+  );
   const attemptCount = Number(row?.attemptCount ?? 1);
   const blockedUntil = asDate(row?.blockedUntil);
-  const blocked = Boolean(blockedUntil && blockedUntil > now && attemptCount > input.maxAttempts);
+  const blocked = Boolean(
+    blockedUntil && blockedUntil > now && attemptCount > input.maxAttempts
+  );
   // A block set by this very statement ends exactly blockMs after this request's clock.
-  const newlyBlocked = blocked && blockedUntil!.getTime() === now.getTime() + input.blockMs;
+  const newlyBlocked =
+    blocked && blockedUntil!.getTime() === now.getTime() + input.blockMs;
   return { attemptCount, blockedUntil, blocked, newlyBlocked };
 }
 
-export async function enforcePersistentRateLimit(input: PersistentRateLimitPolicy): Promise<void> {
+export async function enforcePersistentRateLimit(
+  input: PersistentRateLimitPolicy
+): Promise<void> {
   const state = await recordPersistentRateLimitAttempt(input);
   if (state.blocked) throw new Error("candidate_security_rate_limited");
 }
 
-/** Forgets the counter of a subject (e.g. after a successful sign-in). */
-export async function clearPersistentRateLimit(input: { action: string; subject: string }): Promise<void> {
+/**
+ * Gives back one attempt counted by recordPersistentRateLimitAttempt, for a
+ * request that then failed on our side (storage or database error): only the
+ * requests we accepted use up the budget. A subject already above the
+ * threshold keeps its block.
+ */
+export async function releasePersistentRateLimitAttempt(
+  input: PersistentRateLimitPolicy
+): Promise<void> {
   const db = await getDb();
   if (!db) return;
-  await db.delete(candidateSecurityRateLimits).where(and(
-    eq(candidateSecurityRateLimits.action, input.action),
-    eq(candidateSecurityRateLimits.subjectHash, hashSecurityValue(input.subject)),
-  ));
+  const table = candidateSecurityRateLimits;
+  await db
+    .update(table)
+    .set({ attemptCount: sql`GREATEST(${table.attemptCount} - 1, 0)` })
+    .where(
+      and(
+        eq(table.action, input.action),
+        eq(table.subjectHash, hashSecurityValue(input.subject)),
+        lte(table.attemptCount, input.maxAttempts)
+      )
+    );
 }
 
-export async function isCompromisedPassword(password: string): Promise<boolean> {
-  if (process.env.NODE_ENV === "test") return false;
-  const digest = createHash("sha1").update(password).digest("hex").toUpperCase();
+/** Forgets the counter of a subject (e.g. after a successful sign-in). */
+export async function clearPersistentRateLimit(input: {
+  action: string;
+  subject: string;
+}): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .delete(candidateSecurityRateLimits)
+    .where(
+      and(
+        eq(candidateSecurityRateLimits.action, input.action),
+        eq(
+          candidateSecurityRateLimits.subjectHash,
+          hashSecurityValue(input.subject)
+        )
+      )
+    );
+}
+
+export async function isCompromisedPassword(
+  password: string
+): Promise<boolean> {
+  // Skipped under Vitest only, which sets VITEST=true itself: a NODE_ENV=test set by mistake on a real server keeps the check (CODE-10).
+  if (process.env.VITEST === "true") return false;
+  const digest = createHash("sha1")
+    .update(password)
+    .digest("hex")
+    .toUpperCase();
   const prefix = digest.slice(0, 5);
   const suffix = digest.slice(5);
   const cached = pwnedSuffixCache.get(prefix);
-  if (cached && cached.expiresAt > Date.now()) return cached.suffixes.has(suffix);
-  const response = await fetch(`https://api.pwnedpasswords.com/range/${prefix}`, {
-    headers: { "Add-Padding": "true", "User-Agent": "HippocampusConsulting-CandidateSecurity" },
+  if (cached && cached.expiresAt > Date.now())
+    return cached.suffixes.has(suffix);
+  const response = await fetch(
+    `https://api.pwnedpasswords.com/range/${prefix}`,
+    {
+      headers: {
+        "Add-Padding": "true",
+        "User-Agent": "HippocampusConsulting-CandidateSecurity",
+      },
+    }
+  );
+  if (!response.ok)
+    throw new Error("candidate_password_breach_check_unavailable");
+  const suffixes = new Set(
+    (await response.text())
+      .split("\n")
+      .map(line => line.split(":")[0]?.trim())
+      .filter((value): value is string => Boolean(value))
+  );
+  pwnedSuffixCache.set(prefix, {
+    expiresAt: Date.now() + HIBP_CACHE_TTL_MS,
+    suffixes,
   });
-  if (!response.ok) throw new Error("candidate_password_breach_check_unavailable");
-  const suffixes = new Set((await response.text()).split("\n").map(line => line.split(":")[0]?.trim()).filter((value): value is string => Boolean(value)));
-  pwnedSuffixCache.set(prefix, { expiresAt: Date.now() + HIBP_CACHE_TTL_MS, suffixes });
   return suffixes.has(suffix);
 }

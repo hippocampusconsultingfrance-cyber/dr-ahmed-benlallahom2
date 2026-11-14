@@ -11,7 +11,8 @@ export const siteConfig = {
   // réponse aux emails patients (Reply-To par défaut).
   phone: "+33 9 72 15 24 13",
   email: "executive.office@drahmedbenlallahom.com",
-  linkedin: "https://www.linkedin.com/in/ahmed-ben-lallahom-md-desaic-7a086b13a/",
+  linkedin:
+    "https://www.linkedin.com/in/ahmed-ben-lallahom-md-desaic-7a086b13a/",
 
   // Nom complet et titre
   name: "Dr. Ahmed Ben Lallahom",

@@ -1,9 +1,27 @@
 import { TRPCError } from "@trpc/server";
 import { Resend } from "resend";
+import { startFitsDeadline } from "../processingDeadline";
+import { logError } from "./logError";
+import {
+  reportResendQuotaError,
+  resendDeliveryFailureCode,
+  sendSlotBeforeNewTry,
+  sendWithRateLimitRetry,
+} from "./resendDelivery";
 
 export type NotificationPayload = {
   title: string;
   content: string;
+  /** Where the owner's « Répondre » writes: the visitor of a public form (PUB-09); the owner's mailbox when absent. */
+  replyTo?: string;
+  /**
+   * The record's reference (C…, APT…, CV…), put first in the subject,
+   * « [C…] Contact – Nom » (INTL-11): a search of the mailbox finds it
+   * however long the name.
+   */
+  reference?: string;
+  /** Who wrote (a visitor's name), last in the subject and cut there to about 60 visible characters. */
+  name?: string;
 };
 
 const TITLE_MAX_LENGTH = 1200;
@@ -13,15 +31,116 @@ const trimValue = (value: string): string => value.trim();
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0;
 
-const OWNER_NOTIFICATION_EMAIL = process.env.OWNER_NOTIFICATION_EMAIL?.trim() || "hippocampusconsultingfrance@gmail.com";
-const FROM_EMAIL = "Hippocampus Consulting <recrutement@drahmedbenlallahom.com>";
+const OWNER_NOTIFICATION_EMAIL =
+  process.env.OWNER_NOTIFICATION_EMAIL?.trim() ||
+  "hippocampusconsultingfrance@gmail.com";
+const FROM_EMAIL =
+  "Hippocampus Consulting <recrutement@drahmedbenlallahom.com>";
 let resendClient: Resend | undefined;
 
-function getResendClient(): Resend | undefined {
+/** Resend client of the owner notifications, shared with the public form acknowledgements; undefined without RESEND_API_KEY. */
+export function getResendClient(): Resend | undefined {
   const apiKey = process.env.RESEND_API_KEY?.trim();
   if (!apiKey) return undefined;
   resendClient ??= new Resend(apiKey);
   return resendClient;
+}
+
+/** Visible characters of a name in an owner subject, then of the whole subject (INTL-11). */
+export const OWNER_SUBJECT_NAME_MAX_CHARACTERS = 60;
+const OWNER_SUBJECT_MAX_CHARACTERS = 200;
+
+const graphemes = new Intl.Segmenter("fr", { granularity: "grapheme" });
+
+/**
+ * `text` cut to its first `max` visible characters, « … » included, between
+ * two of them (Intl.Segmenter): an emoji, a ZWJ sequence or a letter and its
+ * accents is never cut in two, as .slice() did with a lone half of an emoji.
+ */
+export function cutToVisibleCharacters(text: string, max: number): string {
+  const characters = Array.from(
+    graphemes.segment(text),
+    ({ segment }) => segment
+  );
+  return characters.length <= max
+    ? text
+    : `${characters
+        .slice(0, max - 1)
+        .join("")
+        .trimEnd()}…`;
+}
+
+// Written as escapes: line breaks and the other control characters (INTL-05).
+const LINE_BREAKS = new RegExp(
+  // eslint-disable-next-line no-control-regex -- control characters are what it replaces
+  "[\\u0000-\\u001F\\u007F-\\u009F\\u2028\\u2029]+",
+  "g"
+);
+const oneLine = (text: string) => text.replace(LINE_BREAKS, " ").trim();
+
+// Written as escapes: the embeddings and overrides (LRE, RLE, PDF, LRO, RLO), closed by PDF, and the
+// isolates (LRI, RLI, FSI, PDI), closed by PDI.
+const DIRECTIONAL_FORMATTING = new RegExp(
+  "[\\u202A-\\u202E\\u2066-\\u2069]",
+  "g"
+);
+const POP_DIRECTIONAL_FORMATTING = "\u202C";
+const POP_DIRECTIONAL_ISOLATE = "\u2069";
+
+/**
+ * `text` with each embedding, override and isolate it opens closed at its
+ * end, and without a closing mark that closes nothing, as the bidirectional
+ * algorithm pairs them (UAX #9: a PDI also closes the embeddings opened
+ * inside its isolate, a PDF never closes past an isolate). The stored name
+ * keeps what cleanTextInput left (INTL-05): its last PDI goes with the
+ * marks at its end even when it closes an isolate, and a name cut in the
+ * subject can lose it too; the subject never leaves an isolate open.
+ */
+function closeDirectionalFormatting(text: string): string {
+  const closers: string[] = [];
+  const kept = text.replace(DIRECTIONAL_FORMATTING, mark => {
+    if (mark === POP_DIRECTIONAL_FORMATTING) {
+      if (closers.at(-1) !== POP_DIRECTIONAL_FORMATTING) return "";
+      closers.pop();
+      return mark;
+    }
+    if (mark === POP_DIRECTIONAL_ISOLATE) {
+      const isolate = closers.lastIndexOf(POP_DIRECTIONAL_ISOLATE);
+      if (isolate < 0) return "";
+      closers.length = isolate;
+      return mark;
+    }
+    closers.push(
+      mark >= "\u2066" ? POP_DIRECTIONAL_ISOLATE : POP_DIRECTIONAL_FORMATTING
+    );
+    return mark;
+  });
+  return kept + closers.reverse().join("");
+}
+
+/**
+ * « [reference] title – name » on one line: a line break in a name (INTL-05)
+ * becomes a space; in the subject, the name is cut to about 60 visible
+ * characters and the subject to 200, both between two characters (INTL-11).
+ * The isolates and embeddings a name opens are closed, after any cut.
+ */
+function ownerNotificationHeading(
+  payload: Pick<NotificationPayload, "title" | "reference" | "name">,
+  cut: boolean
+): string {
+  const reference = payload.reference?.trim()
+    ? `[${oneLine(payload.reference)}] `
+    : "";
+  const name = payload.name?.trim() ? oneLine(payload.name) : "";
+  const shownName = closeDirectionalFormatting(
+    cut ? cutToVisibleCharacters(name, OWNER_SUBJECT_NAME_MAX_CHARACTERS) : name
+  );
+  const heading = `${reference}${oneLine(payload.title)}${name ? ` – ${shownName}` : ""}`;
+  return cut
+    ? closeDirectionalFormatting(
+        cutToVisibleCharacters(heading, OWNER_SUBJECT_MAX_CHARACTERS)
+      )
+    : heading;
 }
 
 function escapeHtml(value: string): string {
@@ -67,38 +186,104 @@ const validatePayload = (input: NotificationPayload): NotificationPayload => {
   return { title, content };
 };
 
-/** Dispatches a private project-owner notification through Resend. */
+/**
+ * The owner notification email itself (sender, owner mailbox, escaped HTML and
+ * plain text). The paid-booking notification sends it with the post-payment
+ * retries (see sendOwnerNotificationEmail). Reply-To: the payload's replyTo,
+ * else the owner's mailbox.
+ */
+export function buildOwnerNotificationEmail(payload: NotificationPayload) {
+  const { content } = validatePayload(payload);
+  // The whole name in the heading of the email; the subject cuts it.
+  const title = ownerNotificationHeading(payload, false);
+  const subject = ownerNotificationHeading(payload, true);
+  return {
+    from: FROM_EMAIL,
+    to: [OWNER_NOTIFICATION_EMAIL],
+    replyTo: payload.replyTo?.trim() || OWNER_NOTIFICATION_EMAIL,
+    subject,
+    // A French document with its title (A11Y-21), in a centred table 600 px
+    // wide that Outlook for Windows keeps too, the content's line breaks as
+    // <br />, which Outlook reads where it ignores white-space (MAIL-10). A word
+    // longer than the screen (a Stripe session's identifier) may break (MAIL-04).
+    html: `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8" /><title>${escapeHtml(subject)}</title></head><body style="margin:0;padding:0;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;"><tr><td align="center"><!--[if mso]><table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" align="center"><tr><td><![endif]--><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;margin:0 auto;border-collapse:collapse;font-family:Arial,sans-serif;color:#0f172a"><tr><td bgcolor="#071827" style="padding:18px 22px;background:#071827;color:#ffffff;border-bottom:3px solid #0891b2"><strong>Hippocampus Consulting</strong></td></tr><tr><td style="padding:24px;border:1px solid #dbe4ee;border-top:0"><h2 style="margin-top:0;color:#0e7490">${escapeHtml(title)}</h2><div style="line-height:1.6;overflow-wrap:anywhere;word-break:break-word">${escapeHtml(content).replace(/\r?\n/g, "<br />")}</div><p style="margin-top:24px;font-size:12px;color:#64748b">Notification privée générée par drahmedbenlallahom.com</p></td></tr></table><!--[if mso]></td></tr></table><![endif]--></td></tr></table></body></html>`,
+    text: `${title}\n\n${content}\n\nNotification privée générée par drahmedbenlallahom.com`,
+  };
+}
+
+/**
+ * Dispatches a private project-owner notification through Resend. As for the
+ * other emails (ABUS-03), Resend's rate limit gets one more send after its
+ * retry-after delay when that delay is short (a few seconds at most, so a
+ * request is not held much longer), and a used-up quota is logged as a
+ * high-severity event.
+ * With an idempotency key, an uncertain answer (network error, timeout, 5xx:
+ * Resend may have taken the email) is asked again once at once under that
+ * key (REC-09): Resend keeps a key only 24 hours, and the caller's own retry,
+ * minutes or a daily pass later, may come once it is forgotten. Sent from a
+ * processing that spaces its sends (the post-payment jobs), that new try
+ * waits for its send slot (ABUS-03).
+ * `stopAtDeadline`: for an alert queued as a post-payment job (refund_owner,
+ * and the failure alert of a post-payment email, queued when it does not go
+ * out), not asked again once the immediate budget of the processing it runs
+ * in is spent, the request it serves having answered (ABUS-03): its job goes
+ * to the queue. Without it (the other alerts, queued nowhere), it is asked
+ * again whatever the time, rather than lost.
+ */
 export async function notifyOwner(
   payload: NotificationPayload,
-  options: { idempotencyKey?: string } = {},
+  options: { idempotencyKey?: string; stopAtDeadline?: boolean } = {}
 ): Promise<boolean> {
-  const { title, content } = validatePayload(payload);
+  const message = buildOwnerNotificationEmail(payload);
   const resend = getResendClient();
   if (!resend) {
-    console.warn("[Notification] Resend is not configured; the database record remains available.");
+    console.warn(
+      "[Notification] Resend is not configured; the database record remains available."
+    );
     return false;
   }
 
-  try {
-    const message = {
-      from: FROM_EMAIL,
-      to: [OWNER_NOTIFICATION_EMAIL],
-      replyTo: OWNER_NOTIFICATION_EMAIL,
-      subject: title.slice(0, 200),
-      html: `<div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;color:#0f172a"><div style="padding:18px 22px;background:#071827;color:#fff;border-bottom:3px solid #0891b2"><strong>Hippocampus Consulting</strong></div><div style="padding:24px;border:1px solid #dbe4ee;border-top:0"><h2 style="margin-top:0;color:#0e7490">${escapeHtml(title)}</h2><div style="white-space:pre-wrap;line-height:1.6">${escapeHtml(content)}</div><p style="margin-top:24px;font-size:12px;color:#64748b">Notification privée générée par drahmedbenlallahom.com</p></div></div>`,
-      text: `${title}\n\n${content}\n\nNotification privée générée par drahmedbenlallahom.com`,
-    };
-    // A stable idempotency key lets a caller retry without a duplicate email.
-    const { error } = options.idempotencyKey
-      ? await resend.emails.send(message, { idempotencyKey: options.idempotencyKey })
-      : await resend.emails.send(message);
-    if (error) {
-      console.warn(`[Notification] Resend rejected the owner notification: ${error.message}`);
-      return false;
+  const { idempotencyKey, stopAtDeadline = false } = options;
+  const attempts = idempotencyKey ? 2 : 1;
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      // A stable idempotency key lets a caller retry without a duplicate email.
+      const { error } = await sendWithRateLimitRetry(() =>
+        idempotencyKey
+          ? resend.emails.send(message, { idempotencyKey })
+          : resend.emails.send(message)
+      );
+      if (!error) return true;
+      // Resend's answer is not an Error: logged under its name, its message without the address it may repeat.
+      logError(
+        "[Notification] Resend rejected the owner notification",
+        Object.assign(new Error(error.message), {
+          name: "ResendError",
+          providerError: error,
+        }),
+        { level: "warn" }
+      );
+      // A used-up quota is logged as a high-severity event. Its owner alert,
+      // refused in turn, logs one more event; the alert's slot, held during
+      // the send, then stops the chain.
+      await reportResendQuotaError(error, "owner_notification");
+      if (
+        attempt >= attempts ||
+        resendDeliveryFailureCode(error) !== "delivery_exception"
+      )
+        return false;
+    } catch {
+      console.warn("[Notification] Owner email delivery failed.");
+      if (attempt >= attempts) return false;
     }
-    return true;
-  } catch {
-    console.warn("[Notification] Owner email delivery failed.");
-    return false;
+    // The new try takes the send slot of the processing it runs in, if any
+    // (ABUS-03), rather than reach Resend right after the first one; an alert
+    // queued nowhere waits for it whatever the time.
+    if (
+      !(await sendSlotBeforeNewTry(
+        stopAtDeadline ? startFitsDeadline : () => true
+      ))
+    )
+      return false;
   }
 }

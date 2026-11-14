@@ -7,29 +7,25 @@ dist/
 build/
 *.dist
 
-# Generated files
+# Generated files: the table scripts/generate-docx-font-metrics.mjs writes, drizzle-kit's snapshots
 *.tsbuildinfo
 coverage/
+server/docxFontMetrics.ts
+drizzle/pg/meta/
+drizzle/legacy-mysql/meta/
 
-# Package files
+# Package files, written by npm and pnpm
 package-lock.json
 pnpm-lock.yaml
+pnpm-workspace.yaml
 
-# Database
-*.db
-*.sqlite
-*.sqlite3
+# Audits and archives, kept as they were written
+docs/audits/
+docs/archive/
 
-# Logs
-*.log
+# Test fixtures and snapshots, compared as they are
+server/testing/fixtures/
+**/__snapshots__/
 
-# Environment files
-.env*
-
-# IDE files
-.vscode/
-.idea/
-
-# OS files
-.DS_Store
-Thumbs.db
+# Copies of the repository that local tools keep
+.claude/
