@@ -602,12 +602,20 @@ Les 169 constats restants ont été triés dans le code actuel. Pour chacun, la 
   - **IA-05** : la balise de données reste neutralisée quelle que soit l'écriture : pleine chasse, caractères invisibles ou d'étiquette, chevrons voisins, entités, lettres cyrilliques ou grecques.
   - **IA-06** : les dates d'un document du coffre ne sont gardées qu'entre 1950 et trente ans plus tard.
   - **IA-07** : ce qui est lu dans la transcription d'un scan est marqué « à contrôler sur le scan ».
-  - **Risque connu (IA-02)** : dans certaines tournures, un nom de langue peut encore se perdre, et la langue de tête suffit alors. Exemples :
-    - une langue inconnue des listes, écrite après des lieux ouverts par un tiret : « Anglais – Dubaï, Darija » ;
-    - une langue écrite après un mot de niveau que la liste n'a pas dans cette langue : « English – read, written, spoken, Darija » ;
-    - une langue jointe sans séparateur reconnu : « Anglais ainsi que wolof ».
+  - **IA-02, tours 7 et 8 (fusionnés le 14 novembre)** :
+    - les mots qui qualifient une langue (compétence, niveau, durée en chiffres ou en lettres, expérience, exigence) sont les mêmes en français, en anglais, en allemand et en chinois : « English – read, written, spoken, Darija » et « Anglais – lu, écrit, parlé, Darija » font tous deux deux exigences ;
+    - les autres noms courants des langues de la table (Castilian, Putonghua, MSA, 阿语…) sont lus comme ces langues ;
+    - une partie qui a son propre tiret, après un « ; » ou une ligne, ouvre une nouvelle exigence : « Arabe – courant ; Wolof – Dakar » en fait deux ;
+    - 和, 及 et 与 se lisent « et » ;
+    - un mot chinois en 话, 文 ou 言 n'est un nom de langue que si son radical nomme une langue, un peuple ou un lieu (上海话, 拉丁文, 藏文, 白话) ; 电话, 论文 ou 方言 restent des mots ordinaires.
 
-    Un septième tour, ciblé sur ces cas, est en cours.
+    Sur 23 040 libellés réalistes en quatre langues, une langue ne se perd plus que dans 50 libellés, contre 2 447 avant ces tours, sans aucun verdict validé qui régresse.
+  - **Risques connus (IA-02)**, à garder en tête pendant la revue humaine, qui reste obligatoire :
+    - un nom de langue qu'aucune liste ne connaît (Darija, Teochew, Tigrinisch…), écrit après des lieux ouverts par un tiret, peut encore se perdre : la langue de tête suffit alors ;
+    - une langue jointe sans séparateur reconnu se perd aussi : « Anglais ainsi que wolof », « English as well as Tagalog » ;
+    - à l'inverse, un mot inconnu écrit après un qualificatif connu devient une exigence que personne ne remplit, par exemple « English – two years of experience, medical terminology » : le candidat qui parle la langue est alors écarté ;
+    - une exigence écrite 白话 (cantonais) n'est remplie ni par 粤语 ni par « Cantonese », et 官话 ne l'est pas par 普通话 ;
+    - les mots de qualification chinois ne sont connus qu'en caractères simplifiés : en caractères traditionnels, un nom de parler suivi de 優先 ou 流暢 peut se perdre.
 - **Laissés à votre décision** : la base réglée à l'heure de Paris (DATA-13, `SHOW timezone` sur Neon) ; les langues écrites en anglais dans l'export en français, qui relèvent du format d'export (INTL-10).
 
 **Vague 3 (fusionnée le 8 novembre)** :
