@@ -876,7 +876,7 @@ describe("langues du recrutement comparées par code (IA-02)", () => {
     }
   });
 
-  it.each(CHINESE_CONTEXTS)("lit %s le nom chinois en 文 ou 话 d’une langue qu’Intl.DisplayNames nomme hors des listes comme une exigence, et 白话, 官话 et 平话 dès qu’ils ouvrent un mot ou suivent un lieu (IA02-R8-NOM-CHINOIS-HORS-LISTES-PERDU)", (_, write) => {
+  it.each(CHINESE_CONTEXTS)("lit %s le nom chinois en 文 ou 话 d’une langue qu’Intl.DisplayNames nomme hors des listes comme une exigence, et 白话, 官话 et 平话 partout où ils finissent un mot (IA02-R8-NOM-CHINOIS-HORS-LISTES-PERDU)", (_, write) => {
     // Before (ebc5768): 拉丁文, 梵文, 巴利文, 平话... were everyday words, and the language was lost after the places a dash opened
     // or after 和, 及, 与; b81633b kept them. X文 and X话 are a language's name when X语 is one: 拉丁语, 梵语, 巴利语, 吴语.
     for (const name of [
@@ -896,6 +896,38 @@ describe("langues du recrutement comparées par code (IA-02)", () => {
     // Before (ebc5768, as b81633b): 恭维话 (compliments: 维 of 维文 at the end of 恭维), 大白话 and 明白话 (plain words), 打官话
     // (officialese) were a language nobody spoke; daf844a and ac75d5a read one requirement met by English.
     for (const word of ["恭维话", "大白话", "明白话", "打官话", "说大白话", "讲明白话"]) {
+      const required = write(word);
+      for (const requirements of [recruitmentLanguageRequirements(required), recruitmentLanguageListRequirements([required])]) {
+        expect(requirements.map(requirement => requirement.text), required).toEqual([required]);
+        expect(meetsRequiredLanguage(["English"], requirements[0]!), required).toBe(true);
+      }
+    }
+  });
+
+  it.each(CHINESE_CONTEXTS)("lit %s 白话, 官话, 平话 ou un peuple d’un caractère après un qualificatif, un verbe ou un lieu qu’aucune liste ne connaît comme une exigence, comme « cantonais local » (IA02-R8B-NOM-CHINOIS-APRES-QUALIFICATIF-PERDU)", (_, write) => {
+    // Before (3df46bb): they were names only where they started a word or followed a listed place, and after 熟悉, 了解, 当地, 本地,
+    // 地道, 标准, 正宗, 湖广, 德宏, 西双版纳, 新 or 老 the language was lost; ebc5768 and b81633b kept them, as « local Cantonese ».
+    for (const [word, name] of [
+      ["熟悉白话", "白话"], ["了解白话", "白话"], ["当地白话", "白话"], ["本地白话", "白话"], ["地道白话", "白话"], ["熟悉白話", "白話"], ["当地官话", "官话"],
+      ["标准官话", "官话"], ["湖广官话", "官话"], ["正宗平话", "平话"], ["德宏傣文", "傣文"], ["西双版纳傣文", "傣文"], ["新傣文", "傣文"], ["熟悉维文", "维文"],
+      ["老瑶文", "瑶文"], ["老瑤文", "瑤文"], ["新蒙文", "蒙文"],
+    ] as const) {
+      const required = write(word);
+      for (const requirements of [recruitmentLanguageRequirements(required), recruitmentLanguageListRequirements([required])]) {
+        expect(requirements, required).toHaveLength(2);
+        expect(requirements.every(requirement => meetsRequiredLanguage(["English"], requirement)), required).toBe(false);
+        expect(requirements.every(requirement => meetsRequiredLanguage(["English", name], requirement)), required).toBe(true);
+      }
+    }
+    for (const required of ["English – Guangzhou, local Cantonese", "Anglais – Canton, cantonais local"]) {
+      expect(recruitmentLanguageRequirements(required), required).toHaveLength(2);
+    }
+  });
+
+  it.each(CHINESE_CONTEXTS)("lit %s 大白话, 明白话, 打官话 et 恭维话, en caractères simplifiés ou traditionnels, comme des mots courants : la liste fermée des exceptions (IA02-R8B-NOM-CHINOIS-APRES-QUALIFICATIF-PERDU)", (_, write) => {
+    // The closed list of everyday words that end as 白话, 官话 or a people of one character does: 大 and 明 before 白话, 打 before
+    // 官话, 恭 before 维. Any other character before them leaves the language's name (above).
+    for (const word of ["大白话", "大白話", "明白话", "明白話", "打官话", "打官話", "恭维话", "恭維話", "说大白话", "说明白话", "不说恭维话"]) {
       const required = write(word);
       for (const requirements of [recruitmentLanguageRequirements(required), recruitmentLanguageListRequirements([required])]) {
         expect(requirements.map(requirement => requirement.text), required).toEqual([required]);

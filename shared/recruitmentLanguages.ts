@@ -228,10 +228,11 @@ const HAN_WORD = new RegExp("^\\p{Script=Han}+$", "u");
  * regions, and the areas and cities whose speech is named after them (上海话,
  * 潮州话, 四川话, 温州话, 潮汕话, 东北话, 莆仙话), IA02-R8: those the groups of
  * Mandarin and of Pinghua are named after too (西南官话, 中原官话, 兰银官话,
- * 桂南平话); then the peoples of China whose script or speech is named after
- * them (蒙文, 维文, 满文, 傣文), a people of one character only where it starts
- * a word or follows a place (below: 维文, 新疆维文, not 恭维话, compliments);
- * then the usual short Chinese names of languages no list knows (印尼语, 越语,
+ * 桂南平话, 北方话); then the peoples of China whose script or speech is
+ * named after them (蒙文, 维文, 满文, 傣文; IA02-R8B: one of a single character
+ * too, wherever it ends what is written before 话, 文 or 言, 新疆维文,
+ * 德宏傣文, 新傣文, but in the everyday words below, 恭维话, compliments); then
+ * the usual short Chinese names of languages no list knows (印尼语, 越语,
  * 缅语, 柬语); each in simplified and traditional characters.
  */
 const CHINESE_PLACE_NAMES =
@@ -253,12 +254,22 @@ const CHINESE_PEOPLE_NAMES = "汉 漢 蒙 藏 维 維 满 滿 苗 彝 壮 壯 �
 const CHINESE_SHORT_LANGUAGE_NAMES = "印尼 越 缅 緬 柬";
 /**
  * The names of a Chinese speech named after none of these: 白话 (白話),
- * Cantonese, 官话 (官話), Mandarin, and (IA02-R8) 平话 (平話), Pinghua. Each is
- * one only where it starts a word or follows a place (below: « 会说白话 »,
- * « 广东白话 », « 西南官话 », « 桂南平话 »), not at the end of another word
- * (大白话, 明白话, plain words; 打官话, officialese).
+ * Cantonese, 官话 (官話), Mandarin, and (IA02-R8) 平话 (平話), Pinghua,
+ * wherever they end a word (会说白话, 熟悉白话, 当地官话, 广东白话, 西南官话,
+ * 桂南平话), but in the everyday words below.
  */
 const CHINESE_SPEECH_NAMES = ["白话", "白話", "官话", "官話", "平话", "平話"];
+/**
+ * IA02-R8B: the everyday words written with one of these names, or with a
+ * people of one character (above) before 话, known by what is written before
+ * their last character: 大白话 and 明白话 (plain words: 大 or 明 before 白话),
+ * 打官话 (officialese: 打 before 官话) and 恭维话 (compliments: 恭 before 维),
+ * in simplified and traditional characters. A closed list, short on purpose:
+ * after any other character the name is the language's (熟悉白话, 当地官话,
+ * 正宗平话, 德宏傣文, 熟悉维文), as « cantonais local » and « local
+ * Cantonese » are.
+ */
+const CHINESE_EVERYDAY_STEMS = ["大白", "明白", "打官", "恭维", "恭維"];
 /** IA02-R8: the Chinese of Intl.DisplayNames, in simplified and in traditional characters (拉丁语, 拉丁文; 斯瓦希里语, 史瓦希里文). */
 const CHINESE_LOCALES = ["zh", "zh-Hant"];
 /**
@@ -1166,28 +1177,24 @@ function chineseLastWord(part: string): "name" | "qualifier" | "other" | "none" 
  * The names a Chinese word that ends with 话, 文 or 言 is a language's name
  * after, as above, read when first asked for: `stems`, those of languages,
  * places and peoples, wherever they end what is written before that
- * character; `places`, those of places; `peoples`, the peoples of one
- * character, only where they start a word or follow a place; `length`, the
- * longest of them.
+ * character; `length`, the longest of them.
  */
-type ChineseSpeechStems = { stems: ReadonlySet<string>; places: ReadonlySet<string>; peoples: ReadonlySet<string>; length: number };
+type ChineseSpeechStems = { stems: ReadonlySet<string>; length: number };
 let chineseSpeechStems: ChineseSpeechStems | undefined;
 
 function readChineseSpeechStems(): ChineseSpeechStems {
   const stems = new Set<string>();
-  const places = new Set<string>();
-  const peoples = new Set<string>();
   let length = 0;
-  const add = (names: Set<string>, name: string) => {
+  const add = (name: string) => {
     if (!HAN_WORD.test(name)) return;
-    names.add(name);
+    stems.add(name);
     length = Math.max(length, name.length);
   };
   // A language's Chinese name without its last character; not 国 of 国语, which ends a word for a country (所在国, 外国), nor
   // what ends with 语, 话, 文 or 言 itself, a word of its own (文言 of 文言文, Literary Chinese, also a literary style).
   const addLanguage = (name: string) => {
     const stem = name.slice(0, -1);
-    if (CHINESE_NAME_ENDINGS.includes(name.at(-1) ?? "") && !COUNTRY_CHARACTERS.includes(stem) && !CHINESE_NAME_ENDINGS.includes(stem.at(-1) ?? "")) add(stems, stem);
+    if (CHINESE_NAME_ENDINGS.includes(name.at(-1) ?? "") && !COUNTRY_CHARACTERS.includes(stem) && !CHINESE_NAME_ENDINGS.includes(stem.at(-1) ?? "")) add(stem);
   };
   otherLanguageNames ??= readOtherLanguageNames();
   [...LANGUAGE_NAMES.map(entry => entry.folded), ...Array.from(otherLanguageNames.keys())].forEach(addLanguage);
@@ -1205,15 +1212,10 @@ function readChineseSpeechStems(): ChineseSpeechStems {
       }
     }
   }
-  CHINESE_SHORT_LANGUAGE_NAMES.split(" ").forEach(name => add(stems, name));
-  for (const name of [...CHINESE_PLACE_NAMES.split(" "), ...TAIWAN_NAMES, ...regionNames("zh").map(region => region.folded)]) {
-    add(stems, name);
-    add(places, name);
-  }
-  // IA02-R8: a people of one character (维, 蒙) ends many a word (恭维, 启蒙); one of more (维吾尔, 傈僳) is read as a place is,
-  // and one whose name is also a language's stem (藏 of 藏语, 满 of 满语, 汉 of 汉语) as that language's.
-  for (const name of CHINESE_PEOPLE_NAMES.split(" ")) add(Array.from(name).length > 1 ? stems : peoples, name);
-  return { stems, places, peoples, length };
+  // IA02-R8B: the places and the peoples, those of one character among them (维, 蒙, 傣), wherever they end that text.
+  [CHINESE_SHORT_LANGUAGE_NAMES, CHINESE_PLACE_NAMES, CHINESE_PEOPLE_NAMES].forEach(names => names.split(" ").forEach(add));
+  [...TAIWAN_NAMES, ...regionNames("zh").map(region => region.folded)].forEach(add);
+  return { stems, length };
 }
 
 /**
@@ -1224,34 +1226,22 @@ function readChineseSpeechStems(): ChineseSpeechStems {
  * IA02-R8: any language Intl.DisplayNames names in Chinese, 拉丁文, 梵文,
  * 巴利文, 吴话), of a country or a region Intl.DisplayNames gives in Chinese
  * (台湾话, 新加坡话, 香港话), of a Chinese province, area or city (上海话,
- * 潮州话, 四川话, 温州话, 东北话), of a people (藏文, 维文; IA02-R8: one of a
- * single character where it starts a word or follows a place, 新疆维文, not
- * 恭维话) or a usual short name (印尼文, 越文), or when it is 白话, 官话 or
- * 平话 starting a word or after a place (会说白话, 广东白话, 西南官话, 桂南平话;
- * IA02-R8: not 大白话, 明白话, 打官话). Any other is an everyday word (电话,
- * 通话, 说话, 论文, 公文, 原文, 发言, 前言, 方言, 文言, 恭维话, 大白话).
+ * 潮州话, 四川话, 温州话, 东北话), of a people (藏文, 维文, 新疆维文, 德宏傣文)
+ * or a usual short name (印尼文, 越文), or when it is 白话, 官话 or 平话
+ * (熟悉白话, 当地官话, 广东白话, 西南官话, 桂南平话); IA02-R8B: but in the
+ * everyday words of the closed list above (大白话, 明白话, 打官话, 恭维话).
+ * Any other is an everyday word (电话, 通话, 说话, 论文, 公文, 原文, 发言,
+ * 前言, 方言, 文言).
  */
 function namesChineseSpeech(folded: string) {
   if (!CHINESE_WORD_ENDINGS.includes(folded.at(-1) ?? "")) return true;
-  chineseSpeechStems ??= readChineseSpeechStems();
-  const { stems, peoples, length } = chineseSpeechStems;
-  const speech = CHINESE_SPEECH_NAMES.find(name => folded.endsWith(name));
-  if (speech && opensChineseName(folded.slice(0, -speech.length))) return true;
   const before = folded.slice(0, -1);
-  for (let size = Math.min(before.length, length); size > 0; size -= 1) {
-    const stem = before.slice(-size);
-    if (stems.has(stem) || (peoples.has(stem) && opensChineseName(before.slice(0, -size)))) return true;
-  }
-  return false;
-}
-
-/** IA02-R8: whether a Chinese name written after this folded text starts a word (above: « 会说白话 », « 维文 ») or follows a place (« 广东白话 », « 新疆维文 »). */
-function opensChineseName(head: string) {
-  if (startsChineseWord(head)) return true;
+  if (CHINESE_EVERYDAY_STEMS.some(stem => before.endsWith(stem))) return false;
+  if (CHINESE_SPEECH_NAMES.some(name => folded.endsWith(name))) return true;
   chineseSpeechStems ??= readChineseSpeechStems();
-  const { places, length } = chineseSpeechStems;
-  for (let size = Math.min(head.length, length); size > 0; size -= 1) {
-    if (places.has(head.slice(-size))) return true;
+  const { stems, length } = chineseSpeechStems;
+  for (let size = Math.min(before.length, length); size > 0; size -= 1) {
+    if (stems.has(before.slice(-size))) return true;
   }
   return false;
 }

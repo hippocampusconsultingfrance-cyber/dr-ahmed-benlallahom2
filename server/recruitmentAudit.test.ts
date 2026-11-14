@@ -183,6 +183,19 @@ describe("recruitment matching profiles", () => {
     }
   });
 
+  it("lit, dans un profil, 白话, 官话 ou un peuple d’un caractère après un qualificatif ou un lieu qu’aucune liste ne connaît comme une exigence, et 大白话 ou 恭维话 comme un mot (IA02-R8B-NOM-CHINOIS-APRES-QUALIFICATIF-PERDU)", () => {
+    const candidate = { score: 70, specialty: "Anesthésie-réanimation", targetCountries: ["Émirats arabes unis"], extractedSkills: [] };
+    const profile = (requiredLanguages: string[]) => ({ targetCountry: null, specialty: null, minimumScore: 0, requiredLanguages: JSON.stringify(requiredLanguages), requiredSkills: null });
+    // Before (3df46bb): the candidate who had English alone was in the profile, 熟悉白话, 当地官话 or 傣文 after 德宏 read as everyday words.
+    for (const [required, name] of [[["英语 – 香港", "熟悉白话"], "白话"], [["英语和当地官话"], "官话"], [["英语 – 德宏", "傣文"], "傣文"], [["英语 – 香港", "德宏傣文"], "傣文"]] as const) {
+      expect(matchesRecruitmentProfile({ ...candidate, languages: ["English"], profile: profile([...required]) }), required.join(", ")).toBe(false);
+      expect(matchesRecruitmentProfile({ ...candidate, languages: ["English", name], profile: profile([...required]) }), required.join(", ")).toBe(true);
+    }
+    for (const required of [["英语 – 迪拜", "大白话"], ["英语和恭维话"]]) {
+      expect(matchesRecruitmentProfile({ ...candidate, languages: ["English"], profile: profile(required) }), required.join(", ")).toBe(true);
+    }
+  });
+
   it("handles malformed JSON safely", () => {
     expect(parseRecruitmentJsonArray("not-json")).toEqual([]);
     expect(parseRecruitmentJsonArray(JSON.stringify(["France", 1, null]))).toEqual(["France"]);

@@ -507,6 +507,21 @@ describe("Candidatures — profil de matching et filtres de la liste (IA-02)", (
     await expectKept("英语和官话", []);
   });
 
+  it("lit 白话, 官话 ou un peuple d’un caractère après un qualificatif ou un lieu qu’aucune liste ne connaît comme une exigence, et 大白话 ou 恭维话 comme un mot : la mission, le profil et le filtre Langue (IA02-R8B-NOM-CHINOIS-APRES-QUALIFICATIF-PERDU)", async () => {
+    seedSpeakers("CVR8BZH", [["Cantonophone", ["English", "白话"]], ["Mandarinophone", ["English", "官话"]], ["Daiphone", ["English", "傣文"]]]);
+    const everyone = ["Anglophone", "Arabophone", "Cantonophone", "Daiphone", "Darijaphone", "Mandarinophone", "Neerlandophone", "Shanghaiphone", "Sinophone", "Teochewphone", "Tigrinophone"];
+    // Before (3df46bb): after 熟悉, 当地 or 标准, or after 德宏, a place no list knows, 白话, 官话 and 傣文 were everyday words, and the
+    // speaker of English alone met the texts; ebc5768 and b81633b kept them, as « English – Guangzhou, local Cantonese ».
+    await expectKept("英语 – 香港，熟悉白话", ["Cantonophone"]);
+    await expectKept("英语和当地官话", ["Mandarinophone"]);
+    await expectKept("英语 – 流利及标准官话", ["Mandarinophone"]);
+    await expectKept("英语 – 德宏，傣文", ["Daiphone"]);
+    await expectKept("英语 – 香港，德宏傣文", ["Daiphone"]);
+    // 大白话 (plain words) and 恭维话 (compliments) are still words, one requirement met by English.
+    await expectKept("英语 – 迪拜，大白话", everyone);
+    await expectKept("英语和恭维话", everyone);
+  });
+
   it("ne lit les langues tirées du CV, et leurs citations, que pour un profil qui exige des langues (IA-02)", async () => {
     seedCandidates(0, 3, 3);
     const [byCountry, byLanguage] = memory.seed(recruitmentMatchProfiles, [

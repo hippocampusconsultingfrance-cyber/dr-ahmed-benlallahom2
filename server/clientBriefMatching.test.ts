@@ -232,6 +232,20 @@ describe("matching mission–candidat", () => {
     }
   });
 
+  it("lit 白话, 官话 ou un peuple d’un caractère après un qualificatif ou un lieu qu’aucune liste ne connaît comme une exigence, et 大白话 ou 恭维话 comme un mot (IA02-R8B-NOM-CHINOIS-APRES-QUALIFICATIF-PERDU)", () => {
+    const candidate = { specialty: "Anesthésie-réanimation", targetCountries: '["Émirats arabes unis"]' };
+    const match = (requiredLanguages: string, declared: string[]) =>
+      computeBriefCandidateMatch({ specialtyNeeded: "Anesthésie-réanimation", country: "Émirats arabes unis", requiredCertifications: null, requiredLanguages }, { ...candidate, languageFacts: languageFacts(JSON.stringify(declared), []) });
+    // Before (3df46bb): English gave 15 language points of 15, 熟悉白话, 当地官话 or 德宏傣文 read as everyday words; ebc5768 and b81633b kept them.
+    for (const [required, name] of [["英语 – 香港，熟悉白话", "白话"], ["英语和当地官话", "官话"], ["英语 – 德宏，傣文", "傣文"], ["英语 – 香港，德宏傣文", "傣文"], ["英語 – 香港，熟悉白話", "白話"]] as const) {
+      expect(match(required, ["English"]).breakdown.languages, required).toBeLessThan(15);
+      expect(match(required, ["English", name]).breakdown.languages, required).toBe(15);
+    }
+    for (const required of ["英语 – 迪拜，大白话", "英语和恭维话"]) {
+      expect(match(required, ["English"]).breakdown.languages, required).toBe(15);
+    }
+  });
+
   it("une certification déclarée par le candidat compte, elle aussi, une fois confirmée", () => {
     const declaredOnly = computeBriefCandidateMatch(brief, { ...anaesthetist, certificationFacts: certificationFacts("ACLS, ATLS", []) });
     expect(declaredOnly.breakdown.certifications).toBe(0);
