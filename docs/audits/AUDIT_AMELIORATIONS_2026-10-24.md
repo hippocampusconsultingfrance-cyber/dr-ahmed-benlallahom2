@@ -685,7 +685,13 @@ Les 169 constats restants ont été triés dans le code actuel. Pour chacun, la 
   - **RGPD-13** : relire l'accusé de réception et l'email au propriétaire (`pnpm emails:preview`), décider de mentionner la prolongation de deux mois (article 12.3), puis mettre à jour `REGISTRE_TRAITEMENTS_CNIL.md` (« un mois après réception, prolongeable de deux mois ») et `docs/PROCEDURE_DEMANDES_RGPD.md` (confirmation par le lien, types Limitation et Retrait du consentement) ;
   - **CI** : rendre obligatoire le job « End-to-end scenarios » après son premier passage vert.
 
-**Vague 6** : à faire. Elle couvre la mise en forme du code et ses règles de style.
+**Vague 6 (fusionnée le 14 novembre)** :
+
+| ID | État | Reste à faire |
+|---|---|---|
+| CODE-04 | ✅ ESLint (règles recommandées d'ESLint et de typescript-eslint, sans celles qui demandent les types, et les deux règles des hooks de React) sur le code, les tests, les scripts, les scénarios, le schéma et les fichiers de configuration ; `pnpm lint` ne tolère aucun avertissement ; chaque remarque est corrigée sans changer de comportement, et une règle n'est désactivée que sur une ligne, avec sa raison. Prettier est appliqué une fois, dans un commit à part (`269e21d`) que `git blame` ignore grâce à `.git-blame-ignore-revs`, puis vérifié par `pnpm format:check`. Les deux tournent dans la CI, qui refuse toute configuration qui les neutraliserait. `.gitattributes` garde les fins de ligne LF, même sur une copie Windows, et Prettier est épinglé à une version exacte, mise à jour seule par Dependabot | Fusionner la PR par un commit de fusion, et non par « squash » ni « rebase », pour garder `269e21d` ; sur un poste, `git config blame.ignoreRevsFile .git-blame-ignore-revs` |
+
+- **Au déploiement** : rien ne change à l'exécution. Une branche ouverte avant la vague 6 doit passer `pnpm format` et `pnpm lint` après sa fusion.
 
 ### À faire de votre côté
 - **Comptes et secrets, tout de suite** :

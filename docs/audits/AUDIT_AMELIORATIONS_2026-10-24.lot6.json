@@ -28,7 +28,7 @@
     },
     {
       "vague": 3,
-      "statut": "à faire",
+      "statut": "fusionnée",
       "unites": [
         "emails-gabarit",
         "admin-finitions",
@@ -39,7 +39,7 @@
     },
     {
       "vague": 4,
-      "statut": "à faire",
+      "statut": "fusionnée",
       "unites": [
         "accueil-i18n",
         "campagnes-email",
@@ -49,7 +49,7 @@
     },
     {
       "vague": 5,
-      "statut": "à faire",
+      "statut": "fusionnée",
       "unites": [
         "intl-pays-fichiers",
         "tarif-heure-paris",
@@ -60,7 +60,7 @@
     },
     {
       "vague": 6,
-      "statut": "à faire",
+      "statut": "fusionnée",
       "unites": [
         "lint-format"
       ]
