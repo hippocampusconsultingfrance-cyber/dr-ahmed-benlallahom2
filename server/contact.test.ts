@@ -1,3 +1,4 @@
+import type { TRPCError } from "@trpc/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { appRouter } from "./routers";
 import { createTestContext } from "./testSupport/trpcContext";
@@ -10,7 +11,15 @@ import { siteConfig } from "../client/src/data/site-config";
 // Emails handed to Resend, which the tests never reach: a stand-in client answers.
 const resend = vi.hoisted(() => ({
   configured: true,
-  send: vi.fn(async (_message: Record<string, unknown>, _options?: { idempotencyKey?: string }): Promise<{ data: { id: string } | null; error: { name: string; message: string; statusCode: number } | null }> => ({ data: { id: "email_1" }, error: null })),
+  send: vi.fn(
+    async (
+      _message: Record<string, unknown>,
+      _options?: { idempotencyKey?: string }
+    ): Promise<{
+      data: { id: string } | null;
+      error: { name: string; message: string; statusCode: number } | null;
+    }> => ({ data: { id: "email_1" }, error: null })
+  ),
 }));
 
 // Mock the database and notification modules
@@ -25,12 +34,13 @@ vi.mock("./db", () => ({
 
 vi.mock("./_core/notification", () => ({
   notifyOwner: vi.fn().mockResolvedValue(true),
-  getResendClient: () => (resend.configured ? { emails: { send: resend.send } } : undefined),
+  getResendClient: () =>
+    resend.configured ? { emails: { send: resend.send } } : undefined,
 }));
 
 // The day's volume is under its cap unless a test says otherwise (ABUS-01).
 vi.mock("./publicFormRateLimit", async importOriginal => ({
-  ...await importOriginal<typeof import("./publicFormRateLimit")>(),
+  ...(await importOriginal<typeof import("./publicFormRateLimit")>()),
   countPublicFormDailyVolume: vi.fn(async () => true),
 }));
 
@@ -141,7 +151,8 @@ describe("contact.submit", () => {
         gdprConsent: 0,
       });
       expect.fail("Should have thrown an error");
-    } catch (error: any) {
+    } catch (caught) {
+      const error = caught as TRPCError;
       expect(error.code).toBe("BAD_REQUEST");
       expect(error.message).toContain("RGPD");
     }
@@ -289,33 +300,45 @@ describe("contrôle anti-robot des formulaires contact et RGPD", () => {
 
   it("refuse un message de contact dont le contrôle Turnstile échoue, sans l’enregistrer ni prévenir le cabinet", async () => {
     const caller = appRouter.createCaller(createTestContext());
-    vi.mocked(verifyCandidateTurnstile).mockRejectedValueOnce(new Error("candidate_turnstile_invalid"));
+    vi.mocked(verifyCandidateTurnstile).mockRejectedValueOnce(
+      new Error("candidate_turnstile_invalid")
+    );
 
-    await expect(caller.contact.submit({
-      name: "Robot",
-      email: "robot@example.com",
-      message: "Message envoyé par un script.",
-      gdprConsent: 1,
-      turnstileToken: "turnstile-token-refused-by-the-mock",
-    })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(
+      caller.contact.submit({
+        name: "Robot",
+        email: "robot@example.com",
+        message: "Message envoyé par un script.",
+        gdprConsent: 1,
+        turnstileToken: "turnstile-token-refused-by-the-mock",
+      })
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
 
-    expect(verifyCandidateTurnstile).toHaveBeenCalledWith(expect.objectContaining({ token: "turnstile-token-refused-by-the-mock" }));
+    expect(verifyCandidateTurnstile).toHaveBeenCalledWith(
+      expect.objectContaining({ token: "turnstile-token-refused-by-the-mock" })
+    );
     expect((await getDb())!.execute).not.toHaveBeenCalled();
     expect(notifyOwner).not.toHaveBeenCalled();
   });
 
   it("refuse une demande RGPD dont le contrôle Turnstile échoue, sans l’enregistrer ni prévenir le cabinet", async () => {
     const caller = appRouter.createCaller(createTestContext());
-    vi.mocked(verifyCandidateTurnstile).mockRejectedValueOnce(new Error("candidate_turnstile_invalid"));
+    vi.mocked(verifyCandidateTurnstile).mockRejectedValueOnce(
+      new Error("candidate_turnstile_invalid")
+    );
 
-    await expect(caller.gdpr.submit({
-      name: "Robot",
-      email: "robot@example.com",
-      requestType: "deletion",
-      turnstileToken: "turnstile-token-refused-by-the-mock",
-    })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(
+      caller.gdpr.submit({
+        name: "Robot",
+        email: "robot@example.com",
+        requestType: "deletion",
+        turnstileToken: "turnstile-token-refused-by-the-mock",
+      })
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
 
-    expect(verifyCandidateTurnstile).toHaveBeenCalledWith(expect.objectContaining({ token: "turnstile-token-refused-by-the-mock" }));
+    expect(verifyCandidateTurnstile).toHaveBeenCalledWith(
+      expect.objectContaining({ token: "turnstile-token-refused-by-the-mock" })
+    );
     expect((await getDb())!.execute).not.toHaveBeenCalled();
     expect(notifyOwner).not.toHaveBeenCalled();
   });
@@ -326,14 +349,33 @@ describe("numéros de suivi des formulaires contact et RGPD", () => {
     const caller = appRouter.createCaller(createTestContext());
     const random = vi.spyOn(Math, "random");
     try {
-      const contacts = await Promise.all(Array.from({ length: 20 }, () => caller.contact.submit({ name: "Jean Dupont", email: "jean@example.com", message: "Bonjour.", gdprConsent: 1 })));
-      const requests = await Promise.all(Array.from({ length: 20 }, () => caller.gdpr.submit({ name: "Jane Smith", email: "jane@example.com", requestType: "access" })));
+      const contacts = await Promise.all(
+        Array.from({ length: 20 }, () =>
+          caller.contact.submit({
+            name: "Jean Dupont",
+            email: "jean@example.com",
+            message: "Bonjour.",
+            gdprConsent: 1,
+          })
+        )
+      );
+      const requests = await Promise.all(
+        Array.from({ length: 20 }, () =>
+          caller.gdpr.submit({
+            name: "Jane Smith",
+            email: "jane@example.com",
+            requestType: "access",
+          })
+        )
+      );
 
       // Twenty submissions in the same millisecond: a timestamp would repeat.
       expect(new Set(contacts.map(result => result.trackingId)).size).toBe(20);
       expect(new Set(requests.map(result => result.trackingId)).size).toBe(20);
-      for (const { trackingId } of contacts) expect(trackingId).toMatch(/^C[0-9A-Z]{12}$/);
-      for (const { trackingId } of requests) expect(trackingId).toMatch(/^G[0-9A-Z]{12}$/);
+      for (const { trackingId } of contacts)
+        expect(trackingId).toMatch(/^C[0-9A-Z]{12}$/);
+      for (const { trackingId } of requests)
+        expect(trackingId).toMatch(/^G[0-9A-Z]{12}$/);
       expect(random).not.toHaveBeenCalled();
     } finally {
       random.mockRestore();
@@ -347,10 +389,22 @@ describe("message de contact : réponse au visiteur, catégorie et accusé de r�
     name: "Votre colis est bloqué https://colis-phish.example",
     email: "victime@example.com",
     phone: "+33 1 23 45 67 89 rappel urgent",
-    message: "Payez sur https://promo-phish.example/fr pour débloquer votre dossier.",
+    message:
+      "Payez sur https://promo-phish.example/fr pour débloquer votre dossier.",
     gdprConsent: 1,
   };
-  const sentEmails = () => resend.send.mock.calls.map(([message, options]) => ({ message: message as { from: string; to: string[]; replyTo: string; subject: string; html: string; text: string }, options }));
+  const sentEmails = () =>
+    resend.send.mock.calls.map(([message, options]) => ({
+      message: message as {
+        from: string;
+        to: string[];
+        replyTo: string;
+        subject: string;
+        html: string;
+        text: string;
+      },
+      options,
+    }));
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -361,10 +415,19 @@ describe("message de contact : réponse au visiteur, catégorie et accusé de r�
 
   it("fait répondre le cabinet au visiteur, et dit dans la notification qui écrit", async () => {
     const caller = appRouter.createCaller(createTestContext());
-    await caller.contact.submit({ ...typed, category: "institution", language: "en" });
-    await caller.contact.submit({ ...typed, email: "sans-categorie@example.com" });
+    await caller.contact.submit({
+      ...typed,
+      category: "institution",
+      language: "en",
+    });
+    await caller.contact.submit({
+      ...typed,
+      email: "sans-categorie@example.com",
+    });
 
-    const [first, second] = vi.mocked(notifyOwner).mock.calls.map(([payload]) => payload);
+    const [first, second] = vi
+      .mocked(notifyOwner)
+      .mock.calls.map(([payload]) => payload);
     expect(first).toMatchObject({ replyTo: "victime@example.com" });
     expect(first!.content).toContain("**Vous êtes:** Établissement");
     expect(second!.content).toContain("**Vous êtes:** Non précisé");
@@ -372,47 +435,89 @@ describe("message de contact : réponse au visiteur, catégorie et accusé de r�
     expect(first!.content).toContain("**Langue de la page:** en");
     expect(second!.content).toContain("**Langue de la page:** Non précisée");
     // The email the owner gets: « Répondre » writes to the visitor, not to the owner's own mailbox.
-    const { buildOwnerNotificationEmail } = await vi.importActual<typeof import("./_core/notification")>("./_core/notification");
-    const ownerEmail = buildOwnerNotificationEmail(first as NotificationPayload);
+    const { buildOwnerNotificationEmail } = await vi.importActual<
+      typeof import("./_core/notification")
+    >("./_core/notification");
+    const ownerEmail = buildOwnerNotificationEmail(
+      first as NotificationPayload
+    );
     expect(ownerEmail.replyTo).toBe("victime@example.com");
     expect(ownerEmail.to).not.toContain("victime@example.com");
-    expect(buildOwnerNotificationEmail({ title: "Alerte", content: "Sans visiteur." }).replyTo).toBe(ownerEmail.to[0]);
+    expect(
+      buildOwnerNotificationEmail({
+        title: "Alerte",
+        content: "Sans visiteur.",
+      }).replyTo
+    ).toBe(ownerEmail.to[0]);
   });
 
   it("met la référence en tête du sujet et relie la notification à l’élément dans l’administration (INTL-11, ADM-09)", async () => {
     const caller = appRouter.createCaller(createTestContext());
-    const contact = await caller.contact.submit({ ...typed, name: "Jeanne Martin" });
-    const request = await caller.gdpr.submit({ name: "Jeanne Martin", email: "jeanne@example.com", requestType: "access" });
+    const contact = await caller.contact.submit({
+      ...typed,
+      name: "Jeanne Martin",
+    });
+    const request = await caller.gdpr.submit({
+      name: "Jeanne Martin",
+      email: "jeanne@example.com",
+      requestType: "access",
+    });
 
-    const [contactPayload, requestPayload] = vi.mocked(notifyOwner).mock.calls.map(([payload]) => payload);
-    const { buildOwnerNotificationEmail } = await vi.importActual<typeof import("./_core/notification")>("./_core/notification");
-    expect(buildOwnerNotificationEmail(contactPayload!).subject).toBe(`[${contact.trackingId}] Contact – Jeanne Martin`);
-    expect(buildOwnerNotificationEmail(requestPayload!).subject).toBe(`[${request.trackingId}] Demande RGPD – Jeanne Martin`);
-    expect(contactPayload!.content).toContain(`**Ouvrir le message:** https://drahmedbenlallahom.com/admin?tab=contacts&ref=${contact.trackingId}`);
-    expect(requestPayload!.content).toContain(`**Ouvrir la demande:** https://drahmedbenlallahom.com/admin?tab=gdpr&ref=${request.trackingId}`);
+    const [contactPayload, requestPayload] = vi
+      .mocked(notifyOwner)
+      .mock.calls.map(([payload]) => payload);
+    const { buildOwnerNotificationEmail } = await vi.importActual<
+      typeof import("./_core/notification")
+    >("./_core/notification");
+    expect(buildOwnerNotificationEmail(contactPayload!).subject).toBe(
+      `[${contact.trackingId}] Contact – Jeanne Martin`
+    );
+    expect(buildOwnerNotificationEmail(requestPayload!).subject).toBe(
+      `[${request.trackingId}] Demande RGPD – Jeanne Martin`
+    );
+    expect(contactPayload!.content).toContain(
+      `**Ouvrir le message:** https://drahmedbenlallahom.com/admin?tab=contacts&ref=${contact.trackingId}`
+    );
+    expect(requestPayload!.content).toContain(
+      `**Ouvrir la demande:** https://drahmedbenlallahom.com/admin?tab=gdpr&ref=${request.trackingId}`
+    );
   });
 
   it("refuse une catégorie inconnue sans rien enregistrer", async () => {
     const caller = appRouter.createCaller(createTestContext());
-    await expect(caller.contact.submit({ ...typed, category: "spam" as never })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(
+      caller.contact.submit({ ...typed, category: "spam" as never })
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
     expect((await getDb())!.execute).not.toHaveBeenCalled();
     expect(resend.send).not.toHaveBeenCalled();
   });
 
   it("envoie un seul accusé, avec la référence, sans recopier le nom, le téléphone ni le message", async () => {
     const caller = appRouter.createCaller(createTestContext());
-    const { trackingId } = await caller.contact.submit({ ...typed, category: "patient" });
+    const { trackingId } = await caller.contact.submit({
+      ...typed,
+      category: "patient",
+    });
 
     expect(sentEmails()).toHaveLength(1);
     const [{ message, options }] = sentEmails();
     expect(options).toEqual({ idempotencyKey: `ack-${trackingId}` });
     expect(message.to).toEqual(["victime@example.com"]);
     expect(message.replyTo).toBe(siteConfig.email);
-    expect(message.subject).toBe(`Votre message a bien été reçu — ${trackingId}`);
+    expect(message.subject).toBe(
+      `Votre message a bien été reçu — ${trackingId}`
+    );
     expect(message.text).toContain(`Référence : ${trackingId}`);
     expect(message.html).toContain(trackingId);
     for (const part of [message.subject, message.html, message.text]) {
-      for (const text of ["colis", "phish", "Payez", "23 45 67", "rappel urgent"]) expect(part).not.toContain(text);
+      for (const text of [
+        "colis",
+        "phish",
+        "Payez",
+        "23 45 67",
+        "rappel urgent",
+      ])
+        expect(part).not.toContain(text);
     }
   });
 
@@ -426,22 +531,36 @@ describe("message de contact : réponse au visiteur, catégorie et accusé de r�
         vi.unstubAllEnvs();
       }
     };
-    await submitWith("Dr Ahmed Ben Lallahom <consultation@drahmedbenlallahom.com>", "secretariat@drahmedbenlallahom.com");
+    await submitWith(
+      "Dr Ahmed Ben Lallahom <consultation@drahmedbenlallahom.com>",
+      "secretariat@drahmedbenlallahom.com"
+    );
     await submitWith("", "");
 
-    expect(sentEmails().map(({ message }) => [message.from, message.replyTo])).toEqual([
-      ["Dr Ahmed Ben Lallahom <consultation@drahmedbenlallahom.com>", "secretariat@drahmedbenlallahom.com"],
+    expect(
+      sentEmails().map(({ message }) => [message.from, message.replyTo])
+    ).toEqual([
+      [
+        "Dr Ahmed Ben Lallahom <consultation@drahmedbenlallahom.com>",
+        "secretariat@drahmedbenlallahom.com",
+      ],
       // Unset: the transactional sender and the site's contact address.
-      ["Hippocampus Consulting <recrutement@drahmedbenlallahom.com>", siteConfig.email],
+      [
+        "Hippocampus Consulting <recrutement@drahmedbenlallahom.com>",
+        siteConfig.email,
+      ],
     ]);
   });
 
   it("écrit l’accusé en anglais pour une page en anglais, allemand ou chinois", async () => {
     const caller = appRouter.createCaller(createTestContext());
-    for (const language of ["en", "de", "zh"] as const) await caller.contact.submit({ ...typed, language });
+    for (const language of ["en", "de", "zh"] as const)
+      await caller.contact.submit({ ...typed, language });
     await caller.contact.submit({ ...typed, language: "fr" });
 
-    expect(sentEmails().map(({ message }) => message.subject.split(" — ")[0])).toEqual([
+    expect(
+      sentEmails().map(({ message }) => message.subject.split(" — ")[0])
+    ).toEqual([
       "Your message has been received",
       "Your message has been received",
       "Your message has been received",
@@ -453,7 +572,9 @@ describe("message de contact : réponse au visiteur, catégorie et accusé de r�
     vi.mocked(countPublicFormDailyVolume).mockResolvedValue(false);
     const caller = appRouter.createCaller(createTestContext());
 
-    await expect(caller.contact.submit(typed)).resolves.toMatchObject({ success: true });
+    await expect(caller.contact.submit(typed)).resolves.toMatchObject({
+      success: true,
+    });
     expect((await getDb())!.execute).toHaveBeenCalledTimes(1);
     expect(resend.send).not.toHaveBeenCalled();
     expect(notifyOwner).not.toHaveBeenCalled();
@@ -463,18 +584,33 @@ describe("message de contact : réponse au visiteur, catégorie et accusé de r�
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const caller = appRouter.createCaller(createTestContext());
 
-    resend.send.mockResolvedValueOnce({ data: null, error: { name: "validation_error", message: "Invalid `to` field", statusCode: 422 } });
-    await expect(caller.contact.submit(typed)).resolves.toMatchObject({ success: true });
+    resend.send.mockResolvedValueOnce({
+      data: null,
+      error: {
+        name: "validation_error",
+        message: "Invalid `to` field",
+        statusCode: 422,
+      },
+    });
+    await expect(caller.contact.submit(typed)).resolves.toMatchObject({
+      success: true,
+    });
     resend.send.mockRejectedValueOnce(new TypeError("fetch failed"));
-    await expect(caller.contact.submit(typed)).resolves.toMatchObject({ success: true });
+    await expect(caller.contact.submit(typed)).resolves.toMatchObject({
+      success: true,
+    });
     resend.configured = false;
-    await expect(caller.contact.submit(typed)).resolves.toMatchObject({ success: true });
+    await expect(caller.contact.submit(typed)).resolves.toMatchObject({
+      success: true,
+    });
 
     expect(resend.send).toHaveBeenCalledTimes(2);
     expect(notifyOwner).toHaveBeenCalledTimes(3);
     // Logged without the visitor's address.
     expect(warn).toHaveBeenCalledTimes(3);
-    expect(warn.mock.calls.flat().join(" ")).not.toContain("victime@example.com");
+    expect(warn.mock.calls.flat().join(" ")).not.toContain(
+      "victime@example.com"
+    );
     warn.mockRestore();
   });
 });

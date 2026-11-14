@@ -1,5 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { Archive, Clock3, Mail, Phone, ShieldCheck, Sparkles, Send, Save, Trash2 } from "lucide-react";
+import {
+  Archive,
+  Clock3,
+  Mail,
+  Phone,
+  ShieldCheck,
+  Sparkles,
+  Send,
+  Save,
+  Trash2,
+} from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import AdminLoadMore from "@/components/AdminLoadMore";
@@ -7,25 +17,64 @@ import AdminSearchField from "@/components/AdminSearchField";
 import { AdminErrorState } from "@/components/AdminStatePanel";
 import AdminStatusBadge from "@/components/AdminStatusBadge";
 import { formatAdminDateTime } from "@/components/adminDateFormat";
-import { adminListCount, adminPageOffsets, ADMIN_PAGE_SIZE, mergeAdminPages, useAdminPageCount } from "@/components/adminPagination";
+import {
+  adminListCount,
+  adminPageOffsets,
+  ADMIN_PAGE_SIZE,
+  mergeAdminPages,
+  useAdminPageCount,
+} from "@/components/adminPagination";
 import { adminSearchStatus, useAdminSearch } from "@/components/adminSearch";
 import { publishedQuestionLanguage } from "@/lib/publishedQuestionLanguage";
 import { toast } from "sonner";
 
 const MIN_PRIVATE_RESPONSE_LENGTH = 20;
 
-type MedicalQuestionStatus = "submitted" | "drafting" | "answered" | "published" | "rejected";
+type MedicalQuestionStatus =
+  | "submitted"
+  | "drafting"
+  | "answered"
+  | "published"
+  | "rejected";
 
 /**
  * ADM-01: the tab opens on the questions to answer (new and drafts), oldest
  * first, so that none waits out of sight behind the newer ones.
  */
 export const MEDICAL_QUESTION_QUEUES = {
-  todo: { label: "À traiter", statuses: ["submitted", "drafting"], order: "oldest", empty: "Aucune question à traiter." },
-  answered: { label: "Répondues", statuses: ["answered", "published"], order: "newest", empty: "Aucune question répondue." },
-  rejected: { label: "Classées sans suite", statuses: ["rejected"], order: "newest", empty: "Aucune question classée sans suite." },
-  all: { label: "Toutes", statuses: undefined, order: "newest", empty: "Aucune question reçue." },
-} as const satisfies Record<string, { label: string; statuses: readonly MedicalQuestionStatus[] | undefined; order: "oldest" | "newest"; empty: string }>;
+  todo: {
+    label: "À traiter",
+    statuses: ["submitted", "drafting"],
+    order: "oldest",
+    empty: "Aucune question à traiter.",
+  },
+  answered: {
+    label: "Répondues",
+    statuses: ["answered", "published"],
+    order: "newest",
+    empty: "Aucune question répondue.",
+  },
+  rejected: {
+    label: "Classées sans suite",
+    statuses: ["rejected"],
+    order: "newest",
+    empty: "Aucune question classée sans suite.",
+  },
+  all: {
+    label: "Toutes",
+    statuses: undefined,
+    order: "newest",
+    empty: "Aucune question reçue.",
+  },
+} as const satisfies Record<
+  string,
+  {
+    label: string;
+    statuses: readonly MedicalQuestionStatus[] | undefined;
+    order: "oldest" | "newest";
+    empty: string;
+  }
+>;
 
 type MedicalQuestionQueue = keyof typeof MEDICAL_QUESTION_QUEUES;
 
@@ -45,10 +94,18 @@ type RejectionReason = keyof typeof REJECTION_REASONS;
  * question (publishedQuestionLanguage), which its card declares to screen readers and names on a
  * page in another language. Said beside the two fields, so that the version is written in it.
  */
-const PUBLIC_VERSION_LANGUAGE_NAMES = { fr: "français", en: "anglais", de: "allemand", zh: "chinois" } as const;
+const PUBLIC_VERSION_LANGUAGE_NAMES = {
+  fr: "français",
+  en: "anglais",
+  de: "allemand",
+  zh: "chinois",
+} as const;
 
-function publicVersionLanguageHint(language: string | null | undefined): string {
-  const name = PUBLIC_VERSION_LANGUAGE_NAMES[publishedQuestionLanguage(language)];
+function publicVersionLanguageHint(
+  language: string | null | undefined
+): string {
+  const name =
+    PUBLIC_VERSION_LANGUAGE_NAMES[publishedQuestionLanguage(language)];
   return `Version publique présentée en ${name}, la langue de la question : rédigez-la en ${name}.`;
 }
 
@@ -67,14 +124,28 @@ const SEND_PUBLICATION = {
  * of the answer and what becomes of the anonymised version. A resend says
  * when the text is no longer the one sent.
  */
-function sendConfirmation(question: { firstName: string; lastName: string; email: string; adminResponse: string | null }, response: string, publication: keyof typeof SEND_PUBLICATION) {
+function sendConfirmation(
+  question: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    adminResponse: string | null;
+  },
+  response: string,
+  publication: keyof typeof SEND_PUBLICATION
+) {
   const text = response.trim().replace(/\s+/g, " ");
-  const excerpt = text.length > SEND_EXCERPT_LENGTH ? `${text.slice(0, SEND_EXCERPT_LENGTH).trimEnd()}…` : text;
+  const excerpt =
+    text.length > SEND_EXCERPT_LENGTH
+      ? `${text.slice(0, SEND_EXCERPT_LENGTH).trimEnd()}…`
+      : text;
   const resend = publication === "resend";
   return [
     `${resend ? "Renvoyer" : "Envoyer"} la réponse par email à ${question.firstName} ${question.lastName} (${question.email}) ?`,
     `« ${excerpt} »`,
-    ...(resend && response.trim() !== question.adminResponse?.trim() ? ["Texte modifié depuis le dernier envoi."] : []),
+    ...(resend && response.trim() !== question.adminResponse?.trim()
+      ? ["Texte modifié depuis le dernier envoi."]
+      : []),
     SEND_PUBLICATION[publication],
   ].join("\n\n");
 }
@@ -86,7 +157,10 @@ function sendConfirmation(question: { firstName: string; lastName: string; email
  * reads it next. Side by side on a desktop, the detail is already next to the
  * list: neither the page nor the focus moves.
  */
-export function revealQuestionDetail(detail: Pick<HTMLElement, "focus" | "scrollIntoView"> | null, view: Pick<Window, "matchMedia"> = window) {
+export function revealQuestionDetail(
+  detail: Pick<HTMLElement, "focus" | "scrollIntoView"> | null,
+  view: Pick<Window, "matchMedia"> = window
+) {
   if (!detail || view.matchMedia("(min-width: 64rem)").matches) return;
   detail.focus({ preventScroll: true });
   detail.scrollIntoView({ block: "start" });
@@ -100,7 +174,8 @@ export function revealQuestionDetail(detail: Pick<HTMLElement, "focus" | "scroll
 function revealLinkedQuestionDetail(detail: HTMLElement | null) {
   if (!detail) return;
   detail.focus({ preventScroll: true });
-  if (!window.matchMedia("(min-width: 64rem)").matches) detail.scrollIntoView({ block: "start" });
+  if (!window.matchMedia("(min-width: 64rem)").matches)
+    detail.scrollIntoView({ block: "start" });
 }
 
 /**
@@ -109,18 +184,52 @@ function revealLinkedQuestionDetail(detail: HTMLElement | null) {
  * answered or set aside since its notification; that question is opened once
  * the list shows it.
  */
-export default function MedicalQuestionsAdminTab({ initialSearch = "" }: { initialSearch?: string } = {}) {
-  const [queue, setQueue] = useState<MedicalQuestionQueue>(initialSearch ? "all" : "todo");
+export default function MedicalQuestionsAdminTab({
+  initialSearch = "",
+}: { initialSearch?: string } = {}) {
+  const [queue, setQueue] = useState<MedicalQuestionQueue>(
+    initialSearch ? "all" : "todo"
+  );
   // ADM-02: patient name, email or the QMED-… reference of the notification email, searched by the server.
-  const { text: searchText, search, setText: setSearchText, clear: clearSearch } = useAdminSearch(initialSearch);
-  const { pageCount, loadMore } = useAdminPageCount(JSON.stringify({ queue, search }));
+  const {
+    text: searchText,
+    search,
+    setText: setSearchText,
+    clear: clearSearch,
+  } = useAdminSearch(initialSearch);
+  const { pageCount, loadMore } = useAdminPageCount(
+    JSON.stringify({ queue, search })
+  );
   const { statuses, order } = MEDICAL_QUESTION_QUEUES[queue];
-  const pages = trpc.useQueries(t => adminPageOffsets(pageCount).map(offset => t.medicalQuestions.admin.list({ statuses: statuses ? [...statuses] : undefined, order, search, limit: ADMIN_PAGE_SIZE, offset })));
-  const { items, total, isLoading, isLoadingMore, error, loadMoreError, retryLoadMore, retry, retrying } = mergeAdminPages(pages);
+  const pages = trpc.useQueries(t =>
+    adminPageOffsets(pageCount).map(offset =>
+      t.medicalQuestions.admin.list({
+        statuses: statuses ? [...statuses] : undefined,
+        order,
+        search,
+        limit: ADMIN_PAGE_SIZE,
+        offset,
+      })
+    )
+  );
+  const {
+    items,
+    total,
+    isLoading,
+    isLoadingMore,
+    error,
+    loadMoreError,
+    retryLoadMore,
+    retry,
+    retrying,
+  } = mergeAdminPages(pages);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const detailRef = useRef<HTMLDivElement>(null);
   // ADM-09: the question a notification's link names, selected once (another one chosen afterwards stays chosen).
-  const linkedQuestionId = initialSearch ? items.find(question => question.trackingId === initialSearch)?.id ?? null : null;
+  const linkedQuestionId = initialSearch
+    ? (items.find(question => question.trackingId === initialSearch)?.id ??
+      null)
+    : null;
   const linkedQuestionOpened = useRef(false);
   useEffect(() => {
     if (linkedQuestionId === null || linkedQuestionOpened.current) return;
@@ -132,7 +241,9 @@ export default function MedicalQuestionsAdminTab({ initialSearch = "" }: { initi
   const [publicQuestion, setPublicQuestion] = useState("");
   const [publicResponse, setPublicResponse] = useState("");
   const [publish, setPublish] = useState(false);
-  const [rejectionReason, setRejectionReason] = useState<RejectionReason | "">("");
+  const [rejectionReason, setRejectionReason] = useState<RejectionReason | "">(
+    ""
+  );
   const selected = trpc.medicalQuestions.admin.get.useQuery(
     { id: selectedId ?? 0 },
     { enabled: selectedId !== null }
@@ -149,37 +260,52 @@ export default function MedicalQuestionsAdminTab({ initialSearch = "" }: { initi
   const improve = trpc.medicalQuestions.admin.improveDraft.useMutation({
     onSuccess: result => {
       setAdminResponse(result.suggestion);
-      toast.success("Proposition IA appliquée : relisez-la avant toute validation.");
+      toast.success(
+        "Proposition IA appliquée : relisez-la avant toute validation."
+      );
     },
     onError: mutationError => toast.error(mutationError.message),
   });
-  const sendValidated = trpc.medicalQuestions.admin.sendValidatedResponse.useMutation({
-    onSuccess: result => {
-      void utils.medicalQuestions.admin.get.invalidate();
-      void utils.medicalQuestions.admin.list.invalidate();
-      // DATA-02: an attempt stopped before its recording, too old to be tried again safely.
-      if (result.unconfirmedSentAt) {
-        toast.warning(`Un envoi du ${formatAdminDateTime(result.unconfirmedSentAt)} s’est interrompu avant d’être enregistré : la personne a peut-être déjà reçu la réponse. Il est enregistré à cette date avec le texte de cet envoi, sans nouvel email : une modification faite depuis n’a été ni envoyée ni conservée. « Renvoyer la réponse » permet un nouvel envoi volontaire.`, { duration: 12_000 });
-        return;
-      }
-      toast.success(result.resent ? "Réponse renvoyée par email." : result.published ? "Réponse envoyée et version anonymisée publiée." : "Réponse envoyée par email.");
-    },
-    onError: mutationError => toast.error(mutationError.message),
-  });
-  const updatePublication = trpc.medicalQuestions.admin.updatePublication.useMutation({
-    onSuccess: () => {
-      void utils.medicalQuestions.admin.get.invalidate();
-      void utils.medicalQuestions.admin.list.invalidate();
-      toast.success("Publication mise à jour, sans nouvel email au patient.");
-    },
-    onError: mutationError => toast.error(mutationError.message),
-  });
+  const sendValidated =
+    trpc.medicalQuestions.admin.sendValidatedResponse.useMutation({
+      onSuccess: result => {
+        void utils.medicalQuestions.admin.get.invalidate();
+        void utils.medicalQuestions.admin.list.invalidate();
+        // DATA-02: an attempt stopped before its recording, too old to be tried again safely.
+        if (result.unconfirmedSentAt) {
+          toast.warning(
+            `Un envoi du ${formatAdminDateTime(result.unconfirmedSentAt)} s’est interrompu avant d’être enregistré : la personne a peut-être déjà reçu la réponse. Il est enregistré à cette date avec le texte de cet envoi, sans nouvel email : une modification faite depuis n’a été ni envoyée ni conservée. « Renvoyer la réponse » permet un nouvel envoi volontaire.`,
+            { duration: 12_000 }
+          );
+          return;
+        }
+        toast.success(
+          result.resent
+            ? "Réponse renvoyée par email."
+            : result.published
+              ? "Réponse envoyée et version anonymisée publiée."
+              : "Réponse envoyée par email."
+        );
+      },
+      onError: mutationError => toast.error(mutationError.message),
+    });
+  const updatePublication =
+    trpc.medicalQuestions.admin.updatePublication.useMutation({
+      onSuccess: () => {
+        void utils.medicalQuestions.admin.get.invalidate();
+        void utils.medicalQuestions.admin.list.invalidate();
+        toast.success("Publication mise à jour, sans nouvel email au patient.");
+      },
+      onError: mutationError => toast.error(mutationError.message),
+    });
   const unpublish = trpc.medicalQuestions.admin.unpublish.useMutation({
     onSuccess: () => {
       setPublish(false);
       void utils.medicalQuestions.admin.get.invalidate();
       void utils.medicalQuestions.admin.list.invalidate();
-      toast.success("La question a été retirée de la bibliothèque publique. Le dossier privé et son journal sont conservés.");
+      toast.success(
+        "La question a été retirée de la bibliothèque publique. Le dossier privé et son journal sont conservés."
+      );
     },
     onError: mutationError => toast.error(mutationError.message),
   });
@@ -187,7 +313,9 @@ export default function MedicalQuestionsAdminTab({ initialSearch = "" }: { initi
     onSuccess: () => {
       void utils.medicalQuestions.admin.get.invalidate();
       void utils.medicalQuestions.admin.list.invalidate();
-      toast.success("Question classée sans suite. Le dossier privé et son journal sont conservés ; enregistrer un brouillon la remet à traiter.");
+      toast.success(
+        "Question classée sans suite. Le dossier privé et son journal sont conservés ; enregistrer un brouillon la remet à traiter."
+      );
     },
     onError: mutationError => toast.error(mutationError.message),
   });
@@ -196,7 +324,9 @@ export default function MedicalQuestionsAdminTab({ initialSearch = "" }: { initi
     onSuccess: () => {
       setSelectedId(null);
       void utils.medicalQuestions.admin.list.invalidate();
-      toast.success("Question supprimée définitivement, avec sa version publique et son journal.");
+      toast.success(
+        "Question supprimée définitivement, avec sa version publique et son journal."
+      );
     },
     onError: mutationError => toast.error(mutationError.message),
   });
@@ -212,11 +342,19 @@ export default function MedicalQuestionsAdminTab({ initialSearch = "" }: { initi
 
   const responseLength = adminResponse.trim().length;
   const responseReady = responseLength >= MIN_PRIVATE_RESPONSE_LENGTH;
-  const remainingCharacters = Math.max(0, MIN_PRIVATE_RESPONSE_LENGTH - responseLength);
-  const missingPublicContent = publish && (!publicQuestion.trim() || !publicResponse.trim());
+  const remainingCharacters = Math.max(
+    0,
+    MIN_PRIVATE_RESPONSE_LENGTH - responseLength
+  );
+  const missingPublicContent =
+    publish && (!publicQuestion.trim() || !publicResponse.trim());
   // ADM-MQ-01: once the answer is sent, the main button cannot email again.
   const alreadySent = Boolean(selected.data?.responseSentAt);
-  const sendDisabled = alreadySent || !responseReady || sendValidated.isPending || missingPublicContent;
+  const sendDisabled =
+    alreadySent ||
+    !responseReady ||
+    sendValidated.isPending ||
+    missingPublicContent;
   // ADM-23: a draft is kept at any length; only the sending asks for the minimum.
   const draftDisabled = responseLength === 0 || saveDraft.isPending;
 
@@ -229,14 +367,27 @@ export default function MedicalQuestionsAdminTab({ initialSearch = "" }: { initi
   function handleSend() {
     if (!selected.data) return;
     if (!responseReady) {
-      toast.error(`La réponse privée doit comporter au moins ${MIN_PRIVATE_RESPONSE_LENGTH} caractères.`);
+      toast.error(
+        `La réponse privée doit comporter au moins ${MIN_PRIVATE_RESPONSE_LENGTH} caractères.`
+      );
       return;
     }
     if (missingPublicContent) {
-      toast.error("La question et la réponse anonymisées sont obligatoires pour publier.");
+      toast.error(
+        "La question et la réponse anonymisées sont obligatoires pour publier."
+      );
       return;
     }
-    if (!window.confirm(sendConfirmation(selected.data, adminResponse, publish ? "publish" : "private"))) return;
+    if (
+      !window.confirm(
+        sendConfirmation(
+          selected.data,
+          adminResponse,
+          publish ? "publish" : "private"
+        )
+      )
+    )
+      return;
     sendValidated.mutate({
       id: selected.data.id,
       adminResponse,
@@ -248,17 +399,33 @@ export default function MedicalQuestionsAdminTab({ initialSearch = "" }: { initi
 
   function handleResend() {
     if (!selected.data || !responseReady) return;
-    if (!window.confirm(sendConfirmation(selected.data, adminResponse, "resend"))) return;
-    sendValidated.mutate({ id: selected.data.id, adminResponse, publicQuestion, publicResponse, publish: false, resend: true });
+    if (
+      !window.confirm(sendConfirmation(selected.data, adminResponse, "resend"))
+    )
+      return;
+    sendValidated.mutate({
+      id: selected.data.id,
+      adminResponse,
+      publicQuestion,
+      publicResponse,
+      publish: false,
+      resend: true,
+    });
   }
 
   function handlePublicationUpdate() {
     if (!selected.data) return;
     if (!publicQuestion.trim() || !publicResponse.trim()) {
-      toast.error("La question et la réponse anonymisées sont obligatoires pour publier.");
+      toast.error(
+        "La question et la réponse anonymisées sont obligatoires pour publier."
+      );
       return;
     }
-    updatePublication.mutate({ id: selected.data.id, publicQuestion, publicResponse });
+    updatePublication.mutate({
+      id: selected.data.id,
+      publicQuestion,
+      publicResponse,
+    });
   }
 
   return (
@@ -267,31 +434,67 @@ export default function MedicalQuestionsAdminTab({ initialSearch = "" }: { initi
         <p className="section-kicker">Service gratuit</p>
         <h2 className="mt-2 font-display text-3xl">Questions médicales</h2>
         <p className="mt-3 text-sm leading-6 text-muted-foreground">
-          Les coordonnées et la question originale restent privées. Aucun envoi ni publication n’est possible sans validation médicale.
+          Les coordonnées et la question originale restent privées. Aucun envoi
+          ni publication n’est possible sans validation médicale.
         </p>
-        <div className="mt-5 flex flex-wrap gap-2" role="group" aria-label="Questions affichées">
-          {(Object.keys(MEDICAL_QUESTION_QUEUES) as MedicalQuestionQueue[]).map(key => (
-            <button
-              type="button"
-              key={key}
-              onClick={() => setQueue(key)}
-              aria-pressed={queue === key}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${queue === key ? "bg-primary text-primary-foreground" : "border border-border bg-card text-muted-foreground hover:text-foreground"}`}
-            >
-              {MEDICAL_QUESTION_QUEUES[key].label}
-            </button>
-          ))}
+        <div
+          className="mt-5 flex flex-wrap gap-2"
+          role="group"
+          aria-label="Questions affichées"
+        >
+          {(Object.keys(MEDICAL_QUESTION_QUEUES) as MedicalQuestionQueue[]).map(
+            key => (
+              <button
+                type="button"
+                key={key}
+                onClick={() => setQueue(key)}
+                aria-pressed={queue === key}
+                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${queue === key ? "bg-primary text-primary-foreground" : "border border-border bg-card text-muted-foreground hover:text-foreground"}`}
+              >
+                {MEDICAL_QUESTION_QUEUES[key].label}
+              </button>
+            )
+          )}
         </div>
-        <AdminSearchField id="medical-questions-search" label="Rechercher une question" placeholder="Nom, prénom, email ou référence QMED-…" value={searchText} onChange={setSearchText} onClear={clearSearch} status={adminSearchStatus(search, { isLoading, error, shown: items.length, total }, "question(s)")} className="mt-4" />
+        <AdminSearchField
+          id="medical-questions-search"
+          label="Rechercher une question"
+          placeholder="Nom, prénom, email ou référence QMED-…"
+          value={searchText}
+          onChange={setSearchText}
+          onClear={clearSearch}
+          status={adminSearchStatus(
+            search,
+            { isLoading, error, shown: items.length, total },
+            "question(s)"
+          )}
+          className="mt-4"
+        />
         {/* Queues and search stay on screen (and keep the focus) while the list loads or fails. */}
         {isLoading ? (
-          <div className="mt-4"><PublicContentSkeleton cards={3} label="Chargement des questions médicales" /></div>
+          <div className="mt-4">
+            <PublicContentSkeleton
+              cards={3}
+              label="Chargement des questions médicales"
+            />
+          </div>
         ) : error ? (
-          <div className="mt-4"><AdminErrorState description={error.message} onRetry={retry} retrying={retrying} headingLevel={3} /></div>
+          <div className="mt-4">
+            <AdminErrorState
+              description={error.message}
+              onRetry={retry}
+              retrying={retrying}
+              headingLevel={3}
+            />
+          </div>
         ) : (
           <>
             <p className="mt-3 wrap-anywhere text-sm text-muted-foreground">
-              {adminListCount(items.length, total, "question(s)")}{search ? ` pour « ${search} »` : ""}{queue === "todo" ? " · de la plus ancienne à la plus récente" : ""}
+              {adminListCount(items.length, total, "question(s)")}
+              {search ? ` pour « ${search} »` : ""}
+              {queue === "todo"
+                ? " · de la plus ancienne à la plus récente"
+                : ""}
             </p>
             <div className="mt-4 space-y-3">
               {items.map(question => (
@@ -306,20 +509,43 @@ export default function MedicalQuestionsAdminTab({ initialSearch = "" }: { initi
                   className={`min-w-0 w-full rounded-2xl border p-4 text-left transition-colors ${selectedId === question.id ? "border-primary bg-primary/10" : "border-border bg-card hover:border-primary/40"}`}
                 >
                   <div className="flex items-center justify-between gap-3">
-                    <span className="min-w-0 truncate font-semibold text-foreground">{question.firstName} {question.lastName}</span>
-                    <AdminStatusBadge kind="medicalQuestion" status={question.status} className="shrink-0" />
+                    <span className="min-w-0 truncate font-semibold text-foreground">
+                      {question.firstName} {question.lastName}
+                    </span>
+                    <AdminStatusBadge
+                      kind="medicalQuestion"
+                      status={question.status}
+                      className="shrink-0"
+                    />
                   </div>
-                  <p className="mt-1 font-mono text-xs text-muted-foreground">{question.trackingId}</p>
-                  <p className="mt-2 line-clamp-2 wrap-anywhere text-sm text-muted-foreground">{question.question}</p>
+                  <p className="mt-1 font-mono text-xs text-muted-foreground">
+                    {question.trackingId}
+                  </p>
+                  <p className="mt-2 line-clamp-2 wrap-anywhere text-sm text-muted-foreground">
+                    {question.question}
+                  </p>
                   <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Clock3 className="h-3.5 w-3.5" />
                     {formatAdminDateTime(question.createdAt)}
                   </p>
                 </button>
               ))}
-              {items.length === 0 && <p className="rounded-2xl border border-border p-5 wrap-anywhere text-muted-foreground">{search ? `Aucune question ne correspond à « ${search} » dans cette liste.` : MEDICAL_QUESTION_QUEUES[queue].empty}</p>}
+              {items.length === 0 && (
+                <p className="rounded-2xl border border-border p-5 wrap-anywhere text-muted-foreground">
+                  {search
+                    ? `Aucune question ne correspond à « ${search} » dans cette liste.`
+                    : MEDICAL_QUESTION_QUEUES[queue].empty}
+                </p>
+              )}
             </div>
-            <AdminLoadMore shown={items.length} total={total} loading={isLoadingMore} onLoadMore={loadMore} error={loadMoreError} onRetry={retryLoadMore} />
+            <AdminLoadMore
+              shown={items.length}
+              total={total}
+              loading={isLoadingMore}
+              onLoadMore={loadMore}
+              error={loadMoreError}
+              onRetry={retryLoadMore}
+            />
           </>
         )}
       </div>
@@ -329,40 +555,89 @@ export default function MedicalQuestionsAdminTab({ initialSearch = "" }: { initi
         screen tall, so that revealQuestionDetail can bring its top under the header even at the end of the
         page: the cookie banner's room at the bottom no longer lengthens the admin's pages (ADM-16).
       */}
-      <div ref={detailRef} tabIndex={-1} role="region" aria-label="Question sélectionnée" className="min-w-0 scroll-mt-28 rounded-3xl border border-border bg-card/50 p-6 wrap-anywhere max-lg:min-h-[calc(100dvh-7rem)] sm:scroll-mt-20">
+      <div
+        ref={detailRef}
+        tabIndex={-1}
+        role="region"
+        aria-label="Question sélectionnée"
+        className="min-w-0 scroll-mt-28 rounded-3xl border border-border bg-card/50 p-6 wrap-anywhere max-lg:min-h-[calc(100dvh-7rem)] sm:scroll-mt-20"
+      >
         {selected.isLoading ? (
           <PublicContentSkeleton cards={1} label="Chargement de la demande" />
         ) : selected.error ? (
           <div className="grid min-h-80 place-items-center text-center">
             <div className="max-w-md space-y-3" role="alert">
-              <p className="font-medium text-destructive">Impossible de charger cette demande privée.</p>
-              <p className="text-sm text-muted-foreground">{selected.error.message}</p>
-              <button type="button" onClick={() => void selected.refetch()} className="rounded-lg border border-primary/40 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/10">Réessayer le chargement</button>
+              <p className="font-medium text-destructive">
+                Impossible de charger cette demande privée.
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {selected.error.message}
+              </p>
+              <button
+                type="button"
+                onClick={() => void selected.refetch()}
+                className="rounded-lg border border-primary/40 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/10"
+              >
+                Réessayer le chargement
+              </button>
             </div>
           </div>
         ) : selected.data ? (
           <div>
             <div className="flex items-center gap-2 text-primary">
               <ShieldCheck className="h-5 w-5" />
-              <span className="text-xs font-semibold uppercase tracking-wider">Données privées — administration uniquement</span>
+              <span className="text-xs font-semibold uppercase tracking-wider">
+                Données privées — administration uniquement
+              </span>
             </div>
-            <h3 className="mt-4 font-display text-2xl">{selected.data.firstName} {selected.data.lastName}</h3>
-            <p className="mt-1 text-sm text-muted-foreground">Référence <span className="font-mono text-foreground">{selected.data.trackingId}</span> · <AdminStatusBadge kind="medicalQuestion" status={selected.data.status} />{selected.data.rejectionReason ? ` (motif : ${REJECTION_REASONS[selected.data.rejectionReason]})` : ""}</p>
+            <h3 className="mt-4 font-display text-2xl">
+              {selected.data.firstName} {selected.data.lastName}
+            </h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Référence{" "}
+              <span className="font-mono text-foreground">
+                {selected.data.trackingId}
+              </span>{" "}
+              ·{" "}
+              <AdminStatusBadge
+                kind="medicalQuestion"
+                status={selected.data.status}
+              />
+              {selected.data.rejectionReason
+                ? ` (motif : ${REJECTION_REASONS[selected.data.rejectionReason]})`
+                : ""}
+            </p>
             <div className="mt-3 grid gap-2 text-sm text-muted-foreground">
-              <span className="flex items-center gap-2"><Mail className="h-4 w-4" />{selected.data.email}</span>
-              <span className="flex items-center gap-2"><Phone className="h-4 w-4" />{selected.data.phone}</span>
+              <span className="flex items-center gap-2">
+                <Mail className="h-4 w-4" />
+                {selected.data.email}
+              </span>
+              <span className="flex items-center gap-2">
+                <Phone className="h-4 w-4" />
+                {selected.data.phone}
+              </span>
             </div>
             <div className="mt-6 rounded-2xl border border-border bg-background/70 p-5">
-              <p className="whitespace-pre-line leading-7 text-foreground">{selected.data.question}</p>
+              <p className="whitespace-pre-line leading-7 text-foreground">
+                {selected.data.question}
+              </p>
             </div>
             {selected.data.responseSentAt && (
-              <p className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-200" role="status">
-                Réponse envoyée le {formatAdminDateTime(selected.data.responseSentAt)}. Un nouvel envoi n’est possible que par « Renvoyer la réponse par email ».
+              <p
+                className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-200"
+                role="status"
+              >
+                Réponse envoyée le{" "}
+                {formatAdminDateTime(selected.data.responseSentAt)}. Un nouvel
+                envoi n’est possible que par « Renvoyer la réponse par email ».
               </p>
             )}
 
             <div className="mt-6 space-y-3">
-              <label className="block text-sm font-medium" htmlFor="medical-question-private-response">
+              <label
+                className="block text-sm font-medium"
+                htmlFor="medical-question-private-response"
+              >
                 Réponse privée envoyée par email
                 <textarea
                   id="medical-question-private-response"
@@ -374,8 +649,13 @@ export default function MedicalQuestionsAdminTab({ initialSearch = "" }: { initi
                   aria-describedby="medical-question-response-requirement"
                 />
               </label>
-              <p id="medical-question-response-requirement" className={`text-xs leading-5 ${responseReady ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}`} aria-live="polite">
-                {responseLength}/{MIN_PRIVATE_RESPONSE_LENGTH} caractères minimum. {validationHint}
+              <p
+                id="medical-question-response-requirement"
+                className={`text-xs leading-5 ${responseReady ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}`}
+                aria-live="polite"
+              >
+                {responseLength}/{MIN_PRIVATE_RESPONSE_LENGTH} caractères
+                minimum. {validationHint}
               </p>
               <button
                 type="button"
@@ -384,32 +664,86 @@ export default function MedicalQuestionsAdminTab({ initialSearch = "" }: { initi
                 className="inline-flex items-center gap-2 rounded-lg border border-primary/40 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/10 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <Sparkles className="h-4 w-4" />
-                {improve.isPending ? "Reformulation…" : "Améliorer la formulation avec IA"}
+                {improve.isPending
+                  ? "Reformulation…"
+                  : "Améliorer la formulation avec IA"}
               </button>
-              <p className="text-xs leading-5 text-muted-foreground">L’IA ne crée pas de réponse médicale : elle reformule uniquement votre brouillon. Relisez toujours avant de valider.</p>
+              <p className="text-xs leading-5 text-muted-foreground">
+                L’IA ne crée pas de réponse médicale : elle reformule uniquement
+                votre brouillon. Relisez toujours avant de valider.
+              </p>
 
-              <p id="medical-question-public-language" className="text-xs leading-5 text-muted-foreground">{publicVersionLanguageHint(selected.data.language)}</p>
-              <label className="block text-sm font-medium" htmlFor="medical-question-public-question">
+              <p
+                id="medical-question-public-language"
+                className="text-xs leading-5 text-muted-foreground"
+              >
+                {publicVersionLanguageHint(selected.data.language)}
+              </p>
+              <label
+                className="block text-sm font-medium"
+                htmlFor="medical-question-public-question"
+              >
                 Question publique anonymisée
-                <textarea id="medical-question-public-question" value={publicQuestion} onChange={event => setPublicQuestion(event.target.value)} rows={3} className="form-control mt-2 block w-full" placeholder="Supprimez tout élément identifiant." aria-describedby="medical-question-public-language" />
+                <textarea
+                  id="medical-question-public-question"
+                  value={publicQuestion}
+                  onChange={event => setPublicQuestion(event.target.value)}
+                  rows={3}
+                  className="form-control mt-2 block w-full"
+                  placeholder="Supprimez tout élément identifiant."
+                  aria-describedby="medical-question-public-language"
+                />
               </label>
-              <label className="block text-sm font-medium" htmlFor="medical-question-public-response">
+              <label
+                className="block text-sm font-medium"
+                htmlFor="medical-question-public-response"
+              >
                 Réponse publique anonymisée
-                <textarea id="medical-question-public-response" value={publicResponse} onChange={event => setPublicResponse(event.target.value)} rows={6} className="form-control mt-2 block w-full" placeholder="Version destinée à la bibliothèque publique." aria-describedby="medical-question-public-language" />
+                <textarea
+                  id="medical-question-public-response"
+                  value={publicResponse}
+                  onChange={event => setPublicResponse(event.target.value)}
+                  rows={6}
+                  className="form-control mt-2 block w-full"
+                  placeholder="Version destinée à la bibliothèque publique."
+                  aria-describedby="medical-question-public-language"
+                />
               </label>
               <label className="flex items-start gap-3 text-sm">
-                <input type="checkbox" checked={publish} disabled={selected.data.publicationConsent !== 1} onChange={event => setPublish(event.target.checked)} className="form-consent-checkbox mt-1" />
-                <span>{alreadySent ? "Version anonymisée publiée" : "Publier la version anonymisée après envoi"} {selected.data.publicationConsent === 1 ? "(accord de publication reçu)" : "(indisponible : aucun accord de publication)"}</span>
+                <input
+                  type="checkbox"
+                  checked={publish}
+                  disabled={selected.data.publicationConsent !== 1}
+                  onChange={event => setPublish(event.target.checked)}
+                  className="form-consent-checkbox mt-1"
+                />
+                <span>
+                  {alreadySent
+                    ? "Version anonymisée publiée"
+                    : "Publier la version anonymisée après envoi"}{" "}
+                  {selected.data.publicationConsent === 1
+                    ? "(accord de publication reçu)"
+                    : "(indisponible : aucun accord de publication)"}
+                </span>
               </label>
               <div className="flex flex-wrap gap-3 pt-1">
                 <button
                   type="button"
-                  onClick={() => saveDraft.mutate({ id: selected.data!.id, adminResponse, publicQuestion, publicResponse })}
+                  onClick={() =>
+                    saveDraft.mutate({
+                      id: selected.data!.id,
+                      adminResponse,
+                      publicQuestion,
+                      publicResponse,
+                    })
+                  }
                   disabled={draftDisabled}
                   className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-muted disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <Save className="h-4 w-4" />
-                  {saveDraft.isPending ? "Enregistrement…" : "Enregistrer le brouillon"}
+                  {saveDraft.isPending
+                    ? "Enregistrement…"
+                    : "Enregistrer le brouillon"}
                 </button>
                 <button
                   type="button"
@@ -418,7 +752,13 @@ export default function MedicalQuestionsAdminTab({ initialSearch = "" }: { initi
                   className="cta-primary inline-flex items-center gap-2 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <Send className="h-4 w-4" />
-                  {alreadySent ? "Réponse déjà envoyée" : sendValidated.isPending ? "Envoi…" : publish ? "Valider, envoyer et publier" : "Valider et envoyer"}
+                  {alreadySent
+                    ? "Réponse déjà envoyée"
+                    : sendValidated.isPending
+                      ? "Envoi…"
+                      : publish
+                        ? "Valider, envoyer et publier"
+                        : "Valider et envoyer"}
                 </button>
                 {alreadySent && selected.data.publicationConsent === 1 && (
                   <button
@@ -427,7 +767,11 @@ export default function MedicalQuestionsAdminTab({ initialSearch = "" }: { initi
                     disabled={updatePublication.isPending}
                     className="inline-flex items-center gap-2 rounded-lg border border-primary/40 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/10 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    {updatePublication.isPending ? "Mise à jour…" : selected.data.status === "published" ? "Mettre à jour la publication" : "Publier la version anonymisée"}
+                    {updatePublication.isPending
+                      ? "Mise à jour…"
+                      : selected.data.status === "published"
+                        ? "Mettre à jour la publication"
+                        : "Publier la version anonymisée"}
                   </button>
                 )}
                 {alreadySent && (
@@ -437,43 +781,75 @@ export default function MedicalQuestionsAdminTab({ initialSearch = "" }: { initi
                     disabled={!responseReady || sendValidated.isPending}
                     className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-muted disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    {sendValidated.isPending ? "Envoi…" : "Renvoyer la réponse par email"}
+                    {sendValidated.isPending
+                      ? "Envoi…"
+                      : "Renvoyer la réponse par email"}
                   </button>
                 )}
                 {selected.data.status === "published" && (
                   <button
                     type="button"
                     onClick={() => {
-                      if (window.confirm("Retirer cette question de la bibliothèque publique ? La réponse privée, les coordonnées et le journal d’audit resteront conservés.")) {
+                      if (
+                        window.confirm(
+                          "Retirer cette question de la bibliothèque publique ? La réponse privée, les coordonnées et le journal d’audit resteront conservés."
+                        )
+                      ) {
                         unpublish.mutate({ id: selected.data!.id });
                       }
                     }}
                     disabled={unpublish.isPending}
                     className="inline-flex items-center gap-2 rounded-lg border border-destructive/60 px-4 py-2 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    {unpublish.isPending ? "Retrait…" : "Retirer de la bibliothèque publique"}
+                    {unpublish.isPending
+                      ? "Retrait…"
+                      : "Retirer de la bibliothèque publique"}
                   </button>
                 )}
                 {!alreadySent && selected.data.status !== "rejected" && (
                   <>
-                    <label className="inline-flex items-center gap-2 text-sm text-muted-foreground" htmlFor="medical-question-rejection-reason">
+                    <label
+                      className="inline-flex items-center gap-2 text-sm text-muted-foreground"
+                      htmlFor="medical-question-rejection-reason"
+                    >
                       Motif du classement
                       <select
                         id="medical-question-rejection-reason"
                         value={rejectionReason}
-                        onChange={event => setRejectionReason(event.target.value as RejectionReason | "")}
+                        onChange={event =>
+                          setRejectionReason(
+                            event.target.value as RejectionReason | ""
+                          )
+                        }
                         className="h-9 rounded-md border border-border bg-background px-2 text-sm text-foreground"
                       >
                         <option value="">Sans motif</option>
-                        {(Object.keys(REJECTION_REASONS) as RejectionReason[]).map(reason => <option key={reason} value={reason}>{REJECTION_REASONS[reason]}</option>)}
+                        {(
+                          Object.keys(REJECTION_REASONS) as RejectionReason[]
+                        ).map(reason => (
+                          <option key={reason} value={reason}>
+                            {REJECTION_REASONS[reason]}
+                          </option>
+                        ))}
                       </select>
                     </label>
                     <button
                       type="button"
                       onClick={() => {
-                        const reason = rejectionReason ? ` (motif : ${REJECTION_REASONS[rejectionReason]})` : "";
-                        if (window.confirm(`Classer sans suite la question ${selected.data!.trackingId}${reason} ? Aucun email n’est envoyé ; la question quitte la liste « À traiter », le dossier privé et son journal sont conservés.`)) {
-                          reject.mutate({ id: selected.data!.id, ...(rejectionReason ? { reason: rejectionReason } : {}) });
+                        const reason = rejectionReason
+                          ? ` (motif : ${REJECTION_REASONS[rejectionReason]})`
+                          : "";
+                        if (
+                          window.confirm(
+                            `Classer sans suite la question ${selected.data!.trackingId}${reason} ? Aucun email n’est envoyé ; la question quitte la liste « À traiter », le dossier privé et son journal sont conservés.`
+                          )
+                        ) {
+                          reject.mutate({
+                            id: selected.data!.id,
+                            ...(rejectionReason
+                              ? { reason: rejectionReason }
+                              : {}),
+                          });
                         }
                       }}
                       disabled={reject.isPending}
@@ -487,7 +863,11 @@ export default function MedicalQuestionsAdminTab({ initialSearch = "" }: { initi
                 <button
                   type="button"
                   onClick={() => {
-                    if (window.confirm(`Supprimer définitivement la question ${selected.data!.trackingId} ? Les coordonnées, la question, la réponse, la version publique éventuelle et le journal de la question seront effacés. Action irréversible.`)) {
+                    if (
+                      window.confirm(
+                        `Supprimer définitivement la question ${selected.data!.trackingId} ? Les coordonnées, la question, la réponse, la version publique éventuelle et le journal de la question seront effacés. Action irréversible.`
+                      )
+                    ) {
                       remove.mutate({ id: selected.data!.id });
                     }
                   }}
@@ -501,7 +881,9 @@ export default function MedicalQuestionsAdminTab({ initialSearch = "" }: { initi
             </div>
           </div>
         ) : (
-          <div className="grid min-h-80 place-items-center text-center text-muted-foreground">Sélectionnez une question pour consulter ses informations privées.</div>
+          <div className="grid min-h-80 place-items-center text-center text-muted-foreground">
+            Sélectionnez une question pour consulter ses informations privées.
+          </div>
         )}
       </div>
     </section>

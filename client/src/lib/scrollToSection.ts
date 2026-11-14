@@ -4,7 +4,10 @@
  * réservé à l'en-tête fixe (index.css) s'ajouterait à la marge haute que chaque section a déjà, et
  * la section arriverait une centaine de pixels plus bas (PUB-01).
  */
-export function scrollToSectionTop(section: HTMLElement | null, behavior: ScrollBehavior = "smooth") {
+export function scrollToSectionTop(
+  section: HTMLElement | null,
+  behavior: ScrollBehavior = "smooth"
+) {
   if (!section) return;
   window.scrollTo({ top: layoutTop(section), behavior });
 }
@@ -17,6 +20,11 @@ export function scrollToSectionTop(section: HTMLElement | null, behavior: Scroll
  */
 function layoutTop(section: HTMLElement) {
   let top = 0;
-  for (let node: HTMLElement | null = section; node; node = node.offsetParent as HTMLElement | null) top += node.offsetTop;
+  for (
+    let node: HTMLElement | null = section;
+    node;
+    node = node.offsetParent as HTMLElement | null
+  )
+    top += node.offsetTop;
   return top;
 }

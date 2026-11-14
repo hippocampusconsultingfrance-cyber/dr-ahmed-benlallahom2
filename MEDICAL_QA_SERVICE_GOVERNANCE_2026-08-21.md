@@ -9,25 +9,25 @@
 
 Le service permet à une personne de demander gratuitement une explication générale sur l’anesthésie, la préparation d’une opération ou le déroulement habituel d’un parcours de soins. Les réponses doivent rester pédagogiques, générales, prudentes et sans diagnostic individuel, prescription, indication thérapeutique personnalisée ni instruction d’urgence.
 
-| Règle produit | Application concrète |
-|---|---|
-| Pas un service d’urgence | Avertissement permanent, case de compréhension obligatoire et rappel de contacter les secours locaux en cas d’urgence ou de symptôme inquiétant. En France, le 15 et le 112 orientent vers une réponse adaptée en situation urgente. [1] |
-| Pas de consultation à distance | Aucun créneau, ordonnance, diagnostic ou décision clinique n’est généré par le formulaire ni par l’IA. |
-| Réponse humaine obligatoire | L’IA améliore uniquement la clarté et la syntaxe du brouillon rédigé par l’administrateur ; elle ne répond jamais directement à la personne et ne déclenche aucun envoi. |
-| Public seulement après contrôle | Une publication est possible uniquement après validation médicale, anonymisation manuelle et consentement distinct de la personne. |
-| Gratuité transparente | La page indique sans ambiguïté que le service est gratuit et qu’il s’agit d’une réponse d’information. |
+| Règle produit                   | Application concrète                                                                                                                                                                                                                     |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pas un service d’urgence        | Avertissement permanent, case de compréhension obligatoire et rappel de contacter les secours locaux en cas d’urgence ou de symptôme inquiétant. En France, le 15 et le 112 orientent vers une réponse adaptée en situation urgente. [1] |
+| Pas de consultation à distance  | Aucun créneau, ordonnance, diagnostic ou décision clinique n’est généré par le formulaire ni par l’IA.                                                                                                                                   |
+| Réponse humaine obligatoire     | L’IA améliore uniquement la clarté et la syntaxe du brouillon rédigé par l’administrateur ; elle ne répond jamais directement à la personne et ne déclenche aucun envoi.                                                                 |
+| Public seulement après contrôle | Une publication est possible uniquement après validation médicale, anonymisation manuelle et consentement distinct de la personne.                                                                                                       |
+| Gratuité transparente           | La page indique sans ambiguïté que le service est gratuit et qu’il s’agit d’une réponse d’information.                                                                                                                                   |
 
 ## Données, consentement et publication
 
 Le formulaire collecte le prénom, le nom, l’email et le numéro de téléphone afin de traiter la demande et de joindre la personne. Ces coordonnées ne doivent jamais être visibles sur la page publique, dans l’URL, dans l’email de publication ou dans le texte généré pour l’IA. Une question libre peut révéler une donnée de santé : le traitement doit donc être minimisé, inscrit au registre et documenté avec sa base juridique et, le cas échéant, une analyse d’impact. La CNIL rappelle que les données de santé sont sensibles et que le responsable doit pouvoir démontrer sa conformité. [2]
 
-| Donnée | Accès | Publication | Conservation prévue |
-|---|---|---|---|
-| Prénom, nom, email, téléphone | Administrateur autorisé uniquement | Jamais | Durée configurable, avec mécanisme de suppression RGPD existant |
-| Question originale | Administrateur autorisé uniquement | Jamais telle quelle | Durée configurable, avec piste d’audit |
-| Version publique de la question | Administrateur autorisé uniquement avant publication | Oui, après anonymisation et consentement | Tant que publiée ou jusqu’au retrait |
-| Réponse médicale validée | Administrateur autorisé uniquement avant publication | Oui, après validation humaine | Tant que publiée ou jusqu’au retrait |
-| Suggestion de style IA | Administrateur uniquement | Jamais | Non conservée comme décision médicale autonome |
+| Donnée                          | Accès                                                | Publication                              | Conservation prévue                                             |
+| ------------------------------- | ---------------------------------------------------- | ---------------------------------------- | --------------------------------------------------------------- |
+| Prénom, nom, email, téléphone   | Administrateur autorisé uniquement                   | Jamais                                   | Durée configurable, avec mécanisme de suppression RGPD existant |
+| Question originale              | Administrateur autorisé uniquement                   | Jamais telle quelle                      | Durée configurable, avec piste d’audit                          |
+| Version publique de la question | Administrateur autorisé uniquement avant publication | Oui, après anonymisation et consentement | Tant que publiée ou jusqu’au retrait                            |
+| Réponse médicale validée        | Administrateur autorisé uniquement avant publication | Oui, après validation humaine            | Tant que publiée ou jusqu’au retrait                            |
+| Suggestion de style IA          | Administrateur uniquement                            | Jamais                                   | Non conservée comme décision médicale autonome                  |
 
 La personne dispose de deux consentements distincts : le premier pour traiter sa demande et lui répondre par email ; le second, facultatif, pour publier une version anonymisée de la question et de la réponse après validation médicale. Si le second n’est pas accordé, l’administrateur peut envoyer l’email mais le bouton de publication reste indisponible.
 

@@ -14,7 +14,10 @@ const bookingDateTimeFormats = new Map<string, Intl.DateTimeFormat>();
  * slow to build, and the booking grid formats every time slot of the day again
  * whenever the page clock ticks.
  */
-export function getBookingDateTimeFormat(locale: string, options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+export function getBookingDateTimeFormat(
+  locale: string,
+  options: Intl.DateTimeFormatOptions
+): Intl.DateTimeFormat {
   const key = `${locale}|${JSON.stringify(options)}`;
   let format = bookingDateTimeFormats.get(key);
   if (!format) {
@@ -26,7 +29,16 @@ export function getBookingDateTimeFormat(locale: string, options: Intl.DateTimeF
 
 /** "2026-10-29" for an instant in a time zone (the browser's when omitted). */
 function calendarDayIn(date: Date, timeZone?: string): string {
-  const parts = Object.fromEntries(getBookingDateTimeFormat("en-US", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date).map(part => [part.type, part.value]));
+  const parts = Object.fromEntries(
+    getBookingDateTimeFormat("en-US", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    })
+      .formatToParts(date)
+      .map(part => [part.type, part.value])
+  );
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
@@ -35,9 +47,21 @@ function calendarDayIn(date: Date, timeZone?: string): string {
  * the same time as Paris: "22:00", or "ven. 02:30" when the day also differs;
  * null in France, Belgium… `timeZone` defaults to the browser's.
  */
-export function formatVisitorTime(date: Date, locale: string, timeZone?: string): string | null {
-  const format = (options: Intl.DateTimeFormatOptions, zone?: string) => getBookingDateTimeFormat(locale, { ...options, hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: zone }).format(date);
-  if (calendarDayIn(date, timeZone) !== calendarDayIn(date, PARIS_TIME_ZONE)) return format({ weekday: "short" }, timeZone);
+export function formatVisitorTime(
+  date: Date,
+  locale: string,
+  timeZone?: string
+): string | null {
+  const format = (options: Intl.DateTimeFormatOptions, zone?: string) =>
+    getBookingDateTimeFormat(locale, {
+      ...options,
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+      timeZone: zone,
+    }).format(date);
+  if (calendarDayIn(date, timeZone) !== calendarDayIn(date, PARIS_TIME_ZONE))
+    return format({ weekday: "short" }, timeZone);
   const localTime = format({}, timeZone);
   return localTime === format({}, PARIS_TIME_ZONE) ? null : localTime;
 }

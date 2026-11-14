@@ -5,7 +5,10 @@ export const ADMIN_PAGE_SIZE = 50;
 
 /** Offsets of the pages loaded so far: 0, 50, 100… */
 export function adminPageOffsets(pageCount: number): number[] {
-  return Array.from({ length: Math.max(1, pageCount) }, (_, page) => page * ADMIN_PAGE_SIZE);
+  return Array.from(
+    { length: Math.max(1, pageCount) },
+    (_, page) => page * ADMIN_PAGE_SIZE
+  );
 }
 
 type AdminPageQuery<T> = {
@@ -23,7 +26,9 @@ type AdminPageQuery<T> = {
  * of « Charger plus » (later pages: the rows already shown stay on screen);
  * the « Réessayer » of a list that could not be loaded (ADM-10).
  */
-export function mergeAdminPages<T extends { id: number }>(pages: AdminPageQuery<T>[]) {
+export function mergeAdminPages<T extends { id: number }>(
+  pages: AdminPageQuery<T>[]
+) {
   const seen = new Set<number>();
   const items: T[] = [];
   for (const page of pages) {
@@ -53,12 +58,27 @@ export function mergeAdminPages<T extends { id: number }>(pages: AdminPageQuery<
  * row (neither the order nor the filters depend on what changed), the pages
  * already loaded are updated instead of being all fetched again.
  */
-export function updateAdminPageItem<T extends { id: number }>(page: { items: T[]; total: number } | undefined, id: number, changes: Partial<T>) {
-  return page && { ...page, items: page.items.map(item => item.id === id ? { ...item, ...changes } : item) };
+export function updateAdminPageItem<T extends { id: number }>(
+  page: { items: T[]; total: number } | undefined,
+  id: number,
+  changes: Partial<T>
+) {
+  return (
+    page && {
+      ...page,
+      items: page.items.map(item =>
+        item.id === id ? { ...item, ...changes } : item
+      ),
+    }
+  );
 }
 
 /** « 50 sur 302 réservation(s) » while rows remain to load, « 302 réservation(s) » once all are shown. */
-export function adminListCount(shown: number, total: number, noun: string): string {
+export function adminListCount(
+  shown: number,
+  total: number,
+  noun: string
+): string {
   return shown < total ? `${shown} sur ${total} ${noun}` : `${total} ${noun}`;
 }
 
@@ -74,5 +94,8 @@ export function useAdminPageCount(filterKey: string) {
   // the count of the previous ones is forgotten at once.
   if (pages.filterKey !== filterKey) setPages({ filterKey, count: 1 });
   const pageCount = pages.filterKey === filterKey ? pages.count : 1;
-  return { pageCount, loadMore: () => setPages({ filterKey, count: pageCount + 1 }) };
+  return {
+    pageCount,
+    loadMore: () => setPages({ filterKey, count: pageCount + 1 }),
+  };
 }

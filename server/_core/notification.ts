@@ -2,7 +2,12 @@ import { TRPCError } from "@trpc/server";
 import { Resend } from "resend";
 import { startFitsDeadline } from "../processingDeadline";
 import { logError } from "./logError";
-import { reportResendQuotaError, resendDeliveryFailureCode, sendSlotBeforeNewTry, sendWithRateLimitRetry } from "./resendDelivery";
+import {
+  reportResendQuotaError,
+  resendDeliveryFailureCode,
+  sendSlotBeforeNewTry,
+  sendWithRateLimitRetry,
+} from "./resendDelivery";
 
 export type NotificationPayload = {
   title: string;
@@ -26,8 +31,11 @@ const trimValue = (value: string): string => value.trim();
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0;
 
-const OWNER_NOTIFICATION_EMAIL = process.env.OWNER_NOTIFICATION_EMAIL?.trim() || "hippocampusconsultingfrance@gmail.com";
-const FROM_EMAIL = "Hippocampus Consulting <recrutement@drahmedbenlallahom.com>";
+const OWNER_NOTIFICATION_EMAIL =
+  process.env.OWNER_NOTIFICATION_EMAIL?.trim() ||
+  "hippocampusconsultingfrance@gmail.com";
+const FROM_EMAIL =
+  "Hippocampus Consulting <recrutement@drahmedbenlallahom.com>";
 let resendClient: Resend | undefined;
 
 /** Resend client of the owner notifications, shared with the public form acknowledgements; undefined without RESEND_API_KEY. */
@@ -50,17 +58,32 @@ const graphemes = new Intl.Segmenter("fr", { granularity: "grapheme" });
  * accents is never cut in two, as .slice() did with a lone half of an emoji.
  */
 export function cutToVisibleCharacters(text: string, max: number): string {
-  const characters = Array.from(graphemes.segment(text), ({ segment }) => segment);
-  return characters.length <= max ? text : `${characters.slice(0, max - 1).join("").trimEnd()}…`;
+  const characters = Array.from(
+    graphemes.segment(text),
+    ({ segment }) => segment
+  );
+  return characters.length <= max
+    ? text
+    : `${characters
+        .slice(0, max - 1)
+        .join("")
+        .trimEnd()}…`;
 }
 
 // Written as escapes: line breaks and the other control characters (INTL-05).
-const LINE_BREAKS = new RegExp("[\\u0000-\\u001F\\u007F-\\u009F\\u2028\\u2029]+", "g");
+const LINE_BREAKS = new RegExp(
+  // eslint-disable-next-line no-control-regex -- control characters are what it replaces
+  "[\\u0000-\\u001F\\u007F-\\u009F\\u2028\\u2029]+",
+  "g"
+);
 const oneLine = (text: string) => text.replace(LINE_BREAKS, " ").trim();
 
 // Written as escapes: the embeddings and overrides (LRE, RLE, PDF, LRO, RLO), closed by PDF, and the
 // isolates (LRI, RLI, FSI, PDI), closed by PDI.
-const DIRECTIONAL_FORMATTING = new RegExp("[\\u202A-\\u202E\\u2066-\\u2069]", "g");
+const DIRECTIONAL_FORMATTING = new RegExp(
+  "[\\u202A-\\u202E\\u2066-\\u2069]",
+  "g"
+);
 const POP_DIRECTIONAL_FORMATTING = "\u202C";
 const POP_DIRECTIONAL_ISOLATE = "\u2069";
 
@@ -87,7 +110,9 @@ function closeDirectionalFormatting(text: string): string {
       closers.length = isolate;
       return mark;
     }
-    closers.push(mark >= "\u2066" ? POP_DIRECTIONAL_ISOLATE : POP_DIRECTIONAL_FORMATTING);
+    closers.push(
+      mark >= "\u2066" ? POP_DIRECTIONAL_ISOLATE : POP_DIRECTIONAL_FORMATTING
+    );
     return mark;
   });
   return kept + closers.reverse().join("");
@@ -99,12 +124,23 @@ function closeDirectionalFormatting(text: string): string {
  * characters and the subject to 200, both between two characters (INTL-11).
  * The isolates and embeddings a name opens are closed, after any cut.
  */
-function ownerNotificationHeading(payload: Pick<NotificationPayload, "title" | "reference" | "name">, cut: boolean): string {
-  const reference = payload.reference?.trim() ? `[${oneLine(payload.reference)}] ` : "";
+function ownerNotificationHeading(
+  payload: Pick<NotificationPayload, "title" | "reference" | "name">,
+  cut: boolean
+): string {
+  const reference = payload.reference?.trim()
+    ? `[${oneLine(payload.reference)}] `
+    : "";
   const name = payload.name?.trim() ? oneLine(payload.name) : "";
-  const shownName = closeDirectionalFormatting(cut ? cutToVisibleCharacters(name, OWNER_SUBJECT_NAME_MAX_CHARACTERS) : name);
+  const shownName = closeDirectionalFormatting(
+    cut ? cutToVisibleCharacters(name, OWNER_SUBJECT_NAME_MAX_CHARACTERS) : name
+  );
   const heading = `${reference}${oneLine(payload.title)}${name ? ` – ${shownName}` : ""}`;
-  return cut ? closeDirectionalFormatting(cutToVisibleCharacters(heading, OWNER_SUBJECT_MAX_CHARACTERS)) : heading;
+  return cut
+    ? closeDirectionalFormatting(
+        cutToVisibleCharacters(heading, OWNER_SUBJECT_MAX_CHARACTERS)
+      )
+    : heading;
 }
 
 function escapeHtml(value: string): string {
@@ -196,12 +232,14 @@ export function buildOwnerNotificationEmail(payload: NotificationPayload) {
  */
 export async function notifyOwner(
   payload: NotificationPayload,
-  options: { idempotencyKey?: string; stopAtDeadline?: boolean } = {},
+  options: { idempotencyKey?: string; stopAtDeadline?: boolean } = {}
 ): Promise<boolean> {
   const message = buildOwnerNotificationEmail(payload);
   const resend = getResendClient();
   if (!resend) {
-    console.warn("[Notification] Resend is not configured; the database record remains available.");
+    console.warn(
+      "[Notification] Resend is not configured; the database record remains available."
+    );
     return false;
   }
 
@@ -210,17 +248,30 @@ export async function notifyOwner(
   for (let attempt = 1; ; attempt += 1) {
     try {
       // A stable idempotency key lets a caller retry without a duplicate email.
-      const { error } = await sendWithRateLimitRetry(() => idempotencyKey
-        ? resend.emails.send(message, { idempotencyKey })
-        : resend.emails.send(message));
+      const { error } = await sendWithRateLimitRetry(() =>
+        idempotencyKey
+          ? resend.emails.send(message, { idempotencyKey })
+          : resend.emails.send(message)
+      );
       if (!error) return true;
       // Resend's answer is not an Error: logged under its name, its message without the address it may repeat.
-      logError("[Notification] Resend rejected the owner notification", Object.assign(new Error(error.message), { name: "ResendError", providerError: error }), { level: "warn" });
+      logError(
+        "[Notification] Resend rejected the owner notification",
+        Object.assign(new Error(error.message), {
+          name: "ResendError",
+          providerError: error,
+        }),
+        { level: "warn" }
+      );
       // A used-up quota is logged as a high-severity event. Its owner alert,
       // refused in turn, logs one more event; the alert's slot, held during
       // the send, then stops the chain.
       await reportResendQuotaError(error, "owner_notification");
-      if (attempt >= attempts || resendDeliveryFailureCode(error) !== "delivery_exception") return false;
+      if (
+        attempt >= attempts ||
+        resendDeliveryFailureCode(error) !== "delivery_exception"
+      )
+        return false;
     } catch {
       console.warn("[Notification] Owner email delivery failed.");
       if (attempt >= attempts) return false;
@@ -228,6 +279,11 @@ export async function notifyOwner(
     // The new try takes the send slot of the processing it runs in, if any
     // (ABUS-03), rather than reach Resend right after the first one; an alert
     // queued nowhere waits for it whatever the time.
-    if (!(await sendSlotBeforeNewTry(stopAtDeadline ? startFitsDeadline : () => true))) return false;
+    if (
+      !(await sendSlotBeforeNewTry(
+        stopAtDeadline ? startFitsDeadline : () => true
+      ))
+    )
+      return false;
   }
 }

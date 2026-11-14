@@ -22,7 +22,11 @@ export const contentEn = {
   // Hero Section
   hero: {
     greeting: "Dr. Ahmed Ben Lallahom",
-    roles: ["Anesthesiologist-Intensivist", "Healthcare Entrepreneur", "Medical Consultant"],
+    roles: [
+      "Anesthesiologist-Intensivist",
+      "Healthcare Entrepreneur",
+      "Medical Consultant",
+    ],
     description:
       "Anesthesiologist-intensivist and healthcare entrepreneur based in France. Combining clinical excellence with strategic vision to advance medicine worldwide.",
     bookConsultation: "Book a Consultation",
@@ -32,7 +36,8 @@ export const contentEn = {
   about: {
     title: "About",
     text: "Dr. Ahmed Ben Lallahom is a dedicated anesthesiologist-intensivist with over a decade of high-quality clinical experience in France. A Diplomate of the European Society of Anaesthesiology and Intensive Care (DESAIC), he combines deep medical expertise in preoperative assessment, advanced anesthesia, and postoperative care with a vision for healthcare innovation through his various business ventures.",
-    portraitAlt: "Portrait of Dr Ahmed Ben Lallahom, anaesthesiologist and intensive care physician",
+    portraitAlt:
+      "Portrait of Dr Ahmed Ben Lallahom, anaesthesiologist and intensive care physician",
     statsLabels: {
       yearsClinical: "Years Clinical Practice",
       ventures: "Healthcare Ventures",
@@ -45,17 +50,32 @@ export const contentEn = {
   values: {
     title: "Core Values",
     items: [
-      { title: "Patient Safety", description: "Safety is at the heart of every clinical and strategic decision." },
-      { title: "Clinical Excellence", description: "A constant commitment to the highest standards of care." },
-      { title: "Evidence-Based Care", description: "Every practice is guided by science and evidence." },
-      { title: "Healthcare Leadership", description: "Transforming healthcare systems through innovation and management." },
+      {
+        title: "Patient Safety",
+        description:
+          "Safety is at the heart of every clinical and strategic decision.",
+      },
+      {
+        title: "Clinical Excellence",
+        description: "A constant commitment to the highest standards of care.",
+      },
+      {
+        title: "Evidence-Based Care",
+        description: "Every practice is guided by science and evidence.",
+      },
+      {
+        title: "Healthcare Leadership",
+        description:
+          "Transforming healthcare systems through innovation and management.",
+      },
     ],
   },
 
   // Experience Section
   experiences: {
     title: "Leadership & Ventures",
-    subtitle: "CEO, co-founder and practitioner — a career at the intersection of medicine and entrepreneurship",
+    subtitle:
+      "CEO, co-founder and practitioner — a career at the intersection of medicine and entrepreneurship",
     items: [
       {
         company: "Hippocampus Consulting",
@@ -88,8 +108,7 @@ export const contentEn = {
       {
         company: "Sawa4You",
         role: "Co-Founder",
-        description:
-          "International Business & Human Advisory.",
+        description: "International Business & Human Advisory.",
         tags: ["International Consulting", "Business Advisory"],
       },
       {
@@ -105,7 +124,8 @@ export const contentEn = {
   // Services Section
   services: {
     title: "Services",
-    subtitle: "Clinical precision for healthcare systems, founders and high-acuity medical operations.",
+    subtitle:
+      "Clinical precision for healthcare systems, founders and high-acuity medical operations.",
     items: [
       {
         number: "01",
@@ -155,24 +175,95 @@ export const contentEn = {
   // Education Section
   education: {
     title: "Education & Certifications",
-    subtitle: "An academic path of excellence in anaesthesia and intensive care, from the Faculty of Medicine of Tunis to European diplomas.",
+    subtitle:
+      "An academic path of excellence in anaesthesia and intensive care, from the Faculty of Medicine of Tunis to European diplomas.",
     diplomas: [
-      { year: "2025–2026", title: "Certificate in Pain Evaluation and Treatment", institution: "Université de Nantes (in progress)" },
-      { year: "2024", title: "University Diploma in Perioperative Resuscitation in Digestive Surgery", institution: "Université Paris Cité" },
-      { year: "2023", title: "European Diploma in Regional Anaesthesia (RA) and Acute Pain Management", institution: "" },
-      { year: "2022", title: "European Diploma in Anaesthesia and Intensive Care", institution: "" },
-      { year: "2022", title: "University Diploma in Paediatric Anaesthesia Competency Maintenance", institution: "Sorbonne Université" },
-      { year: "2022", title: "University Diploma \"Severe Trauma: First 24 Hours Management\"", institution: "Université Paris-Saclay" },
-      { year: "2021", title: "Laureate of the Knowledge Verification Examinations (PAE)", institution: "Score: 13.83/20" },
-      { year: "2021", title: "University Diploma in Artificial Ventilation", institution: "Université d'Angers" },
-      { year: "2021", title: "University Diploma in Extracorporeal Renal Replacement Techniques", institution: "Université de Strasbourg" },
-      { year: "2020", title: "Inter-University Diploma in Metabolic Resuscitation", institution: "" },
-      { year: "2020", title: "End-of-Specialty Diploma in Anaesthesia and Intensive Care", institution: "" },
-      { year: "2019", title: "Diploma of Specialised Medical Training in Anaesthesia and Intensive Care", institution: "Sorbonne Université" },
-      { year: "2017", title: "State Doctorate in Medicine", institution: "Highest Honours, jury commendation, and nomination for best thesis prize" },
-      { year: "2015–2018", title: "Residency in Anaesthesia and Intensive Care", institution: "" },
-      { year: "2013–2014", title: "Medical Externship at Tunis Hospitals", institution: "" },
-      { year: "2006–2012", title: "Medical Studies", institution: "Faculty of Medicine of Tunis" },
+      {
+        year: "2025–2026",
+        title: "Certificate in Pain Evaluation and Treatment",
+        institution: "Université de Nantes (in progress)",
+      },
+      {
+        year: "2024",
+        title:
+          "University Diploma in Perioperative Resuscitation in Digestive Surgery",
+        institution: "Université Paris Cité",
+      },
+      {
+        year: "2023",
+        title:
+          "European Diploma in Regional Anaesthesia (RA) and Acute Pain Management",
+        institution: "",
+      },
+      {
+        year: "2022",
+        title: "European Diploma in Anaesthesia and Intensive Care",
+        institution: "",
+      },
+      {
+        year: "2022",
+        title:
+          "University Diploma in Paediatric Anaesthesia Competency Maintenance",
+        institution: "Sorbonne Université",
+      },
+      {
+        year: "2022",
+        title: 'University Diploma "Severe Trauma: First 24 Hours Management"',
+        institution: "Université Paris-Saclay",
+      },
+      {
+        year: "2021",
+        title: "Laureate of the Knowledge Verification Examinations (PAE)",
+        institution: "Score: 13.83/20",
+      },
+      {
+        year: "2021",
+        title: "University Diploma in Artificial Ventilation",
+        institution: "Université d'Angers",
+      },
+      {
+        year: "2021",
+        title:
+          "University Diploma in Extracorporeal Renal Replacement Techniques",
+        institution: "Université de Strasbourg",
+      },
+      {
+        year: "2020",
+        title: "Inter-University Diploma in Metabolic Resuscitation",
+        institution: "",
+      },
+      {
+        year: "2020",
+        title: "End-of-Specialty Diploma in Anaesthesia and Intensive Care",
+        institution: "",
+      },
+      {
+        year: "2019",
+        title:
+          "Diploma of Specialised Medical Training in Anaesthesia and Intensive Care",
+        institution: "Sorbonne Université",
+      },
+      {
+        year: "2017",
+        title: "State Doctorate in Medicine",
+        institution:
+          "Highest Honours, jury commendation, and nomination for best thesis prize",
+      },
+      {
+        year: "2015–2018",
+        title: "Residency in Anaesthesia and Intensive Care",
+        institution: "",
+      },
+      {
+        year: "2013–2014",
+        title: "Medical Externship at Tunis Hospitals",
+        institution: "",
+      },
+      {
+        year: "2006–2012",
+        title: "Medical Studies",
+        institution: "Faculty of Medicine of Tunis",
+      },
     ],
   },
 
@@ -189,7 +280,8 @@ export const contentEn = {
       emailPlaceholder: "Your email address",
       message: "Message",
       messagePlaceholder: "How can I help you?",
-      gdprConsent: "I accept the Privacy Policy and authorize the processing of my personal data",
+      gdprConsent:
+        "I accept the Privacy Policy and authorize the processing of my personal data",
       send: "Send",
     },
   },
@@ -198,7 +290,8 @@ export const contentEn = {
   gdpr: {
     title: "GDPR Request",
     subtitle: "Exercise your data protection rights",
-    description: "You have the right to access, rectify, delete your personal data or object to its processing. Fill out this form to submit your request.",
+    description:
+      "You have the right to access, rectify, delete your personal data or object to its processing. Fill out this form to submit your request.",
     form: {
       name: "Full Name",
       namePlaceholder: "Your full name",
@@ -219,18 +312,22 @@ export const contentEn = {
       description: "Description of your request",
       descriptionPlaceholder: "Describe your GDPR request in detail...",
       send: "Submit Request",
-      successMessage: "Your GDPR request has been received. We will answer within one month of its receipt. You will receive your reference by email, with a link to confirm your address.",
+      successMessage:
+        "Your GDPR request has been received. We will answer within one month of its receipt. You will receive your reference by email, with a link to confirm your address.",
     },
     // Link confirming the address, sent with the acknowledgement (RGPD-13).
     confirmation: {
       title: "Confirm your email address",
-      description: "Click the button below to confirm that the address of your GDPR request is yours.",
+      description:
+        "Click the button below to confirm that the address of your GDPR request is yours.",
       button: "Confirm my address",
       confirming: "Confirming...",
       confirmedTitle: "Address confirmed",
-      confirmed: "Thank you: the address of your request {reference} is confirmed. We will answer within one month of its receipt.",
+      confirmed:
+        "Thank you: the address of your request {reference} is confirmed. We will answer within one month of its receipt.",
       used: "This link has already been used: the address of your request is already confirmed.",
-      invalid: "This confirmation link is invalid or has expired. To add to your request, reply to the acknowledgement email quoting your reference.",
+      invalid:
+        "This confirmation link is invalid or has expired. To add to your request, reply to the acknowledgement email quoting your reference.",
       error: "The confirmation could not be recorded. Please try again.",
       newRequest: "Make another request",
     },

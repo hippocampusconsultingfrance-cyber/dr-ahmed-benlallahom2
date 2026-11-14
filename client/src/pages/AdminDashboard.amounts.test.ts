@@ -1,13 +1,21 @@
 import { createElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { elementsOf, renderStateful, resetStatefulHooks } from "@/testing/statefulRender";
+import {
+  elementsOf,
+  renderStateful,
+  resetStatefulHooks,
+} from "@/testing/statefulRender";
 
 // Montants de l’administration écrits comme les emails et le toast du
 // remboursement : « 100,00 € », pas « 100.00€ » (carte d’un rendez-vous, tuile
 // des revenus, messages de remboursement, données d’une personne).
 
-vi.mock("react", async importOriginal => (await import("@/testing/statefulRender")).withStatefulHooks(await importOriginal()));
+vi.mock("react", async importOriginal =>
+  (await import("@/testing/statefulRender")).withStatefulHooks(
+    await importOriginal()
+  )
+);
 
 const view = vi.hoisted(() => ({
   // The revenue of the current month, the one of the previous month being 100.00.
@@ -15,39 +23,75 @@ const view = vi.hoisted(() => ({
   items: [] as Array<Record<string, unknown>>,
 }));
 
-const mutation = () => ({ useMutation: () => ({ mutate: vi.fn(), isPending: false }) });
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() } }));
+const mutation = () => ({
+  useMutation: () => ({ mutate: vi.fn(), isPending: false }),
+});
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
+}));
 vi.mock("@/components/AdminAttentionPanel", () => ({ default: () => null }));
-vi.mock("@/components/RecruitmentDashboardPanel", () => ({ default: () => null }));
+vi.mock("@/components/RecruitmentDashboardPanel", () => ({
+  default: () => null,
+}));
 vi.mock("@/lib/trpc", () => {
   const invalidate = { invalidate: vi.fn() };
   return {
     trpc: {
       useUtils: () => ({
-        admin: { appointments: { list: invalidate }, stats: invalidate, attention: invalidate, contacts: { list: invalidate }, recruitment: { list: invalidate } },
+        admin: {
+          appointments: { list: invalidate },
+          stats: invalidate,
+          attention: invalidate,
+          contacts: { list: invalidate },
+          recruitment: { list: invalidate },
+        },
         medicalQuestions: { admin: { list: invalidate } },
       }),
-      useQueries: (build: (t: unknown) => unknown[]) => build({ admin: { appointments: { list: (input: unknown) => input } } })
-        .map(() => ({ data: { items: view.items, total: view.items.length }, isLoading: false, error: null, refetch: vi.fn() })),
+      useQueries: (build: (t: unknown) => unknown[]) =>
+        build({
+          admin: { appointments: { list: (input: unknown) => input } },
+        }).map(() => ({
+          data: { items: view.items, total: view.items.length },
+          isLoading: false,
+          error: null,
+          refetch: vi.fn(),
+        })),
       admin: {
         stats: {
           useQuery: () => ({
             data: {
-              appointments: { today: 0, tomorrow: 0, upcomingWeek: { count: 0, lastDay: "2026-11-13" } },
-              medicalQuestions: { open: 0, oldestReceivedAt: null, recentAnswers: { count: 0, averageResponseMs: null } },
+              appointments: {
+                today: 0,
+                tomorrow: 0,
+                upcomingWeek: { count: 0, lastDay: "2026-11-13" },
+              },
+              medicalQuestions: {
+                open: 0,
+                oldestReceivedAt: null,
+                recentAnswers: { count: 0, averageResponseMs: null },
+              },
               unreadMessages: 0,
               gdprRequests: { open: 0, nextDeadline: null },
               documentsToReview: 0,
               applications: { new: 0, lastWeek: 0, lastFourWeeks: 0 },
               bookingConversion: { started: 0, paid: 0 },
-              revenue: { currentMonth: { month: "2026-11", amount: view.revenue }, previousMonth: { month: "2026-10", amount: "100.00" } },
+              revenue: {
+                currentMonth: { month: "2026-11", amount: view.revenue },
+                previousMonth: { month: "2026-10", amount: "100.00" },
+              },
             },
             isLoading: false,
             error: null,
           }),
         },
         appointments: {
-          agenda: { useQuery: () => ({ data: { items: [], truncated: false }, isLoading: false, error: null }) },
+          agenda: {
+            useQuery: () => ({
+              data: { items: [], truncated: false },
+              isLoading: false,
+              error: null,
+            }),
+          },
           updateStatus: mutation(),
           refund: mutation(),
           refundUnconfirmedSession: mutation(),
@@ -62,9 +106,13 @@ vi.mock("@/lib/trpc", () => {
   };
 });
 
-const { default: AppointmentsTab } = await import("@/components/AppointmentsTab");
+const { default: AppointmentsTab } = await import(
+  "@/components/AppointmentsTab"
+);
 const { default: OverviewTab } = await import("@/components/OverviewTab");
-const { PersonalDataResult } = await import("@/components/PersonalDataSearchPanel");
+const { PersonalDataResult } = await import(
+  "@/components/PersonalDataSearchPanel"
+);
 
 /** Regular spaces, as read on screen (Intl puts no-break spaces around the thousands and before €). */
 const shown = (text: string) => text.replace(/\s/g, " ");
@@ -100,15 +148,36 @@ afterEach(() => {
 
 describe("montants au format français dans l’administration", () => {
   it("tuile des revenus : « 650,00 € », comme les emails, quel que soit le format reçu de la base", () => {
-    expect(shown(renderToStaticMarkup(createElement(OverviewTab, { onNavigate: vi.fn() })))).toContain(">650,00 €<");
+    expect(
+      shown(
+        renderToStaticMarkup(
+          createElement(OverviewTab, { onNavigate: vi.fn() })
+        )
+      )
+    ).toContain(">650,00 €<");
     view.revenue = 1250.5;
-    expect(shown(renderToStaticMarkup(createElement(OverviewTab, { onNavigate: vi.fn() })))).toContain(">1 250,50 €<");
+    expect(
+      shown(
+        renderToStaticMarkup(
+          createElement(OverviewTab, { onNavigate: vi.fn() })
+        )
+      )
+    ).toContain(">1 250,50 €<");
     view.revenue = 0;
-    expect(shown(renderToStaticMarkup(createElement(OverviewTab, { onNavigate: vi.fn() })))).toContain(">0,00 €<");
+    expect(
+      shown(
+        renderToStaticMarkup(
+          createElement(OverviewTab, { onNavigate: vi.fn() })
+        )
+      )
+    ).toContain(">0,00 €<");
   });
 
   it("carte d’un rendez-vous et messages de remboursement : « 150,00 € »", () => {
-    view.items = [appointment(), appointment({ id: 2, trackingId: "APTAMOUNT002", finalPrice: "100.00" })];
+    view.items = [
+      appointment(),
+      appointment({ id: 2, trackingId: "APTAMOUNT002", finalPrice: "100.00" }),
+    ];
     const tree = renderStateful(AppointmentsTab) as ReactElement;
     const html = shown(renderToStaticMarkup(tree));
     expect(html).toContain(">150,00 €<");
@@ -117,10 +186,21 @@ describe("montants au format français dans l’administration", () => {
 
     const prompt = vi.fn((_message: string) => null);
     vi.stubGlobal("window", { prompt, confirm: vi.fn(() => false) });
-    const click = (label: string) => (elementsOf(tree).find(element => typeof element.props.onClick === "function" && renderToStaticMarkup(element as ReactElement).includes(label))!.props.onClick as () => void)();
+    const click = (label: string) =>
+      (
+        elementsOf(tree).find(
+          element =>
+            typeof element.props.onClick === "function" &&
+            renderToStaticMarkup(element as ReactElement).includes(label)
+        )!.props.onClick as () => void
+      )();
     click("Annuler (praticien) et rembourser");
     click("Annulation patient (remboursement)");
-    expect(prompt.mock.calls.map(([message]) => shown(String(message).split("\n")[0]!))).toEqual([
+    expect(
+      prompt.mock.calls.map(([message]) =>
+        shown(String(message).split("\n")[0]!)
+      )
+    ).toEqual([
       "Annuler APTAMOUNT001 et rembourser intégralement 150,00 € au patient.",
       "Annulation demandée par le patient (plus de 24 h avant) : remboursement de 150,00 €.",
     ]);
@@ -132,13 +212,39 @@ describe("montants au format français dans l’administration", () => {
       contactMessages: [],
       medicalQuestions: [],
       gdprRequests: [],
-      appointments: [{ id: 4, trackingId: "APTAMOUNT004", appointmentDate: new Date(2026, 8, 10), finalPrice: "100.00", paymentStatus: "completed", appointmentStatus: "completed", invoiceNumber: null }],
-      recruitment: { applications: [], candidateAccountWithoutApplication: false },
+      appointments: [
+        {
+          id: 4,
+          trackingId: "APTAMOUNT004",
+          appointmentDate: new Date(2026, 8, 10),
+          finalPrice: "100.00",
+          paymentStatus: "completed",
+          appointmentStatus: "completed",
+          invoiceNumber: null,
+        },
+      ],
+      recruitment: {
+        applications: [],
+        candidateAccountWithoutApplication: false,
+      },
       // Totals per table and rows an erasure would touch (RGPD-12).
-      totals: { contactMessages: 0, medicalQuestions: 0, gdprRequests: 0, appointments: 1, recruitmentApplications: 0 },
+      totals: {
+        contactMessages: 0,
+        medicalQuestions: 0,
+        gdprRequests: 0,
+        appointments: 1,
+        recruitmentApplications: 0,
+      },
       erasableRows: 1,
     };
-    const html = shown(renderToStaticMarkup(createElement(PersonalDataResult, { data: data as never, onChanged: vi.fn() })));
+    const html = shown(
+      renderToStaticMarkup(
+        createElement(PersonalDataResult, {
+          data: data as never,
+          onChanged: vi.fn(),
+        })
+      )
+    );
     expect(html).toContain("· 100,00 €");
     expect(html).not.toContain("100.00");
   });

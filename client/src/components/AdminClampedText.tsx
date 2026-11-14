@@ -17,7 +17,17 @@ const clampedTextCopy = {
  * tells a screen reader whose text it is (« Voir tout — demande de Jean
  * Dupont »), so that the buttons of a list are told apart.
  */
-export default function AdminClampedText({ text, about, className = "", language = "fr" }: { text: string; about?: string; className?: string; language?: UserLanguage }) {
+export default function AdminClampedText({
+  text,
+  about,
+  className = "",
+  language = "fr",
+}: {
+  text: string;
+  about?: string;
+  className?: string;
+  language?: UserLanguage;
+}) {
   const copy = clampedTextCopy[language] ?? clampedTextCopy.fr;
   const id = useId();
   const textRef = useRef<HTMLParagraphElement>(null);
@@ -27,7 +37,8 @@ export default function AdminClampedText({ text, about, className = "", language
   useLayoutEffect(() => {
     const element = textRef.current;
     if (!element || expanded) return;
-    const measure = () => setCut(element.scrollHeight > element.clientHeight + 1);
+    const measure = () =>
+      setCut(element.scrollHeight > element.clientHeight + 1);
     measure();
     if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(measure);
@@ -37,9 +48,21 @@ export default function AdminClampedText({ text, about, className = "", language
 
   return (
     <div className={className}>
-      <p ref={textRef} id={id} className={`whitespace-pre-line wrap-anywhere ${expanded ? "" : "line-clamp-2"}`}>{text}</p>
+      <p
+        ref={textRef}
+        id={id}
+        className={`whitespace-pre-line wrap-anywhere ${expanded ? "" : "line-clamp-2"}`}
+      >
+        {text}
+      </p>
       {(cut || expanded) && (
-        <button type="button" aria-expanded={expanded} aria-controls={id} onClick={() => setExpanded(current => !current)} className="mt-1 text-xs font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+        <button
+          type="button"
+          aria-expanded={expanded}
+          aria-controls={id}
+          onClick={() => setExpanded(current => !current)}
+          className="mt-1 text-xs font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        >
           {expanded ? copy.less : copy.more}
           {about && <span className="sr-only"> — {about}</span>}
         </button>

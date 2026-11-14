@@ -30,6 +30,9 @@ export default defineConfig({
     timezoneId: "Europe/Paris",
     viewport: { width: 1280, height: 900 },
     trace: "retain-on-failure",
-    launchOptions: { executablePath: process.env.CHROMIUM?.trim() || undefined, args: ["--no-sandbox", "--no-proxy-server"] },
+    launchOptions: {
+      executablePath: process.env.CHROMIUM?.trim() || undefined,
+      args: ["--no-sandbox", "--no-proxy-server"],
+    },
   },
 });

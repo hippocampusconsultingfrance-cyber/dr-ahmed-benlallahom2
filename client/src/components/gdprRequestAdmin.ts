@@ -36,7 +36,14 @@ function parisMidnight(year: number, month: number, day: number) {
   // Paris is one or two hours ahead of UTC, and no clock change skips midnight.
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const clock = getParisParts(new Date(instant));
-    const shown = Date.UTC(clock.year, clock.month - 1, clock.day, clock.hour, clock.minute, clock.second);
+    const shown = Date.UTC(
+      clock.year,
+      clock.month - 1,
+      clock.day,
+      clock.hour,
+      clock.minute,
+      clock.second
+    );
     if (shown === wallClock) break;
     instant -= shown - wallClock;
   }
@@ -52,17 +59,33 @@ function parisMidnight(year: number, month: number, day: number) {
  */
 export function gdprRequestDeadline(receivedAt: Date | string) {
   const received = getParisParts(new Date(receivedAt));
-  const lastDayOfNextMonth = new Date(Date.UTC(received.year, received.month + 1, 0)).getUTCDate();
+  const lastDayOfNextMonth = new Date(
+    Date.UTC(received.year, received.month + 1, 0)
+  ).getUTCDate();
   const deadlineDay = Math.min(received.day, lastDayOfNextMonth);
-  return new Date(parisMidnight(received.year, received.month + 1, deadlineDay + 1).getTime() - 1);
+  return new Date(
+    parisMidnight(
+      received.year,
+      received.month + 1,
+      deadlineDay + 1
+    ).getTime() - 1
+  );
 }
 
 /** An open request whose deadline day has ended in Paris. */
-export function isGdprRequestOverdue(request: { status: string; createdAt: Date | string }, now = new Date()) {
-  return isGdprRequestOpen(request.status) && gdprRequestDeadline(request.createdAt).getTime() < now.getTime();
+export function isGdprRequestOverdue(
+  request: { status: string; createdAt: Date | string },
+  now = new Date()
+) {
+  return (
+    isGdprRequestOpen(request.status) &&
+    gdprRequestDeadline(request.createdAt).getTime() < now.getTime()
+  );
 }
 
 /** "26/11/2026": a request's day (receipt, deadline, answer) in Paris. */
 export function formatGdprRequestDate(date: Date | string) {
-  return new Date(date).toLocaleDateString("fr-FR", { timeZone: GDPR_REQUEST_TIME_ZONE });
+  return new Date(date).toLocaleDateString("fr-FR", {
+    timeZone: GDPR_REQUEST_TIME_ZONE,
+  });
 }

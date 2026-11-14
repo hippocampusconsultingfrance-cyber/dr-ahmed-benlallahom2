@@ -10,11 +10,15 @@ const FORGE_API_URL = "http://127.0.0.1:9/forge";
 vi.hoisted(() => {
   process.env.VERCEL = "1";
   vi.stubEnv("BUILT_IN_FORGE_API_URL", "http://127.0.0.1:9/forge");
-  vi.stubEnv("BUILT_IN_FORGE_API_KEY", "synthetic-forge-key-for-the-removed-storage-proxy");
+  vi.stubEnv(
+    "BUILT_IN_FORGE_API_KEY",
+    "synthetic-forge-key-for-the-removed-storage-proxy"
+  );
 });
 vi.mock("../db", () => ({ getDb: async () => null }));
 vi.mock("@clerk/express", () => ({
-  clerkMiddleware: () => (_req: unknown, _res: unknown, next: () => void) => next(),
+  clerkMiddleware: () => (_req: unknown, _res: unknown, next: () => void) =>
+    next(),
   getAuth: () => ({ userId: null }),
   clerkClient: { users: { getUser: vi.fn() } },
 }));
@@ -41,12 +45,19 @@ describe("ancienne route de stockage Manus (SECU-08)", () => {
     expect(ENV.forgeApiUrl).toBe(FORGE_API_URL);
     const fetchSpy = vi.spyOn(globalThis, "fetch");
 
-    for (const path of ["/manus-storage/cv/candidat.pdf", "/manus-storage/logo-abl_2afbc5e0.png"]) {
+    for (const path of [
+      "/manus-storage/cv/candidat.pdf",
+      "/manus-storage/logo-abl_2afbc5e0.png",
+    ]) {
       const response = await fetch(`${baseUrl}${path}`, { redirect: "manual" });
       expect(response.status, path).toBe(404);
       expect(response.headers.get("location"), path).toBeNull();
     }
     // Only the test's own requests: the server asked Forge for no signed URL.
-    expect(fetchSpy.mock.calls.map(([input]) => String(input)).filter(url => !url.startsWith(baseUrl))).toEqual([]);
+    expect(
+      fetchSpy.mock.calls
+        .map(([input]) => String(input))
+        .filter(url => !url.startsWith(baseUrl))
+    ).toEqual([]);
   });
 });

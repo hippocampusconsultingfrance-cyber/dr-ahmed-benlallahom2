@@ -28,7 +28,9 @@ export function isNightRateForParis(date: Date): boolean {
 
 /** Price in cents of a consultation starting at `date`: the night rate from 18:00 to 08:00 in Paris. */
 export function consultationPriceCents(date: Date): number {
-  return isNightRateForParis(date) ? CONSULTATION_NIGHT_RATE_CENTS : CONSULTATION_DAY_RATE_CENTS;
+  return isNightRateForParis(date)
+    ? CONSULTATION_NIGHT_RATE_CENTS
+    : CONSULTATION_DAY_RATE_CENTS;
 }
 
 const rateAmountFormats = new Map<string, Intl.NumberFormat>();
@@ -42,7 +44,10 @@ export function formatRateAmount(cents: number, locale: string): string {
   const key = `${locale}|${fractionDigits}`;
   let format = rateAmountFormats.get(key);
   if (!format) {
-    format = new Intl.NumberFormat(locale, { minimumFractionDigits: fractionDigits, maximumFractionDigits: 2 });
+    format = new Intl.NumberFormat(locale, {
+      minimumFractionDigits: fractionDigits,
+      maximumFractionDigits: 2,
+    });
     rateAmountFormats.set(key, format);
   }
   return format.format(cents / 100);
@@ -57,7 +62,12 @@ export function englishRateHour(hour: number, space = ""): string {
  * Locale of the dates and amounts of a booking, by language of the booking
  * page: the page, its confirmation and the Stripe payment page (RES-14).
  */
-export const BOOKING_LOCALES: Record<string, string> = { fr: "fr-FR", en: "en-GB", de: "de-DE", zh: "zh-CN" };
+export const BOOKING_LOCALES: Record<string, string> = {
+  fr: "fr-FR",
+  en: "en-GB",
+  de: "de-DE",
+  zh: "zh-CN",
+};
 
 /** The locale of a booking language; English (en-GB) for a language the site does not offer. */
 export function getBookingLocale(language: string): string {
@@ -92,9 +102,13 @@ export const BOOKING_TERMS_OF_SALE_HREF: string | null = null;
 export type BookingWindowIssue = "too_soon" | "too_far";
 
 /** Why a consultation start cannot be booked at `now` (past dates are "too_soon"), or null. */
-export function getBookingWindowIssue(appointmentStart: Date, now: number = Date.now()): BookingWindowIssue | null {
+export function getBookingWindowIssue(
+  appointmentStart: Date,
+  now: number = Date.now()
+): BookingWindowIssue | null {
   const start = appointmentStart.getTime();
-  if (!Number.isFinite(start) || start < now + BOOKING_MIN_LEAD_TIME_MS) return "too_soon";
+  if (!Number.isFinite(start) || start < now + BOOKING_MIN_LEAD_TIME_MS)
+    return "too_soon";
   if (start > now + BOOKING_HORIZON_MS) return "too_far";
   return null;
 }
@@ -127,16 +141,26 @@ export const BOOKING_REFUSAL_REASONS = [
 ] as const;
 export type BookingRefusalReason = (typeof BOOKING_REFUSAL_REASONS)[number];
 
-export function isBookingRefusalReason(value: unknown): value is BookingRefusalReason {
-  return typeof value === "string" && (BOOKING_REFUSAL_REASONS as readonly string[]).includes(value);
+export function isBookingRefusalReason(
+  value: unknown
+): value is BookingRefusalReason {
+  return (
+    typeof value === "string" &&
+    (BOOKING_REFUSAL_REASONS as readonly string[]).includes(value)
+  );
 }
 
 export const BOOKING_TOO_SOON_MESSAGE = `Ce créneau n’est plus réservable : les consultations se réservent au moins ${BOOKING_MIN_LEAD_TIME_HOURS} heures à l’avance. Veuillez choisir un créneau plus tardif.`;
 export const BOOKING_TOO_FAR_MESSAGE = `Les consultations se réservent au plus ${BOOKING_HORIZON_DAYS} jours à l’avance. Veuillez choisir une date plus proche.`;
-export const BOOKING_INVALID_PHONE_MESSAGE = "Saisissez un numéro de téléphone valide, avec l’indicatif du pays précédé de + ou 00 (8 à 15 chiffres, ex. +33 6 12 34 56 78).";
-export const BOOKING_INVALID_NAME_MESSAGE = "Saisissez votre nom complet : il doit comporter au moins une lettre ou un chiffre.";
+export const BOOKING_INVALID_PHONE_MESSAGE =
+  "Saisissez un numéro de téléphone valide, avec l’indicatif du pays précédé de + ou 00 (8 à 15 chiffres, ex. +33 6 12 34 56 78).";
+export const BOOKING_INVALID_NAME_MESSAGE =
+  "Saisissez votre nom complet : il doit comporter au moins une lettre ou un chiffre.";
 
-const VISIBLE_LETTER_OR_DIGIT = new RegExp("(?!\\p{Default_Ignorable_Code_Point})[\\p{L}\\p{N}]", "u");
+const VISIBLE_LETTER_OR_DIGIT = new RegExp(
+  "(?!\\p{Default_Ignorable_Code_Point})[\\p{L}\\p{N}]",
+  "u"
+);
 
 /**
  * A name the invoice can print: at least one letter or digit, of any script,
@@ -156,7 +180,8 @@ const NO_BREAK_SPACES = /[\u00A0\u2007\u202F]/g;
 // copier-coller (LRM, RLM, ALM, LRE…PDF, LRO, RLO, LRI…PDI), et caractères
 // invisibles de largeur nulle qu’un numéro copié emporte aussi (ZWSP, ZWNJ,
 // ZWJ, WJ, BOM).
-const INVISIBLE_MARKS = /[\u061C\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g;
+const INVISIBLE_MARKS =
+  /[\u061C\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g;
 
 /**
  * Phone number as typed or pasted, read the way the booking checks it
@@ -168,7 +193,7 @@ const INVISIBLE_MARKS = /[\u061C\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uF
 export function normalizePhoneInput(value: string): string {
   return value
     .normalize("NFKC")
-    .replace(ARABIC_INDIC_DIGITS, digit => String((digit.charCodeAt(0) & 0xf)))
+    .replace(ARABIC_INDIC_DIGITS, digit => String(digit.charCodeAt(0) & 0xf))
     .replace(NO_BREAK_SPACES, " ")
     .replace(INVISIBLE_MARKS, "")
     .trim();
@@ -188,7 +213,10 @@ export function toE164PhoneNumber(value: string): string | null {
   const trimmed = value.trim();
   const prefix = /^\(?(\+|00)\s*\(?[1-9]/.exec(trimmed)?.[1];
   if (!prefix || !/^\(?(\+|00)[0-9 ().-]*[0-9]$/.test(trimmed)) return null;
-  const digits = trimmed.replace(/\(\s*0\s*\)/g, "").replace(/\D/g, "").slice(prefix === "00" ? 2 : 0);
+  const digits = trimmed
+    .replace(/\(\s*0\s*\)/g, "")
+    .replace(/\D/g, "")
+    .slice(prefix === "00" ? 2 : 0);
   return digits.length >= 8 && digits.length <= 15 ? `+${digits}` : null;
 }
 
@@ -198,7 +226,8 @@ export function isPlausiblePhoneNumber(value: string): boolean {
 }
 
 // La règle de z.string().email() (zod 4), que le serveur appliquait jusque-là.
-const BOOKING_EMAIL_ADDRESS = /^(?:[A-Za-z0-9_'+\-]+\.)*[A-Za-z0-9_'+\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\-]*\.)+[A-Za-z]{2,}$/;
+const BOOKING_EMAIL_ADDRESS =
+  /^(?:[A-Za-z0-9_'+-]+\.)*[A-Za-z0-9_'+-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9-]*\.)+[A-Za-z]{2,}$/;
 
 /**
  * Address the confirmation and the invoice can reach (RES-10): one rule for

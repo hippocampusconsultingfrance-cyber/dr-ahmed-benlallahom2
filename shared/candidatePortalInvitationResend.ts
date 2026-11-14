@@ -9,6 +9,10 @@
 export const CANDIDATE_INVITATION_FORCED_RESEND_DELAY_MS = 10 * 60_000;
 
 /** When « Renvoyer quand même » becomes possible after an uncertain attempt made at `occurredAt`. */
-export function candidateInvitationForcedResendAt(occurredAt: Date | string | number): Date {
-  return new Date(new Date(occurredAt).getTime() + CANDIDATE_INVITATION_FORCED_RESEND_DELAY_MS);
+export function candidateInvitationForcedResendAt(
+  occurredAt: Date | string | number
+): Date {
+  return new Date(
+    new Date(occurredAt).getTime() + CANDIDATE_INVITATION_FORCED_RESEND_DELAY_MS
+  );
 }

@@ -7,14 +7,21 @@ import { describe, expect, it, vi } from "vitest";
 const calls = vi.hoisted(() => ({ order: [] as string[] }));
 
 vi.mock("./_core/env", async importOriginal => ({
-  ...await importOriginal<typeof import("./_core/env")>(),
-  reportCriticalProductionEnvironment: vi.fn(() => { calls.order.push("report"); return { ok: false, missing: ["CRON_SECRET"], enforced: true }; }),
-  assertCriticalProductionEnvironment: vi.fn(() => { calls.order.push("assert"); throw new Error("missing CRON_SECRET"); }),
+  ...(await importOriginal<typeof import("./_core/env")>()),
+  reportCriticalProductionEnvironment: vi.fn(() => {
+    calls.order.push("report");
+    return { ok: false, missing: ["CRON_SECRET"], enforced: true };
+  }),
+  assertCriticalProductionEnvironment: vi.fn(() => {
+    calls.order.push("assert");
+    throw new Error("missing CRON_SECRET");
+  }),
 }));
 vi.mock("./_core/index", () => ({
   createApp: vi.fn(async () => {
     calls.order.push("createApp");
-    return (_req: unknown, res: { end: (body: string) => void }) => res.end("app");
+    return (_req: unknown, res: { end: (body: string) => void }) =>
+      res.end("app");
   }),
 }));
 

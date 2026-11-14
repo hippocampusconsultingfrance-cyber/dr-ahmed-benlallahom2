@@ -24,16 +24,39 @@ function trackingIdOf(key: string) {
 export async function removeOrphanApplicationCvFiles(now = new Date()) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  const objects = await storageListObjects(APPLICATION_CV_PREFIX, ORPHAN_APPLICATION_CV_SCAN_LIMIT);
-  const old = objects.filter(object => object.uploadedAt.getTime() < now.getTime() - ORPHAN_APPLICATION_CV_AFTER_MS && trackingIdOf(object.key));
-  const trackingIds = Array.from(new Set(old.map(object => trackingIdOf(object.key)!)));
+  const objects = await storageListObjects(
+    APPLICATION_CV_PREFIX,
+    ORPHAN_APPLICATION_CV_SCAN_LIMIT
+  );
+  const old = objects.filter(
+    object =>
+      object.uploadedAt.getTime() <
+        now.getTime() - ORPHAN_APPLICATION_CV_AFTER_MS &&
+      trackingIdOf(object.key)
+  );
+  const trackingIds = Array.from(
+    new Set(old.map(object => trackingIdOf(object.key)!))
+  );
   const known = new Set<string>();
   for (let index = 0; index < trackingIds.length; index += 500) {
-    const rows = await db.select({ trackingId: cvApplications.trackingId }).from(cvApplications)
-      .where(inArray(cvApplications.trackingId, trackingIds.slice(index, index + 500)));
+    const rows = await db
+      .select({ trackingId: cvApplications.trackingId })
+      .from(cvApplications)
+      .where(
+        inArray(
+          cvApplications.trackingId,
+          trackingIds.slice(index, index + 500)
+        )
+      );
     for (const row of rows) known.add(row.trackingId);
   }
-  const orphans = old.filter(object => !known.has(trackingIdOf(object.key)!)).map(object => object.key);
+  const orphans = old
+    .filter(object => !known.has(trackingIdOf(object.key)!))
+    .map(object => object.key);
   if (orphans.length) await storageDelete(orphans);
-  return { scanned: objects.length, deleted: orphans.length, scanComplete: objects.length < ORPHAN_APPLICATION_CV_SCAN_LIMIT };
+  return {
+    scanned: objects.length,
+    deleted: orphans.length,
+    scanComplete: objects.length < ORPHAN_APPLICATION_CV_SCAN_LIMIT,
+  };
 }

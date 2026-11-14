@@ -14,7 +14,10 @@
     "drizzle/**/*.ts",
     "scripts/**/*.{mjs,ts}"
   ],
-  "ignoreDependencies": ["@fontsource-variable/dm-sans", "@fontsource/playfair-display"],
+  "ignoreDependencies": [
+    "@fontsource-variable/dm-sans",
+    "@fontsource/playfair-display"
+  ],
   "ignoreBinaries": ["fc-match", "fc-scan", "sha256sum"],
   "rules": {
     "exports": "off",

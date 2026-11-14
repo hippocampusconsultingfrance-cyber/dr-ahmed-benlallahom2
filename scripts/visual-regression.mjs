@@ -6,7 +6,9 @@ import { chromium } from "playwright-core";
 import pixelmatch from "pixelmatch";
 import { PNG } from "pngjs";
 
-const baseUrl = (process.env.VISUAL_TEST_BASE_URL ?? "http://127.0.0.1:3000").replace(/\/$/, "");
+const baseUrl = (
+  process.env.VISUAL_TEST_BASE_URL ?? "http://127.0.0.1:3000"
+).replace(/\/$/, "");
 const recordMode = process.env.VISUAL_BASELINE_MODE === "record";
 const mismatchLimit = 0.008;
 
@@ -18,7 +20,10 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
  * sur n'importe quelle machine (et non plus un dossier de l'ancien hébergeur Manus).
  */
 export function candidateDirectory(environment = process.env) {
-  return path.resolve(root, environment.VISUAL_BASELINE_DIR?.trim() || "tmp/visual-regression");
+  return path.resolve(
+    root,
+    environment.VISUAL_BASELINE_DIR?.trim() || "tmp/visual-regression"
+  );
 }
 
 /**
@@ -26,7 +31,11 @@ export function candidateDirectory(environment = process.env) {
  * puis celui de Playwright, puis celui du système (/usr/bin/chromium, /usr/bin/google-chrome).
  * Sans aucun, le script le dit avant toute capture.
  */
-export function findChromium(environment = process.env, exists = existsSync, bundled = () => chromium.executablePath()) {
+export function findChromium(
+  environment = process.env,
+  exists = existsSync,
+  bundled = () => chromium.executablePath()
+) {
   if (environment.CHROMIUM?.trim()) return environment.CHROMIUM.trim();
   let installed;
   try {
@@ -34,8 +43,13 @@ export function findChromium(environment = process.env, exists = existsSync, bun
   } catch {
     // Pas de Chromium Playwright connu pour cette plateforme : restent ceux du système.
   }
-  const found = [installed, "/usr/bin/chromium", "/usr/bin/google-chrome"].find(candidate => candidate && exists(candidate));
-  if (!found) throw new Error("Aucun Chromium trouvé : indiquez son chemin dans CHROMIUM (CHROMIUM=/chemin/vers/chrome node scripts/visual-regression.mjs).");
+  const found = [installed, "/usr/bin/chromium", "/usr/bin/google-chrome"].find(
+    candidate => candidate && exists(candidate)
+  );
+  if (!found)
+    throw new Error(
+      "Aucun Chromium trouvé : indiquez son chemin dans CHROMIUM (CHROMIUM=/chemin/vers/chrome node scripts/visual-regression.mjs)."
+    );
   return found;
 }
 
@@ -44,7 +58,10 @@ const mobile = { width: 375, height: 812 };
 const routes = [
   ["home", "/"],
   ["booking", "/booking"],
-  ["booking-confirmation", "/booking/confirmation?status=success&trackingId=VISUAL-TEST-2026"],
+  [
+    "booking-confirmation",
+    "/booking/confirmation?status=success&trackingId=VISUAL-TEST-2026",
+  ],
   ["recruitment", "/recruitment"],
   ["recruitment-standard", "/recruitment/standard"],
   ["vvip-offshore", "/recruitment/vvip-offshore"],
@@ -63,15 +80,37 @@ const routes = [
   ["service-error", "/error"],
 ];
 
-export const scenarios = routes.flatMap(([id, route]) => [
-  { id: `${id}-desktop`, path: route, viewport: desktop },
-  { id: `${id}-mobile`, path: route, viewport: mobile },
-]).concat([
-  { id: "booking-de-desktop", path: "/booking", viewport: desktop, language: "de" },
-  { id: "recruitment-standard-de-mobile", path: "/recruitment/standard", viewport: mobile, language: "de" },
-  { id: "booking-zh-desktop", path: "/booking", viewport: desktop, language: "zh" },
-  { id: "employers-zh-mobile", path: "/employers", viewport: mobile, language: "zh" },
-]);
+export const scenarios = routes
+  .flatMap(([id, route]) => [
+    { id: `${id}-desktop`, path: route, viewport: desktop },
+    { id: `${id}-mobile`, path: route, viewport: mobile },
+  ])
+  .concat([
+    {
+      id: "booking-de-desktop",
+      path: "/booking",
+      viewport: desktop,
+      language: "de",
+    },
+    {
+      id: "recruitment-standard-de-mobile",
+      path: "/recruitment/standard",
+      viewport: mobile,
+      language: "de",
+    },
+    {
+      id: "booking-zh-desktop",
+      path: "/booking",
+      viewport: desktop,
+      language: "zh",
+    },
+    {
+      id: "employers-zh-mobile",
+      path: "/employers",
+      viewport: mobile,
+      language: "zh",
+    },
+  ]);
 
 // Les étalons approuvés sont publiés hors du dépôt, dans le stockage de l'ancien
 // hébergeur Manus, sous ces clés. Le serveur n'expose plus de route /manus-storage
@@ -95,8 +134,10 @@ export const baselineKeys = {
   "why-hippocampus-mobile": "why-hippocampus-mobile_76fd06aa.png",
   "venture-hippocampus-desktop": "venture-hippocampus-desktop_f86e55c8.png",
   "venture-hippocampus-mobile": "venture-hippocampus-mobile_3e5d2815.png",
-  "recruitment-unsubscribe-desktop": "recruitment-unsubscribe-desktop_5aba6787.png",
-  "recruitment-unsubscribe-mobile": "recruitment-unsubscribe-mobile_21b7a2dc.png",
+  "recruitment-unsubscribe-desktop":
+    "recruitment-unsubscribe-desktop_5aba6787.png",
+  "recruitment-unsubscribe-mobile":
+    "recruitment-unsubscribe-mobile_21b7a2dc.png",
   "faq-desktop": "faq-desktop_8346b3f3.png",
   "faq-mobile": "faq-mobile_50323a0f.png",
   "search-desktop": "search-desktop_89bb7f65.png",
@@ -116,7 +157,8 @@ export const baselineKeys = {
   "service-error-desktop": "service-error-desktop_892004ab.png",
   "service-error-mobile": "service-error-mobile_569851c0.png",
   "booking-de-desktop": "booking-de-desktop_418b9fd4.png",
-  "recruitment-standard-de-mobile": "recruitment-standard-de-mobile_5893b47a.png",
+  "recruitment-standard-de-mobile":
+    "recruitment-standard-de-mobile_5893b47a.png",
   "booking-zh-desktop": "booking-zh-desktop_b3cfce00.png",
   "employers-zh-mobile": "employers-zh-mobile_7b35cfe2.png",
 };
@@ -127,26 +169,42 @@ export const baselineKeys = {
  * @param {string} key
  * @param {{ environment?: Record<string, string | undefined>, fetchImpl?: (input: URL | string, init?: RequestInit) => Promise<Response> }} [options]
  */
-export async function fetchBaseline(key, { environment = process.env, fetchImpl = fetch } = {}) {
+export async function fetchBaseline(
+  key,
+  { environment = process.env, fetchImpl = fetch } = {}
+) {
   const apiUrl = environment.BUILT_IN_FORGE_API_URL?.trim();
   const apiKey = environment.BUILT_IN_FORGE_API_KEY?.trim();
   if (!apiUrl || !apiKey) {
-    throw new Error("Étalons inaccessibles : BUILT_IN_FORGE_API_URL et BUILT_IN_FORGE_API_KEY sont requis pour lire le stockage Manus.");
+    throw new Error(
+      "Étalons inaccessibles : BUILT_IN_FORGE_API_URL et BUILT_IN_FORGE_API_KEY sont requis pour lire le stockage Manus."
+    );
   }
-  const presignUrl = new URL("v1/storage/presign/get", apiUrl.replace(/\/+$/, "") + "/");
+  const presignUrl = new URL(
+    "v1/storage/presign/get",
+    apiUrl.replace(/\/+$/, "") + "/"
+  );
   presignUrl.searchParams.set("path", key);
-  const presign = await fetchImpl(presignUrl, { headers: { Authorization: `Bearer ${apiKey}` } });
-  if (!presign.ok) throw new Error(`${key} : URL signée refusée par Forge (${presign.status}).`);
+  const presign = await fetchImpl(presignUrl, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+  if (!presign.ok)
+    throw new Error(
+      `${key} : URL signée refusée par Forge (${presign.status}).`
+    );
   const { url } = await presign.json();
   if (!url) throw new Error(`${key} : URL signée vide.`);
   const image = await fetchImpl(url);
-  if (!image.ok) throw new Error(`${key} : étalon inaccessible (${image.status}).`);
+  if (!image.ok)
+    throw new Error(`${key} : étalon inaccessible (${image.status}).`);
   return Buffer.from(await image.arrayBuffer());
 }
 
 function assertSameDimensions(current, baseline, id) {
   if (current.width !== baseline.width || current.height !== baseline.height) {
-    throw new Error(`${id}: dimensions inattendues (${current.width}×${current.height} au lieu de ${baseline.width}×${baseline.height}).`);
+    throw new Error(
+      `${id}: dimensions inattendues (${current.width}×${current.height} au lieu de ${baseline.width}×${baseline.height}).`
+    );
   }
 }
 
@@ -159,17 +217,31 @@ async function captureScenario(browser, scenario) {
     colorScheme: "dark",
     reducedMotion: "reduce",
   });
-  await context.addInitScript((language) => {
-    localStorage.setItem("cookieConsent", JSON.stringify({ essential: true, performance: false, preferences: false }));
+  await context.addInitScript(language => {
+    localStorage.setItem(
+      "cookieConsent",
+      JSON.stringify({
+        essential: true,
+        performance: false,
+        preferences: false,
+      })
+    );
     localStorage.setItem("language", language);
   }, scenario.language ?? "fr");
   const page = await context.newPage();
-  await page.goto(`${baseUrl}${scenario.path}`, { waitUntil: "domcontentloaded", timeout: 20_000 });
+  await page.goto(`${baseUrl}${scenario.path}`, {
+    waitUntil: "domcontentloaded",
+    timeout: 20_000,
+  });
   await page.evaluate(async () => {
+    // eslint-disable-next-line no-undef -- runs in the page, where document is the page's
     await document.fonts.ready;
   });
   await page.waitForTimeout(400);
-  const screenshot = await page.screenshot({ fullPage: false, animations: "disabled" });
+  const screenshot = await page.screenshot({
+    fullPage: false,
+    animations: "disabled",
+  });
   await context.close();
   return screenshot;
 }
@@ -179,15 +251,21 @@ async function recordBaselines(browser) {
   await mkdir(outputDirectory, { recursive: true });
   for (const scenario of scenarios) {
     const screenshot = await captureScenario(browser, scenario);
-    await writeFile(path.join(outputDirectory, `${scenario.id}.png`), screenshot);
-    console.log(`Étalon candidat enregistré : ${path.relative(root, path.join(outputDirectory, `${scenario.id}.png`))}`);
+    await writeFile(
+      path.join(outputDirectory, `${scenario.id}.png`),
+      screenshot
+    );
+    console.log(
+      `Étalon candidat enregistré : ${path.relative(root, path.join(outputDirectory, `${scenario.id}.png`))}`
+    );
   }
 }
 
 async function compareBaselines(browser) {
   for (const scenario of scenarios) {
     const baselineKey = baselineKeys[scenario.id];
-    if (!baselineKey) throw new Error(`Étalon non configuré pour ${scenario.id}.`);
+    if (!baselineKey)
+      throw new Error(`Étalon non configuré pour ${scenario.id}.`);
 
     const [currentBuffer, baselineBuffer] = await Promise.all([
       captureScenario(browser, scenario),
@@ -197,22 +275,37 @@ async function compareBaselines(browser) {
     const current = PNG.sync.read(currentBuffer);
     const baseline = PNG.sync.read(baselineBuffer);
     assertSameDimensions(current, baseline, scenario.id);
-    const differentPixels = pixelmatch(current.data, baseline.data, null, current.width, current.height, {
-      threshold: 0.1,
-      includeAA: false,
-    });
+    const differentPixels = pixelmatch(
+      current.data,
+      baseline.data,
+      null,
+      current.width,
+      current.height,
+      {
+        threshold: 0.1,
+        includeAA: false,
+      }
+    );
     const ratio = differentPixels / (current.width * current.height);
     if (ratio > mismatchLimit) {
-      throw new Error(`${scenario.id}: régression visuelle ${(ratio * 100).toFixed(2)} % (limite ${(mismatchLimit * 100).toFixed(2)} %).`);
+      throw new Error(
+        `${scenario.id}: régression visuelle ${(ratio * 100).toFixed(2)} % (limite ${(mismatchLimit * 100).toFixed(2)} %).`
+      );
     }
-    console.log(`Validé : ${scenario.id} (${(ratio * 100).toFixed(3)} % de différence).`);
+    console.log(
+      `Validé : ${scenario.id} (${(ratio * 100).toFixed(3)} % de différence).`
+    );
   }
 }
 
 async function main() {
   // Les BUILT_IN_FORGE_* du .env local, comme le serveur (pnpm dev) les lit.
   await import("dotenv/config");
-  const browser = await chromium.launch({ executablePath: findChromium(), headless: true, args: ["--font-render-hinting=none"] });
+  const browser = await chromium.launch({
+    executablePath: findChromium(),
+    headless: true,
+    args: ["--font-render-hinting=none"],
+  });
   try {
     if (recordMode) await recordBaselines(browser);
     else await compareBaselines(browser);
@@ -221,4 +314,8 @@ async function main() {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) await main();
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
+)
+  await main();

@@ -27,7 +27,15 @@ export const adminContactsRouter = router({
 
       const whereClause = and(
         input.unreadOnly ? eq(contactMessages.read, 0) : undefined,
-        adminSearchCondition(input.search, [contactMessages.name, contactMessages.email, contactMessages.trackingId], { fullName: contactMessages.name }),
+        adminSearchCondition(
+          input.search,
+          [
+            contactMessages.name,
+            contactMessages.email,
+            contactMessages.trackingId,
+          ],
+          { fullName: contactMessages.name }
+        )
       );
 
       const items = await db
@@ -67,13 +75,27 @@ export const adminContactsRouter = router({
       const db = await getDb();
       if (!db) throw new Error("Database connection failed");
 
-      const notFound = () => new TRPCError({ code: "NOT_FOUND", message: "Message introuvable : il a peut-être déjà été supprimé." });
-      const [message] = await db.select({ id: contactMessages.id }).from(contactMessages).where(eq(contactMessages.id, input.id)).limit(1);
+      const notFound = () =>
+        new TRPCError({
+          code: "NOT_FOUND",
+          message: "Message introuvable : il a peut-être déjà été supprimé.",
+        });
+      const [message] = await db
+        .select({ id: contactMessages.id })
+        .from(contactMessages)
+        .where(eq(contactMessages.id, input.id))
+        .limit(1);
       if (!message) throw notFound();
       // Deleted with its trace, both or neither (DATA-01).
       const [deletion] = await db.batch([
         db.delete(contactMessages).where(eq(contactMessages.id, input.id)),
-        securityEventInsert(db, { actorKind: "admin", actorReference: ctx.user.openId, category: "admin_contact_message_deleted", outcome: "allowed", metadata: { deleted: 1 } }),
+        securityEventInsert(db, {
+          actorKind: "admin",
+          actorReference: ctx.user.openId,
+          category: "admin_contact_message_deleted",
+          outcome: "allowed",
+          metadata: { deleted: 1 },
+        }),
       ]);
       if (mutationRowCount(deletion) === 0) throw notFound();
 

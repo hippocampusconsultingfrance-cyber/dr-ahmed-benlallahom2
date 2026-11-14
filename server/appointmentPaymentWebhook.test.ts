@@ -6,15 +6,27 @@ const database = vi.hoisted(() => ({ getDb: vi.fn() }));
 const fulfillment = vi.hoisted(() => ({
   enqueueAppointmentFulfillment: vi.fn(async () => undefined),
   enqueueStripeRefundNotices: vi.fn(async () => undefined),
-  processAppointmentFulfillmentNow: vi.fn(async () => ({ processed: 2, results: [] })),
+  processAppointmentFulfillmentNow: vi.fn(async () => ({
+    processed: 2,
+    results: [],
+  })),
   closeUnsentAppointmentFulfillment: vi.fn(async () => 0),
 }));
-const owner = vi.hoisted(() => ({ notifyOwner: vi.fn(async (_payload: { title: string; content: string }) => true) }));
+const owner = vi.hoisted(() => ({
+  notifyOwner: vi.fn(
+    async (_payload: { title: string; content: string }) => true
+  ),
+}));
 vi.mock("./db", () => ({ getDb: database.getDb }));
 vi.mock("./appointmentFulfillment", () => fulfillment);
 vi.mock("./_core/notification", () => owner);
 
-import { buildUnconfirmablePaymentAlert, handleChargeRefunded, handleCheckoutSessionCompleted, processFulfillmentBestEffort } from "./appointmentPaymentWebhook";
+import {
+  buildUnconfirmablePaymentAlert,
+  handleChargeRefunded,
+  handleCheckoutSessionCompleted,
+  processFulfillmentBestEffort,
+} from "./appointmentPaymentWebhook";
 
 const dialect = new PgDialect();
 
@@ -26,7 +38,9 @@ function fakeDatabase(reads: unknown[][], updateRowCounts: number[] = []) {
   const writes: Write[] = [];
   const db = {
     select: vi.fn(() => ({
-      from: () => ({ where: () => ({ limit: async () => queue.shift() ?? [] }) }),
+      from: () => ({
+        where: () => ({ limit: async () => queue.shift() ?? [] }),
+      }),
     })),
     update: vi.fn(() => ({
       set: (values: Record<string, unknown>) => ({
@@ -68,43 +82,68 @@ function paidSession(overrides: Record<string, unknown> = {}) {
   };
 }
 
-const confirmingWrites = (writes: Write[]) => writes.filter(write => write.values.paymentStatus === "completed");
+const confirmingWrites = (writes: Write[]) =>
+  writes.filter(write => write.values.paymentStatus === "completed");
 
 beforeEach(() => vi.clearAllMocks());
 
 describe("webhook Stripe checkout.session.completed", () => {
   it("accuse réception sans confirmer une session non payée", async () => {
     fakeDatabase([]);
-    const result = await handleCheckoutSessionCompleted(paidSession({ payment_status: "unpaid" }));
+    const result = await handleCheckoutSessionCompleted(
+      paidSession({ payment_status: "unpaid" })
+    );
 
-    expect(result).toMatchObject({ httpStatus: 200, outcome: "payment_not_paid" });
+    expect(result).toMatchObject({
+      httpStatus: 200,
+      outcome: "payment_not_paid",
+    });
     expect(database.getDb).not.toHaveBeenCalled();
     expect(fulfillment.enqueueAppointmentFulfillment).not.toHaveBeenCalled();
   });
 
   it("rejette un événement sans référence de rendez-vous", async () => {
-    const result = await handleCheckoutSessionCompleted(paidSession({ metadata: {} }));
-    expect(result).toEqual({ httpStatus: 400, body: { error: "Invalid webhook" }, outcome: "missing_reference" });
+    const result = await handleCheckoutSessionCompleted(
+      paidSession({ metadata: {} })
+    );
+    expect(result).toEqual({
+      httpStatus: 400,
+      body: { error: "Invalid webhook" },
+      outcome: "missing_reference",
+    });
   });
 
   it("confirme uniquement un créneau encore réservé et envoie immédiatement confirmation et facture", async () => {
     const { writes } = fakeDatabase([[heldAppointment()]], [1]);
 
     const startedAt = Date.now();
-    const result = await handleCheckoutSessionCompleted(paidSession(), { fulfillmentTimeoutMs: 1_000 });
+    const result = await handleCheckoutSessionCompleted(paidSession(), {
+      fulfillmentTimeoutMs: 1_000,
+    });
 
     expect(result).toMatchObject({ httpStatus: 200, outcome: "confirmed" });
     expect(writes).toHaveLength(1);
-    expect(writes[0].values).toMatchObject({ paymentStatus: "completed", appointmentStatus: "confirmed", stripePaymentIntentId: "pi_test_1", stripeSessionId: "cs_test_1" });
+    expect(writes[0].values).toMatchObject({
+      paymentStatus: "completed",
+      appointmentStatus: "confirmed",
+      stripePaymentIntentId: "pi_test_1",
+      stripeSessionId: "cs_test_1",
+    });
     const { sql, params } = dialect.sqlToQuery(writes[0].where);
     expect(sql).toContain('"payment_status" =');
     expect(sql).toContain('"appointment_status" =');
     expect(sql).toContain('"stripe_session_id" is null');
-    expect(params).toEqual(expect.arrayContaining([42, "pending", "held", "cs_test_1"]));
+    expect(params).toEqual(
+      expect.arrayContaining([42, "pending", "held", "cs_test_1"])
+    );
     expect(fulfillment.enqueueAppointmentFulfillment).toHaveBeenCalledWith(42);
     // The jobs share the immediate budget (ABUS-03): it ends with the wait for them.
-    expect(fulfillment.processAppointmentFulfillmentNow).toHaveBeenCalledWith(42, { deadlineAt: expect.any(Number) });
-    const [[, { deadlineAt }]] = fulfillment.processAppointmentFulfillmentNow.mock.calls as unknown as Array<[number, { deadlineAt: number }]>;
+    expect(fulfillment.processAppointmentFulfillmentNow).toHaveBeenCalledWith(
+      42,
+      { deadlineAt: expect.any(Number) }
+    );
+    const [[, { deadlineAt }]] = fulfillment.processAppointmentFulfillmentNow
+      .mock.calls as unknown as Array<[number, { deadlineAt: number }]>;
     expect(deadlineAt).toBeGreaterThanOrEqual(startedAt + 1_000);
     expect(deadlineAt).toBeLessThanOrEqual(Date.now() + 1_000);
     expect(owner.notifyOwner).not.toHaveBeenCalled();
@@ -116,7 +155,11 @@ describe("webhook Stripe checkout.session.completed", () => {
 
     const result = await handleCheckoutSessionCompleted(paidSession());
 
-    expect(result).toMatchObject({ httpStatus: 200, outcome: "unconfirmable", body: { received: true, confirmed: false, manualReviewRequired: true } });
+    expect(result).toMatchObject({
+      httpStatus: 200,
+      outcome: "unconfirmable",
+      body: { received: true, confirmed: false, manualReviewRequired: true },
+    });
     expect(writes).toHaveLength(2);
     expect(writes[1].values).toEqual({ stripePaymentIntentId: "pi_test_1" });
     const { sql } = dialect.sqlToQuery(writes[1].where);
@@ -126,10 +169,16 @@ describe("webhook Stripe checkout.session.completed", () => {
     const alert = owner.notifyOwner.mock.calls[0]![0];
     expect(alert.title).toContain("non confirmable");
     expect(alert.title).toContain("APT-42");
-    expect(alert.content).toContain("Remboursement ou reprogrammation manuelle requis");
+    expect(alert.content).toContain(
+      "Remboursement ou reprogrammation manuelle requis"
+    );
     // MAIL-04: whom to call, and where the appointment is.
-    expect(alert.content).toContain("Patient : Jeanne Martin — jeanne@test.local — +33 6 12 34 56 78.");
-    expect(alert.content).toContain("Ouvrir le rendez-vous : https://drahmedbenlallahom.com/admin?tab=appointments&ref=APT-42");
+    expect(alert.content).toContain(
+      "Patient : Jeanne Martin — jeanne@test.local — +33 6 12 34 56 78."
+    );
+    expect(alert.content).toContain(
+      "Ouvrir le rendez-vous : https://drahmedbenlallahom.com/admin?tab=appointments&ref=APT-42"
+    );
     expect(alert.content).toContain("pi_test_1");
     expect(fulfillment.enqueueAppointmentFulfillment).not.toHaveBeenCalled();
   });
@@ -141,17 +190,36 @@ describe("webhook Stripe checkout.session.completed", () => {
 
     const result = await handleCheckoutSessionCompleted(paidSession());
 
-    expect(result).toMatchObject({ httpStatus: 500, outcome: "unconfirmable", body: { received: false } });
+    expect(result).toMatchObject({
+      httpStatus: 500,
+      outcome: "unconfirmable",
+      body: { received: false },
+    });
     expect(owner.notifyOwner).toHaveBeenCalledTimes(1);
     // Seule la tentative de confirmation conditionnelle a écrit : aucun
     // stripePaymentIntentId ne vient transformer la relivraison en doublon muet.
     expect(writes).toHaveLength(1);
-    expect(writes.some(write => "stripePaymentIntentId" in write.values && !("paymentStatus" in write.values))).toBe(false);
+    expect(
+      writes.some(
+        write =>
+          "stripePaymentIntentId" in write.values &&
+          !("paymentStatus" in write.values)
+      )
+    ).toBe(false);
   });
 
   it("répond aussi 5xx pour un double paiement si l’alerte échoue", async () => {
     owner.notifyOwner.mockRejectedValueOnce(new Error("resend_down"));
-    fakeDatabase([[heldAppointment({ paymentStatus: "completed", appointmentStatus: "confirmed", stripeSessionId: "cs_first", stripePaymentIntentId: "pi_first" })]]);
+    fakeDatabase([
+      [
+        heldAppointment({
+          paymentStatus: "completed",
+          appointmentStatus: "confirmed",
+          stripeSessionId: "cs_first",
+          stripePaymentIntentId: "pi_first",
+        }),
+      ],
+    ]);
 
     const result = await handleCheckoutSessionCompleted(paidSession());
 
@@ -159,39 +227,81 @@ describe("webhook Stripe checkout.session.completed", () => {
   });
 
   it("ne confirme pas automatiquement une session différente de celle enregistrée", async () => {
-    const { writes } = fakeDatabase([[heldAppointment({ stripeSessionId: "cs_other" })]]);
+    const { writes } = fakeDatabase([
+      [heldAppointment({ stripeSessionId: "cs_other" })],
+    ]);
 
     const result = await handleCheckoutSessionCompleted(paidSession());
 
     expect(result).toMatchObject({ httpStatus: 200, outcome: "unconfirmable" });
     expect(confirmingWrites(writes)).toHaveLength(0);
-    expect(owner.notifyOwner).toHaveBeenCalledWith(expect.objectContaining({ content: expect.stringContaining("ne correspond pas") }));
+    expect(owner.notifyOwner).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining("ne correspond pas"),
+      })
+    );
     expect(fulfillment.enqueueAppointmentFulfillment).not.toHaveBeenCalled();
   });
 
   it("reste idempotent pour une nouvelle livraison du même paiement", async () => {
-    const { writes } = fakeDatabase([[heldAppointment({ paymentStatus: "completed", appointmentStatus: "confirmed", stripePaymentIntentId: "pi_test_1" })]]);
+    const { writes } = fakeDatabase([
+      [
+        heldAppointment({
+          paymentStatus: "completed",
+          appointmentStatus: "confirmed",
+          stripePaymentIntentId: "pi_test_1",
+        }),
+      ],
+    ]);
 
     const result = await handleCheckoutSessionCompleted(paidSession());
 
-    expect(result).toMatchObject({ httpStatus: 200, outcome: "duplicate", body: { received: true, duplicate: true } });
+    expect(result).toMatchObject({
+      httpStatus: 200,
+      outcome: "duplicate",
+      body: { received: true, duplicate: true },
+    });
     expect(writes).toHaveLength(0);
     expect(fulfillment.enqueueAppointmentFulfillment).toHaveBeenCalledWith(42);
     expect(owner.notifyOwner).not.toHaveBeenCalled();
   });
 
   it("signale un second paiement sur un rendez-vous déjà réglé par une autre session", async () => {
-    fakeDatabase([[heldAppointment({ paymentStatus: "completed", appointmentStatus: "confirmed", stripeSessionId: "cs_first", stripePaymentIntentId: "pi_first" })]]);
+    fakeDatabase([
+      [
+        heldAppointment({
+          paymentStatus: "completed",
+          appointmentStatus: "confirmed",
+          stripeSessionId: "cs_first",
+          stripePaymentIntentId: "pi_first",
+        }),
+      ],
+    ]);
 
     const result = await handleCheckoutSessionCompleted(paidSession());
 
     expect(result).toMatchObject({ httpStatus: 200, outcome: "unconfirmable" });
-    expect(owner.notifyOwner).toHaveBeenCalledWith(expect.objectContaining({ content: expect.stringContaining("double paiement") }));
+    expect(owner.notifyOwner).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining("double paiement"),
+      })
+    );
     expect(fulfillment.enqueueAppointmentFulfillment).not.toHaveBeenCalled();
   });
 
   it("traite une livraison concurrente qui a déjà confirmé le même paiement comme un doublon", async () => {
-    fakeDatabase([[heldAppointment()], [heldAppointment({ paymentStatus: "completed", appointmentStatus: "confirmed" })]], [0]);
+    fakeDatabase(
+      [
+        [heldAppointment()],
+        [
+          heldAppointment({
+            paymentStatus: "completed",
+            appointmentStatus: "confirmed",
+          }),
+        ],
+      ],
+      [0]
+    );
 
     const result = await handleCheckoutSessionCompleted(paidSession());
 
@@ -202,95 +312,172 @@ describe("webhook Stripe checkout.session.completed", () => {
   it("conserve le contrôle du montant", async () => {
     const { writes } = fakeDatabase([[heldAppointment()]]);
 
-    const result = await handleCheckoutSessionCompleted(paidSession({ amount_total: 100 }));
+    const result = await handleCheckoutSessionCompleted(
+      paidSession({ amount_total: 100 })
+    );
 
-    expect(result).toEqual({ httpStatus: 400, body: { error: "Invalid webhook" }, outcome: "amount_mismatch" });
+    expect(result).toEqual({
+      httpStatus: 400,
+      body: { error: "Invalid webhook" },
+      outcome: "amount_mismatch",
+    });
     expect(writes).toHaveLength(0);
   });
 
   it("répond à Stripe même si l’envoi immédiat échoue", async () => {
     fakeDatabase([[heldAppointment()]], [1]);
-    fulfillment.processAppointmentFulfillmentNow.mockRejectedValueOnce(new Error("Database connection failed"));
+    fulfillment.processAppointmentFulfillmentNow.mockRejectedValueOnce(
+      new Error("Database connection failed")
+    );
 
-    const result = await handleCheckoutSessionCompleted(paidSession(), { fulfillmentTimeoutMs: 1_000 });
+    const result = await handleCheckoutSessionCompleted(paidSession(), {
+      fulfillmentTimeoutMs: 1_000,
+    });
 
     expect(result).toMatchObject({ httpStatus: 200, outcome: "confirmed" });
   });
 });
 
 describe("webhook Stripe charge.refunded (RES-06)", () => {
-  const paidRow = () => heldAppointment({ paymentStatus: "completed", appointmentStatus: "confirmed", stripePaymentIntentId: "pi_test_1", slotKey: "2026-11-02T09:00:00.000Z", cancelledAt: null });
-  const fullRefund = { id: "ch_test_1", amount: 10000, amount_refunded: 10000, refunded: true, payment_intent: "pi_test_1" };
+  const paidRow = () =>
+    heldAppointment({
+      paymentStatus: "completed",
+      appointmentStatus: "confirmed",
+      stripePaymentIntentId: "pi_test_1",
+      slotKey: "2026-11-02T09:00:00.000Z",
+      cancelledAt: null,
+    });
+  const fullRefund = {
+    id: "ch_test_1",
+    amount: 10000,
+    amount_refunded: 10000,
+    refunded: true,
+    payment_intent: "pi_test_1",
+  };
 
   it("ne modifie que la ligne encore payée avec ce paiement et ce statut", async () => {
     const { writes } = fakeDatabase([[paidRow()]], [1]);
     const result = await handleChargeRefunded(fullRefund);
 
     expect(result).toMatchObject({ httpStatus: 200, outcome: "refunded" });
-    expect(writes[0].values).toMatchObject({ paymentStatus: "refunded", appointmentStatus: "cancelled", slotKey: null, refundAmount: "100.00" });
+    expect(writes[0].values).toMatchObject({
+      paymentStatus: "refunded",
+      appointmentStatus: "cancelled",
+      slotKey: null,
+      refundAmount: "100.00",
+    });
     const { sql, params } = dialect.sqlToQuery(writes[0].where);
     expect(sql).toContain('"stripe_payment_intent_id" =');
-    expect(params).toEqual(expect.arrayContaining([42, "pi_test_1", "completed", "confirmed"]));
+    expect(params).toEqual(
+      expect.arrayContaining([42, "pi_test_1", "completed", "confirmed"])
+    );
     // Patient email and owner alert: queued, then attempted right away (RES-06).
     expect(fulfillment.enqueueStripeRefundNotices).toHaveBeenCalledWith(42);
-    expect(fulfillment.processAppointmentFulfillmentNow).toHaveBeenCalledWith(42, { deadlineAt: expect.any(Number) });
+    expect(fulfillment.processAppointmentFulfillmentNow).toHaveBeenCalledWith(
+      42,
+      { deadlineAt: expect.any(Number) }
+    );
     expect(owner.notifyOwner).not.toHaveBeenCalled();
     // Post-payment emails still waiting for a retry are closed as not sent (EXPL-02).
-    expect(fulfillment.closeUnsentAppointmentFulfillment).toHaveBeenCalledWith(42, expect.any(Date));
+    expect(fulfillment.closeUnsentAppointmentFulfillment).toHaveBeenCalledWith(
+      42,
+      expect.any(Date)
+    );
   });
 
   it("répond 500 si les envois ne peuvent pas être mis en file : la relivraison les remet en file", async () => {
     fakeDatabase([[paidRow()]], [1]);
-    fulfillment.enqueueStripeRefundNotices.mockRejectedValueOnce(new Error("Database connection failed"));
+    fulfillment.enqueueStripeRefundNotices.mockRejectedValueOnce(
+      new Error("Database connection failed")
+    );
 
-    await expect(handleChargeRefunded(fullRefund)).rejects.toThrow("Database connection failed");
+    await expect(handleChargeRefunded(fullRefund)).rejects.toThrow(
+      "Database connection failed"
+    );
   });
 
   it("demande à Stripe de relivrer quand le rendez-vous a changé entre-temps sans être remboursé", async () => {
     owner.notifyOwner.mockClear();
-    fakeDatabase([[paidRow()], [{ ...paidRow(), appointmentStatus: "completed" }]], [0]);
+    fakeDatabase(
+      [[paidRow()], [{ ...paidRow(), appointmentStatus: "completed" }]],
+      [0]
+    );
     const result = await handleChargeRefunded(fullRefund);
 
-    expect(result).toEqual({ httpStatus: 500, body: { received: false }, outcome: "changed_concurrently" });
+    expect(result).toEqual({
+      httpStatus: 500,
+      body: { received: false },
+      outcome: "changed_concurrently",
+    });
     expect(owner.notifyOwner).not.toHaveBeenCalled();
-    expect(fulfillment.closeUnsentAppointmentFulfillment).not.toHaveBeenCalled();
+    expect(
+      fulfillment.closeUnsentAppointmentFulfillment
+    ).not.toHaveBeenCalled();
   });
 });
 
 describe("envoi immédiat borné dans le temps", () => {
   it("rend la main après le délai sans attendre l’envoi", async () => {
-    const outcome = await processFulfillmentBestEffort(1, 5, () => new Promise(() => undefined));
+    const outcome = await processFulfillmentBestEffort(
+      1,
+      5,
+      () => new Promise(() => undefined)
+    );
     expect(outcome).toEqual({ processed: 0, timedOut: true, failed: false });
   });
 
   it("n’émet pas de rejet non géré quand l’envoi échoue après le délai", async () => {
-    const outcome = await processFulfillmentBestEffort(1, 5, () => new Promise((_resolve, reject) => setTimeout(() => reject(new Error("late")), 20)));
+    const outcome = await processFulfillmentBestEffort(
+      1,
+      5,
+      () =>
+        new Promise((_resolve, reject) =>
+          setTimeout(() => reject(new Error("late")), 20)
+        )
+    );
     expect(outcome.timedOut).toBe(true);
     await new Promise(resolve => setTimeout(resolve, 40));
   });
 
   it("journalise l’échec de l’envoi immédiat sur une ligne JSON, avec le SQLSTATE et sans les paramètres de la requête (EXPL-11)", async () => {
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const timeout = Object.assign(new Error("canceling statement due to statement timeout"), { code: "57014" });
-    const refused = new DrizzleQueryError('update "appointment_fulfillment_jobs" set "last_error" = $1 where "appointment_fulfillment_jobs"."id" = $2', ["confirmation_email_rejected:patient.synthetic@example.test", 7], timeout);
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const timeout = Object.assign(
+      new Error("canceling statement due to statement timeout"),
+      { code: "57014" }
+    );
+    const refused = new DrizzleQueryError(
+      'update "appointment_fulfillment_jobs" set "last_error" = $1 where "appointment_fulfillment_jobs"."id" = $2',
+      ["confirmation_email_rejected:patient.synthetic@example.test", 7],
+      timeout
+    );
 
-    const outcome = await processFulfillmentBestEffort(1, 1_000, async () => { throw refused; });
+    const outcome = await processFulfillmentBestEffort(1, 1_000, async () => {
+      throw refused;
+    });
 
     expect(outcome).toEqual({ processed: 0, timedOut: false, failed: true });
     expect(consoleError.mock.calls).toEqual([[expect.any(String)]]);
     expect(JSON.parse(consoleError.mock.calls[0]![0] as string)).toEqual({
-      label: "[AppointmentFulfillment] Immediate processing failed; left for scheduled retry",
+      label:
+        "[AppointmentFulfillment] Immediate processing failed; left for scheduled retry",
       name: "Error",
       code: "57014",
-      message: 'Failed query: update "appointment_fulfillment_jobs" set "last_error" = $1 where "appointment_fulfillment_jobs"."id" = $2',
+      message:
+        'Failed query: update "appointment_fulfillment_jobs" set "last_error" = $1 where "appointment_fulfillment_jobs"."id" = $2',
       cause: "Error: canceling statement due to statement timeout",
     });
-    expect(JSON.stringify(consoleError.mock.calls)).not.toContain("patient.synthetic");
+    expect(JSON.stringify(consoleError.mock.calls)).not.toContain(
+      "patient.synthetic"
+    );
     consoleError.mockRestore();
   });
 
   it("retourne le nombre de jobs traités quand l’envoi aboutit à temps", async () => {
-    const outcome = await processFulfillmentBestEffort(1, 1_000, async () => ({ processed: 2 }));
+    const outcome = await processFulfillmentBestEffort(1, 1_000, async () => ({
+      processed: 2,
+    }));
     expect(outcome).toEqual({ processed: 2, timedOut: false, failed: false });
   });
 });
@@ -305,11 +492,19 @@ describe("alerte de paiement non confirmable", () => {
       paymentIntentId: "pi_9",
       paymentStatus: "pending",
       appointmentStatus: "cancelled",
-      patient: { name: "Jeanne Martin", email: "jeanne@test.local", phone: "+33 6 12 34 56 78" },
+      patient: {
+        name: "Jeanne Martin",
+        email: "jeanne@test.local",
+        phone: "+33 6 12 34 56 78",
+      },
     });
-    expect(alert.title).toBe("Paiement reçu pour un rendez-vous non confirmable (APT-9)");
+    expect(alert.title).toBe(
+      "Paiement reçu pour un rendez-vous non confirmable (APT-9)"
+    );
     expect(alert.content).toContain("120,00 €");
-    expect(alert.content).toContain("Remboursement ou reprogrammation manuelle requis");
+    expect(alert.content).toContain(
+      "Remboursement ou reprogrammation manuelle requis"
+    );
   });
 
   it("dit quoi, quand (heure de Paris), quoi faire et avec qui, avec le lien du rendez-vous et les identifiants Stripe à la fin (MAIL-04)", () => {
@@ -322,7 +517,11 @@ describe("alerte de paiement non confirmable", () => {
       paymentIntentId: "pi_3Q9",
       paymentStatus: "pending",
       appointmentStatus: "cancelled",
-      patient: { name: "Jeanne Martin", email: "jeanne@test.local", phone: "+33 6 12 34 56 78" },
+      patient: {
+        name: "Jeanne Martin",
+        email: "jeanne@test.local",
+        phone: "+33 6 12 34 56 78",
+      },
       receivedAt: new Date("2026-11-12T14:05:00Z"),
     });
     expect(alert.content.split("\n")).toEqual([
@@ -335,7 +534,9 @@ describe("alerte de paiement non confirmable", () => {
       `Session Stripe : ${sessionId}`,
       "Paiement Stripe (PaymentIntent) : pi_3Q9",
     ]);
-    expect(alert.content).not.toMatch(/onglet Rendez-vous|pending|cancelled|100\.00/);
+    expect(alert.content).not.toMatch(
+      /onglet Rendez-vous|pending|cancelled|100\.00/
+    );
   });
 
   it("dit d’un montant que Stripe n’a pas donné qu’il est inconnu, dans une phrase correcte (MAIL-04)", () => {
@@ -347,11 +548,19 @@ describe("alerte de paiement non confirmable", () => {
       paymentIntentId: null,
       paymentStatus: "pending",
       appointmentStatus: "cancelled",
-      patient: { name: "Jeanne Martin", email: "jeanne@test.local", phone: "+33 6 12 34 56 78" },
+      patient: {
+        name: "Jeanne Martin",
+        email: "jeanne@test.local",
+        phone: "+33 6 12 34 56 78",
+      },
       receivedAt: new Date("2026-11-12T14:05:00Z"),
     });
-    expect(alert.content.split("\n")[0]).toMatch(/^Le 12 novembre 2026 à 15:05 \(heure de Paris\), Stripe a signalé un paiement d’un montant inconnu pour le rendez-vous APT-9, qui n’a pas pu être confirmé automatiquement : /);
+    expect(alert.content.split("\n")[0]).toMatch(
+      /^Le 12 novembre 2026 à 15:05 \(heure de Paris\), Stripe a signalé un paiement d’un montant inconnu pour le rendez-vous APT-9, qui n’a pas pu être confirmé automatiquement : /
+    );
     expect(alert.content).not.toContain("paiement de inconnu");
-    expect(alert.content).toContain("Paiement Stripe (PaymentIntent) : non communiqué");
+    expect(alert.content).toContain(
+      "Paiement Stripe (PaymentIntent) : non communiqué"
+    );
   });
 });

@@ -1,10 +1,20 @@
-import { dailyOwnerAlertIdempotencyKey, enforcePersistentRateLimit, recordPersistentRateLimitAttempt, releasePersistentRateLimitAttempt, sendOwnerAlertOncePerWindow } from "./candidateSecurity";
+import {
+  dailyOwnerAlertIdempotencyKey,
+  enforcePersistentRateLimit,
+  recordPersistentRateLimitAttempt,
+  releasePersistentRateLimitAttempt,
+  sendOwnerAlertOncePerWindow,
+} from "./candidateSecurity";
 import { notifyOwner } from "./_core/notification";
 
 /** Clé de comptage : couple IP + email (formulaires), IP seule ou email seul (réservation). */
 export type PublicFormRateLimitScope = "ip_email" | "ip" | "email";
 
-export function publicFormRateLimitSubject(scope: PublicFormRateLimitScope, ipHash: string | null, email: string): string | null {
+export function publicFormRateLimitSubject(
+  scope: PublicFormRateLimitScope,
+  ipHash: string | null,
+  email: string
+): string | null {
   if (scope === "ip_email") return `${ipHash ?? "unknown"}:${email}`;
   if (scope === "email") return `email:${email}`;
   // Sans IP identifiable, ne jamais regrouper tous les patients dans un seul
@@ -29,12 +39,42 @@ const DAY_MS = 24 * HOUR_MS;
 // souvent la même IP. Le contact et les demandes RGPD (ABUS-01) écrivent
 // chacun au propriétaire : même compteur, en plus de leur limite IP + email.
 export const PUBLIC_EMAIL_IP_RATE_LIMITS = {
-  contact: { action: "public_contact_submit_ip", maxAttempts: 10, windowMs: HOUR_MS, blockMs: HOUR_MS },
-  gdpr: { action: "public_gdpr_submit_ip", maxAttempts: 5, windowMs: DAY_MS, blockMs: DAY_MS },
-  medicalQuestion: { action: "public_medical_question_submit_ip", maxAttempts: 5, windowMs: HOUR_MS, blockMs: HOUR_MS },
-  recruitmentApply: { action: "public_recruitment_apply_ip", maxAttempts: 10, windowMs: HOUR_MS, blockMs: HOUR_MS },
-  candidateRegister: { action: "candidate_register_ip", maxAttempts: 5, windowMs: HOUR_MS, blockMs: HOUR_MS },
-  candidateVerificationResend: { action: "candidate_verification_resend_ip", maxAttempts: 5, windowMs: HOUR_MS, blockMs: HOUR_MS },
+  contact: {
+    action: "public_contact_submit_ip",
+    maxAttempts: 10,
+    windowMs: HOUR_MS,
+    blockMs: HOUR_MS,
+  },
+  gdpr: {
+    action: "public_gdpr_submit_ip",
+    maxAttempts: 5,
+    windowMs: DAY_MS,
+    blockMs: DAY_MS,
+  },
+  medicalQuestion: {
+    action: "public_medical_question_submit_ip",
+    maxAttempts: 5,
+    windowMs: HOUR_MS,
+    blockMs: HOUR_MS,
+  },
+  recruitmentApply: {
+    action: "public_recruitment_apply_ip",
+    maxAttempts: 10,
+    windowMs: HOUR_MS,
+    blockMs: HOUR_MS,
+  },
+  candidateRegister: {
+    action: "candidate_register_ip",
+    maxAttempts: 5,
+    windowMs: HOUR_MS,
+    blockMs: HOUR_MS,
+  },
+  candidateVerificationResend: {
+    action: "candidate_verification_resend_ip",
+    maxAttempts: 5,
+    windowMs: HOUR_MS,
+    blockMs: HOUR_MS,
+  },
 } as const;
 
 /**
@@ -42,17 +82,29 @@ export const PUBLIC_EMAIL_IP_RATE_LIMITS = {
  * enforcePersistentRateLimit, « candidate_security_rate_limited » au-delà du
  * seuil. Sans IP identifiable rien n’est compté (voir publicFormRateLimitSubject).
  */
-export async function enforcePublicEmailIpRateLimit(kind: keyof typeof PUBLIC_EMAIL_IP_RATE_LIMITS, ipHash: string | null): Promise<void> {
+export async function enforcePublicEmailIpRateLimit(
+  kind: keyof typeof PUBLIC_EMAIL_IP_RATE_LIMITS,
+  ipHash: string | null
+): Promise<void> {
   const subject = publicFormRateLimitSubject("ip", ipHash, "");
   if (!subject) return;
-  await enforcePersistentRateLimit({ ...PUBLIC_EMAIL_IP_RATE_LIMITS[kind], subject });
+  await enforcePersistentRateLimit({
+    ...PUBLIC_EMAIL_IP_RATE_LIMITS[kind],
+    subject,
+  });
 }
 
 /** Rend l’envoi compté par enforcePublicEmailIpRateLimit quand la demande échoue ensuite de notre côté (erreur 500). */
-export async function releasePublicEmailIpRateLimit(kind: keyof typeof PUBLIC_EMAIL_IP_RATE_LIMITS, ipHash: string | null): Promise<void> {
+export async function releasePublicEmailIpRateLimit(
+  kind: keyof typeof PUBLIC_EMAIL_IP_RATE_LIMITS,
+  ipHash: string | null
+): Promise<void> {
   const subject = publicFormRateLimitSubject("ip", ipHash, "");
   if (!subject) return;
-  await releasePersistentRateLimitAttempt({ ...PUBLIC_EMAIL_IP_RATE_LIMITS[kind], subject });
+  await releasePersistentRateLimitAttempt({
+    ...PUBLIC_EMAIL_IP_RATE_LIMITS[kind],
+    subject,
+  });
 }
 
 /**
@@ -73,8 +125,12 @@ export const PUBLIC_FORM_DAILY_VOLUME_THRESHOLDS = {
   candidateRegister: 50,
 } as const;
 
-export type PublicFormVolumeKind = keyof typeof PUBLIC_FORM_DAILY_VOLUME_THRESHOLDS;
-export type PublicFormDailyVolumeKind = Exclude<PublicFormVolumeKind, "candidateRegister">;
+export type PublicFormVolumeKind =
+  keyof typeof PUBLIC_FORM_DAILY_VOLUME_THRESHOLDS;
+export type PublicFormDailyVolumeKind = Exclude<
+  PublicFormVolumeKind,
+  "candidateRegister"
+>;
 
 /** Libellés des alertes au propriétaire (pluriel, « 50 messages de contact »). */
 export const PUBLIC_FORM_VOLUME_LABELS: Record<PublicFormVolumeKind, string> = {
@@ -85,7 +141,10 @@ export const PUBLIC_FORM_VOLUME_LABELS: Record<PublicFormVolumeKind, string> = {
   candidateRegister: "créations d’espace candidat",
 };
 
-const PUBLIC_FORM_DAILY_VOLUME_ACTIONS: Record<PublicFormDailyVolumeKind, string> = {
+const PUBLIC_FORM_DAILY_VOLUME_ACTIONS: Record<
+  PublicFormDailyVolumeKind,
+  string
+> = {
   contact: "public_contact_daily_volume",
   gdpr: "public_gdpr_daily_volume",
   medicalQuestion: "public_medical_question_daily_volume",
@@ -93,10 +152,13 @@ const PUBLIC_FORM_DAILY_VOLUME_ACTIONS: Record<PublicFormDailyVolumeKind, string
 };
 
 const PUBLIC_FORM_SKIPPED_EFFECTS: Record<PublicFormDailyVolumeKind, string> = {
-  contact: "sans accusé de réception à l’adresse saisie ni email de notification pour chacune",
+  contact:
+    "sans accusé de réception à l’adresse saisie ni email de notification pour chacune",
   gdpr: "sans accusé de réception à l’adresse saisie ni email de notification pour chacune",
-  medicalQuestion: "sans accusé de réception à l’adresse saisie ni email de notification pour chacune",
-  recruitmentApply: "sans email de confirmation au candidat, sans email de notification pour chacune et sans analyse IA du CV (« Analyser le CV » sur les dossiers légitimes)",
+  medicalQuestion:
+    "sans accusé de réception à l’adresse saisie ni email de notification pour chacune",
+  recruitmentApply:
+    "sans email de confirmation au candidat, sans email de notification pour chacune et sans analyse IA du CV (« Analyser le CV » sur les dossiers légitimes)",
 };
 
 /**
@@ -106,26 +168,49 @@ const PUBLIC_FORM_SKIPPED_EFFECTS: Record<PublicFormDailyVolumeKind, string> = {
  * par jour, quel que soit le nombre de demandes ainsi traitées (même pour des
  * demandes simultanées). Un compteur indisponible ne coupe rien.
  */
-export async function countPublicFormDailyVolume(kind: PublicFormDailyVolumeKind): Promise<boolean> {
+export async function countPublicFormDailyVolume(
+  kind: PublicFormDailyVolumeKind
+): Promise<boolean> {
   const threshold = PUBLIC_FORM_DAILY_VOLUME_THRESHOLDS[kind];
   const action = PUBLIC_FORM_DAILY_VOLUME_ACTIONS[kind];
   let state: Awaited<ReturnType<typeof recordPersistentRateLimitAttempt>>;
   try {
-    state = await recordPersistentRateLimitAttempt({ action, subject: "global", maxAttempts: threshold, windowMs: DAY_MS, blockMs: DAY_MS });
+    state = await recordPersistentRateLimitAttempt({
+      action,
+      subject: "global",
+      maxAttempts: threshold,
+      windowMs: DAY_MS,
+      blockMs: DAY_MS,
+    });
   } catch (error) {
-    console.error("public_form_daily_volume_unavailable", error instanceof Error ? error.name : "UnknownError");
+    console.error(
+      "public_form_daily_volume_unavailable",
+      error instanceof Error ? error.name : "UnknownError"
+    );
     return true;
   }
   if (!state.blocked) return true;
   // An alert that could not leave is sent by a later request above the threshold.
   const alertAction = `${action}_alert`;
-  await sendOwnerAlertOncePerWindow({ action: alertAction, subject: "global", windowMs: DAY_MS, blockMs: DAY_MS }, () => notifyOwner({
-    title: `Volume inhabituel : plus de ${threshold} ${PUBLIC_FORM_VOLUME_LABELS[kind]} en 24 heures`,
-    content: [
-      `Le seuil quotidien de ${threshold} ${PUBLIC_FORM_VOLUME_LABELS[kind]} est dépassé (moins de 24 heures, tous visiteurs confondus).`,
-      `Le formulaire reste ouvert : pendant les 24 prochaines heures, les demandes suivantes sont enregistrées ${PUBLIC_FORM_SKIPPED_EFFECTS[kind]}. Aucun autre email ne vous sera envoyé pour ce volume.`,
-      "Consultez-les dans l’administration. S’il s’agit d’envois automatisés, activez l’Attack Challenge Mode du pare-feu Vercel.",
-    ].join("\n\n"),
-  }, { idempotencyKey: dailyOwnerAlertIdempotencyKey(alertAction) })).catch(() => false);
+  await sendOwnerAlertOncePerWindow(
+    {
+      action: alertAction,
+      subject: "global",
+      windowMs: DAY_MS,
+      blockMs: DAY_MS,
+    },
+    () =>
+      notifyOwner(
+        {
+          title: `Volume inhabituel : plus de ${threshold} ${PUBLIC_FORM_VOLUME_LABELS[kind]} en 24 heures`,
+          content: [
+            `Le seuil quotidien de ${threshold} ${PUBLIC_FORM_VOLUME_LABELS[kind]} est dépassé (moins de 24 heures, tous visiteurs confondus).`,
+            `Le formulaire reste ouvert : pendant les 24 prochaines heures, les demandes suivantes sont enregistrées ${PUBLIC_FORM_SKIPPED_EFFECTS[kind]}. Aucun autre email ne vous sera envoyé pour ce volume.`,
+            "Consultez-les dans l’administration. S’il s’agit d’envois automatisés, activez l’Attack Challenge Mode du pare-feu Vercel.",
+          ].join("\n\n"),
+        },
+        { idempotencyKey: dailyOwnerAlertIdempotencyKey(alertAction) }
+      )
+  ).catch(() => false);
   return false;
 }

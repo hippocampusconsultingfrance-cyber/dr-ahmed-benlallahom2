@@ -25,24 +25,44 @@ describe("page 404 (A11Y-15, PUB-28, A11Y-17)", () => {
   it.each([
     ["fr", "Page introuvable", "Retour à l'accueil"],
     ["en", "Page Not Found", "Go Home"],
-  ] as const)("%s : titre la page « %s » dans un <main> que vise le lien d’évitement", (language, title, home) => {
-    mount(language);
+  ] as const)(
+    "%s : titre la page « %s » dans un <main> que vise le lien d’évitement",
+    (language, title, home) => {
+      mount(language);
 
-    const main = screen.getByRole("main");
-    expect(main.id).toBe("main-content");
-    expect(getMainContentTarget(document)).toBe(main);
-    expect(within(main).getAllByRole("heading", { level: 1 }).map(heading => heading.textContent?.trim())).toEqual([title]);
-    // « 404 » n'est plus le titre : un simple décor.
-    expect(screen.queryByRole("heading", { name: "404" })).toBeNull();
+      const main = screen.getByRole("main");
+      expect(main.id).toBe("main-content");
+      expect(getMainContentTarget(document)).toBe(main);
+      expect(
+        within(main)
+          .getAllByRole("heading", { level: 1 })
+          .map(heading => heading.textContent?.trim())
+      ).toEqual([title]);
+      // « 404 » n'est plus le titre : un simple décor.
+      expect(screen.queryByRole("heading", { name: "404" })).toBeNull();
 
-    expect(screen.getByRole("link", { name: home }).getAttribute("href")).toBe("/");
-    expect(screen.queryByRole("button", { name: home })).toBeNull();
-  });
+      expect(
+        screen.getByRole("link", { name: home }).getAttribute("href")
+      ).toBe("/");
+      expect(screen.queryByRole("button", { name: home })).toBeNull();
+    }
+  );
 
-  it.each(["fr", "en"] as const)("%s : propose de vrais liens vers la réservation, les questions santé, le recrutement, les employeurs et le contact", language => {
-    mount(language);
+  it.each(["fr", "en"] as const)(
+    "%s : propose de vrais liens vers la réservation, les questions santé, le recrutement, les employeurs et le contact",
+    language => {
+      mount(language);
 
-    const shortcuts = screen.getByRole("navigation", { name: publicShortcuts.title[language] });
-    expect(within(shortcuts).getAllByRole("link").map(link => [link.textContent, link.getAttribute("href")])).toEqual(publicShortcuts.links.map(link => [link.label[language], link.href]));
-  });
+      const shortcuts = screen.getByRole("navigation", {
+        name: publicShortcuts.title[language],
+      });
+      expect(
+        within(shortcuts)
+          .getAllByRole("link")
+          .map(link => [link.textContent, link.getAttribute("href")])
+      ).toEqual(
+        publicShortcuts.links.map(link => [link.label[language], link.href])
+      );
+    }
+  );
 });

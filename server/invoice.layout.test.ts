@@ -5,7 +5,9 @@ describe("mise en page de facture", () => {
   it("conserve un format A4, des marges et un pied de page lisible", () => {
     expect(INVOICE_LAYOUT.size).toBe("A4");
     expect(INVOICE_LAYOUT.margin).toBeGreaterThanOrEqual(40);
-    expect(INVOICE_LAYOUT.footerValidityY).toBeGreaterThan(INVOICE_LAYOUT.footerBrandY);
+    expect(INVOICE_LAYOUT.footerValidityY).toBeGreaterThan(
+      INVOICE_LAYOUT.footerBrandY
+    );
     expect(INVOICE_LAYOUT.footerValidityY).toBeLessThan(792);
   });
 

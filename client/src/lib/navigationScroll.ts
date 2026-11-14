@@ -16,7 +16,8 @@ export function scrollToTopOnNavigation(target: Window = window) {
   const navigated = (event: Event) => {
     const samePage = target.location.pathname === pathname;
     pathname = target.location.pathname;
-    if (target.location.hash || (event.type === "replaceState" && samePage)) return;
+    if (target.location.hash || (event.type === "replaceState" && samePage))
+      return;
     target.scrollTo({ top: 0, left: 0, behavior: "instant" });
   };
   const restored = () => {

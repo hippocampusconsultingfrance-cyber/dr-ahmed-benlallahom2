@@ -1,11 +1,27 @@
 import { inspect } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { clientBriefCandidates, clientBriefs, cvApplications, cvCandidateCertifications, cvCandidateLanguages, recruitmentAuditLogs, recruitmentCampaignRecipients, recruitmentCampaigns, recruitmentFollowUpTasks } from "../drizzle/schema";
+import {
+  clientBriefCandidates,
+  clientBriefs,
+  cvApplications,
+  cvCandidateCertifications,
+  cvCandidateLanguages,
+  recruitmentAuditLogs,
+  recruitmentCampaignRecipients,
+  recruitmentCampaigns,
+  recruitmentFollowUpTasks,
+} from "../drizzle/schema";
 import { RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "./recruitmentAnalysis";
 import { createMemoryPg, type MemoryPg } from "./testing/memoryPgProxy";
 import type { TrpcContext } from "./_core/context";
 
-type BatchEmail = { to: string; subject: string; html: string; text: string; headers: Record<string, string> };
+type BatchEmail = {
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+  headers: Record<string, string>;
+};
 
 const state = vi.hoisted(() => ({
   memory: null as null | { db: unknown },
@@ -24,27 +40,55 @@ const state = vi.hoisted(() => ({
 
 vi.mock("./db", () => ({ getDb: async () => state.memory?.db ?? null }));
 vi.mock("./adminMfa", async importOriginal => ({
-  ...await importOriginal<typeof import("./adminMfa")>(),
+  ...(await importOriginal<typeof import("./adminMfa")>()),
   isAdminMfaVerified: vi.fn(async () => true),
 }));
 vi.mock("./_core/notifications", async importOriginal => ({
-  ...await importOriginal<typeof import("./_core/notifications")>(),
+  ...(await importOriginal<typeof import("./_core/notifications")>()),
   // Resend's batch endpoint as it answers (EXPL-08): all the batch or none of it.
-  sendRecruitmentCampaignBatch: vi.fn(async (emails: BatchEmail[], idempotencyKey: string) => {
-    state.keys.push(idempotencyKey);
-    state.batchSizes.push(emails.length);
-    const earlier = state.answers.get(idempotencyKey);
-    if (earlier && earlier.emails === JSON.stringify(emails)) return { ids: earlier.ids, error: null };
-    if (state.quotaExceeded) return { ids: null, error: { name: "daily_quota_exceeded", statusCode: 429, message: "daily quota" }, failureCode: "quota", messageRefused: false, retryLater: true };
-    if (emails.some(email => state.failFor.has(email.to))) return { ids: null, error: { name: "validation_error", statusCode: 422, message: "Invalid `to` field" }, failureCode: "provider_rejected", messageRefused: true, retryLater: false };
-    const ids = emails.map(email => `email-${state.sentTo.push(email.to)}`);
-    state.answers.set(idempotencyKey, { emails: JSON.stringify(emails), ids });
-    if (state.loseNextAnswer) {
-      state.loseNextAnswer = false;
-      throw new Error("fetch failed");
+  sendRecruitmentCampaignBatch: vi.fn(
+    async (emails: BatchEmail[], idempotencyKey: string) => {
+      state.keys.push(idempotencyKey);
+      state.batchSizes.push(emails.length);
+      const earlier = state.answers.get(idempotencyKey);
+      if (earlier && earlier.emails === JSON.stringify(emails))
+        return { ids: earlier.ids, error: null };
+      if (state.quotaExceeded)
+        return {
+          ids: null,
+          error: {
+            name: "daily_quota_exceeded",
+            statusCode: 429,
+            message: "daily quota",
+          },
+          failureCode: "quota",
+          messageRefused: false,
+          retryLater: true,
+        };
+      if (emails.some(email => state.failFor.has(email.to)))
+        return {
+          ids: null,
+          error: {
+            name: "validation_error",
+            statusCode: 422,
+            message: "Invalid `to` field",
+          },
+          failureCode: "provider_rejected",
+          messageRefused: true,
+          retryLater: false,
+        };
+      const ids = emails.map(email => `email-${state.sentTo.push(email.to)}`);
+      state.answers.set(idempotencyKey, {
+        emails: JSON.stringify(emails),
+        ids,
+      });
+      if (state.loseNextAnswer) {
+        state.loseNextAnswer = false;
+        throw new Error("fetch failed");
+      }
+      return { ids, error: null };
     }
-    return { ids, error: null };
-  }),
+  ),
 }));
 
 import { appRouter, driveRetryOutcome, reanalysisOutcome } from "./routers";
@@ -62,21 +106,46 @@ function admin() {
     user: { openId: "user_owner", role: "admin" } as TrpcContext["user"],
     mfaVerified: true,
     req: { protocol: "https", headers: {} } as TrpcContext["req"],
-    res: { clearCookie: vi.fn(), cookie: vi.fn() } as unknown as TrpcContext["res"],
+    res: {
+      clearCookie: vi.fn(),
+      cookie: vi.fn(),
+    } as unknown as TrpcContext["res"],
   };
   return appRouter.createCaller(ctx);
 }
 
 function seedCandidate(index: number, extra: Record<string, unknown> = {}) {
-  return memory.seed(cvApplications, [{
-    tracking_id: `CVACTIONS${String(index).padStart(5, "0")}`, first_name: `Prénom${index}`, last_name: "Nom", email: `c${index}@test.local`, specialty: "Anesthésie", target_countries: "[]",
-    cv_file_key: `recruitment/cv/k${index}.pdf`, cv_original_name: "cv.pdf", cv_mime_type: "application/pdf", cv_size_bytes: 1000, marketing_consent: 1, ...extra,
-  }])[0]!;
+  return memory.seed(cvApplications, [
+    {
+      tracking_id: `CVACTIONS${String(index).padStart(5, "0")}`,
+      first_name: `Prénom${index}`,
+      last_name: "Nom",
+      email: `c${index}@test.local`,
+      specialty: "Anesthésie",
+      target_countries: "[]",
+      cv_file_key: `recruitment/cv/k${index}.pdf`,
+      cv_original_name: "cv.pdf",
+      cv_mime_type: "application/pdf",
+      cv_size_bytes: 1000,
+      marketing_consent: 1,
+      ...extra,
+    },
+  ])[0]!;
 }
 
 describe("actions d’administration du recrutement", () => {
   beforeEach(() => {
-    memory = createMemoryPg([cvApplications, cvCandidateCertifications, cvCandidateLanguages, recruitmentAuditLogs, clientBriefs, clientBriefCandidates, recruitmentCampaigns, recruitmentCampaignRecipients, recruitmentFollowUpTasks]);
+    memory = createMemoryPg([
+      cvApplications,
+      cvCandidateCertifications,
+      cvCandidateLanguages,
+      recruitmentAuditLogs,
+      clientBriefs,
+      clientBriefCandidates,
+      recruitmentCampaigns,
+      recruitmentCampaignRecipients,
+      recruitmentFollowUpTasks,
+    ]);
     state.memory = memory;
     state.sentTo = [];
     state.keys = [];
@@ -91,28 +160,67 @@ describe("actions d’administration du recrutement", () => {
   });
 
   it("changer le statut conserve la note interne (ADM-REC-01)", async () => {
-    const candidate = seedCandidate(1, { admin_notes: "Très bon profil, rappeler lundi" });
-    await admin().admin.recruitment.updateStatus({ id: candidate.id as number, status: "reviewing" });
-    expect(memory.rows(cvApplications)[0]).toMatchObject({ status: "reviewing", admin_notes: "Très bon profil, rappeler lundi" });
-    await admin().admin.recruitment.updateStatus({ id: candidate.id as number, status: "reviewing", adminNotes: "Note modifiée" });
+    const candidate = seedCandidate(1, {
+      admin_notes: "Très bon profil, rappeler lundi",
+    });
+    await admin().admin.recruitment.updateStatus({
+      id: candidate.id as number,
+      status: "reviewing",
+    });
+    expect(memory.rows(cvApplications)[0]).toMatchObject({
+      status: "reviewing",
+      admin_notes: "Très bon profil, rappeler lundi",
+    });
+    await admin().admin.recruitment.updateStatus({
+      id: candidate.id as number,
+      status: "reviewing",
+      adminNotes: "Note modifiée",
+    });
     expect(memory.rows(cvApplications)[0]!.admin_notes).toBe("Note modifiée");
-    await admin().admin.recruitment.updateStatus({ id: candidate.id as number, status: "shortlisted", adminNotes: "" });
-    expect(memory.rows(cvApplications)[0]).toMatchObject({ status: "shortlisted", admin_notes: null });
+    await admin().admin.recruitment.updateStatus({
+      id: candidate.id as number,
+      status: "shortlisted",
+      adminNotes: "",
+    });
+    expect(memory.rows(cvApplications)[0]).toMatchObject({
+      status: "shortlisted",
+      admin_notes: null,
+    });
   });
 
   it("date la qualification et l’envoi de la shortlist d’une mission, une seule fois (ADM-BRIEF-02)", async () => {
-    const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-TEST-01", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Suisse" }]);
+    const [brief] = memory.seed(clientBriefs, [
+      {
+        brief_id: "BRIEF-TEST-01",
+        organization_name: "Clinique",
+        contact_name: "RH",
+        email: "rh@test.local",
+        target_environment: "Hôpital",
+        specialty_needed: "Anesthésie",
+        country: "Suisse",
+      },
+    ]);
     const id = brief!.id as number;
     await admin().admin.clientBriefs.updateStatus({ id, status: "reviewing" });
     const acknowledgedAt = memory.rows(clientBriefs)[0]!.acknowledged_at;
     expect(acknowledgedAt).not.toBeNull();
     expect(memory.rows(clientBriefs)[0]!.shortlist_sent_at).toBeNull();
-    await admin().admin.clientBriefs.updateStatus({ id, status: "shortlist_sent" });
+    await admin().admin.clientBriefs.updateStatus({
+      id,
+      status: "shortlist_sent",
+    });
     const shortlistSentAt = memory.rows(clientBriefs)[0]!.shortlist_sent_at;
     expect(shortlistSentAt).not.toBeNull();
-    await admin().admin.clientBriefs.updateStatus({ id, status: "contract_signed" });
+    await admin().admin.clientBriefs.updateStatus({
+      id,
+      status: "contract_signed",
+    });
     await admin().admin.clientBriefs.updateStatus({ id, status: "closed" });
-    expect(memory.rows(clientBriefs)[0]).toMatchObject({ brief_status: "closed", acknowledged_at: acknowledgedAt, shortlist_sent_at: shortlistSentAt });
+    expect(memory.rows(clientBriefs)[0]).toMatchObject({
+      brief_status: "closed",
+      acknowledged_at: acknowledgedAt,
+      shortlist_sent_at: shortlistSentAt,
+    });
   });
 
   it("une campagne en échec n’est pas un succès, et la relance ne vise que les destinataires en échec (ADM-MAIL-02)", async () => {
@@ -121,79 +229,217 @@ describe("actions d’administration du recrutement", () => {
     const withdrawn = seedCandidate(3);
     const bounced = seedCandidate(4);
     state.failFor = new Set(["c2@test.local", "c3@test.local"]);
-    const result = await admin().admin.recruitment.campaigns.send({ title: "Offre test", subject: "Offre Suisse", body: "Une mission à Genève, répondez par email.", language: "fr", mode: "selected", selectedIds: [served.id as number, failing.id as number, withdrawn.id as number], confirmed: true });
+    const result = await admin().admin.recruitment.campaigns.send({
+      title: "Offre test",
+      subject: "Offre Suisse",
+      body: "Une mission à Genève, répondez par email.",
+      language: "fr",
+      mode: "selected",
+      selectedIds: [
+        served.id as number,
+        failing.id as number,
+        withdrawn.id as number,
+      ],
+      confirmed: true,
+    });
     expect(result).toMatchObject({ total: 3, sent: 1, failed: 2 });
     expect(memory.rows(recruitmentCampaigns)[0]!.status).toBe("partially_sent");
     const campaignId = result.campaignId;
-    memory.seed(recruitmentCampaignRecipients, [{ campaign_id: campaignId, application_id: bounced.id, recipient_email: "c4@test.local", delivery_status: "bounced" }]);
+    memory.seed(recruitmentCampaignRecipients, [
+      {
+        campaign_id: campaignId,
+        application_id: bounced.id,
+        recipient_email: "c4@test.local",
+        delivery_status: "bounced",
+      },
+    ]);
 
     // c3 withdraws consent; c2's provider error is over.
-    memory.rows(cvApplications).find(row => row.id === withdrawn.id)!.marketing_unsubscribed_at = "2026-10-16 10:00:00.000";
+    memory
+      .rows(cvApplications)
+      .find(row => row.id === withdrawn.id)!.marketing_unsubscribed_at =
+      "2026-10-16 10:00:00.000";
     state.failFor.clear();
     state.sentTo = [];
-    const retry = await admin().admin.recruitment.campaigns.retryFailed({ campaignId, confirmed: true });
-    expect(retry).toEqual({ campaignId, attempted: 2, sent: 1, failed: 0, skipped: 1 });
+    const retry = await admin().admin.recruitment.campaigns.retryFailed({
+      campaignId,
+      confirmed: true,
+    });
+    expect(retry).toEqual({
+      campaignId,
+      attempted: 2,
+      sent: 1,
+      failed: 0,
+      skipped: 1,
+    });
     expect(state.sentTo).toEqual(["c2@test.local"]);
-    const statuses = Object.fromEntries(memory.rows(recruitmentCampaignRecipients).map(row => [row.recipient_email, row.delivery_status]));
-    expect(statuses).toEqual({ "c1@test.local": "sent", "c2@test.local": "sent", "c3@test.local": "skipped", "c4@test.local": "bounced" });
+    const statuses = Object.fromEntries(
+      memory
+        .rows(recruitmentCampaignRecipients)
+        .map(row => [row.recipient_email, row.delivery_status])
+    );
+    expect(statuses).toEqual({
+      "c1@test.local": "sent",
+      "c2@test.local": "sent",
+      "c3@test.local": "skipped",
+      "c4@test.local": "bounced",
+    });
     expect(memory.rows(recruitmentCampaigns)[0]!.status).toBe("partially_sent");
 
     // Nothing left to retry: no email is sent twice.
     state.sentTo = [];
-    await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 0, sent: 0 });
+    await expect(
+      admin().admin.recruitment.campaigns.retryFailed({
+        campaignId,
+        confirmed: true,
+      })
+    ).resolves.toMatchObject({ attempted: 0, sent: 0 });
     expect(state.sentTo).toEqual([]);
   });
 
   it("envoie 200 destinataires en deux lots de 100, insérés d’une seule requête et enregistrés lot par lot (EXPL-08)", async () => {
-    const candidates = Array.from({ length: 200 }, (_, index) => seedCandidate(index + 1, { marketing_unsubscribe_token: `token${String(index + 1).padStart(27, "0")}` }));
+    const candidates = Array.from({ length: 200 }, (_, index) =>
+      seedCandidate(index + 1, {
+        marketing_unsubscribe_token: `token${String(index + 1).padStart(27, "0")}`,
+      })
+    );
     const before = memory.statements.length;
-    const result = await admin().admin.recruitment.campaigns.send({ title: "Offre test", subject: "Offre Suisse", body: "Une mission à Genève, répondez par email.", language: "fr", mode: "selected", selectedIds: candidates.map(candidate => candidate.id as number), confirmed: true });
+    const result = await admin().admin.recruitment.campaigns.send({
+      title: "Offre test",
+      subject: "Offre Suisse",
+      body: "Une mission à Genève, répondez par email.",
+      language: "fr",
+      mode: "selected",
+      selectedIds: candidates.map(candidate => candidate.id as number),
+      confirmed: true,
+    });
     expect(result).toMatchObject({ total: 200, sent: 200, failed: 0 });
     expect(state.batchSizes).toEqual([100, 100]);
-    const statements = memory.statements.slice(before).map(statement => statement.sql);
-    expect(statements.filter(sql => sql.startsWith('insert into "recruitment_campaign_recipients"'))).toHaveLength(1);
+    const statements = memory.statements
+      .slice(before)
+      .map(statement => statement.sql);
+    expect(
+      statements.filter(sql =>
+        sql.startsWith('insert into "recruitment_campaign_recipients"')
+      )
+    ).toHaveLength(1);
     // A few statements a batch, not six a recipient: the follow-ups and the journal in one insert each.
-    expect(statements.filter(sql => sql.startsWith('insert into "recruitment_follow_up_tasks"'))).toHaveLength(2);
-    expect(statements.filter(sql => sql.startsWith('insert into "recruitment_audit_logs"'))).toHaveLength(2);
+    expect(
+      statements.filter(sql =>
+        sql.startsWith('insert into "recruitment_follow_up_tasks"')
+      )
+    ).toHaveLength(2);
+    expect(
+      statements.filter(sql =>
+        sql.startsWith('insert into "recruitment_audit_logs"')
+      )
+    ).toHaveLength(2);
     expect(statements.length).toBeLessThan(220 + 20);
     const recipients = memory.rows(recruitmentCampaignRecipients);
-    expect(recipients.every(row => row.delivery_status === "sent" && typeof row.provider_email_id === "string")).toBe(true);
-    expect(new Set(recipients.map(row => row.provider_email_id)).size).toBe(200);
+    expect(
+      recipients.every(
+        row =>
+          row.delivery_status === "sent" &&
+          typeof row.provider_email_id === "string"
+      )
+    ).toBe(true);
+    expect(new Set(recipients.map(row => row.provider_email_id)).size).toBe(
+      200
+    );
     expect(memory.rows(recruitmentFollowUpTasks)).toHaveLength(400);
-    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "sent" });
+    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({
+      status: "sent",
+    });
     // Each batch under the key of its own recipients, in the order of their ids.
     const ids = recipients.map(row => row.id as number).sort((a, b) => a - b);
-    expect(state.keys).toEqual([campaignBatchIdempotencyKey(result.campaignId, ids.slice(0, 100)), campaignBatchIdempotencyKey(result.campaignId, ids.slice(100))]);
+    expect(state.keys).toEqual([
+      campaignBatchIdempotencyKey(result.campaignId, ids.slice(0, 100)),
+      campaignBatchIdempotencyKey(result.campaignId, ids.slice(100)),
+    ]);
   });
 
   it("un lot dont la réponse se perd est renvoyé tel quel sous la même clé : Resend redonne sa première réponse, aucun email ne part deux fois (EXPL-08, DATA-02)", async () => {
-    const first = seedCandidate(1, { marketing_unsubscribe_token: "a".repeat(32) });
-    const second = seedCandidate(2, { marketing_unsubscribe_token: "b".repeat(32) });
+    const first = seedCandidate(1, {
+      marketing_unsubscribe_token: "a".repeat(32),
+    });
+    const second = seedCandidate(2, {
+      marketing_unsubscribe_token: "b".repeat(32),
+    });
     state.loseNextAnswer = true;
-    const result = await admin().admin.recruitment.campaigns.send({ title: "Offre test", subject: "Offre Suisse", body: "Une mission à Genève, répondez par email.", language: "fr", mode: "selected", selectedIds: [first.id as number, second.id as number], confirmed: true });
+    const result = await admin().admin.recruitment.campaigns.send({
+      title: "Offre test",
+      subject: "Offre Suisse",
+      body: "Une mission à Genève, répondez par email.",
+      language: "fr",
+      mode: "selected",
+      selectedIds: [first.id as number, second.id as number],
+      confirmed: true,
+    });
     expect(result).toMatchObject({ total: 2, sent: 0, failed: 2 });
-    expect(memory.rows(recruitmentCampaignRecipients).map(row => [row.delivery_status, row.error])).toEqual([["failed", "fetch failed"], ["failed", "fetch failed"]]);
+    expect(
+      memory
+        .rows(recruitmentCampaignRecipients)
+        .map(row => [row.delivery_status, row.error])
+    ).toEqual([
+      ["failed", "fetch failed"],
+      ["failed", "fetch failed"],
+    ]);
 
-    await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId: result.campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 2, sent: 2, failed: 0 });
+    await expect(
+      admin().admin.recruitment.campaigns.retryFailed({
+        campaignId: result.campaignId,
+        confirmed: true,
+      })
+    ).resolves.toMatchObject({ attempted: 2, sent: 2, failed: 0 });
     expect(state.keys).toHaveLength(2);
     expect(state.keys[1]).toBe(state.keys[0]);
     expect(state.sentTo).toEqual(["c1@test.local", "c2@test.local"]);
-    expect(memory.rows(recruitmentCampaignRecipients).map(row => [row.delivery_status, row.provider_email_id])).toEqual([["sent", "email-1"], ["sent", "email-2"]]);
-    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "sent" });
+    expect(
+      memory
+        .rows(recruitmentCampaignRecipients)
+        .map(row => [row.delivery_status, row.provider_email_id])
+    ).toEqual([
+      ["sent", "email-1"],
+      ["sent", "email-2"],
+    ]);
+    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({
+      status: "sent",
+    });
   });
 
   it("arrête la campagne à un quota épuisé, sans essayer les lots suivants, et laisse tous les destinataires à relancer (EXPL-08, ABUS-03)", async () => {
-    const candidates = Array.from({ length: 150 }, (_, index) => seedCandidate(index + 1, { marketing_unsubscribe_token: `token${String(index + 1).padStart(27, "0")}` }));
+    const candidates = Array.from({ length: 150 }, (_, index) =>
+      seedCandidate(index + 1, {
+        marketing_unsubscribe_token: `token${String(index + 1).padStart(27, "0")}`,
+      })
+    );
     state.quotaExceeded = true;
-    const result = await admin().admin.recruitment.campaigns.send({ title: "Offre test", subject: "Offre Suisse", body: "Une mission à Genève, répondez par email.", language: "fr", mode: "selected", selectedIds: candidates.map(candidate => candidate.id as number), confirmed: true });
+    const result = await admin().admin.recruitment.campaigns.send({
+      title: "Offre test",
+      subject: "Offre Suisse",
+      body: "Une mission à Genève, répondez par email.",
+      language: "fr",
+      mode: "selected",
+      selectedIds: candidates.map(candidate => candidate.id as number),
+      confirmed: true,
+    });
     expect(result).toMatchObject({ total: 150, sent: 0, failed: 150 });
     expect(state.batchSizes).toEqual([100]);
     const recipients = memory.rows(recruitmentCampaignRecipients);
-    expect(new Set(recipients.map(row => `${row.delivery_status}:${row.error}`))).toEqual(new Set(["failed:Resend campaign email failed: daily quota"]));
-    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "failed" });
+    expect(
+      new Set(recipients.map(row => `${row.delivery_status}:${row.error}`))
+    ).toEqual(new Set(["failed:Resend campaign email failed: daily quota"]));
+    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({
+      status: "failed",
+    });
 
     state.quotaExceeded = false;
-    await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId: result.campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 150, sent: 150, failed: 0 });
+    await expect(
+      admin().admin.recruitment.campaigns.retryFailed({
+        campaignId: result.campaignId,
+        confirmed: true,
+      })
+    ).resolves.toMatchObject({ attempted: 150, sent: 150, failed: 0 });
     expect(state.batchSizes).toEqual([100, 100, 50]);
     expect(new Set(state.sentTo).size).toBe(150);
     expect(state.sentTo).toHaveLength(150);
@@ -202,57 +448,154 @@ describe("actions d’administration du recrutement", () => {
   it("reprend un envoi coupé en cours de route : les destinataires « queued » depuis plus de 10 minutes, pas ceux d’un envoi en cours (EXPL-08)", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-11-08T10:00:00.000Z"));
-    const stalled = seedCandidate(1, { marketing_unsubscribe_token: "a".repeat(32) });
-    const recent = seedCandidate(2, { marketing_unsubscribe_token: "b".repeat(32) });
+    const stalled = seedCandidate(1, {
+      marketing_unsubscribe_token: "a".repeat(32),
+    });
+    const recent = seedCandidate(2, {
+      marketing_unsubscribe_token: "b".repeat(32),
+    });
     // The function was cut off at 60 s: the campaign stays « sending », its recipients « queued », none emailed.
-    const [campaign] = memory.seed(recruitmentCampaigns, [{ title: "Offre test", subject: "Offre Suisse", body: "Une mission à Genève, répondez par email.", language: "fr", audience_mode: "selected", recipient_count: 2, status: "sending", created_by_open_id: "user_owner" }]);
+    const [campaign] = memory.seed(recruitmentCampaigns, [
+      {
+        title: "Offre test",
+        subject: "Offre Suisse",
+        body: "Une mission à Genève, répondez par email.",
+        language: "fr",
+        audience_mode: "selected",
+        recipient_count: 2,
+        status: "sending",
+        created_by_open_id: "user_owner",
+      },
+    ]);
     const campaignId = campaign!.id as number;
-    memory.seed(recruitmentCampaignRecipients, [{ campaign_id: campaignId, application_id: stalled.id, recipient_email: "c1@test.local", delivery_status: "queued", created_at: "2026-11-08 09:49:00.000" }]);
-    memory.seed(recruitmentCampaignRecipients, [{ campaign_id: campaignId, application_id: recent.id, recipient_email: "c2@test.local", delivery_status: "queued", created_at: "2026-11-08 09:55:00.000" }]);
+    memory.seed(recruitmentCampaignRecipients, [
+      {
+        campaign_id: campaignId,
+        application_id: stalled.id,
+        recipient_email: "c1@test.local",
+        delivery_status: "queued",
+        created_at: "2026-11-08 09:49:00.000",
+      },
+    ]);
+    memory.seed(recruitmentCampaignRecipients, [
+      {
+        campaign_id: campaignId,
+        application_id: recent.id,
+        recipient_email: "c2@test.local",
+        delivery_status: "queued",
+        created_at: "2026-11-08 09:55:00.000",
+      },
+    ]);
 
-    await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 1, sent: 1, failed: 0, skipped: 0 });
+    await expect(
+      admin().admin.recruitment.campaigns.retryFailed({
+        campaignId,
+        confirmed: true,
+      })
+    ).resolves.toMatchObject({ attempted: 1, sent: 1, failed: 0, skipped: 0 });
     expect(state.sentTo).toEqual(["c1@test.local"]);
-    expect(Object.fromEntries(memory.rows(recruitmentCampaignRecipients).map(row => [row.recipient_email, row.delivery_status]))).toEqual({ "c1@test.local": "sent", "c2@test.local": "queued" });
-    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "sent" });
+    expect(
+      Object.fromEntries(
+        memory
+          .rows(recruitmentCampaignRecipients)
+          .map(row => [row.recipient_email, row.delivery_status])
+      )
+    ).toEqual({ "c1@test.local": "sent", "c2@test.local": "queued" });
+    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({
+      status: "sent",
+    });
   });
 
   it("ne renvoie pas d’office un destinataire « queued » depuis plus de 23 heures, quand Resend ne reconnaîtrait plus sa clé (EXPL-08, DATA-05)", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-11-08T10:00:00.000Z"));
-    const candidate = seedCandidate(1, { marketing_unsubscribe_token: "a".repeat(32) });
+    const candidate = seedCandidate(1, {
+      marketing_unsubscribe_token: "a".repeat(32),
+    });
     // Its email was accepted, both recordings refused: the outcome stays uncertain, the row « queued ».
-    memory.failNext(/^update "recruitment_campaign_recipients" set "delivery_status" = \$1, "provider_email_id"/, 2);
-    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const result = await admin().admin.recruitment.campaigns.send({ title: "Offre test", subject: "Offre Suisse", body: "Une mission à Genève, répondez par email.", language: "fr", mode: "selected", selectedIds: [candidate.id as number], confirmed: true });
+    memory.failNext(
+      /^update "recruitment_campaign_recipients" set "delivery_status" = \$1, "provider_email_id"/,
+      2
+    );
+    const error = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const result = await admin().admin.recruitment.campaigns.send({
+      title: "Offre test",
+      subject: "Offre Suisse",
+      body: "Une mission à Genève, répondez par email.",
+      language: "fr",
+      mode: "selected",
+      selectedIds: [candidate.id as number],
+      confirmed: true,
+    });
     error.mockRestore();
-    expect(memory.rows(recruitmentCampaignRecipients)[0]).toMatchObject({ delivery_status: "queued" });
+    expect(memory.rows(recruitmentCampaignRecipients)[0]).toMatchObject({
+      delivery_status: "queued",
+    });
     // A day later Resend has forgotten the key: sent again, the candidate would get the offer twice.
     state.answers.clear();
     vi.setSystemTime(new Date("2026-11-09T09:01:00.000Z"));
-    await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId: result.campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 0, sent: 0 });
+    await expect(
+      admin().admin.recruitment.campaigns.retryFailed({
+        campaignId: result.campaignId,
+        confirmed: true,
+      })
+    ).resolves.toMatchObject({ attempted: 0, sent: 0 });
     expect(state.sentTo).toEqual(["c1@test.local"]);
-    expect(memory.rows(recruitmentCampaignRecipients)[0]).toMatchObject({ delivery_status: "queued" });
-    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "sent" });
+    expect(memory.rows(recruitmentCampaignRecipients)[0]).toMatchObject({
+      delivery_status: "queued",
+    });
+    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({
+      status: "sent",
+    });
   });
 
   it("une relance en cours n’est pas reprise par une seconde avant 10 minutes (EXPL-08)", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-11-08T10:00:00.000Z"));
-    const candidate = seedCandidate(1, { marketing_unsubscribe_token: "a".repeat(32) });
+    const candidate = seedCandidate(1, {
+      marketing_unsubscribe_token: "a".repeat(32),
+    });
     state.loseNextAnswer = true;
-    const result = await admin().admin.recruitment.campaigns.send({ title: "Offre test", subject: "Offre Suisse", body: "Une mission à Genève, répondez par email.", language: "fr", mode: "selected", selectedIds: [candidate.id as number], confirmed: true });
+    const result = await admin().admin.recruitment.campaigns.send({
+      title: "Offre test",
+      subject: "Offre Suisse",
+      body: "Une mission à Genève, répondez par email.",
+      language: "fr",
+      mode: "selected",
+      selectedIds: [candidate.id as number],
+      confirmed: true,
+    });
     expect(result).toMatchObject({ sent: 0, failed: 1 });
     // A retry claims it (« queued », the attempt dated), then is cut off before its answer.
     const recipient = memory.rows(recruitmentCampaignRecipients)[0]!;
-    Object.assign(recipient, { delivery_status: "queued", error: null, last_event_at: "2026-11-08 10:00:00.000" });
+    Object.assign(recipient, {
+      delivery_status: "queued",
+      error: null,
+      last_event_at: "2026-11-08 10:00:00.000",
+    });
 
     vi.setSystemTime(new Date("2026-11-08T10:05:00.000Z"));
-    await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId: result.campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 0, sent: 0 });
+    await expect(
+      admin().admin.recruitment.campaigns.retryFailed({
+        campaignId: result.campaignId,
+        confirmed: true,
+      })
+    ).resolves.toMatchObject({ attempted: 0, sent: 0 });
     vi.setSystemTime(new Date("2026-11-08T10:11:00.000Z"));
-    await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId: result.campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 1, sent: 1 });
+    await expect(
+      admin().admin.recruitment.campaigns.retryFailed({
+        campaignId: result.campaignId,
+        confirmed: true,
+      })
+    ).resolves.toMatchObject({ attempted: 1, sent: 1 });
     // Resend took the first batch: the retry, under the same key, gets its answer back.
     expect(state.sentTo).toEqual(["c1@test.local"]);
-    expect(recipient).toMatchObject({ delivery_status: "sent", provider_email_id: "email-1" });
+    expect(recipient).toMatchObject({
+      delivery_status: "sent",
+      provider_email_id: "email-1",
+    });
   });
 
   it("un email accepté par Resend reste envoyé quand son enregistrement échoue, et aucune relance ne le renvoie (DATA-05)", async () => {
@@ -261,23 +604,50 @@ describe("actions d’administration du recrutement", () => {
     state.failFor = new Set(["c2@test.local"]);
     // The follow-up tasks of c1 are refused after Resend accepted its email.
     memory.failNext(/^insert into "recruitment_follow_up_tasks"/);
-    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const result = await admin().admin.recruitment.campaigns.send({ title: "Offre test", subject: "Offre Suisse", body: "Une mission à Genève, répondez par email.", language: "fr", mode: "selected", selectedIds: [accepted.id as number, failing.id as number], confirmed: true });
+    const error = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const result = await admin().admin.recruitment.campaigns.send({
+      title: "Offre test",
+      subject: "Offre Suisse",
+      body: "Une mission à Genève, répondez par email.",
+      language: "fr",
+      mode: "selected",
+      selectedIds: [accepted.id as number, failing.id as number],
+      confirmed: true,
+    });
     error.mockRestore();
     expect(result).toMatchObject({ total: 2, sent: 1, failed: 1 });
     const recipients = memory.rows(recruitmentCampaignRecipients);
     const [acceptedRecipient, failedRecipient] = recipients;
     // Never « failed » once accepted, nor any internal SQL message kept for the admin; the
     // provider's id is kept, for its bounce or complaint events.
-    expect(acceptedRecipient).toMatchObject({ recipient_email: "c1@test.local", delivery_status: "sent", provider_email_id: "email-1", error: null });
-    expect(failedRecipient).toMatchObject({ recipient_email: "c2@test.local", delivery_status: "failed", error: REFUSED });
+    expect(acceptedRecipient).toMatchObject({
+      recipient_email: "c1@test.local",
+      delivery_status: "sent",
+      provider_email_id: "email-1",
+      error: null,
+    });
+    expect(failedRecipient).toMatchObject({
+      recipient_email: "c2@test.local",
+      delivery_status: "failed",
+      error: REFUSED,
+    });
     // The rest of the bookkeeping is written together or not at all.
     expect(memory.rows(recruitmentFollowUpTasks)).toEqual([]);
-    expect(memory.rows(recruitmentAuditLogs).filter(row => row.action === "email")).toEqual([]);
-    expect(memory.rows(cvApplications).find(row => row.id === accepted.id)!.last_contacted_at).toBeNull();
+    expect(
+      memory.rows(recruitmentAuditLogs).filter(row => row.action === "email")
+    ).toEqual([]);
+    expect(
+      memory.rows(cvApplications).find(row => row.id === accepted.id)!
+        .last_contacted_at
+    ).toBeNull();
     // The batch Resend refused for c2's address, then each email alone, under its recipient's key.
     expect(state.keys).toEqual([
-      campaignBatchIdempotencyKey(result.campaignId, [acceptedRecipient!.id as number, failedRecipient!.id as number]),
+      campaignBatchIdempotencyKey(result.campaignId, [
+        acceptedRecipient!.id as number,
+        failedRecipient!.id as number,
+      ]),
       `campaign-${result.campaignId}-recipient-${acceptedRecipient!.id}`,
       `campaign-${result.campaignId}-recipient-${failedRecipient!.id}`,
     ]);
@@ -285,14 +655,39 @@ describe("actions d’administration du recrutement", () => {
     // The retry sends only the email Resend refused, under the same key; c1 gets nothing more.
     state.failFor.clear();
     state.keys = [];
-    await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId: result.campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 1, sent: 1, failed: 0 });
+    await expect(
+      admin().admin.recruitment.campaigns.retryFailed({
+        campaignId: result.campaignId,
+        confirmed: true,
+      })
+    ).resolves.toMatchObject({ attempted: 1, sent: 1, failed: 0 });
     expect(state.sentTo).toEqual(["c1@test.local", "c2@test.local"]);
-    expect(state.keys).toEqual([`campaign-${result.campaignId}-recipient-${failedRecipient!.id}`]);
-    expect(failedRecipient).toMatchObject({ delivery_status: "sent", provider_email_id: "email-2", error: null });
-    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "sent" });
-    expect(memory.rows(recruitmentFollowUpTasks).map(row => row.application_id)).toEqual([failing.id, failing.id]);
-    expect(memory.rows(recruitmentAuditLogs).filter(row => row.action === "email").map(row => row.application_id)).toEqual([failing.id]);
-    await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId: result.campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 0, sent: 0 });
+    expect(state.keys).toEqual([
+      `campaign-${result.campaignId}-recipient-${failedRecipient!.id}`,
+    ]);
+    expect(failedRecipient).toMatchObject({
+      delivery_status: "sent",
+      provider_email_id: "email-2",
+      error: null,
+    });
+    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({
+      status: "sent",
+    });
+    expect(
+      memory.rows(recruitmentFollowUpTasks).map(row => row.application_id)
+    ).toEqual([failing.id, failing.id]);
+    expect(
+      memory
+        .rows(recruitmentAuditLogs)
+        .filter(row => row.action === "email")
+        .map(row => row.application_id)
+    ).toEqual([failing.id]);
+    await expect(
+      admin().admin.recruitment.campaigns.retryFailed({
+        campaignId: result.campaignId,
+        confirmed: true,
+      })
+    ).resolves.toMatchObject({ attempted: 0, sent: 0 });
   });
 
   it("un email accepté dont même le destinataire ne s’enregistre pas reste « queued » ; repris 10 minutes plus tard sous la même clé, il ne repart pas (DATA-05, EXPL-08)", async () => {
@@ -300,25 +695,62 @@ describe("actions d’administration du recrutement", () => {
     vi.setSystemTime(new Date("2026-11-08T10:00:00.000Z"));
     const candidate = seedCandidate(1);
     // The batch, then the recipient alone, are refused after Resend accepted the email.
-    memory.failNext(/^update "recruitment_campaign_recipients" set "delivery_status" = \$1, "provider_email_id"/, 2);
-    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const result = await admin().admin.recruitment.campaigns.send({ title: "Offre test", subject: "Offre Suisse", body: "Une mission à Genève, répondez par email.", language: "fr", mode: "selected", selectedIds: [candidate.id as number], confirmed: true });
+    memory.failNext(
+      /^update "recruitment_campaign_recipients" set "delivery_status" = \$1, "provider_email_id"/,
+      2
+    );
+    const error = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const result = await admin().admin.recruitment.campaigns.send({
+      title: "Offre test",
+      subject: "Offre Suisse",
+      body: "Une mission à Genève, répondez par email.",
+      language: "fr",
+      mode: "selected",
+      selectedIds: [candidate.id as number],
+      confirmed: true,
+    });
     error.mockRestore();
     expect(result).toMatchObject({ total: 1, sent: 1, failed: 0 });
-    expect(memory.rows(recruitmentCampaignRecipients)[0]).toMatchObject({ delivery_status: "queued", provider_email_id: null, error: null });
-    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "sent" });
-    await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId: result.campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 0, sent: 0 });
+    expect(memory.rows(recruitmentCampaignRecipients)[0]).toMatchObject({
+      delivery_status: "queued",
+      provider_email_id: null,
+      error: null,
+    });
+    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({
+      status: "sent",
+    });
+    await expect(
+      admin().admin.recruitment.campaigns.retryFailed({
+        campaignId: result.campaignId,
+        confirmed: true,
+      })
+    ).resolves.toMatchObject({ attempted: 0, sent: 0 });
     expect(state.sentTo).toEqual(["c1@test.local"]);
     // A retry with nothing to send leaves the campaign sent, not « failed ».
-    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "sent" });
+    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({
+      status: "sent",
+    });
 
     // Ten minutes later it is taken up again: the same email under the same key, Resend's
     // first answer comes back, and the provider's id is recorded at last.
     vi.setSystemTime(new Date("2026-11-08T10:11:00.000Z"));
-    await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId: result.campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 1, sent: 1, failed: 0 });
-    expect(state.keys).toEqual([`campaign-${result.campaignId}-recipient-${memory.rows(recruitmentCampaignRecipients)[0]!.id}`, `campaign-${result.campaignId}-recipient-${memory.rows(recruitmentCampaignRecipients)[0]!.id}`]);
+    await expect(
+      admin().admin.recruitment.campaigns.retryFailed({
+        campaignId: result.campaignId,
+        confirmed: true,
+      })
+    ).resolves.toMatchObject({ attempted: 1, sent: 1, failed: 0 });
+    expect(state.keys).toEqual([
+      `campaign-${result.campaignId}-recipient-${memory.rows(recruitmentCampaignRecipients)[0]!.id}`,
+      `campaign-${result.campaignId}-recipient-${memory.rows(recruitmentCampaignRecipients)[0]!.id}`,
+    ]);
     expect(state.sentTo).toEqual(["c1@test.local"]);
-    expect(memory.rows(recruitmentCampaignRecipients)[0]).toMatchObject({ delivery_status: "sent", provider_email_id: "email-1" });
+    expect(memory.rows(recruitmentCampaignRecipients)[0]).toMatchObject({
+      delivery_status: "sent",
+      provider_email_id: "email-1",
+    });
   });
 
   it("une relance compte comme envoyé le destinataire resté « queued » après l’acceptation de son email (DATA-05)", async () => {
@@ -326,113 +758,331 @@ describe("actions d’administration du recrutement", () => {
     const failing = seedCandidate(2);
     state.failFor = new Set(["c2@test.local"]);
     // c1's email is accepted, then both its recordings are refused; Resend refuses c2's.
-    memory.failNext(/^update "recruitment_campaign_recipients" set "delivery_status" = \$1, "provider_email_id"/, 2);
-    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const result = await admin().admin.recruitment.campaigns.send({ title: "Offre test", subject: "Offre Suisse", body: "Une mission à Genève, répondez par email.", language: "fr", mode: "selected", selectedIds: [accepted.id as number, failing.id as number], confirmed: true });
+    memory.failNext(
+      /^update "recruitment_campaign_recipients" set "delivery_status" = \$1, "provider_email_id"/,
+      2
+    );
+    const error = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const result = await admin().admin.recruitment.campaigns.send({
+      title: "Offre test",
+      subject: "Offre Suisse",
+      body: "Une mission à Genève, répondez par email.",
+      language: "fr",
+      mode: "selected",
+      selectedIds: [accepted.id as number, failing.id as number],
+      confirmed: true,
+    });
     error.mockRestore();
     expect(result).toMatchObject({ total: 2, sent: 1, failed: 1 });
-    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "partially_sent" });
+    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({
+      status: "partially_sent",
+    });
 
     state.failFor.clear();
-    await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId: result.campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 1, sent: 1, failed: 0 });
+    await expect(
+      admin().admin.recruitment.campaigns.retryFailed({
+        campaignId: result.campaignId,
+        confirmed: true,
+      })
+    ).resolves.toMatchObject({ attempted: 1, sent: 1, failed: 0 });
     expect(state.sentTo).toEqual(["c1@test.local", "c2@test.local"]);
-    expect(Object.fromEntries(memory.rows(recruitmentCampaignRecipients).map(row => [row.recipient_email, row.delivery_status]))).toEqual({ "c1@test.local": "queued", "c2@test.local": "sent" });
+    expect(
+      Object.fromEntries(
+        memory
+          .rows(recruitmentCampaignRecipients)
+          .map(row => [row.recipient_email, row.delivery_status])
+      )
+    ).toEqual({ "c1@test.local": "queued", "c2@test.local": "sent" });
     // Every email went out: the campaign is sent.
-    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "sent" });
+    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({
+      status: "sent",
+    });
   });
 
   it("un destinataire dont le jeton de désinscription ne s’enregistre pas reste « failed », sans email, et une relance l’envoie sous sa clé (DATA-05)", async () => {
     const blocked = seedCandidate(1);
     // c2 already has its token: nothing to record for it.
-    const served = seedCandidate(2, { marketing_unsubscribe_token: "b".repeat(32) });
-    const unsubscribeTokenWrite = /^update "cv_applications" set "marketing_unsubscribe_token"/;
+    const served = seedCandidate(2, {
+      marketing_unsubscribe_token: "b".repeat(32),
+    });
+    const unsubscribeTokenWrite =
+      /^update "cv_applications" set "marketing_unsubscribe_token"/;
     // c1's token is refused before anything is sent, at the send then at the first retry.
     memory.failNext(unsubscribeTokenWrite);
-    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const result = await admin().admin.recruitment.campaigns.send({ title: "Offre test", subject: "Offre Suisse", body: "Une mission à Genève, répondez par email.", language: "fr", mode: "selected", selectedIds: [blocked.id as number, served.id as number], confirmed: true });
+    const error = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const result = await admin().admin.recruitment.campaigns.send({
+      title: "Offre test",
+      subject: "Offre Suisse",
+      body: "Une mission à Genève, répondez par email.",
+      language: "fr",
+      mode: "selected",
+      selectedIds: [blocked.id as number, served.id as number],
+      confirmed: true,
+    });
     expect(result).toMatchObject({ total: 2, sent: 1, failed: 1 });
     expect(state.sentTo).toEqual(["c2@test.local"]);
-    const recipient = memory.rows(recruitmentCampaignRecipients).find(row => row.recipient_email === "c1@test.local")!;
+    const recipient = memory
+      .rows(recruitmentCampaignRecipients)
+      .find(row => row.recipient_email === "c1@test.local")!;
     // A stable reason, not the query and its parameters.
-    expect(recipient).toMatchObject({ delivery_status: "failed", error: "unsubscribe_token_not_recorded", provider_email_id: null });
-    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "partially_sent" });
+    expect(recipient).toMatchObject({
+      delivery_status: "failed",
+      error: "unsubscribe_token_not_recorded",
+      provider_email_id: null,
+    });
+    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({
+      status: "partially_sent",
+    });
 
     // Refused again at the retry: « failed » again, never left « queued » and counted as served.
     memory.failNext(unsubscribeTokenWrite);
-    await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId: result.campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 1, sent: 0, failed: 1 });
+    await expect(
+      admin().admin.recruitment.campaigns.retryFailed({
+        campaignId: result.campaignId,
+        confirmed: true,
+      })
+    ).resolves.toMatchObject({ attempted: 1, sent: 0, failed: 1 });
     // Logged at each refusal, by the error's name only: neither the query nor
     // the tokens it carried (inspected, so that an Error object counts too).
     // The application's id is the WHERE's parameter, after the token and updatedAt.
-    const refusedTokens = memory.statements.filter(statement => unsubscribeTokenWrite.test(statement.sql) && statement.params.at(-1) === blocked.id).map(statement => String(statement.params[0]));
+    const refusedTokens = memory.statements
+      .filter(
+        statement =>
+          unsubscribeTokenWrite.test(statement.sql) &&
+          statement.params.at(-1) === blocked.id
+      )
+      .map(statement => String(statement.params[0]));
     expect(refusedTokens).toHaveLength(2);
-    expect(error).toHaveBeenCalledWith(expect.stringContaining("Unsubscribe tokens not recorded"), expect.objectContaining({ error: "Error" }));
+    expect(error).toHaveBeenCalledWith(
+      expect.stringContaining("Unsubscribe tokens not recorded"),
+      expect.objectContaining({ error: "Error" })
+    );
     const logged = inspect(error.mock.calls, { depth: null });
     expect(logged).not.toContain("Failed query");
     for (const token of refusedTokens) expect(logged).not.toContain(token);
     error.mockRestore();
     expect(state.sentTo).toEqual(["c2@test.local"]);
-    expect(recipient).toMatchObject({ delivery_status: "failed", error: "unsubscribe_token_not_recorded" });
-    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "partially_sent" });
+    expect(recipient).toMatchObject({
+      delivery_status: "failed",
+      error: "unsubscribe_token_not_recorded",
+    });
+    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({
+      status: "partially_sent",
+    });
 
     // The token recorded at last, the email goes out under the recipient's own key.
     state.keys = [];
-    await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId: result.campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 1, sent: 1, failed: 0 });
+    await expect(
+      admin().admin.recruitment.campaigns.retryFailed({
+        campaignId: result.campaignId,
+        confirmed: true,
+      })
+    ).resolves.toMatchObject({ attempted: 1, sent: 1, failed: 0 });
     expect(state.sentTo).toEqual(["c2@test.local", "c1@test.local"]);
-    expect(state.keys).toEqual([`campaign-${result.campaignId}-recipient-${recipient.id}`]);
+    expect(state.keys).toEqual([
+      `campaign-${result.campaignId}-recipient-${recipient.id}`,
+    ]);
     expect(recipient).toMatchObject({ delivery_status: "sent", error: null });
-    expect(memory.rows(cvApplications).find(row => row.id === blocked.id)!.marketing_unsubscribe_token).toMatch(/^[0-9a-f]{32}$/);
-    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "sent" });
+    expect(
+      memory.rows(cvApplications).find(row => row.id === blocked.id)!
+        .marketing_unsubscribe_token
+    ).toMatch(/^[0-9a-f]{32}$/);
+    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({
+      status: "sent",
+    });
   });
 
   it("rapporte l’issue réelle d’une relance d’analyse ou de copie Drive (ADM-REC-02, ADM-DRIVE-01)", () => {
-    expect(reanalysisOutcome({ alreadyRunning: false }, { processed: 1, results: [{ completed: true, needsReview: false }] })).toEqual({ outcome: "completed", error: null });
-    expect(reanalysisOutcome({ alreadyRunning: false }, { processed: 1, results: [{ completed: false, retry: true, error: "Failed after 2 attempts. GatewayInternalServerError" }] })).toEqual({ outcome: "retry_scheduled", error: "Failed after 2 attempts. GatewayInternalServerError" });
-    expect(reanalysisOutcome({ alreadyRunning: false }, { processed: 1, results: [{ completed: false, retry: false, error: "cv_validation_pdf_encrypted" }] }).outcome).toBe("failed");
-    expect(reanalysisOutcome({ alreadyRunning: true }, { processed: 0, results: [] }).outcome).toBe("already_running");
-    expect(driveRetryOutcome({ alreadyCompleted: false, alreadyRunning: false }, { processed: 1, results: [{ completed: false, retry: true, error: "google_drive_token_invalid_grant" }] })).toEqual({ outcome: "retry_scheduled", error: "google_drive_token_invalid_grant" });
-    expect(driveRetryOutcome({ alreadyCompleted: false, alreadyRunning: false }, { processed: 0, waitingForAuthorization: true, results: [] }).outcome).toBe("not_connected");
-    expect(driveRetryOutcome({ alreadyCompleted: false, alreadyRunning: false }, { processed: 1, results: [{ completed: true }] }).outcome).toBe("completed");
+    expect(
+      reanalysisOutcome(
+        { alreadyRunning: false },
+        { processed: 1, results: [{ completed: true, needsReview: false }] }
+      )
+    ).toEqual({ outcome: "completed", error: null });
+    expect(
+      reanalysisOutcome(
+        { alreadyRunning: false },
+        {
+          processed: 1,
+          results: [
+            {
+              completed: false,
+              retry: true,
+              error: "Failed after 2 attempts. GatewayInternalServerError",
+            },
+          ],
+        }
+      )
+    ).toEqual({
+      outcome: "retry_scheduled",
+      error: "Failed after 2 attempts. GatewayInternalServerError",
+    });
+    expect(
+      reanalysisOutcome(
+        { alreadyRunning: false },
+        {
+          processed: 1,
+          results: [
+            {
+              completed: false,
+              retry: false,
+              error: "cv_validation_pdf_encrypted",
+            },
+          ],
+        }
+      ).outcome
+    ).toBe("failed");
+    expect(
+      reanalysisOutcome({ alreadyRunning: true }, { processed: 0, results: [] })
+        .outcome
+    ).toBe("already_running");
+    expect(
+      driveRetryOutcome(
+        { alreadyCompleted: false, alreadyRunning: false },
+        {
+          processed: 1,
+          results: [
+            {
+              completed: false,
+              retry: true,
+              error: "google_drive_token_invalid_grant",
+            },
+          ],
+        }
+      )
+    ).toEqual({
+      outcome: "retry_scheduled",
+      error: "google_drive_token_invalid_grant",
+    });
+    expect(
+      driveRetryOutcome(
+        { alreadyCompleted: false, alreadyRunning: false },
+        { processed: 0, waitingForAuthorization: true, results: [] }
+      ).outcome
+    ).toBe("not_connected");
+    expect(
+      driveRetryOutcome(
+        { alreadyCompleted: false, alreadyRunning: false },
+        { processed: 1, results: [{ completed: true }] }
+      ).outcome
+    ).toBe("completed");
   });
 
   it("la shortlist exportée pour un employeur ne contient pas le score IA ; l’export interne du vivier le garde (LEGAL-22)", async () => {
-    const shortlisted = seedCandidate(1, { ai_score: 91, analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION });
-    seedCandidate(2, { ai_score: 40, analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION });
-    const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-EXPORT-1", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Suisse" }]);
-    memory.seed(clientBriefCandidates, [{ brief_id: brief!.id, application_id: shortlisted.id, association_status: "shortlisted", candidate_consent_at: consentAt }]);
-    const shortlist = await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number });
+    const shortlisted = seedCandidate(1, {
+      ai_score: 91,
+      analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION,
+    });
+    seedCandidate(2, {
+      ai_score: 40,
+      analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION,
+    });
+    const [brief] = memory.seed(clientBriefs, [
+      {
+        brief_id: "BRIEF-EXPORT-1",
+        organization_name: "Clinique",
+        contact_name: "RH",
+        email: "rh@test.local",
+        target_environment: "Hôpital",
+        specialty_needed: "Anesthésie",
+        country: "Suisse",
+      },
+    ]);
+    memory.seed(clientBriefCandidates, [
+      {
+        brief_id: brief!.id,
+        application_id: shortlisted.id,
+        association_status: "shortlisted",
+        candidate_consent_at: consentAt,
+      },
+    ]);
+    const shortlist = await admin().admin.recruitment.exportCsv({
+      type: "shortlist",
+      briefId: brief!.id as number,
+    });
     const [shortlistHeader, ...shortlistRows] = shortlist.csv.split("\n");
     expect(shortlist.count).toBe(1);
     expect(shortlistHeader).not.toContain("Score IA");
     expect(shortlistRows[0]).toContain("c1@test.local");
     expect(shortlistRows[0]).not.toContain("91");
-    const pool = await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: [shortlisted.id as number] });
+    const pool = await admin().admin.recruitment.exportCsv({
+      type: "pool",
+      candidateIds: [shortlisted.id as number],
+    });
     expect(pool.csv.split("\n")[0]).toContain("Score IA");
-    expect(pool.csv).toContain("\"91\"");
+    expect(pool.csv).toContain('"91"');
   });
 
   it("exporte un numéro international avec « 00 » au lieu du « + », sans apostrophe, et garde la protection des autres colonnes (ADM-26)", async () => {
-    const grouped = seedCandidate(1, { phone: "+216 51 000 010", availability: "=HYPERLINK(\"https://example.test\")" });
-    const compact = seedCandidate(2, { phone: "+21651000010", mobility: "-1+1" });
+    const grouped = seedCandidate(1, {
+      phone: "+216 51 000 010",
+      availability: '=HYPERLINK("https://example.test")',
+    });
+    const compact = seedCandidate(2, {
+      phone: "+21651000010",
+      mobility: "-1+1",
+    });
     const national = seedCandidate(3, { phone: "06 12 34 56 78" });
-    const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-PHONE-1", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Qatar" }]);
-    memory.seed(clientBriefCandidates, [{ brief_id: brief!.id, application_id: compact.id, association_status: "shortlisted", candidate_consent_at: consentAt }]);
+    const [brief] = memory.seed(clientBriefs, [
+      {
+        brief_id: "BRIEF-PHONE-1",
+        organization_name: "Clinique",
+        contact_name: "RH",
+        email: "rh@test.local",
+        target_environment: "Hôpital",
+        specialty_needed: "Anesthésie",
+        country: "Qatar",
+      },
+    ]);
+    memory.seed(clientBriefCandidates, [
+      {
+        brief_id: brief!.id,
+        application_id: compact.id,
+        association_status: "shortlisted",
+        candidate_consent_at: consentAt,
+      },
+    ]);
     const cells = (csv: string, email: string, column: string) => {
       const [header, ...rows] = csv.split("\n");
       const row = rows.find(line => line.includes(email))!;
       return row.split(";")[header!.split(";").indexOf(`"${column}"`)];
     };
 
-    const pool = await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: [grouped.id as number, compact.id as number, national.id as number] });
-    expect(cells(pool.csv, "c1@test.local", "Téléphone")).toBe("\"00216 51 000 010\"");
+    const pool = await admin().admin.recruitment.exportCsv({
+      type: "pool",
+      candidateIds: [
+        grouped.id as number,
+        compact.id as number,
+        national.id as number,
+      ],
+    });
+    expect(cells(pool.csv, "c1@test.local", "Téléphone")).toBe(
+      '"00216 51 000 010"'
+    );
     // Without spaces, its « 00 » set apart so that a spreadsheet keeps it as text.
-    expect(cells(pool.csv, "c2@test.local", "Téléphone")).toBe("\"00 21651000010\"");
-    expect(cells(pool.csv, "c3@test.local", "Téléphone")).toBe("\"06 12 34 56 78\"");
+    expect(cells(pool.csv, "c2@test.local", "Téléphone")).toBe(
+      '"00 21651000010"'
+    );
+    expect(cells(pool.csv, "c3@test.local", "Téléphone")).toBe(
+      '"06 12 34 56 78"'
+    );
     expect(pool.csv).not.toContain("'+");
-    expect(cells(pool.csv, "c1@test.local", "Disponibilité")).toBe("\"'=HYPERLINK(\"\"https://example.test\"\")\"");
-    expect(cells(pool.csv, "c2@test.local", "Mobilité")).toBe("\"'-1+1\"");
+    expect(cells(pool.csv, "c1@test.local", "Disponibilité")).toBe(
+      '"\'=HYPERLINK(""https://example.test"")"'
+    );
+    expect(cells(pool.csv, "c2@test.local", "Mobilité")).toBe('"\'-1+1"');
 
-    const shortlist = await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number });
-    expect(cells(shortlist.csv, "c2@test.local", "Téléphone")).toBe("\"00 21651000010\"");
+    const shortlist = await admin().admin.recruitment.exportCsv({
+      type: "shortlist",
+      briefId: brief!.id as number,
+    });
+    expect(cells(shortlist.csv, "c2@test.local", "Téléphone")).toBe(
+      '"00 21651000010"'
+    );
   });
 
   it("exporte en texte un numéro saisi sans « + » qu’un tableur lirait comme un nombre ou une date, zéros de tête compris (ADM-26)", async () => {
@@ -450,18 +1100,63 @@ describe("actions d’administration du recrutement", () => {
       "07911 123456": "07911 123456",
       "(0)6 12 34 56 78": "(0)6 12 34 56 78",
     };
-    const candidates = Object.keys(typed).map((phone, index) => seedCandidate(index + 1, { phone }));
-    const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-PHONE-2", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Qatar" }]);
-    memory.seed(clientBriefCandidates, candidates.map(candidate => ({ brief_id: brief!.id, application_id: candidate.id, association_status: "shortlisted", candidate_consent_at: consentAt })));
+    const candidates = Object.keys(typed).map((phone, index) =>
+      seedCandidate(index + 1, { phone })
+    );
+    const [brief] = memory.seed(clientBriefs, [
+      {
+        brief_id: "BRIEF-PHONE-2",
+        organization_name: "Clinique",
+        contact_name: "RH",
+        email: "rh@test.local",
+        target_environment: "Hôpital",
+        specialty_needed: "Anesthésie",
+        country: "Qatar",
+      },
+    ]);
+    memory.seed(
+      clientBriefCandidates,
+      candidates.map(candidate => ({
+        brief_id: brief!.id,
+        application_id: candidate.id,
+        association_status: "shortlisted",
+        candidate_consent_at: consentAt,
+      }))
+    );
     const phones = (csv: string) => {
       const [header, ...rows] = csv.split("\n");
-      const column = header!.split(";").indexOf("\"Téléphone\"");
-      return Object.fromEntries(rows.map(row => [row.split(";")[2], row.split(";")[column]]));
+      const column = header!.split(";").indexOf('"Téléphone"');
+      return Object.fromEntries(
+        rows.map(row => [row.split(";")[2], row.split(";")[column]])
+      );
     };
-    const expected = Object.fromEntries(Object.values(typed).map((phone, index) => [`"c${index + 1}@test.local"`, `"${phone}"`]));
+    const expected = Object.fromEntries(
+      Object.values(typed).map((phone, index) => [
+        `"c${index + 1}@test.local"`,
+        `"${phone}"`,
+      ])
+    );
 
-    expect(phones((await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: candidates.map(candidate => candidate.id as number) })).csv)).toEqual(expected);
-    expect(phones((await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number })).csv)).toEqual(expected);
+    expect(
+      phones(
+        (
+          await admin().admin.recruitment.exportCsv({
+            type: "pool",
+            candidateIds: candidates.map(candidate => candidate.id as number),
+          })
+        ).csv
+      )
+    ).toEqual(expected);
+    expect(
+      phones(
+        (
+          await admin().admin.recruitment.exportCsv({
+            type: "shortlist",
+            briefId: brief!.id as number,
+          })
+        ).csv
+      )
+    ).toEqual(expected);
   });
 
   it("exporte en texte tout numéro de chiffres et de signes que Calc lirait comme un nombre, en français, anglais ou allemand, « 00 » compris (ADM-26)", async () => {
@@ -492,18 +1187,63 @@ describe("actions d’administration du recrutement", () => {
       "0612345678/0698765432": "0612345678/0698765432",
       "+1-202-555-0143": "001-202-555-0143",
     };
-    const candidates = Object.keys(typed).map((phone, index) => seedCandidate(index + 1, { phone }));
-    const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-PHONE-3", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Qatar" }]);
-    memory.seed(clientBriefCandidates, candidates.map(candidate => ({ brief_id: brief!.id, application_id: candidate.id, association_status: "shortlisted", candidate_consent_at: consentAt })));
+    const candidates = Object.keys(typed).map((phone, index) =>
+      seedCandidate(index + 1, { phone })
+    );
+    const [brief] = memory.seed(clientBriefs, [
+      {
+        brief_id: "BRIEF-PHONE-3",
+        organization_name: "Clinique",
+        contact_name: "RH",
+        email: "rh@test.local",
+        target_environment: "Hôpital",
+        specialty_needed: "Anesthésie",
+        country: "Qatar",
+      },
+    ]);
+    memory.seed(
+      clientBriefCandidates,
+      candidates.map(candidate => ({
+        brief_id: brief!.id,
+        application_id: candidate.id,
+        association_status: "shortlisted",
+        candidate_consent_at: consentAt,
+      }))
+    );
     const phones = (csv: string) => {
       const [header, ...rows] = csv.split("\n");
-      const column = header!.split(";").indexOf("\"Téléphone\"");
-      return Object.fromEntries(rows.map(row => [row.split(";")[2], row.split(";")[column]]));
+      const column = header!.split(";").indexOf('"Téléphone"');
+      return Object.fromEntries(
+        rows.map(row => [row.split(";")[2], row.split(";")[column]])
+      );
     };
-    const expected = Object.fromEntries(Object.values(typed).map((phone, index) => [`"c${index + 1}@test.local"`, `"${phone}"`]));
+    const expected = Object.fromEntries(
+      Object.values(typed).map((phone, index) => [
+        `"c${index + 1}@test.local"`,
+        `"${phone}"`,
+      ])
+    );
 
-    expect(phones((await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: candidates.map(candidate => candidate.id as number) })).csv)).toEqual(expected);
-    expect(phones((await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number })).csv)).toEqual(expected);
+    expect(
+      phones(
+        (
+          await admin().admin.recruitment.exportCsv({
+            type: "pool",
+            candidateIds: candidates.map(candidate => candidate.id as number),
+          })
+        ).csv
+      )
+    ).toEqual(expected);
+    expect(
+      phones(
+        (
+          await admin().admin.recruitment.exportCsv({
+            type: "shortlist",
+            briefId: brief!.id as number,
+          })
+        ).csv
+      )
+    ).toEqual(expected);
   });
 
   it("garde séparés plusieurs numéros saisis dans le même champ que Calc lirait comme un nombre, « / » ou « , » entre eux, et laisse tels que saisis ceux qu’il garde en texte (ADM-26)", async () => {
@@ -527,18 +1267,63 @@ describe("actions d’administration du recrutement", () => {
       "0612 34/56": "06 12 34 / 56",
       "126,465/103": "126,465 / 1 03",
     };
-    const candidates = Object.keys(typed).map((phone, index) => seedCandidate(index + 1, { phone }));
-    const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-PHONE-4", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Qatar" }]);
-    memory.seed(clientBriefCandidates, candidates.map(candidate => ({ brief_id: brief!.id, application_id: candidate.id, association_status: "shortlisted", candidate_consent_at: consentAt })));
+    const candidates = Object.keys(typed).map((phone, index) =>
+      seedCandidate(index + 1, { phone })
+    );
+    const [brief] = memory.seed(clientBriefs, [
+      {
+        brief_id: "BRIEF-PHONE-4",
+        organization_name: "Clinique",
+        contact_name: "RH",
+        email: "rh@test.local",
+        target_environment: "Hôpital",
+        specialty_needed: "Anesthésie",
+        country: "Qatar",
+      },
+    ]);
+    memory.seed(
+      clientBriefCandidates,
+      candidates.map(candidate => ({
+        brief_id: brief!.id,
+        application_id: candidate.id,
+        association_status: "shortlisted",
+        candidate_consent_at: consentAt,
+      }))
+    );
     const phones = (csv: string) => {
       const [header, ...rows] = csv.split("\n");
-      const column = header!.split(";").indexOf("\"Téléphone\"");
-      return Object.fromEntries(rows.map(row => [row.split(";")[2], row.split(";")[column]]));
+      const column = header!.split(";").indexOf('"Téléphone"');
+      return Object.fromEntries(
+        rows.map(row => [row.split(";")[2], row.split(";")[column]])
+      );
     };
-    const expected = Object.fromEntries(Object.values(typed).map((phone, index) => [`"c${index + 1}@test.local"`, `"${phone}"`]));
+    const expected = Object.fromEntries(
+      Object.values(typed).map((phone, index) => [
+        `"c${index + 1}@test.local"`,
+        `"${phone}"`,
+      ])
+    );
 
-    expect(phones((await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: candidates.map(candidate => candidate.id as number) })).csv)).toEqual(expected);
-    expect(phones((await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number })).csv)).toEqual(expected);
+    expect(
+      phones(
+        (
+          await admin().admin.recruitment.exportCsv({
+            type: "pool",
+            candidateIds: candidates.map(candidate => candidate.id as number),
+          })
+        ).csv
+      )
+    ).toEqual(expected);
+    expect(
+      phones(
+        (
+          await admin().admin.recruitment.exportCsv({
+            type: "shortlist",
+            briefId: brief!.id as number,
+          })
+        ).csv
+      )
+    ).toEqual(expected);
   });
 
   it("garde le « / » de la variante courte d’un numéro sans couper un numéro unique après son indicatif de zone, et laisse tel que saisi un séparateur en trop (ADM-26)", async () => {
@@ -569,18 +1354,63 @@ describe("actions d’administration du recrutement", () => {
       "( 0612345678 )": "06 12 34 56 78",
       "6/8/-72": "6/ 8/-72",
     };
-    const candidates = Object.keys(typed).map((phone, index) => seedCandidate(index + 1, { phone }));
-    const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-PHONE-5", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Qatar" }]);
-    memory.seed(clientBriefCandidates, candidates.map(candidate => ({ brief_id: brief!.id, application_id: candidate.id, association_status: "shortlisted", candidate_consent_at: consentAt })));
+    const candidates = Object.keys(typed).map((phone, index) =>
+      seedCandidate(index + 1, { phone })
+    );
+    const [brief] = memory.seed(clientBriefs, [
+      {
+        brief_id: "BRIEF-PHONE-5",
+        organization_name: "Clinique",
+        contact_name: "RH",
+        email: "rh@test.local",
+        target_environment: "Hôpital",
+        specialty_needed: "Anesthésie",
+        country: "Qatar",
+      },
+    ]);
+    memory.seed(
+      clientBriefCandidates,
+      candidates.map(candidate => ({
+        brief_id: brief!.id,
+        application_id: candidate.id,
+        association_status: "shortlisted",
+        candidate_consent_at: consentAt,
+      }))
+    );
     const phones = (csv: string) => {
       const [header, ...rows] = csv.split("\n");
-      const column = header!.split(";").indexOf("\"Téléphone\"");
-      return Object.fromEntries(rows.map(row => [row.split(";")[2], row.split(";")[column]]));
+      const column = header!.split(";").indexOf('"Téléphone"');
+      return Object.fromEntries(
+        rows.map(row => [row.split(";")[2], row.split(";")[column]])
+      );
     };
-    const expected = Object.fromEntries(Object.values(typed).map((phone, index) => [`"c${index + 1}@test.local"`, `"${phone}"`]));
+    const expected = Object.fromEntries(
+      Object.values(typed).map((phone, index) => [
+        `"c${index + 1}@test.local"`,
+        `"${phone}"`,
+      ])
+    );
 
-    expect(phones((await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: candidates.map(candidate => candidate.id as number) })).csv)).toEqual(expected);
-    expect(phones((await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number })).csv)).toEqual(expected);
+    expect(
+      phones(
+        (
+          await admin().admin.recruitment.exportCsv({
+            type: "pool",
+            candidateIds: candidates.map(candidate => candidate.id as number),
+          })
+        ).csv
+      )
+    ).toEqual(expected);
+    expect(
+      phones(
+        (
+          await admin().admin.recruitment.exportCsv({
+            type: "shortlist",
+            briefId: brief!.id as number,
+          })
+        ).csv
+      )
+    ).toEqual(expected);
   });
 
   it("laisse tel que saisi un numéro international entre parenthèses, que Calc garde en texte, et met à part les chiffres de celui qu’il lit comme un nombre (ADM-26)", async () => {
@@ -599,18 +1429,63 @@ describe("actions d’administration du recrutement", () => {
       "+33612345678": "00 33612345678",
       "-(+33612345678)": "00 33612345678",
     };
-    const candidates = Object.keys(typed).map((phone, index) => seedCandidate(index + 1, { phone }));
-    const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-PHONE-6", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Qatar" }]);
-    memory.seed(clientBriefCandidates, candidates.map(candidate => ({ brief_id: brief!.id, application_id: candidate.id, association_status: "shortlisted", candidate_consent_at: consentAt })));
+    const candidates = Object.keys(typed).map((phone, index) =>
+      seedCandidate(index + 1, { phone })
+    );
+    const [brief] = memory.seed(clientBriefs, [
+      {
+        brief_id: "BRIEF-PHONE-6",
+        organization_name: "Clinique",
+        contact_name: "RH",
+        email: "rh@test.local",
+        target_environment: "Hôpital",
+        specialty_needed: "Anesthésie",
+        country: "Qatar",
+      },
+    ]);
+    memory.seed(
+      clientBriefCandidates,
+      candidates.map(candidate => ({
+        brief_id: brief!.id,
+        application_id: candidate.id,
+        association_status: "shortlisted",
+        candidate_consent_at: consentAt,
+      }))
+    );
     const phones = (csv: string) => {
       const [header, ...rows] = csv.split("\n");
-      const column = header!.split(";").indexOf("\"Téléphone\"");
-      return Object.fromEntries(rows.map(row => [row.split(";")[2], row.split(";")[column]]));
+      const column = header!.split(";").indexOf('"Téléphone"');
+      return Object.fromEntries(
+        rows.map(row => [row.split(";")[2], row.split(";")[column]])
+      );
     };
-    const expected = Object.fromEntries(Object.values(typed).map((phone, index) => [`"c${index + 1}@test.local"`, `"${phone}"`]));
+    const expected = Object.fromEntries(
+      Object.values(typed).map((phone, index) => [
+        `"c${index + 1}@test.local"`,
+        `"${phone}"`,
+      ])
+    );
 
-    expect(phones((await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: candidates.map(candidate => candidate.id as number) })).csv)).toEqual(expected);
-    expect(phones((await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number })).csv)).toEqual(expected);
+    expect(
+      phones(
+        (
+          await admin().admin.recruitment.exportCsv({
+            type: "pool",
+            candidateIds: candidates.map(candidate => candidate.id as number),
+          })
+        ).csv
+      )
+    ).toEqual(expected);
+    expect(
+      phones(
+        (
+          await admin().admin.recruitment.exportCsv({
+            type: "shortlist",
+            briefId: brief!.id as number,
+          })
+        ).csv
+      )
+    ).toEqual(expected);
   });
 
   it("ne réécrit un numéro que si Calc le lit comme un nombre, et garde alors la virgule et le poste qui la suit ; le signe moins U+2212 compris (ADM-26)", async () => {
@@ -638,25 +1513,71 @@ describe("actions d’administration du recrutement", () => {
       "\u2212 0612345678": "06 12 34 56 78",
       "0612345678 \u2212": "06 12 34 56 78",
       // Text in Calc, left as typed: U+2212 between pairs, dots between pairs, a month above 12.
-      "06\u221212\u221234\u221256\u221278": "06\u221212\u221234\u221256\u221278",
+      "06\u221212\u221234\u221256\u221278":
+        "06\u221212\u221234\u221256\u221278",
       "06.12.34.56.78": "06.12.34.56.78",
       "0471.23.45.67": "0471.23.45.67",
       "202.555.0143": "202.555.0143",
       "98/123 456": "98/123 456",
       "0471-23-45": "0471-23-45",
     };
-    const candidates = Object.keys(typed).map((phone, index) => seedCandidate(index + 1, { phone }));
-    const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-PHONE-7", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Qatar" }]);
-    memory.seed(clientBriefCandidates, candidates.map(candidate => ({ brief_id: brief!.id, application_id: candidate.id, association_status: "shortlisted", candidate_consent_at: consentAt })));
+    const candidates = Object.keys(typed).map((phone, index) =>
+      seedCandidate(index + 1, { phone })
+    );
+    const [brief] = memory.seed(clientBriefs, [
+      {
+        brief_id: "BRIEF-PHONE-7",
+        organization_name: "Clinique",
+        contact_name: "RH",
+        email: "rh@test.local",
+        target_environment: "Hôpital",
+        specialty_needed: "Anesthésie",
+        country: "Qatar",
+      },
+    ]);
+    memory.seed(
+      clientBriefCandidates,
+      candidates.map(candidate => ({
+        brief_id: brief!.id,
+        application_id: candidate.id,
+        association_status: "shortlisted",
+        candidate_consent_at: consentAt,
+      }))
+    );
     const phones = (csv: string) => {
       const [header, ...rows] = csv.split("\n");
-      const column = header!.split(";").indexOf("\"Téléphone\"");
-      return Object.fromEntries(rows.map(row => [row.split(";")[2], row.split(";")[column]]));
+      const column = header!.split(";").indexOf('"Téléphone"');
+      return Object.fromEntries(
+        rows.map(row => [row.split(";")[2], row.split(";")[column]])
+      );
     };
-    const expected = Object.fromEntries(Object.values(typed).map((phone, index) => [`"c${index + 1}@test.local"`, `"${phone}"`]));
+    const expected = Object.fromEntries(
+      Object.values(typed).map((phone, index) => [
+        `"c${index + 1}@test.local"`,
+        `"${phone}"`,
+      ])
+    );
 
-    expect(phones((await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: candidates.map(candidate => candidate.id as number) })).csv)).toEqual(expected);
-    expect(phones((await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number })).csv)).toEqual(expected);
+    expect(
+      phones(
+        (
+          await admin().admin.recruitment.exportCsv({
+            type: "pool",
+            candidateIds: candidates.map(candidate => candidate.id as number),
+          })
+        ).csv
+      )
+    ).toEqual(expected);
+    expect(
+      phones(
+        (
+          await admin().admin.recruitment.exportCsv({
+            type: "shortlist",
+            briefId: brief!.id as number,
+          })
+        ).csv
+      )
+    ).toEqual(expected);
   });
 
   it("garde l’espace et le groupe de trois chiffres qu’un numéro entier suivi de son poste fait lire comme un nombre en français, sans décaler ses paires (ADM-26)", async () => {
@@ -683,18 +1604,63 @@ describe("actions d’administration du recrutement", () => {
       "06 12 34 56 78 913": "06 12 34 56 78 913",
       "+32 471234567 802": "0032 471234567 802",
     };
-    const candidates = Object.keys(typed).map((phone, index) => seedCandidate(index + 1, { phone }));
-    const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-PHONE-8", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Qatar" }]);
-    memory.seed(clientBriefCandidates, candidates.map(candidate => ({ brief_id: brief!.id, application_id: candidate.id, association_status: "shortlisted", candidate_consent_at: consentAt })));
+    const candidates = Object.keys(typed).map((phone, index) =>
+      seedCandidate(index + 1, { phone })
+    );
+    const [brief] = memory.seed(clientBriefs, [
+      {
+        brief_id: "BRIEF-PHONE-8",
+        organization_name: "Clinique",
+        contact_name: "RH",
+        email: "rh@test.local",
+        target_environment: "Hôpital",
+        specialty_needed: "Anesthésie",
+        country: "Qatar",
+      },
+    ]);
+    memory.seed(
+      clientBriefCandidates,
+      candidates.map(candidate => ({
+        brief_id: brief!.id,
+        application_id: candidate.id,
+        association_status: "shortlisted",
+        candidate_consent_at: consentAt,
+      }))
+    );
     const phones = (csv: string) => {
       const [header, ...rows] = csv.split("\n");
-      const column = header!.split(";").indexOf("\"Téléphone\"");
-      return Object.fromEntries(rows.map(row => [row.split(";")[2], row.split(";")[column]]));
+      const column = header!.split(";").indexOf('"Téléphone"');
+      return Object.fromEntries(
+        rows.map(row => [row.split(";")[2], row.split(";")[column]])
+      );
     };
-    const expected = Object.fromEntries(Object.values(typed).map((phone, index) => [`"c${index + 1}@test.local"`, `"${phone}"`]));
+    const expected = Object.fromEntries(
+      Object.values(typed).map((phone, index) => [
+        `"c${index + 1}@test.local"`,
+        `"${phone}"`,
+      ])
+    );
 
-    expect(phones((await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: candidates.map(candidate => candidate.id as number) })).csv)).toEqual(expected);
-    expect(phones((await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number })).csv)).toEqual(expected);
+    expect(
+      phones(
+        (
+          await admin().admin.recruitment.exportCsv({
+            type: "pool",
+            candidateIds: candidates.map(candidate => candidate.id as number),
+          })
+        ).csv
+      )
+    ).toEqual(expected);
+    expect(
+      phones(
+        (
+          await admin().admin.recruitment.exportCsv({
+            type: "shortlist",
+            briefId: brief!.id as number,
+          })
+        ).csv
+      )
+    ).toEqual(expected);
   });
 
   it("garde l’espace et le poste qui suivent un numéro national compact de sept ou huit chiffres que le français lit comme un seul nombre, sans décaler ses paires (ADM-26)", async () => {
@@ -725,18 +1691,63 @@ describe("actions d’administration du recrutement", () => {
       "4412 3456 802": "4412 3456 802",
       "0 44123456 802": "0 44123456 802",
     };
-    const candidates = Object.keys(typed).map((phone, index) => seedCandidate(index + 1, { phone }));
-    const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-PHONE-9", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Qatar" }]);
-    memory.seed(clientBriefCandidates, candidates.map(candidate => ({ brief_id: brief!.id, application_id: candidate.id, association_status: "shortlisted", candidate_consent_at: consentAt })));
+    const candidates = Object.keys(typed).map((phone, index) =>
+      seedCandidate(index + 1, { phone })
+    );
+    const [brief] = memory.seed(clientBriefs, [
+      {
+        brief_id: "BRIEF-PHONE-9",
+        organization_name: "Clinique",
+        contact_name: "RH",
+        email: "rh@test.local",
+        target_environment: "Hôpital",
+        specialty_needed: "Anesthésie",
+        country: "Qatar",
+      },
+    ]);
+    memory.seed(
+      clientBriefCandidates,
+      candidates.map(candidate => ({
+        brief_id: brief!.id,
+        application_id: candidate.id,
+        association_status: "shortlisted",
+        candidate_consent_at: consentAt,
+      }))
+    );
     const phones = (csv: string) => {
       const [header, ...rows] = csv.split("\n");
-      const column = header!.split(";").indexOf("\"Téléphone\"");
-      return Object.fromEntries(rows.map(row => [row.split(";")[2], row.split(";")[column]]));
+      const column = header!.split(";").indexOf('"Téléphone"');
+      return Object.fromEntries(
+        rows.map(row => [row.split(";")[2], row.split(";")[column]])
+      );
     };
-    const expected = Object.fromEntries(Object.values(typed).map((phone, index) => [`"c${index + 1}@test.local"`, `"${phone}"`]));
+    const expected = Object.fromEntries(
+      Object.values(typed).map((phone, index) => [
+        `"c${index + 1}@test.local"`,
+        `"${phone}"`,
+      ])
+    );
 
-    expect(phones((await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: candidates.map(candidate => candidate.id as number) })).csv)).toEqual(expected);
-    expect(phones((await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number })).csv)).toEqual(expected);
+    expect(
+      phones(
+        (
+          await admin().admin.recruitment.exportCsv({
+            type: "pool",
+            candidateIds: candidates.map(candidate => candidate.id as number),
+          })
+        ).csv
+      )
+    ).toEqual(expected);
+    expect(
+      phones(
+        (
+          await admin().admin.recruitment.exportCsv({
+            type: "shortlist",
+            briefId: brief!.id as number,
+          })
+        ).csv
+      )
+    ).toEqual(expected);
   });
 
   it("garde le « / » et la variante telle que saisie d’un numéro national de sept chiffres ou plus que Calc lirait comme une fraction (ADM-26)", async () => {
@@ -759,18 +1770,63 @@ describe("actions d’administration du recrutement", () => {
       "6111234/424": "6111234/424",
       "6111 234 / 4 24": "6111 234 / 4 24",
     };
-    const candidates = Object.keys(typed).map((phone, index) => seedCandidate(index + 1, { phone }));
-    const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-PHONE-10", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Qatar" }]);
-    memory.seed(clientBriefCandidates, candidates.map(candidate => ({ brief_id: brief!.id, application_id: candidate.id, association_status: "shortlisted", candidate_consent_at: consentAt })));
+    const candidates = Object.keys(typed).map((phone, index) =>
+      seedCandidate(index + 1, { phone })
+    );
+    const [brief] = memory.seed(clientBriefs, [
+      {
+        brief_id: "BRIEF-PHONE-10",
+        organization_name: "Clinique",
+        contact_name: "RH",
+        email: "rh@test.local",
+        target_environment: "Hôpital",
+        specialty_needed: "Anesthésie",
+        country: "Qatar",
+      },
+    ]);
+    memory.seed(
+      clientBriefCandidates,
+      candidates.map(candidate => ({
+        brief_id: brief!.id,
+        application_id: candidate.id,
+        association_status: "shortlisted",
+        candidate_consent_at: consentAt,
+      }))
+    );
     const phones = (csv: string) => {
       const [header, ...rows] = csv.split("\n");
-      const column = header!.split(";").indexOf("\"Téléphone\"");
-      return Object.fromEntries(rows.map(row => [row.split(";")[2], row.split(";")[column]]));
+      const column = header!.split(";").indexOf('"Téléphone"');
+      return Object.fromEntries(
+        rows.map(row => [row.split(";")[2], row.split(";")[column]])
+      );
     };
-    const expected = Object.fromEntries(Object.values(typed).map((phone, index) => [`"c${index + 1}@test.local"`, `"${phone}"`]));
+    const expected = Object.fromEntries(
+      Object.values(typed).map((phone, index) => [
+        `"c${index + 1}@test.local"`,
+        `"${phone}"`,
+      ])
+    );
 
-    expect(phones((await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: candidates.map(candidate => candidate.id as number) })).csv)).toEqual(expected);
-    expect(phones((await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number })).csv)).toEqual(expected);
+    expect(
+      phones(
+        (
+          await admin().admin.recruitment.exportCsv({
+            type: "pool",
+            candidateIds: candidates.map(candidate => candidate.id as number),
+          })
+        ).csv
+      )
+    ).toEqual(expected);
+    expect(
+      phones(
+        (
+          await admin().admin.recruitment.exportCsv({
+            type: "shortlist",
+            briefId: brief!.id as number,
+          })
+        ).csv
+      )
+    ).toEqual(expected);
   });
 
   it("garde le point et le poste qui suivent un numéro entier que Calc lit comme un nombre, décimal en anglais ou groupé en allemand, entre parenthèses ou non (ADM-26)", async () => {
@@ -810,18 +1866,63 @@ describe("actions d’administration du recrutement", () => {
       "06.12.34.56.78": "06.12.34.56.78",
       "0612345678. 913": "0612345678. 913",
     };
-    const candidates = Object.keys(typed).map((phone, index) => seedCandidate(index + 1, { phone }));
-    const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-PHONE-11", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Qatar" }]);
-    memory.seed(clientBriefCandidates, candidates.map(candidate => ({ brief_id: brief!.id, application_id: candidate.id, association_status: "shortlisted", candidate_consent_at: consentAt })));
+    const candidates = Object.keys(typed).map((phone, index) =>
+      seedCandidate(index + 1, { phone })
+    );
+    const [brief] = memory.seed(clientBriefs, [
+      {
+        brief_id: "BRIEF-PHONE-11",
+        organization_name: "Clinique",
+        contact_name: "RH",
+        email: "rh@test.local",
+        target_environment: "Hôpital",
+        specialty_needed: "Anesthésie",
+        country: "Qatar",
+      },
+    ]);
+    memory.seed(
+      clientBriefCandidates,
+      candidates.map(candidate => ({
+        brief_id: brief!.id,
+        application_id: candidate.id,
+        association_status: "shortlisted",
+        candidate_consent_at: consentAt,
+      }))
+    );
     const phones = (csv: string) => {
       const [header, ...rows] = csv.split("\n");
-      const column = header!.split(";").indexOf("\"Téléphone\"");
-      return Object.fromEntries(rows.map(row => [row.split(";")[2], row.split(";")[column]]));
+      const column = header!.split(";").indexOf('"Téléphone"');
+      return Object.fromEntries(
+        rows.map(row => [row.split(";")[2], row.split(";")[column]])
+      );
     };
-    const expected = Object.fromEntries(Object.values(typed).map((phone, index) => [`"c${index + 1}@test.local"`, `"${phone}"`]));
+    const expected = Object.fromEntries(
+      Object.values(typed).map((phone, index) => [
+        `"c${index + 1}@test.local"`,
+        `"${phone}"`,
+      ])
+    );
 
-    expect(phones((await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: candidates.map(candidate => candidate.id as number) })).csv)).toEqual(expected);
-    expect(phones((await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number })).csv)).toEqual(expected);
+    expect(
+      phones(
+        (
+          await admin().admin.recruitment.exportCsv({
+            type: "pool",
+            candidateIds: candidates.map(candidate => candidate.id as number),
+          })
+        ).csv
+      )
+    ).toEqual(expected);
+    expect(
+      phones(
+        (
+          await admin().admin.recruitment.exportCsv({
+            type: "shortlist",
+            briefId: brief!.id as number,
+          })
+        ).csv
+      )
+    ).toEqual(expected);
   });
 
   it("garde chaque espace d’un numéro écrit par groupes de trois et suivi de son poste, que le français lit comme un seul nombre, sans coller le poste au numéro ni décaler ses paires (ADM-26)", async () => {
@@ -847,18 +1948,63 @@ describe("actions d’administration du recrutement", () => {
       "0471234594 612 345 678": "04 71 23 45 94 612 345 678",
       "+216 71 123 456 802": "00216 71 123 456 802",
     };
-    const candidates = Object.keys(typed).map((phone, index) => seedCandidate(index + 1, { phone }));
-    const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-PHONE-12", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Qatar" }]);
-    memory.seed(clientBriefCandidates, candidates.map(candidate => ({ brief_id: brief!.id, application_id: candidate.id, association_status: "shortlisted", candidate_consent_at: consentAt })));
+    const candidates = Object.keys(typed).map((phone, index) =>
+      seedCandidate(index + 1, { phone })
+    );
+    const [brief] = memory.seed(clientBriefs, [
+      {
+        brief_id: "BRIEF-PHONE-12",
+        organization_name: "Clinique",
+        contact_name: "RH",
+        email: "rh@test.local",
+        target_environment: "Hôpital",
+        specialty_needed: "Anesthésie",
+        country: "Qatar",
+      },
+    ]);
+    memory.seed(
+      clientBriefCandidates,
+      candidates.map(candidate => ({
+        brief_id: brief!.id,
+        application_id: candidate.id,
+        association_status: "shortlisted",
+        candidate_consent_at: consentAt,
+      }))
+    );
     const phones = (csv: string) => {
       const [header, ...rows] = csv.split("\n");
-      const column = header!.split(";").indexOf("\"Téléphone\"");
-      return Object.fromEntries(rows.map(row => [row.split(";")[2], row.split(";")[column]]));
+      const column = header!.split(";").indexOf('"Téléphone"');
+      return Object.fromEntries(
+        rows.map(row => [row.split(";")[2], row.split(";")[column]])
+      );
     };
-    const expected = Object.fromEntries(Object.values(typed).map((phone, index) => [`"c${index + 1}@test.local"`, `"${phone}"`]));
+    const expected = Object.fromEntries(
+      Object.values(typed).map((phone, index) => [
+        `"c${index + 1}@test.local"`,
+        `"${phone}"`,
+      ])
+    );
 
-    expect(phones((await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: candidates.map(candidate => candidate.id as number) })).csv)).toEqual(expected);
-    expect(phones((await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number })).csv)).toEqual(expected);
+    expect(
+      phones(
+        (
+          await admin().admin.recruitment.exportCsv({
+            type: "pool",
+            candidateIds: candidates.map(candidate => candidate.id as number),
+          })
+        ).csv
+      )
+    ).toEqual(expected);
+    expect(
+      phones(
+        (
+          await admin().admin.recruitment.exportCsv({
+            type: "shortlist",
+            briefId: brief!.id as number,
+          })
+        ).csv
+      )
+    ).toEqual(expected);
   });
 
   it("garde le séparateur d’un numéro de six chiffres suivi d’un poste, d’une variante ou d’un second numéro, chaque numéro écrit comme seul (Nouvelle-Calédonie, Wallis-et-Futuna, Saint-Pierre-et-Miquelon, Andorre, Luxembourg) (ADM-26)", async () => {
@@ -890,18 +2036,63 @@ describe("actions d’administration du recrutement", () => {
       "6111 234/424": "6 11 12 34 / 424",
       "6111234 915": "6 11 12 34 915",
     };
-    const candidates = Object.keys(typed).map((phone, index) => seedCandidate(index + 1, { phone }));
-    const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-PHONE-13", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Qatar" }]);
-    memory.seed(clientBriefCandidates, candidates.map(candidate => ({ brief_id: brief!.id, application_id: candidate.id, association_status: "shortlisted", candidate_consent_at: consentAt })));
+    const candidates = Object.keys(typed).map((phone, index) =>
+      seedCandidate(index + 1, { phone })
+    );
+    const [brief] = memory.seed(clientBriefs, [
+      {
+        brief_id: "BRIEF-PHONE-13",
+        organization_name: "Clinique",
+        contact_name: "RH",
+        email: "rh@test.local",
+        target_environment: "Hôpital",
+        specialty_needed: "Anesthésie",
+        country: "Qatar",
+      },
+    ]);
+    memory.seed(
+      clientBriefCandidates,
+      candidates.map(candidate => ({
+        brief_id: brief!.id,
+        application_id: candidate.id,
+        association_status: "shortlisted",
+        candidate_consent_at: consentAt,
+      }))
+    );
     const phones = (csv: string) => {
       const [header, ...rows] = csv.split("\n");
-      const column = header!.split(";").indexOf("\"Téléphone\"");
-      return Object.fromEntries(rows.map(row => [row.split(";")[2], row.split(";")[column]]));
+      const column = header!.split(";").indexOf('"Téléphone"');
+      return Object.fromEntries(
+        rows.map(row => [row.split(";")[2], row.split(";")[column]])
+      );
     };
-    const expected = Object.fromEntries(Object.values(typed).map((phone, index) => [`"c${index + 1}@test.local"`, `"${phone}"`]));
+    const expected = Object.fromEntries(
+      Object.values(typed).map((phone, index) => [
+        `"c${index + 1}@test.local"`,
+        `"${phone}"`,
+      ])
+    );
 
-    expect(phones((await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: candidates.map(candidate => candidate.id as number) })).csv)).toEqual(expected);
-    expect(phones((await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number })).csv)).toEqual(expected);
+    expect(
+      phones(
+        (
+          await admin().admin.recruitment.exportCsv({
+            type: "pool",
+            candidateIds: candidates.map(candidate => candidate.id as number),
+          })
+        ).csv
+      )
+    ).toEqual(expected);
+    expect(
+      phones(
+        (
+          await admin().admin.recruitment.exportCsv({
+            type: "shortlist",
+            briefId: brief!.id as number,
+          })
+        ).csv
+      )
+    ).toEqual(expected);
   });
 
   it("garde l’espace entre un numéro entier et le poste ou le second numéro qui le suit avant le « / » d’une variante, chacun écrit comme seul, sans décaler ses paires ni coller deux numéros (ADM-26)", async () => {
@@ -938,18 +2129,63 @@ describe("actions d’administration du recrutement", () => {
       "44123456 802/3": "44 12 34 56 802 / 3",
       "+687 281234/281372": "00687 281234 / 28 13 72",
     };
-    const candidates = Object.keys(typed).map((phone, index) => seedCandidate(index + 1, { phone }));
-    const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-PHONE-15", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Qatar" }]);
-    memory.seed(clientBriefCandidates, candidates.map(candidate => ({ brief_id: brief!.id, application_id: candidate.id, association_status: "shortlisted", candidate_consent_at: consentAt })));
+    const candidates = Object.keys(typed).map((phone, index) =>
+      seedCandidate(index + 1, { phone })
+    );
+    const [brief] = memory.seed(clientBriefs, [
+      {
+        brief_id: "BRIEF-PHONE-15",
+        organization_name: "Clinique",
+        contact_name: "RH",
+        email: "rh@test.local",
+        target_environment: "Hôpital",
+        specialty_needed: "Anesthésie",
+        country: "Qatar",
+      },
+    ]);
+    memory.seed(
+      clientBriefCandidates,
+      candidates.map(candidate => ({
+        brief_id: brief!.id,
+        application_id: candidate.id,
+        association_status: "shortlisted",
+        candidate_consent_at: consentAt,
+      }))
+    );
     const phones = (csv: string) => {
       const [header, ...rows] = csv.split("\n");
-      const column = header!.split(";").indexOf("\"Téléphone\"");
-      return Object.fromEntries(rows.map(row => [row.split(";")[2], row.split(";")[column]]));
+      const column = header!.split(";").indexOf('"Téléphone"');
+      return Object.fromEntries(
+        rows.map(row => [row.split(";")[2], row.split(";")[column]])
+      );
     };
-    const expected = Object.fromEntries(Object.values(typed).map((phone, index) => [`"c${index + 1}@test.local"`, `"${phone}"`]));
+    const expected = Object.fromEntries(
+      Object.values(typed).map((phone, index) => [
+        `"c${index + 1}@test.local"`,
+        `"${phone}"`,
+      ])
+    );
 
-    expect(phones((await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: candidates.map(candidate => candidate.id as number) })).csv)).toEqual(expected);
-    expect(phones((await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number })).csv)).toEqual(expected);
+    expect(
+      phones(
+        (
+          await admin().admin.recruitment.exportCsv({
+            type: "pool",
+            candidateIds: candidates.map(candidate => candidate.id as number),
+          })
+        ).csv
+      )
+    ).toEqual(expected);
+    expect(
+      phones(
+        (
+          await admin().admin.recruitment.exportCsv({
+            type: "shortlist",
+            briefId: brief!.id as number,
+          })
+        ).csv
+      )
+    ).toEqual(expected);
   });
 
   it("laisse tel que saisi ce que Calc ne lit pas comme une date : une espace entre deux suites de chiffres, des parenthèses, une ponctuation qu’il refuse, une année de deux chiffres en tête hors « - » (ADM-26)", async () => {
@@ -979,57 +2215,196 @@ describe("actions d’administration du recrutement", () => {
       "41-11-09": "41- 11-09",
       "12/06": "12/ 06",
     };
-    const candidates = Object.keys(typed).map((phone, index) => seedCandidate(index + 1, { phone }));
-    const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-PHONE-14", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Qatar" }]);
-    memory.seed(clientBriefCandidates, candidates.map(candidate => ({ brief_id: brief!.id, application_id: candidate.id, association_status: "shortlisted", candidate_consent_at: consentAt })));
+    const candidates = Object.keys(typed).map((phone, index) =>
+      seedCandidate(index + 1, { phone })
+    );
+    const [brief] = memory.seed(clientBriefs, [
+      {
+        brief_id: "BRIEF-PHONE-14",
+        organization_name: "Clinique",
+        contact_name: "RH",
+        email: "rh@test.local",
+        target_environment: "Hôpital",
+        specialty_needed: "Anesthésie",
+        country: "Qatar",
+      },
+    ]);
+    memory.seed(
+      clientBriefCandidates,
+      candidates.map(candidate => ({
+        brief_id: brief!.id,
+        application_id: candidate.id,
+        association_status: "shortlisted",
+        candidate_consent_at: consentAt,
+      }))
+    );
     const phones = (csv: string) => {
       const [header, ...rows] = csv.split("\n");
-      const column = header!.split(";").indexOf("\"Téléphone\"");
-      return Object.fromEntries(rows.map(row => [row.split(";")[2], row.split(";")[column]]));
+      const column = header!.split(";").indexOf('"Téléphone"');
+      return Object.fromEntries(
+        rows.map(row => [row.split(";")[2], row.split(";")[column]])
+      );
     };
-    const expected = Object.fromEntries(Object.values(typed).map((phone, index) => [`"c${index + 1}@test.local"`, `"${phone}"`]));
+    const expected = Object.fromEntries(
+      Object.values(typed).map((phone, index) => [
+        `"c${index + 1}@test.local"`,
+        `"${phone}"`,
+      ])
+    );
 
-    expect(phones((await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: candidates.map(candidate => candidate.id as number) })).csv)).toEqual(expected);
-    expect(phones((await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number })).csv)).toEqual(expected);
+    expect(
+      phones(
+        (
+          await admin().admin.recruitment.exportCsv({
+            type: "pool",
+            candidateIds: candidates.map(candidate => candidate.id as number),
+          })
+        ).csv
+      )
+    ).toEqual(expected);
+    expect(
+      phones(
+        (
+          await admin().admin.recruitment.exportCsv({
+            type: "shortlist",
+            briefId: brief!.id as number,
+          })
+        ).csv
+      )
+    ).toEqual(expected);
   });
 
   it("écrit dans l’export du vivier les pays et les langues en clair, et le statut en mots (INTL-10)", async () => {
-    const candidate = seedCandidate(1, { target_countries: JSON.stringify(["Émirats arabes unis", "Qatar"]), languages: JSON.stringify(["Arabic", "French"]), status: "shortlisted" });
-    const pool = await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: [candidate.id as number] });
+    const candidate = seedCandidate(1, {
+      target_countries: JSON.stringify(["Émirats arabes unis", "Qatar"]),
+      languages: JSON.stringify(["Arabic", "French"]),
+      status: "shortlisted",
+    });
+    const pool = await admin().admin.recruitment.exportCsv({
+      type: "pool",
+      candidateIds: [candidate.id as number],
+    });
     const [header, row] = pool.csv.split("\n");
     // The file keeps its format: the same columns, separated by « ; ».
-    expect(header).toBe(["Prénom", "Nom", "Email", "Téléphone", "Spécialité", "Pays ciblés", "Langues", "Expérience (ans)", "Disponibilité", "Mobilité", "Certifications", "Score IA", "Statut"].map(cell => `"${cell}"`).join(";"));
-    expect(row).toContain("\"Émirats arabes unis ; Qatar\";\"Arabic ; French\"");
-    expect(row!.endsWith(";\"Présélectionnée\"")).toBe(true);
+    expect(header).toBe(
+      [
+        "Prénom",
+        "Nom",
+        "Email",
+        "Téléphone",
+        "Spécialité",
+        "Pays ciblés",
+        "Langues",
+        "Expérience (ans)",
+        "Disponibilité",
+        "Mobilité",
+        "Certifications",
+        "Score IA",
+        "Statut",
+      ]
+        .map(cell => `"${cell}"`)
+        .join(";")
+    );
+    expect(row).toContain('"Émirats arabes unis ; Qatar";"Arabic ; French"');
+    expect(row!.endsWith(';"Présélectionnée"')).toBe(true);
     expect(row).not.toContain("[");
   });
 
   it("marque traitées ou ignore plusieurs relances d’un coup, celles encore à examiner seulement, chacune journalisée (ADM-13)", async () => {
     const first = seedCandidate(1);
     const second = seedCandidate(2);
-    const [toHandle, other, alreadyDone, untouched] = memory.seed(recruitmentFollowUpTasks, [
-      { application_id: first.id, kind: "follow_up_7", due_at: "2026-10-01 09:00:00.000", status: "suggested" },
-      { application_id: second.id, kind: "follow_up_14", due_at: "2026-10-08 09:00:00.000", status: "suggested" },
-      { application_id: second.id, kind: "follow_up_7", due_at: "2026-10-01 09:00:00.000", status: "dismissed", completed_by_open_id: "earlier_admin" },
-      { application_id: first.id, kind: "follow_up_14", due_at: "2026-10-08 09:00:00.000", status: "suggested" },
-    ]);
+    const [toHandle, other, alreadyDone, untouched] = memory.seed(
+      recruitmentFollowUpTasks,
+      [
+        {
+          application_id: first.id,
+          kind: "follow_up_7",
+          due_at: "2026-10-01 09:00:00.000",
+          status: "suggested",
+        },
+        {
+          application_id: second.id,
+          kind: "follow_up_14",
+          due_at: "2026-10-08 09:00:00.000",
+          status: "suggested",
+        },
+        {
+          application_id: second.id,
+          kind: "follow_up_7",
+          due_at: "2026-10-01 09:00:00.000",
+          status: "dismissed",
+          completed_by_open_id: "earlier_admin",
+        },
+        {
+          application_id: first.id,
+          kind: "follow_up_14",
+          due_at: "2026-10-08 09:00:00.000",
+          status: "suggested",
+        },
+      ]
+    );
 
-    const result = await admin().admin.recruitment.followUps.updateMany({ ids: [toHandle!.id as number, other!.id as number, alreadyDone!.id as number], status: "completed" });
+    const result = await admin().admin.recruitment.followUps.updateMany({
+      ids: [
+        toHandle!.id as number,
+        other!.id as number,
+        alreadyDone!.id as number,
+      ],
+      status: "completed",
+    });
     expect(result).toEqual({ success: true, updated: 2 });
-    const byId = new Map(memory.rows(recruitmentFollowUpTasks).map(row => [row.id, row]));
-    expect(byId.get(toHandle!.id)).toMatchObject({ status: "completed", completed_by_open_id: "user_owner" });
+    const byId = new Map(
+      memory.rows(recruitmentFollowUpTasks).map(row => [row.id, row])
+    );
+    expect(byId.get(toHandle!.id)).toMatchObject({
+      status: "completed",
+      completed_by_open_id: "user_owner",
+    });
     expect(byId.get(toHandle!.id)!.completed_at).not.toBeNull();
-    expect(byId.get(other!.id)).toMatchObject({ status: "completed", completed_by_open_id: "user_owner" });
-    expect(byId.get(alreadyDone!.id)).toMatchObject({ status: "dismissed", completed_by_open_id: "earlier_admin" });
-    expect(byId.get(untouched!.id)).toMatchObject({ status: "suggested", completed_at: null });
-    const audits = memory.rows(recruitmentAuditLogs).map(row => ({ applicationId: row.application_id, metadata: JSON.parse(String(row.metadata)) }));
+    expect(byId.get(other!.id)).toMatchObject({
+      status: "completed",
+      completed_by_open_id: "user_owner",
+    });
+    expect(byId.get(alreadyDone!.id)).toMatchObject({
+      status: "dismissed",
+      completed_by_open_id: "earlier_admin",
+    });
+    expect(byId.get(untouched!.id)).toMatchObject({
+      status: "suggested",
+      completed_at: null,
+    });
+    const audits = memory.rows(recruitmentAuditLogs).map(row => ({
+      applicationId: row.application_id,
+      metadata: JSON.parse(String(row.metadata)),
+    }));
     expect(audits).toEqual([
-      { applicationId: first.id, metadata: { event: "follow_up", taskId: toHandle!.id, status: "completed", batch: true } },
-      { applicationId: second.id, metadata: { event: "follow_up", taskId: other!.id, status: "completed", batch: true } },
+      {
+        applicationId: first.id,
+        metadata: {
+          event: "follow_up",
+          taskId: toHandle!.id,
+          status: "completed",
+          batch: true,
+        },
+      },
+      {
+        applicationId: second.id,
+        metadata: {
+          event: "follow_up",
+          taskId: other!.id,
+          status: "completed",
+          batch: true,
+        },
+      },
     ]);
 
     // Nothing left to review among them: nothing changes, nothing is logged.
-    await expect(admin().admin.recruitment.followUps.updateMany({ ids: [toHandle!.id as number], status: "dismissed" })).resolves.toEqual({ success: true, updated: 0 });
+    await expect(
+      admin().admin.recruitment.followUps.updateMany({
+        ids: [toHandle!.id as number],
+        status: "dismissed",
+      })
+    ).resolves.toEqual({ success: true, updated: 0 });
     expect(memory.rows(recruitmentAuditLogs)).toHaveLength(2);
   });
 
@@ -1039,51 +2414,153 @@ describe("actions d’administration du recrutement", () => {
     seedCandidate(2, { last_contacted_at: contactedAt });
     // Reached by « Proposer un échange » or writing on their own: no campaign has contacted them.
     const neverContacted = seedCandidate(3);
-    await admin().admin.recruitment.candidate.markResponse({ id: answered.id as number });
-    await admin().admin.recruitment.candidate.markResponse({ id: neverContacted.id as number });
+    await admin().admin.recruitment.candidate.markResponse({
+      id: answered.id as number,
+    });
+    await admin().admin.recruitment.candidate.markResponse({
+      id: neverContacted.id as number,
+    });
 
     const dashboard = await admin().admin.recruitment.dashboard();
-    expect(dashboard!.candidateStats).toMatchObject({ total: 3, contacted: 2, responded: 1 });
-    expect(memory.rows(cvApplications).filter(row => row.last_candidate_response_at !== null)).toHaveLength(2);
+    expect(dashboard!.candidateStats).toMatchObject({
+      total: 3,
+      contacted: 2,
+      responded: 1,
+    });
+    expect(
+      memory
+        .rows(cvApplications)
+        .filter(row => row.last_candidate_response_at !== null)
+    ).toHaveLength(2);
   });
 
   it("« Le candidat a répondu » clôt ses relances en attente, pas celles des autres ni celles déjà tranchées, et refuse un dossier inexistant sans écrire de ligne d’audit (ADM-13)", async () => {
-    const answered = seedCandidate(1, { last_contacted_at: "2026-10-01 09:00:00.000" });
-    const other = seedCandidate(2, { last_contacted_at: "2026-10-01 09:00:00.000" });
+    const answered = seedCandidate(1, {
+      last_contacted_at: "2026-10-01 09:00:00.000",
+    });
+    const other = seedCandidate(2, {
+      last_contacted_at: "2026-10-01 09:00:00.000",
+    });
     const due = (day: number) => new Date(Date.UTC(2026, 9, day));
-    const [day7, day14, dismissed, othersTask] = memory.seed(recruitmentFollowUpTasks, [
-      { application_id: answered.id, kind: "follow_up_7", due_at: due(8), status: "suggested", notes: "Relance après campagne" },
-      { application_id: answered.id, kind: "follow_up_14", due_at: due(15), status: "suggested" },
-      { application_id: answered.id, kind: "follow_up_7", due_at: due(1), status: "dismissed", completed_by_open_id: "earlier_admin" },
-      { application_id: other.id, kind: "follow_up_7", due_at: due(8), status: "suggested" },
-    ]);
+    const [day7, day14, dismissed, othersTask] = memory.seed(
+      recruitmentFollowUpTasks,
+      [
+        {
+          application_id: answered.id,
+          kind: "follow_up_7",
+          due_at: due(8),
+          status: "suggested",
+          notes: "Relance après campagne",
+        },
+        {
+          application_id: answered.id,
+          kind: "follow_up_14",
+          due_at: due(15),
+          status: "suggested",
+        },
+        {
+          application_id: answered.id,
+          kind: "follow_up_7",
+          due_at: due(1),
+          status: "dismissed",
+          completed_by_open_id: "earlier_admin",
+        },
+        {
+          application_id: other.id,
+          kind: "follow_up_7",
+          due_at: due(8),
+          status: "suggested",
+        },
+      ]
+    );
 
-    await expect(admin().admin.recruitment.candidate.markResponse({ id: answered.id as number })).resolves.toMatchObject({ success: true, closedFollowUps: 2 });
-    const byId = new Map(memory.rows(recruitmentFollowUpTasks).map(row => [row.id, row]));
-    expect(byId.get(day7!.id)).toMatchObject({ status: "completed", completed_by_open_id: "user_owner", notes: "Relance après campagne" });
-    expect(byId.get(day14!.id)).toMatchObject({ status: "completed", completed_by_open_id: "user_owner" });
-    expect(byId.get(dismissed!.id)).toMatchObject({ status: "dismissed", completed_by_open_id: "earlier_admin" });
-    expect(byId.get(othersTask!.id)).toMatchObject({ status: "suggested", completed_at: null });
+    await expect(
+      admin().admin.recruitment.candidate.markResponse({
+        id: answered.id as number,
+      })
+    ).resolves.toMatchObject({ success: true, closedFollowUps: 2 });
+    const byId = new Map(
+      memory.rows(recruitmentFollowUpTasks).map(row => [row.id, row])
+    );
+    expect(byId.get(day7!.id)).toMatchObject({
+      status: "completed",
+      completed_by_open_id: "user_owner",
+      notes: "Relance après campagne",
+    });
+    expect(byId.get(day14!.id)).toMatchObject({
+      status: "completed",
+      completed_by_open_id: "user_owner",
+    });
+    expect(byId.get(dismissed!.id)).toMatchObject({
+      status: "dismissed",
+      completed_by_open_id: "earlier_admin",
+    });
+    expect(byId.get(othersTask!.id)).toMatchObject({
+      status: "suggested",
+      completed_at: null,
+    });
     // The dashboard's « relances manuelles à examiner » counts the other candidate's alone.
-    expect(Number((await admin().admin.recruitment.dashboard())!.followUpStats!.pending)).toBe(1);
-    const audits = memory.rows(recruitmentAuditLogs).map(row => ({ applicationId: row.application_id, metadata: JSON.parse(String(row.metadata)) }));
+    expect(
+      Number(
+        (await admin().admin.recruitment.dashboard())!.followUpStats!.pending
+      )
+    ).toBe(1);
+    const audits = memory.rows(recruitmentAuditLogs).map(row => ({
+      applicationId: row.application_id,
+      metadata: JSON.parse(String(row.metadata)),
+    }));
     expect(audits).toEqual([
-      { applicationId: answered.id, metadata: { event: "candidate_response", note: null } },
-      { applicationId: answered.id, metadata: { event: "follow_up", taskId: day7!.id, status: "completed", reason: "candidate_response" } },
-      { applicationId: answered.id, metadata: { event: "follow_up", taskId: day14!.id, status: "completed", reason: "candidate_response" } },
+      {
+        applicationId: answered.id,
+        metadata: { event: "candidate_response", note: null },
+      },
+      {
+        applicationId: answered.id,
+        metadata: {
+          event: "follow_up",
+          taskId: day7!.id,
+          status: "completed",
+          reason: "candidate_response",
+        },
+      },
+      {
+        applicationId: answered.id,
+        metadata: {
+          event: "follow_up",
+          taskId: day14!.id,
+          status: "completed",
+          reason: "candidate_response",
+        },
+      },
     ]);
 
     // Another answer later closes nothing more.
-    await expect(admin().admin.recruitment.candidate.markResponse({ id: answered.id as number })).resolves.toMatchObject({ closedFollowUps: 0 });
+    await expect(
+      admin().admin.recruitment.candidate.markResponse({
+        id: answered.id as number,
+      })
+    ).resolves.toMatchObject({ closedFollowUps: 0 });
     // A dossier that does not exist (erased meanwhile): refused, nothing logged.
-    await expect(admin().admin.recruitment.candidate.markResponse({ id: 99_999_999 })).rejects.toMatchObject({ code: "NOT_FOUND" });
-    expect(memory.rows(recruitmentAuditLogs).filter(row => row.application_id === 99_999_999)).toEqual([]);
+    await expect(
+      admin().admin.recruitment.candidate.markResponse({ id: 99_999_999 })
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(
+      memory
+        .rows(recruitmentAuditLogs)
+        .filter(row => row.application_id === 99_999_999)
+    ).toEqual([]);
   });
 
   it("refuse un export du vivier dont plus aucun candidat sélectionné n’est exportable, au lieu d’un fichier vide (REC-01)", async () => {
     const refused = seedCandidate(1, { status: "rejected" });
-    await expect(admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: [refused.id as number] }))
-      .rejects.toThrow("Aucun des candidats sélectionnés ne peut plus être exporté (refusé, archivé ou désinscrit).");
+    await expect(
+      admin().admin.recruitment.exportCsv({
+        type: "pool",
+        candidateIds: [refused.id as number],
+      })
+    ).rejects.toThrow(
+      "Aucun des candidats sélectionnés ne peut plus être exporté (refusé, archivé ou désinscrit)."
+    );
   });
 
   it("une shortlist n’exporte que les présélectionnés de sa mission, et une shortlist vide est refusée (REC-01)", async () => {
@@ -1092,56 +2569,168 @@ describe("actions d’administration du recrutement", () => {
     const otherMission = seedCandidate(3);
     const rejected = seedCandidate(4, { status: "rejected" });
     seedCandidate(5);
-    const [brief, other, empty] = memory.seed(clientBriefs, ["BRIEF-REC01-A", "BRIEF-REC01-B", "BRIEF-REC01-C"].map(briefId => ({ brief_id: briefId, organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Suisse" })));
+    const [brief, other, empty] = memory.seed(
+      clientBriefs,
+      ["BRIEF-REC01-A", "BRIEF-REC01-B", "BRIEF-REC01-C"].map(briefId => ({
+        brief_id: briefId,
+        organization_name: "Clinique",
+        contact_name: "RH",
+        email: "rh@test.local",
+        target_environment: "Hôpital",
+        specialty_needed: "Anesthésie",
+        country: "Suisse",
+      }))
+    );
     const briefId = brief!.id as number;
     // Every one of them agreed to be presented (RGPD-03): only the mission and the status filter here.
     memory.seed(clientBriefCandidates, [
-      { brief_id: briefId, application_id: shortlisted.id, association_status: "shortlisted", candidate_consent_at: consentAt },
-      { brief_id: briefId, application_id: suggested.id, association_status: "suggested", candidate_consent_at: consentAt },
-      { brief_id: briefId, application_id: rejected.id, association_status: "shortlisted", candidate_consent_at: consentAt },
-      { brief_id: other!.id, application_id: otherMission.id, association_status: "shortlisted", candidate_consent_at: consentAt },
+      {
+        brief_id: briefId,
+        application_id: shortlisted.id,
+        association_status: "shortlisted",
+        candidate_consent_at: consentAt,
+      },
+      {
+        brief_id: briefId,
+        application_id: suggested.id,
+        association_status: "suggested",
+        candidate_consent_at: consentAt,
+      },
+      {
+        brief_id: briefId,
+        application_id: rejected.id,
+        association_status: "shortlisted",
+        candidate_consent_at: consentAt,
+      },
+      {
+        brief_id: other!.id,
+        application_id: otherMission.id,
+        association_status: "shortlisted",
+        candidate_consent_at: consentAt,
+      },
     ]);
-    const exportedEmails = (csv: string) => csv.split("\n").slice(1).map(row => row.split(";")[2]);
+    const exportedEmails = (csv: string) =>
+      csv
+        .split("\n")
+        .slice(1)
+        .map(row => row.split(";")[2]);
 
-    const shortlist = await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId });
+    const shortlist = await admin().admin.recruitment.exportCsv({
+      type: "shortlist",
+      briefId,
+    });
     expect(shortlist).toMatchObject({ count: 1 });
-    expect(exportedEmails(shortlist.csv)).toEqual(["\"c1@test.local\""]);
-    await expect(admin().admin.clientBriefs.candidates({ briefId })).resolves.toMatchObject({ shortlistedCount: 1 });
+    expect(exportedEmails(shortlist.csv)).toEqual(['"c1@test.local"']);
+    await expect(
+      admin().admin.clientBriefs.candidates({ briefId })
+    ).resolves.toMatchObject({ shortlistedCount: 1 });
 
     // Ids sent by the client for a shortlist are ignored, never added.
-    const forged = await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId, candidateIds: [suggested.id as number, otherMission.id as number, rejected.id as number] });
-    expect(exportedEmails(forged.csv)).toEqual(["\"c1@test.local\""]);
+    const forged = await admin().admin.recruitment.exportCsv({
+      type: "shortlist",
+      briefId,
+      candidateIds: [
+        suggested.id as number,
+        otherMission.id as number,
+        rejected.id as number,
+      ],
+    });
+    expect(exportedEmails(forged.csv)).toEqual(['"c1@test.local"']);
 
     // A mission nobody is shortlisted for exports nothing, whatever ids come with it.
-    await expect(admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: empty!.id as number })).rejects.toThrow("Aucun candidat présélectionné pour cette mission.");
-    await expect(admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: empty!.id as number, candidateIds: [shortlisted.id as number, suggested.id as number] })).rejects.toThrow("Aucun candidat présélectionné pour cette mission.");
-    await expect(admin().admin.clientBriefs.candidates({ briefId: empty!.id as number })).resolves.toMatchObject({ shortlistedCount: 0 });
+    await expect(
+      admin().admin.recruitment.exportCsv({
+        type: "shortlist",
+        briefId: empty!.id as number,
+      })
+    ).rejects.toThrow("Aucun candidat présélectionné pour cette mission.");
+    await expect(
+      admin().admin.recruitment.exportCsv({
+        type: "shortlist",
+        briefId: empty!.id as number,
+        candidateIds: [shortlisted.id as number, suggested.id as number],
+      })
+    ).rejects.toThrow("Aucun candidat présélectionné pour cette mission.");
+    await expect(
+      admin().admin.clientBriefs.candidates({ briefId: empty!.id as number })
+    ).resolves.toMatchObject({ shortlistedCount: 0 });
 
     // Removing the last shortlisted candidate empties the shortlist again.
-    await admin().admin.clientBriefs.associateCandidate({ briefId, applicationId: shortlisted.id as number, status: "declined" });
-    await expect(admin().admin.recruitment.exportCsv({ type: "shortlist", briefId })).rejects.toThrow("Aucun candidat présélectionné pour cette mission.");
-    await expect(admin().admin.clientBriefs.candidates({ briefId })).resolves.toMatchObject({ shortlistedCount: 0 });
-    expect(memory.rows(recruitmentAuditLogs).filter(row => row.action === "export").map(row => row.application_id)).toEqual([shortlisted.id, shortlisted.id]);
+    await admin().admin.clientBriefs.associateCandidate({
+      briefId,
+      applicationId: shortlisted.id as number,
+      status: "declined",
+    });
+    await expect(
+      admin().admin.recruitment.exportCsv({ type: "shortlist", briefId })
+    ).rejects.toThrow("Aucun candidat présélectionné pour cette mission.");
+    await expect(
+      admin().admin.clientBriefs.candidates({ briefId })
+    ).resolves.toMatchObject({ shortlistedCount: 0 });
+    expect(
+      memory
+        .rows(recruitmentAuditLogs)
+        .filter(row => row.action === "export")
+        .map(row => row.application_id)
+    ).toEqual([shortlisted.id, shortlisted.id]);
   });
 
   it("une shortlist au-delà de la limite par export est refusée, jamais tronquée (REC-01)", async () => {
-    const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-REC01-MAX", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Suisse" }]);
+    const [brief] = memory.seed(clientBriefs, [
+      {
+        brief_id: "BRIEF-REC01-MAX",
+        organization_name: "Clinique",
+        contact_name: "RH",
+        email: "rh@test.local",
+        target_environment: "Hôpital",
+        specialty_needed: "Anesthésie",
+        country: "Suisse",
+      },
+    ]);
     const briefId = brief!.id as number;
-    const candidates = Array.from({ length: 201 }, (_, index) => seedCandidate(index + 1));
-    memory.seed(clientBriefCandidates, candidates.slice(0, 200).map(candidate => ({ brief_id: briefId, application_id: candidate.id, association_status: "shortlisted", candidate_consent_at: consentAt })));
+    const candidates = Array.from({ length: 201 }, (_, index) =>
+      seedCandidate(index + 1)
+    );
+    memory.seed(
+      clientBriefCandidates,
+      candidates.slice(0, 200).map(candidate => ({
+        brief_id: briefId,
+        application_id: candidate.id,
+        association_status: "shortlisted",
+        candidate_consent_at: consentAt,
+      }))
+    );
     const exportedRows = (csv: string) => csv.split("\n").length - 1;
 
     // Exactly at the limit: every shortlisted candidate is in the file.
-    const full = await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId });
+    const full = await admin().admin.recruitment.exportCsv({
+      type: "shortlist",
+      briefId,
+    });
     expect(full.count).toBe(200);
     expect(exportedRows(full.csv)).toBe(200);
-    await expect(admin().admin.clientBriefs.candidates({ briefId })).resolves.toMatchObject({ shortlistedCount: 200 });
+    await expect(
+      admin().admin.clientBriefs.candidates({ briefId })
+    ).resolves.toMatchObject({ shortlistedCount: 200 });
 
     // One more: the export is refused with the limit rather than cut to 200.
-    memory.seed(clientBriefCandidates, [{ brief_id: briefId, application_id: candidates[200]!.id, association_status: "shortlisted", candidate_consent_at: consentAt }]);
-    await expect(admin().admin.clientBriefs.candidates({ briefId })).resolves.toMatchObject({ shortlistedCount: 201, consentedCount: 201 });
+    memory.seed(clientBriefCandidates, [
+      {
+        brief_id: briefId,
+        application_id: candidates[200]!.id,
+        association_status: "shortlisted",
+        candidate_consent_at: consentAt,
+      },
+    ]);
+    await expect(
+      admin().admin.clientBriefs.candidates({ briefId })
+    ).resolves.toMatchObject({ shortlistedCount: 201, consentedCount: 201 });
     const auditRowsBefore = memory.rows(recruitmentAuditLogs).length;
-    await expect(admin().admin.recruitment.exportCsv({ type: "shortlist", briefId })).rejects.toThrow("La shortlist compte 201 candidats avec accord ; 200 au maximum par export. Retirez des candidats de la shortlist avant de l’exporter.");
+    await expect(
+      admin().admin.recruitment.exportCsv({ type: "shortlist", briefId })
+    ).rejects.toThrow(
+      "La shortlist compte 201 candidats avec accord ; 200 au maximum par export. Retirez des candidats de la shortlist avant de l’exporter."
+    );
     expect(memory.rows(recruitmentAuditLogs)).toHaveLength(auditRowsBefore);
   });
 
@@ -1149,10 +2738,17 @@ describe("actions d’administration du recrutement", () => {
     const selected = seedCandidate(1);
     seedCandidate(2);
     const withoutConsent = seedCandidate(3, { marketing_consent: 0 });
-    await expect(admin().admin.recruitment.exportCsv({ type: "pool" })).rejects.toThrow("Sélectionnez au moins un candidat à exporter.");
-    await expect(admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: [] })).rejects.toThrow("Sélectionnez au moins un candidat à exporter.");
+    await expect(
+      admin().admin.recruitment.exportCsv({ type: "pool" })
+    ).rejects.toThrow("Sélectionnez au moins un candidat à exporter.");
+    await expect(
+      admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: [] })
+    ).rejects.toThrow("Sélectionnez au moins un candidat à exporter.");
     // A selected id does not bypass the pool's consent filter.
-    const pool = await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: [selected.id as number, withoutConsent.id as number] });
+    const pool = await admin().admin.recruitment.exportCsv({
+      type: "pool",
+      candidateIds: [selected.id as number, withoutConsent.id as number],
+    });
     expect(pool.count).toBe(1);
     expect(pool.csv).toContain("c1@test.local");
     expect(pool.csv).not.toContain("c2@test.local");
@@ -1161,13 +2757,36 @@ describe("actions d’administration du recrutement", () => {
 
   it("l’email propriétaire d’un brief contient tout pour qualifier et rappeler (ADM-BRIEF-01)", () => {
     const notification = buildClientBriefOwnerNotification({
-      briefId: "BRIEF-ABC", organizationName: "Clinique du Lac", contactName: "Mme RH", email: "rh@clinique.test", phone: "+41 22 000 00 00",
-      targetEnvironment: "Clinique", specialtyNeeded: "Anesthésie", country: "Suisse", requiredCertifications: "Diplôme reconnu MEBEKO", timeline: "Janvier 2027", notes: "Garde de nuit", adminUrl: "https://example.test/admin",
+      briefId: "BRIEF-ABC",
+      organizationName: "Clinique du Lac",
+      contactName: "Mme RH",
+      email: "rh@clinique.test",
+      phone: "+41 22 000 00 00",
+      targetEnvironment: "Clinique",
+      specialtyNeeded: "Anesthésie",
+      country: "Suisse",
+      requiredCertifications: "Diplôme reconnu MEBEKO",
+      timeline: "Janvier 2027",
+      notes: "Garde de nuit",
+      adminUrl: "https://example.test/admin",
     });
-    for (const expected of ["Mme RH", "rh@clinique.test", "+41 22 000 00 00", "Diplôme reconnu MEBEKO", "Janvier 2027", "Garde de nuit", "https://example.test/admin", "Reçu le"]) {
+    for (const expected of [
+      "Mme RH",
+      "rh@clinique.test",
+      "+41 22 000 00 00",
+      "Diplôme reconnu MEBEKO",
+      "Janvier 2027",
+      "Garde de nuit",
+      "https://example.test/admin",
+      "Reçu le",
+    ]) {
       expect(notification.content).toContain(expected);
     }
     // INTL-11: « [BRIEF-ABC] Brief employeur – Clinique du Lac » once composed by notifyOwner.
-    expect(notification).toMatchObject({ reference: "BRIEF-ABC", title: "Brief employeur", name: "Clinique du Lac" });
+    expect(notification).toMatchObject({
+      reference: "BRIEF-ABC",
+      title: "Brief employeur",
+      name: "Clinique du Lac",
+    });
   });
 });

@@ -1,4 +1,8 @@
-export function getMenuFocusIndex(currentIndex: number, itemCount: number, key: string): number | null {
+export function getMenuFocusIndex(
+  currentIndex: number,
+  itemCount: number,
+  key: string
+): number | null {
   if (itemCount < 1) return null;
   if (key === "Home") return 0;
   if (key === "End") return itemCount - 1;

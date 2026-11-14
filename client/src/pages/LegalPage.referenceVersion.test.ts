@@ -6,14 +6,29 @@ import { describe, expect, it, vi } from "vitest";
 // anglaise, allemande et chinoise de la politique renvoient à la version
 // française, qui fait foi ; l’anglais traduit tout le texte français actuel.
 
-const state = vi.hoisted(() => ({ language: "fr" as "fr" | "en" | "de" | "zh" }));
+const state = vi.hoisted(() => ({
+  language: "fr" as "fr" | "en" | "de" | "zh",
+}));
 
-vi.mock("@/contexts/LanguageContext", () => ({ useLanguage: () => ({ language: state.language }) }));
+vi.mock("@/contexts/LanguageContext", () => ({
+  useLanguage: () => ({ language: state.language }),
+}));
 vi.mock("wouter", async () => {
   const { createElement } = await import("react");
   return {
-    useSearchParams: () => [new URLSearchParams("tab=privacy"), () => undefined],
-    Link: ({ href, children, className }: { href: string; children?: ReactNode; className?: string }) => createElement("a", { href, className }, children),
+    useSearchParams: () => [
+      new URLSearchParams("tab=privacy"),
+      () => undefined,
+    ],
+    Link: ({
+      href,
+      children,
+      className,
+    }: {
+      href: string;
+      children?: ReactNode;
+      className?: string;
+    }) => createElement("a", { href, className }, children),
   };
 });
 vi.mock("@/components/Navigation", () => ({ default: () => null }));
@@ -21,7 +36,9 @@ vi.mock("@/components/Footer", () => ({ default: () => null }));
 vi.mock("@/components/SEOHead", () => ({ SEOHead: () => null }));
 vi.mock("@/components/Breadcrumb", () => ({ default: () => null }));
 
-const { default: LegalPage, FRENCH_PRIVACY_POLICY_HREF } = await import("./LegalPage");
+const { default: LegalPage, FRENCH_PRIVACY_POLICY_HREF } = await import(
+  "./LegalPage"
+);
 
 function privacyPolicy(language: typeof state.language) {
   state.language = language;
@@ -30,7 +47,8 @@ function privacyPolicy(language: typeof state.language) {
   return html.slice(start, html.indexOf("</section>", start));
 }
 const count = (html: string, tag: string) => html.split(`<${tag}`).length - 1;
-const withoutNotice = (html: string) => html.replace(/<aside[\s\S]*?<\/aside>/, "");
+const withoutNotice = (html: string) =>
+  html.replace(/<aside[\s\S]*?<\/aside>/, "");
 
 describe("RGPD-01 — version de référence des traductions de la politique de confidentialité", () => {
   it("affiche dans chaque traduction un encadré « version de référence : français » avec un lien vers la version française", () => {
@@ -41,8 +59,12 @@ describe("RGPD-01 — version de référence des traductions de la politique de 
       ["zh", "参考版本：法语", "阅读法语版本"],
     ] as const) {
       const html = privacyPolicy(language);
-      expect(html, language).toMatch(new RegExp(`<aside role="note" aria-label="${title}"`));
-      expect(html, language).toContain(`<a href="/legal?tab=privacy&amp;lang=fr" hrefLang="fr" class="text-primary underline underline-offset-2">${link}</a>`);
+      expect(html, language).toMatch(
+        new RegExp(`<aside role="note" aria-label="${title}"`)
+      );
+      expect(html, language).toContain(
+        `<a href="/legal?tab=privacy&amp;lang=fr" hrefLang="fr" class="text-primary underline underline-offset-2">${link}</a>`
+      );
     }
     expect(privacyPolicy("fr")).not.toContain("<aside");
   });
@@ -63,7 +85,8 @@ describe("RGPD-01 — version de référence des traductions de la politique de 
       "<strong>Processing 6 - Free medical questions:</strong>",
       "any writing assistance receives only an administrator’s draft without contact details",
       "the right to lodge a complaint with the CNIL (Commission Nationale de l&#x27;Informatique et des Libertés), the French supervisory authority.",
-    ]) expect(html).toContain(text);
+    ])
+      expect(html).toContain(text);
   });
 
   it("donne à l’anglais les mêmes sections et autant d’éléments de liste que le français", () => {

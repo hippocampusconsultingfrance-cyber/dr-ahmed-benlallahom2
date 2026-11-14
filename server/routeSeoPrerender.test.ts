@@ -23,14 +23,19 @@ const readProjectFile = (relativePath: string) =>
 const TEMPLATE = `<!doctype html>\n<html lang="fr">\n  <head>\n    ${ROUTE_SEO_MARKER}\n  </head>\n  <body><div id="root"></div></body>\n</html>`;
 
 const sitemapPaths = () =>
-  Array.from(renderSitemapXml("2026-10-16").matchAll(/<loc>([^<]+)<\/loc>/g), match => {
-    const url = new URL(match[1]);
-    expect(url.origin).toBe("https://drahmedbenlallahom.com");
-    return url.pathname.replace(/\/+$/, "") || "/";
-  });
+  Array.from(
+    renderSitemapXml("2026-10-16").matchAll(/<loc>([^<]+)<\/loc>/g),
+    match => {
+      const url = new URL(match[1]);
+      expect(url.origin).toBe("https://drahmedbenlallahom.com");
+      return url.pathname.replace(/\/+$/, "") || "/";
+    }
+  );
 
 const pageFor = (route: string) => {
-  const page = buildPrerenderedPages(TEMPLATE).find(candidate => candidate.route === route);
+  const page = buildPrerenderedPages(TEMPLATE).find(
+    candidate => candidate.route === route
+  );
   if (!page) throw new Error(`Aucune page pré-rendue pour ${route}`);
   return page;
 };
@@ -44,8 +49,12 @@ describe("pré-rendu SEO des routes publiques pour Vercel", () => {
     for (const path of paths) {
       expect(routes, path).toContain(path);
       const { html } = pageFor(path);
-      expect(html, path).toContain('<meta name="robots" content="index, follow, max-image-preview:large" />');
-      expect(html, path).toContain(`<link rel="canonical" href="https://drahmedbenlallahom.com${path}" />`);
+      expect(html, path).toContain(
+        '<meta name="robots" content="index, follow, max-image-preview:large" />'
+      );
+      expect(html, path).toContain(
+        `<link rel="canonical" href="https://drahmedbenlallahom.com${path}" />`
+      );
       expect(html, path).toContain('<meta property="og:title"');
       expect(html, path).not.toContain(ROUTE_SEO_MARKER);
     }
@@ -59,7 +68,9 @@ describe("pré-rendu SEO des routes publiques pour Vercel", () => {
       expect(getPrerenderRoutes(), path).toContain(path);
       expect(seo.notFound, path).not.toBe(true);
       expect(seo.noIndex, path).not.toBe(true);
-      expect(seo.title).toBe(`${venture.company} — ${venture.role} | Dr. Ahmed Ben Lallahom`);
+      expect(seo.title).toBe(
+        `${venture.company} — ${venture.role} | Dr. Ahmed Ben Lallahom`
+      );
       expect(seo.description).toBe(ventureMetaDescription(venture.description));
     }
     expect(getRouteSeo("/venture/novarena").notFound).toBe(true);
@@ -70,17 +81,29 @@ describe("pré-rendu SEO des routes publiques pour Vercel", () => {
     const home = pageFor("/");
 
     expect(home.file).toBe("index.html");
-    expect(home.html).toContain("<title>Dr. Ahmed Ben Lallahom | Médecine et Conseil</title>");
-    expect(home.html).toContain('<meta name="description" content="Anesthésiste-réanimateur');
-    expect(home.html).toContain('<link rel="canonical" href="https://drahmedbenlallahom.com/" />');
-    expect(home.html).toContain('<meta property="og:url" content="https://drahmedbenlallahom.com/" />');
+    expect(home.html).toContain(
+      "<title>Dr. Ahmed Ben Lallahom | Médecine et Conseil</title>"
+    );
+    expect(home.html).toContain(
+      '<meta name="description" content="Anesthésiste-réanimateur'
+    );
+    expect(home.html).toContain(
+      '<link rel="canonical" href="https://drahmedbenlallahom.com/" />'
+    );
+    expect(home.html).toContain(
+      '<meta property="og:url" content="https://drahmedbenlallahom.com/" />'
+    );
   });
 
   it("écrit des fichiers compatibles cleanUrls, sans doublon", () => {
     expect(prerenderFileForRoute("/")).toBe("index.html");
     expect(prerenderFileForRoute("/booking")).toBe("booking.html");
-    expect(prerenderFileForRoute("/recruitment/standard")).toBe("recruitment/standard.html");
-    expect(prerenderFileForRoute("/venture/sawa4you")).toBe("venture/sawa4you.html");
+    expect(prerenderFileForRoute("/recruitment/standard")).toBe(
+      "recruitment/standard.html"
+    );
+    expect(prerenderFileForRoute("/venture/sawa4you")).toBe(
+      "venture/sawa4you.html"
+    );
     expect(() => prerenderFileForRoute("/../secret")).toThrow();
 
     const files = buildPrerenderedPages(TEMPLATE).map(page => page.file);
@@ -94,7 +117,7 @@ describe("pré-rendu SEO des routes publiques pour Vercel", () => {
     expect(files).not.toContain("vvip-offshore.html");
     expect(files).toContain("recruitment/vvip-offshore.html");
     expect(pageFor("/recruitment/vvip-offshore").html).toContain(
-      '<link rel="canonical" href="https://drahmedbenlallahom.com/recruitment/vvip-offshore" />',
+      '<link rel="canonical" href="https://drahmedbenlallahom.com/recruitment/vvip-offshore" />'
     );
   });
 
@@ -103,7 +126,9 @@ describe("pré-rendu SEO des routes publiques pour Vercel", () => {
 
     expect(pages.length).toBeGreaterThan(10);
     for (const page of pages) {
-      expect(page.html, page.file).not.toMatch(/<meta name="(?:keywords|language)"/);
+      expect(page.html, page.file).not.toMatch(
+        /<meta name="(?:keywords|language)"/
+      );
       // La langue reste déclarée par l'attribut standard.
       expect(page.html, page.file).toContain('<html lang="fr">');
     }
@@ -111,13 +136,22 @@ describe("pré-rendu SEO des routes publiques pour Vercel", () => {
 
   it("ne pré-rend aucun parcours privé ou dynamique, laissé à la page de repli", () => {
     const routes = getPrerenderRoutes();
-    for (const path of ["/booking/confirmation", "/admin", "/candidate/access", "/candidate/portal", "/candidate/verify", "/404"]) {
+    for (const path of [
+      "/booking/confirmation",
+      "/admin",
+      "/candidate/access",
+      "/candidate/portal",
+      "/candidate/verify",
+      "/404",
+    ]) {
       expect(routes, path).not.toContain(path);
     }
   });
 
   it("refuse un gabarit sans marqueur plutôt que de produire des pages sans head", () => {
-    expect(() => injectRouteSeoHead("<head></head>", "<title>x</title>")).toThrow(ROUTE_SEO_MARKER);
+    expect(() =>
+      injectRouteSeoHead("<head></head>", "<title>x</title>")
+    ).toThrow(ROUTE_SEO_MARKER);
   });
 });
 
@@ -132,32 +166,53 @@ describe("page de repli SPA servie par Vercel", () => {
     expect(head).not.toContain("og:url");
     expect(head).not.toContain("twitter:url");
 
-    const fallback = buildPrerenderedPages(TEMPLATE).find(page => page.file === SPA_FALLBACK_FILE);
+    const fallback = buildPrerenderedPages(TEMPLATE).find(
+      page => page.file === SPA_FALLBACK_FILE
+    );
     expect(fallback?.html).toContain(head);
     expect(fallback?.html).not.toContain(ROUTE_SEO_MARKER);
   });
 
   it("conserve un gabarit intact avec le marqueur pour Express", () => {
-    const template = buildPrerenderedPages(TEMPLATE).find(page => page.file === SPA_TEMPLATE_FILE);
+    const template = buildPrerenderedPages(TEMPLATE).find(
+      page => page.file === SPA_TEMPLATE_FILE
+    );
     expect(template?.html).toBe(TEMPLATE);
   });
 
   it("est la cible de la réécriture SPA de vercel.json, après l’API, avec cleanUrls", () => {
     const config = JSON.parse(readProjectFile("vercel.json"));
-    const rewrites: { source: string; destination: string; missing?: unknown }[] = config.rewrites;
+    const rewrites: {
+      source: string;
+      destination: string;
+      missing?: unknown;
+    }[] = config.rewrites;
 
     expect(config.cleanUrls).toBe(true);
-    expect(rewrites[0]).toEqual({ source: "/api/:path*", destination: "/api/index" });
-    expect(rewrites.at(-1)).toMatchObject({ source: "/:path*", destination: `/${SPA_FALLBACK_FILE.replace(/\.html$/, "")}` });
+    expect(rewrites[0]).toEqual({
+      source: "/api/:path*",
+      destination: "/api/index",
+    });
+    expect(rewrites.at(-1)).toMatchObject({
+      source: "/:path*",
+      destination: `/${SPA_FALLBACK_FILE.replace(/\.html$/, "")}`,
+    });
     // A missing script or stylesheet (old chunk after a redeploy) gets a 404,
     // never the HTML page cached under /static/ as immutable JavaScript.
-    expect(rewrites.at(-1)!.missing).toEqual([{ type: "header", key: "sec-fetch-dest", value: "(script|style)" }]);
-    expect(rewrites.some(rewrite => rewrite.destination === "/index.html")).toBe(false);
+    expect(rewrites.at(-1)!.missing).toEqual([
+      { type: "header", key: "sec-fetch-dest", value: "(script|style)" },
+    ]);
+    expect(
+      rewrites.some(rewrite => rewrite.destination === "/index.html")
+    ).toBe(false);
   });
 
   it("est générée par le build juste après vite build", () => {
-    const build: string = JSON.parse(readProjectFile("package.json")).scripts.build;
-    expect(build).toMatch(/^NODE_ENV=production vite build && tsx scripts\/prerender-route-seo\.ts && esbuild /);
+    const build: string = JSON.parse(readProjectFile("package.json")).scripts
+      .build;
+    expect(build).toMatch(
+      /^NODE_ENV=production vite build && tsx scripts\/prerender-route-seo\.ts && esbuild /
+    );
   });
 });
 
@@ -178,10 +233,18 @@ describe("vercel.json donne une seule adresse par page (SEOP-11)", () => {
    * finale (trailingSlash: false, sauf pour /), puis les redirections de
    * vercel.json (sources sans paramètre, 308 si permanentes).
    */
-  function vercelRedirect(path: string): { status: number; location: string } | null {
-    if (config.trailingSlash === false && path !== "/" && path.endsWith("/")) return { status: 308, location: path.replace(/\/+$/, "") };
+  function vercelRedirect(
+    path: string
+  ): { status: number; location: string } | null {
+    if (config.trailingSlash === false && path !== "/" && path.endsWith("/"))
+      return { status: 308, location: path.replace(/\/+$/, "") };
     const redirect = config.redirects?.find(rule => rule.source === path);
-    return redirect ? { status: redirect.permanent ? 308 : 307, location: redirect.destination } : null;
+    return redirect
+      ? {
+          status: redirect.permanent ? 308 : 307,
+          location: redirect.destination,
+        }
+      : null;
   }
 
   /** Les URL déclarées chez Stripe et Resend (à saisir telles quelles, sans barre finale). */
@@ -190,27 +253,67 @@ describe("vercel.json donne une seule adresse par page (SEOP-11)", () => {
   it("redirige en 308 une adresse à barre finale et l’alias /vvip-offshore vers la page principale", () => {
     expect(config.cleanUrls).toBe(true);
     expect(config.trailingSlash).toBe(false);
-    expect(config.redirects).toEqual([{ source: "/vvip-offshore", destination: "/recruitment/vvip-offshore", permanent: true }]);
+    expect(config.redirects).toEqual([
+      {
+        source: "/vvip-offshore",
+        destination: "/recruitment/vvip-offshore",
+        permanent: true,
+      },
+    ]);
 
-    expect(vercelRedirect("/booking/")).toEqual({ status: 308, location: "/booking" });
-    expect(vercelRedirect("/recruitment/")).toEqual({ status: 308, location: "/recruitment" });
-    expect(vercelRedirect("/vvip-offshore")).toEqual({ status: 308, location: "/recruitment/vvip-offshore" });
-    expect(vercelRedirect("/vvip-offshore/")).toEqual({ status: 308, location: "/vvip-offshore" });
+    expect(vercelRedirect("/booking/")).toEqual({
+      status: 308,
+      location: "/booking",
+    });
+    expect(vercelRedirect("/recruitment/")).toEqual({
+      status: 308,
+      location: "/recruitment",
+    });
+    expect(vercelRedirect("/vvip-offshore")).toEqual({
+      status: 308,
+      location: "/recruitment/vvip-offshore",
+    });
+    expect(vercelRedirect("/vvip-offshore/")).toEqual({
+      status: 308,
+      location: "/vvip-offshore",
+    });
     expect(vercelRedirect("/")).toBeNull();
   });
 
   it("ne redirige ni un cron, ni un webhook, ni l’API, ni une URL du sitemap ou une canonique", () => {
     const crons = config.crons.map(cron => cron.path);
-    const sitemap = Array.from(renderSitemapXml("2026-10-16").matchAll(/<loc>([^<]+)<\/loc>/g), match => new URL(match[1]).pathname);
-    const canonicals = getPrerenderRoutes().map(route => new URL(`https://drahmedbenlallahom.com${getRouteSeo(route).canonicalPath}`).pathname);
+    const sitemap = Array.from(
+      renderSitemapXml("2026-10-16").matchAll(/<loc>([^<]+)<\/loc>/g),
+      match => new URL(match[1]).pathname
+    );
+    const canonicals = getPrerenderRoutes().map(
+      route =>
+        new URL(
+          `https://drahmedbenlallahom.com${getRouteSeo(route).canonicalPath}`
+        ).pathname
+    );
 
     expect(crons.length).toBeGreaterThan(5);
-    for (const path of crons) expect(path, path).toMatch(/^\/api\/scheduled\/[a-z-]+$/);
-    for (const path of [...crons, ...WEBHOOK_PATHS, "/api/trpc/auth.me", "/api/health", "/api/csp-report", "/api/google-drive/oauth/callback", ...sitemap, ...canonicals]) {
+    for (const path of crons)
+      expect(path, path).toMatch(/^\/api\/scheduled\/[a-z-]+$/);
+    for (const path of [
+      ...crons,
+      ...WEBHOOK_PATHS,
+      "/api/trpc/auth.me",
+      "/api/health",
+      "/api/csp-report",
+      "/api/google-drive/oauth/callback",
+      ...sitemap,
+      ...canonicals,
+    ]) {
       expect(vercelRedirect(path), path).toBeNull();
     }
     // La destination d'une redirection ne redirige pas à son tour.
-    for (const redirect of config.redirects ?? []) expect(vercelRedirect(redirect.destination), redirect.destination).toBeNull();
+    for (const redirect of config.redirects ?? [])
+      expect(
+        vercelRedirect(redirect.destination),
+        redirect.destination
+      ).toBeNull();
   });
 });
 
@@ -218,26 +321,49 @@ describe("contenu sans JavaScript des pages pré-rendues (SEOP-01)", () => {
   it("donne le titre, la description et les liens principaux de la route, hors de #root", () => {
     const { html } = pageFor("/faq");
     const seo = getRouteSeo("/faq");
-    const noscript = html.slice(html.indexOf("<noscript>"), html.indexOf("</noscript>"));
+    const noscript = html.slice(
+      html.indexOf("<noscript>"),
+      html.indexOf("</noscript>")
+    );
 
     expect(html).toContain('<div id="root"></div>');
-    expect(html.indexOf("<noscript>")).toBeGreaterThan(html.indexOf('<div id="root"></div>'));
+    expect(html.indexOf("<noscript>")).toBeGreaterThan(
+      html.indexOf('<div id="root"></div>')
+    );
     expect(html.indexOf("</noscript>")).toBeLessThan(html.indexOf("</body>"));
     expect(noscript).toContain(`<h1>${seo.title}</h1>`);
     expect(noscript).toContain(`<p>${seo.description}</p>`);
     expect(noscript).toContain('<nav aria-label="Liens principaux">');
-    expect(noscript).toContain('<a href="/booking">Réserver une consultation</a>');
-    expect(noscript).toContain('<a href="/faq" aria-current="page">Questions fréquentes</a>');
+    expect(noscript).toContain(
+      '<a href="/booking">Réserver une consultation</a>'
+    );
+    expect(noscript).toContain(
+      '<a href="/faq" aria-current="page">Questions fréquentes</a>'
+    );
   });
 
   it("est présent dans chaque page pré-rendue et dans la page de repli, en français avec l’avis aussi en anglais", () => {
-    for (const page of buildPrerenderedPages(TEMPLATE).filter(candidate => candidate.file !== SPA_TEMPLATE_FILE)) {
+    for (const page of buildPrerenderedPages(TEMPLATE).filter(
+      candidate => candidate.file !== SPA_TEMPLATE_FILE
+    )) {
       expect(page.html.match(/<noscript>/g), page.file).toHaveLength(1);
-      expect(page.html, page.file).toMatch(/<a href="\/booking"( aria-current="page")?>Réserver une consultation<\/a>/);
-      expect(page.html, page.file).toContain("Activez JavaScript dans votre navigateur pour afficher cette page en entier.");
-      expect(page.html, page.file).toContain('<p lang="en">Enable JavaScript in your browser to view this page in full.</p>');
+      expect(page.html, page.file).toMatch(
+        /<a href="\/booking"( aria-current="page")?>Réserver une consultation<\/a>/
+      );
+      expect(page.html, page.file).toContain(
+        "Activez JavaScript dans votre navigateur pour afficher cette page en entier."
+      );
+      expect(page.html, page.file).toContain(
+        '<p lang="en">Enable JavaScript in your browser to view this page in full.</p>'
+      );
     }
-    expect(pageFor("/booking").html).toContain('<a href="/booking" aria-current="page">');
-    expect(buildPrerenderedPages(TEMPLATE).find(page => page.file === SPA_FALLBACK_FILE)?.html).toContain("<h1>Dr. Ahmed Ben Lallahom</h1>");
+    expect(pageFor("/booking").html).toContain(
+      '<a href="/booking" aria-current="page">'
+    );
+    expect(
+      buildPrerenderedPages(TEMPLATE).find(
+        page => page.file === SPA_FALLBACK_FILE
+      )?.html
+    ).toContain("<h1>Dr. Ahmed Ben Lallahom</h1>");
   });
 });

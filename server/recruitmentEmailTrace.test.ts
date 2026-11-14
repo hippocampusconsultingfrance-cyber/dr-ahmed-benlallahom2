@@ -1,5 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildCandidatePortalActivationEmailEvent, buildCandidatePortalInvitationEmailEvent, buildCvConfirmationEmailEvent, buildFailedConfirmationRetryCandidateQuery, canRetryCvConfirmation, candidatePortalAccountMatchesApplication, cvConfirmationRetryOutcome, resolveCandidatePortalActivationDelivery, resolveCandidatePortalInvitationDelivery, resolveCvConfirmationDelivery, retryDueFailedCvConfirmationEmails, sendTrackedCvApplicationConfirmationEmail } from "./recruitmentEmailTrace";
+import {
+  buildCandidatePortalActivationEmailEvent,
+  buildCandidatePortalInvitationEmailEvent,
+  buildCvConfirmationEmailEvent,
+  buildFailedConfirmationRetryCandidateQuery,
+  canRetryCvConfirmation,
+  candidatePortalAccountMatchesApplication,
+  cvConfirmationRetryOutcome,
+  resolveCandidatePortalActivationDelivery,
+  resolveCandidatePortalInvitationDelivery,
+  resolveCvConfirmationDelivery,
+  retryDueFailedCvConfirmationEmails,
+  sendTrackedCvApplicationConfirmationEmail,
+} from "./recruitmentEmailTrace";
 import { drizzle } from "drizzle-orm/neon-http";
 import { recruitmentEmailEvents } from "../drizzle/schema";
 import { createMemoryPg } from "./testing/memoryPgProxy";
@@ -7,8 +20,12 @@ import { createMemoryPg } from "./testing/memoryPgProxy";
 const retryMocks = vi.hoisted(() => ({ getDb: vi.fn(), sendEmail: vi.fn() }));
 
 vi.mock("./db", () => ({ getDb: retryMocks.getDb }));
-vi.mock("./_core/notifications", () => ({ sendCvApplicationConfirmationEmail: retryMocks.sendEmail }));
-vi.mock("./candidateAuth", () => ({ createCandidateInvitationToken: () => "synthetic-invitation-token" }));
+vi.mock("./_core/notifications", () => ({
+  sendCvApplicationConfirmationEmail: retryMocks.sendEmail,
+}));
+vi.mock("./candidateAuth", () => ({
+  createCandidateInvitationToken: () => "synthetic-invitation-token",
+}));
 
 describe("traçabilité de l'email de confirmation de candidature", () => {
   const input = {
@@ -19,11 +36,15 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
 
   it("relie un envoi accepté à la candidature et à l'identifiant Resend", () => {
     const occurredAt = new Date("2026-09-08T08:00:00.000Z");
-    const event = buildCvConfirmationEmailEvent(input, {
-      status: "sent",
-      providerEmailId: "email_123",
-      failureCode: null,
-    }, { now: occurredAt });
+    const event = buildCvConfirmationEmailEvent(
+      input,
+      {
+        status: "sent",
+        providerEmailId: "email_123",
+        failureCode: null,
+      },
+      { now: occurredAt }
+    );
 
     expect(event).toMatchObject({
       providerEventId: "send:email_123",
@@ -42,11 +63,15 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
   });
 
   it("conserve une preuve minimale d'un échec sans contenu du CV", () => {
-    const event = buildCvConfirmationEmailEvent(input, {
-      status: "failed",
-      providerEmailId: null,
-      failureCode: "provider_rejected",
-    }, { localEventId: "attempt-1" });
+    const event = buildCvConfirmationEmailEvent(
+      input,
+      {
+        status: "failed",
+        providerEmailId: null,
+        failureCode: "provider_rejected",
+      },
+      { localEventId: "attempt-1" }
+    );
 
     expect(event.providerEventId).toBe("local:attempt-1");
     expect(event.eventType).toBe("email.failed");
@@ -55,24 +80,67 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
   });
 
   it("distingue une livraison indéterminée d’un échec confirmé", () => {
-    const event = buildCvConfirmationEmailEvent(input, {
-      status: "failed",
-      providerEmailId: null,
-      failureCode: "delivery_exception",
-    }, { localEventId: "unknown-1" });
+    const event = buildCvConfirmationEmailEvent(
+      input,
+      {
+        status: "failed",
+        providerEmailId: null,
+        failureCode: "delivery_exception",
+      },
+      { localEventId: "unknown-1" }
+    );
 
     expect(event.eventType).toBe("email.delivery_unknown");
-    expect(JSON.parse(event.payload)).toMatchObject({ outcome: "unknown", failureCode: "delivery_exception" });
-    expect(canRetryCvConfirmation(resolveCvConfirmationDelivery([event]), new Date("2026-09-09T09:00:00Z"))).toBe(false);
-    expect(cvConfirmationRetryOutcome({ status: "failed", providerEmailId: null, failureCode: "delivery_exception" })).toBe("delivery_unknown");
-    expect(cvConfirmationRetryOutcome({ status: "failed", providerEmailId: null, failureCode: "provider_rejected" })).toBe("failed");
+    expect(JSON.parse(event.payload)).toMatchObject({
+      outcome: "unknown",
+      failureCode: "delivery_exception",
+    });
+    expect(
+      canRetryCvConfirmation(
+        resolveCvConfirmationDelivery([event]),
+        new Date("2026-09-09T09:00:00Z")
+      )
+    ).toBe(false);
+    expect(
+      cvConfirmationRetryOutcome({
+        status: "failed",
+        providerEmailId: null,
+        failureCode: "delivery_exception",
+      })
+    ).toBe("delivery_unknown");
+    expect(
+      cvConfirmationRetryOutcome({
+        status: "failed",
+        providerEmailId: null,
+        failureCode: "provider_rejected",
+      })
+    ).toBe("failed");
   });
 
   it("isole l'accusé de dépôt des autres emails et suit ses webhooks Resend", () => {
     const events = [
-      { eventType: "email.failed", providerEmailId: "campaign_1", payload: JSON.stringify({ kind: "campaign" }), occurredAt: new Date("2026-09-08T10:00:00Z") },
-      { eventType: "email.delivered", providerEmailId: "confirmation_1", payload: JSON.stringify({ type: "email.delivered" }), occurredAt: new Date("2026-09-08T09:05:00Z") },
-      { eventType: "email.sent", providerEmailId: "confirmation_1", payload: JSON.stringify({ kind: "application_confirmation", outcome: "sent", failureCode: null }), occurredAt: new Date("2026-09-08T09:00:00Z") },
+      {
+        eventType: "email.failed",
+        providerEmailId: "campaign_1",
+        payload: JSON.stringify({ kind: "campaign" }),
+        occurredAt: new Date("2026-09-08T10:00:00Z"),
+      },
+      {
+        eventType: "email.delivered",
+        providerEmailId: "confirmation_1",
+        payload: JSON.stringify({ type: "email.delivered" }),
+        occurredAt: new Date("2026-09-08T09:05:00Z"),
+      },
+      {
+        eventType: "email.sent",
+        providerEmailId: "confirmation_1",
+        payload: JSON.stringify({
+          kind: "application_confirmation",
+          outcome: "sent",
+          failureCode: null,
+        }),
+        occurredAt: new Date("2026-09-08T09:00:00Z"),
+      },
     ];
 
     expect(resolveCvConfirmationDelivery(events)).toMatchObject({
@@ -84,11 +152,44 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
 
   it("ignore un webhook tardif d’une ancienne tentative après la réussite de la reprise", () => {
     const events = [
-      { eventType: "email.bounced", providerEmailId: "confirmation_1", payload: JSON.stringify({ type: "email.bounced" }), occurredAt: new Date("2026-09-08T09:20:00Z") },
-      { eventType: "email.delivered", providerEmailId: "confirmation_2", payload: JSON.stringify({ type: "email.delivered" }), occurredAt: new Date("2026-09-08T09:16:00Z") },
-      { eventType: "email.sent", providerEmailId: "confirmation_2", payload: JSON.stringify({ kind: "application_confirmation", outcome: "sent", attempt: 2 }), occurredAt: new Date("2026-09-08T09:15:00Z") },
-      { eventType: "email.failed", providerEmailId: "confirmation_1", payload: JSON.stringify({ type: "email.failed" }), occurredAt: new Date("2026-09-08T09:10:00Z") },
-      { eventType: "email.sent", providerEmailId: "confirmation_1", payload: JSON.stringify({ kind: "application_confirmation", outcome: "sent", attempt: 1 }), occurredAt: new Date("2026-09-08T09:00:00Z") },
+      {
+        eventType: "email.bounced",
+        providerEmailId: "confirmation_1",
+        payload: JSON.stringify({ type: "email.bounced" }),
+        occurredAt: new Date("2026-09-08T09:20:00Z"),
+      },
+      {
+        eventType: "email.delivered",
+        providerEmailId: "confirmation_2",
+        payload: JSON.stringify({ type: "email.delivered" }),
+        occurredAt: new Date("2026-09-08T09:16:00Z"),
+      },
+      {
+        eventType: "email.sent",
+        providerEmailId: "confirmation_2",
+        payload: JSON.stringify({
+          kind: "application_confirmation",
+          outcome: "sent",
+          attempt: 2,
+        }),
+        occurredAt: new Date("2026-09-08T09:15:00Z"),
+      },
+      {
+        eventType: "email.failed",
+        providerEmailId: "confirmation_1",
+        payload: JSON.stringify({ type: "email.failed" }),
+        occurredAt: new Date("2026-09-08T09:10:00Z"),
+      },
+      {
+        eventType: "email.sent",
+        providerEmailId: "confirmation_1",
+        payload: JSON.stringify({
+          kind: "application_confirmation",
+          outcome: "sent",
+          attempt: 1,
+        }),
+        occurredAt: new Date("2026-09-08T09:00:00Z"),
+      },
     ];
 
     expect(resolveCvConfirmationDelivery(events)).toMatchObject({
@@ -101,28 +202,58 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
   it("attend cinq minutes avant la deuxième tentative et s'arrête après trois", () => {
     const occurredAt = new Date("2026-09-08T09:00:00Z");
     const failed = resolveCvConfirmationDelivery([
-      { eventType: "email.failed", providerEmailId: null, payload: JSON.stringify({ kind: "application_confirmation", outcome: "failed", failureCode: "provider_rejected" }), occurredAt },
+      {
+        eventType: "email.failed",
+        providerEmailId: null,
+        payload: JSON.stringify({
+          kind: "application_confirmation",
+          outcome: "failed",
+          failureCode: "provider_rejected",
+        }),
+        occurredAt,
+      },
     ]);
-    expect(canRetryCvConfirmation(failed, new Date("2026-09-08T09:04:59Z"))).toBe(false);
-    expect(canRetryCvConfirmation(failed, new Date("2026-09-08T09:05:00Z"))).toBe(true);
+    expect(
+      canRetryCvConfirmation(failed, new Date("2026-09-08T09:04:59Z"))
+    ).toBe(false);
+    expect(
+      canRetryCvConfirmation(failed, new Date("2026-09-08T09:05:00Z"))
+    ).toBe(true);
 
-    const exhausted = resolveCvConfirmationDelivery([1, 2, 3].map(attempt => ({
-      eventType: "email.failed",
-      providerEmailId: null,
-      payload: JSON.stringify({ kind: "application_confirmation", outcome: "failed", attempt }),
-      occurredAt: new Date(`2026-09-08T0${attempt}:00:00Z`),
-    })));
-    expect(canRetryCvConfirmation(exhausted, new Date("2026-09-10T09:00:00Z"))).toBe(false);
+    const exhausted = resolveCvConfirmationDelivery(
+      [1, 2, 3].map(attempt => ({
+        eventType: "email.failed",
+        providerEmailId: null,
+        payload: JSON.stringify({
+          kind: "application_confirmation",
+          outcome: "failed",
+          attempt,
+        }),
+        occurredAt: new Date(`2026-09-08T0${attempt}:00:00Z`),
+      }))
+    );
+    expect(
+      canRetryCvConfirmation(exhausted, new Date("2026-09-10T09:00:00Z"))
+    ).toBe(false);
   });
 
   it("relie l’invitation de l’espace candidat et ses webhooks à la candidature", () => {
-    const sent = buildCandidatePortalInvitationEmailEvent(input, {
-      status: "sent",
-      providerEmailId: "portal_123",
-      failureCode: null,
-    }, { now: new Date("2026-09-08T10:00:00Z") });
+    const sent = buildCandidatePortalInvitationEmailEvent(
+      input,
+      {
+        status: "sent",
+        providerEmailId: "portal_123",
+        failureCode: null,
+      },
+      { now: new Date("2026-09-08T10:00:00Z") }
+    );
     const events = [
-      { eventType: "email.delivered", providerEmailId: "portal_123", payload: JSON.stringify({ type: "email.delivered" }), occurredAt: new Date("2026-09-08T10:05:00Z") },
+      {
+        eventType: "email.delivered",
+        providerEmailId: "portal_123",
+        payload: JSON.stringify({ type: "email.delivered" }),
+        occurredAt: new Date("2026-09-08T10:05:00Z"),
+      },
       sent,
     ];
 
@@ -131,25 +262,41 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
       attempts: 1,
       providerEmailId: "portal_123",
     });
-    expect(JSON.parse(sent.payload)).toMatchObject({ kind: "candidate_portal_invitation", trackingId: "CV-TRACE-42" });
+    expect(JSON.parse(sent.payload)).toMatchObject({
+      kind: "candidate_portal_invitation",
+      trackingId: "CV-TRACE-42",
+    });
   });
 
   it("considère l’accusé de dépôt comme une invitation au portail", () => {
-    expect(resolveCandidatePortalInvitationDelivery([buildCvConfirmationEmailEvent(input, {
-      status: "sent",
-      providerEmailId: "confirmation_with_invite",
-      failureCode: null,
-    })])).toMatchObject({ eventType: "email.sent", attempts: 1 });
+    expect(
+      resolveCandidatePortalInvitationDelivery([
+        buildCvConfirmationEmailEvent(input, {
+          status: "sent",
+          providerEmailId: "confirmation_with_invite",
+          failureCode: null,
+        }),
+      ])
+    ).toMatchObject({ eventType: "email.sent", attempts: 1 });
   });
 
   it("relie séparément l’e-mail d’activation et ses webhooks à la candidature", () => {
-    const sent = buildCandidatePortalActivationEmailEvent(input, {
-      status: "sent",
-      providerEmailId: "activation_123",
-      failureCode: null,
-    }, { now: new Date("2026-09-08T11:00:00Z") });
+    const sent = buildCandidatePortalActivationEmailEvent(
+      input,
+      {
+        status: "sent",
+        providerEmailId: "activation_123",
+        failureCode: null,
+      },
+      { now: new Date("2026-09-08T11:00:00Z") }
+    );
     const events = [
-      { eventType: "email.delivered", providerEmailId: "activation_123", payload: JSON.stringify({ type: "email.delivered" }), occurredAt: new Date("2026-09-08T11:05:00Z") },
+      {
+        eventType: "email.delivered",
+        providerEmailId: "activation_123",
+        payload: JSON.stringify({ type: "email.delivered" }),
+        occurredAt: new Date("2026-09-08T11:05:00Z"),
+      },
       sent,
     ];
 
@@ -158,21 +305,59 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
       attempts: 1,
       providerEmailId: "activation_123",
     });
-    expect(JSON.parse(sent.payload)).toMatchObject({ kind: "candidate_portal_activation", trackingId: "CV-TRACE-42" });
-    expect(resolveCandidatePortalInvitationDelivery(events).eventType).toBeNull();
+    expect(JSON.parse(sent.payload)).toMatchObject({
+      kind: "candidate_portal_activation",
+      trackingId: "CV-TRACE-42",
+    });
+    expect(
+      resolveCandidatePortalInvitationDelivery(events).eventType
+    ).toBeNull();
   });
 
   it("reconnaît un espace actif par candidature liée ou par adresse vérifiée", () => {
     const application = { id: 42, email: "Candidate@Example.COM" };
-    expect(candidatePortalAccountMatchesApplication({ linkedApplicationId: 42, email: "other@example.com", emailVerifiedAt: new Date() }, application)).toBe(true);
-    expect(candidatePortalAccountMatchesApplication({ linkedApplicationId: null, email: "candidate@example.com", emailVerifiedAt: new Date() }, application)).toBe(true);
-    expect(candidatePortalAccountMatchesApplication({ linkedApplicationId: null, email: "candidate@example.com", emailVerifiedAt: null }, application)).toBe(false);
+    expect(
+      candidatePortalAccountMatchesApplication(
+        {
+          linkedApplicationId: 42,
+          email: "other@example.com",
+          emailVerifiedAt: new Date(),
+        },
+        application
+      )
+    ).toBe(true);
+    expect(
+      candidatePortalAccountMatchesApplication(
+        {
+          linkedApplicationId: null,
+          email: "candidate@example.com",
+          emailVerifiedAt: new Date(),
+        },
+        application
+      )
+    ).toBe(true);
+    expect(
+      candidatePortalAccountMatchesApplication(
+        {
+          linkedApplicationId: null,
+          email: "candidate@example.com",
+          emailVerifiedAt: null,
+        },
+        application
+      )
+    ).toBe(false);
   });
 
   it("ne laisse pas les échecs de campagne évincer la file de reprise des confirmations", () => {
-    const query = buildFailedConfirmationRetryCandidateQuery(drizzle.mock() as unknown as Parameters<typeof buildFailedConfirmationRetryCandidateQuery>[0]).toSQL();
+    const query = buildFailedConfirmationRetryCandidateQuery(
+      drizzle.mock() as unknown as Parameters<
+        typeof buildFailedConfirmationRetryCandidateQuery
+      >[0]
+    ).toSQL();
     expect(query.sql).toContain('"recruitment_email_events"."payload" like');
-    expect(query.sql).toContain('exists (select "id" from "recruitment_email_events" "confirmation_attempt_events"');
+    expect(query.sql).toContain(
+      'exists (select "id" from "recruitment_email_events" "confirmation_attempt_events"'
+    );
     expect(query.params).toEqual([
       "email.failed",
       '%"kind":"application_confirmation"%',
@@ -191,66 +376,133 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
       applicationId: index + 1,
       eventType: "email.failed",
       providerEmailId: null,
-      payload: JSON.stringify({ kind: "application_confirmation", outcome: "failed", attempt: 1 }),
+      payload: JSON.stringify({
+        kind: "application_confirmation",
+        outcome: "failed",
+        attempt: 1,
+      }),
       occurredAt: index === 0 ? oldFailure : recentFailure,
     }));
-    let persistedCursor: { lastScannedFailedEventId: number | null } | null = null;
+    let persistedCursor: { lastScannedFailedEventId: number | null } | null =
+      null;
     const cursorWrites: Array<number | null> = [];
     const candidatePages: number[][] = [];
     const db = drizzle.mock();
 
-    const indexedParam = (sql: string, params: unknown[], pattern: RegExp): unknown => {
+    const indexedParam = (
+      sql: string,
+      params: unknown[],
+      pattern: RegExp
+    ): unknown => {
       const match = pattern.exec(sql);
       return match ? params[Number(match[1]) - 1] : undefined;
     };
 
     // Each query runs through the session's prepareQuery, which drizzle's types keep to itself.
-    const { session } = db as unknown as { session: { prepareQuery: (query: { sql: string; params: unknown[] }) => unknown } };
+    const { session } = db as unknown as {
+      session: {
+        prepareQuery: (query: { sql: string; params: unknown[] }) => unknown;
+      };
+    };
     vi.spyOn(session, "prepareQuery").mockImplementation(query => {
       const prepared = {
         setToken: () => prepared,
         execute: async () => {
           const { sql, params } = query;
-          if (/^select/i.test(sql) && sql.includes('from "recruitment_email_events"') && params.includes("email.failed")) {
-            const beforeId = indexedParam(sql, params, /"recruitment_email_events"\."id"\s*<\s*\$(\d+)/);
+          if (
+            /^select/i.test(sql) &&
+            sql.includes('from "recruitment_email_events"') &&
+            params.includes("email.failed")
+          ) {
+            const beforeId = indexedParam(
+              sql,
+              params,
+              /"recruitment_email_events"\."id"\s*<\s*\$(\d+)/
+            );
             const pageSize = indexedParam(sql, params, /limit\s+\$(\d+)/);
             const page = failedEvents
-              .filter(event => typeof beforeId !== "number" || event.id < beforeId)
+              .filter(
+                event => typeof beforeId !== "number" || event.id < beforeId
+              )
               .sort((left, right) => right.id - left.id)
               .slice(0, typeof pageSize === "number" ? pageSize : 100)
-              .map(event => ({ id: event.id, applicationId: event.applicationId }));
+              .map(event => ({
+                id: event.id,
+                applicationId: event.applicationId,
+              }));
             candidatePages.push(page.map(event => event.id));
             return page;
           }
-          if (/^select/i.test(sql) && sql.includes('from "recruitment_email_events"') && params.includes(cursorEventId)) {
-            return persistedCursor ? [{ payload: JSON.stringify(persistedCursor) }] : [];
+          if (
+            /^select/i.test(sql) &&
+            sql.includes('from "recruitment_email_events"') &&
+            params.includes(cursorEventId)
+          ) {
+            return persistedCursor
+              ? [{ payload: JSON.stringify(persistedCursor) }]
+              : [];
           }
           if (/^select/i.test(sql) && sql.includes('from "cv_applications"')) {
-            const applicationId = indexedParam(sql, params, /"cv_applications"\."id"\s*=\s*\$(\d+)/);
-            if (typeof applicationId !== "number") throw new Error(`Unexpected application query: ${sql}`);
-            return [{
-              id: applicationId, firstName: "Synthetic",
-              email: `candidate${applicationId}@example.invalid`, trackingId: `CV-TEST-${applicationId}`,
-              // The first application was made from the English form (EN-02).
-              language: applicationId === 1 ? "en" : "fr",
-            }];
+            const applicationId = indexedParam(
+              sql,
+              params,
+              /"cv_applications"\."id"\s*=\s*\$(\d+)/
+            );
+            if (typeof applicationId !== "number")
+              throw new Error(`Unexpected application query: ${sql}`);
+            return [
+              {
+                id: applicationId,
+                firstName: "Synthetic",
+                email: `candidate${applicationId}@example.invalid`,
+                trackingId: `CV-TEST-${applicationId}`,
+                // The first application was made from the English form (EN-02).
+                language: applicationId === 1 ? "en" : "fr",
+              },
+            ];
           }
-          if (/^select/i.test(sql) && sql.includes('from "recruitment_email_events"')) {
-            const applicationId = indexedParam(sql, params, /"recruitment_email_events"\."application_id"\s*=\s*\$(\d+)/);
-            const event = failedEvents.find(entry => entry.applicationId === applicationId);
+          if (
+            /^select/i.test(sql) &&
+            sql.includes('from "recruitment_email_events"')
+          ) {
+            const applicationId = indexedParam(
+              sql,
+              params,
+              /"recruitment_email_events"\."application_id"\s*=\s*\$(\d+)/
+            );
+            const event = failedEvents.find(
+              entry => entry.applicationId === applicationId
+            );
             if (!event) throw new Error(`Unexpected event query: ${sql}`);
             return [event];
           }
-          if (/^(insert|update)/i.test(sql) && sql.includes('"recruitment_email_events"')) {
+          if (
+            /^(insert|update)/i.test(sql) &&
+            sql.includes('"recruitment_email_events"')
+          ) {
             if (params.includes(cursorEventId)) {
               const cursorPayload = params
                 .filter((value): value is string => typeof value === "string")
-                .map(value => { try { return JSON.parse(value) as { lastScannedFailedEventId?: number | null }; } catch { return null; } })
+                .map(value => {
+                  try {
+                    return JSON.parse(value) as {
+                      lastScannedFailedEventId?: number | null;
+                    };
+                  } catch {
+                    return null;
+                  }
+                })
                 .find(value => value && "lastScannedFailedEventId" in value);
-              if (!cursorPayload || cursorPayload.lastScannedFailedEventId === undefined) {
+              if (
+                !cursorPayload ||
+                cursorPayload.lastScannedFailedEventId === undefined
+              ) {
                 throw new Error(`Cursor write without cursor payload: ${sql}`);
               }
-              persistedCursor = { lastScannedFailedEventId: cursorPayload.lastScannedFailedEventId };
+              persistedCursor = {
+                lastScannedFailedEventId:
+                  cursorPayload.lastScannedFailedEventId,
+              };
               cursorWrites.push(persistedCursor.lastScannedFailedEventId);
             }
             return { rows: [], rowCount: 1 };
@@ -261,7 +513,11 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
       return prepared as never;
     });
     retryMocks.getDb.mockResolvedValue(db);
-    retryMocks.sendEmail.mockResolvedValue({ status: "sent", providerEmailId: "synthetic-email-1", failureCode: null });
+    retryMocks.sendEmail.mockResolvedValue({
+      status: "sent",
+      providerEmailId: "synthetic-email-1",
+      failureCode: null,
+    });
 
     const firstRun = await retryDueFailedCvConfirmationEmails(1, now);
     const secondRun = await retryDueFailedCvConfirmationEmails(1, now);
@@ -271,12 +527,18 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
     expect(cursorWrites).toContain(2);
     expect(retryMocks.sendEmail).toHaveBeenCalledOnce();
     expect(retryMocks.sendEmail).toHaveBeenCalledWith(
-      "candidate1@example.invalid", "Synthetic", "CV-TEST-1",
-      expect.stringContaining("synthetic-invitation-token"), "cv-application-confirmation-CV-TEST-1-attempt-2", "en",
+      "candidate1@example.invalid",
+      "Synthetic",
+      "CV-TEST-1",
+      expect.stringContaining("synthetic-invitation-token"),
+      "cv-application-confirmation-CV-TEST-1-attempt-2",
+      "en"
     );
 
     // An empty older page wraps the durable scan to the newest failures.
-    expect((await retryDueFailedCvConfirmationEmails(1, now)).processed).toBe(0);
+    expect((await retryDueFailedCvConfirmationEmails(1, now)).processed).toBe(
+      0
+    );
     expect(candidatePages.at(-1)).toEqual([]);
     expect(cursorWrites.at(-1)).toBeNull();
 
@@ -284,9 +546,13 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
     // the cursor at the last inspected row so the other one remains reachable.
     failedEvents[1].occurredAt = oldFailure;
     failedEvents[2].occurredAt = oldFailure;
-    expect((await retryDueFailedCvConfirmationEmails(1, now)).processed).toBe(1);
+    expect((await retryDueFailedCvConfirmationEmails(1, now)).processed).toBe(
+      1
+    );
     expect(cursorWrites.at(-1)).toBe(3);
-    expect((await retryDueFailedCvConfirmationEmails(1, now)).processed).toBe(1);
+    expect((await retryDueFailedCvConfirmationEmails(1, now)).processed).toBe(
+      1
+    );
     expect(cursorWrites.at(-1)).toBe(2);
     expect(retryMocks.sendEmail).toHaveBeenCalledTimes(3);
     vi.restoreAllMocks();
@@ -298,23 +564,61 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
     const memory = createMemoryPg([recruitmentEmailEvents]);
     retryMocks.getDb.mockResolvedValue(memory.db);
     // Same key, same email: Resend answers the same id each time.
-    retryMocks.sendEmail.mockResolvedValue({ status: "sent", providerEmailId: "email_same", failureCode: null });
-    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const confirmation = { applicationId: 42, candidateEmail: "candidate@example.com", candidateFirstName: "Amal", trackingId: "CV-TRACE-42", language: "fr" };
+    retryMocks.sendEmail.mockResolvedValue({
+      status: "sent",
+      providerEmailId: "email_same",
+      failureCode: null,
+    });
+    const error = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const confirmation = {
+      applicationId: 42,
+      candidateEmail: "candidate@example.com",
+      candidateFirstName: "Amal",
+      trackingId: "CV-TRACE-42",
+      language: "fr",
+    };
 
     // The application, then two answers « already received » for copies sent at the same time.
     for (let answer = 0; answer < 3; answer += 1) {
-      await expect(sendTrackedCvApplicationConfirmationEmail(confirmation)).resolves.toEqual({ status: "sent", providerEmailId: "email_same", failureCode: null });
+      await expect(
+        sendTrackedCvApplicationConfirmationEmail(confirmation)
+      ).resolves.toEqual({
+        status: "sent",
+        providerEmailId: "email_same",
+        failureCode: null,
+      });
     }
 
-    expect(retryMocks.sendEmail.mock.calls.map(call => call[4])).toEqual(Array(3).fill("cv-application-confirmation-CV-TRACE-42-attempt-1"));
-    expect(memory.rows(recruitmentEmailEvents)).toEqual([expect.objectContaining({ provider_event_id: "send:email_same", application_id: 42, event_type: "email.sent" })]);
+    expect(retryMocks.sendEmail.mock.calls.map(call => call[4])).toEqual(
+      Array(3).fill("cv-application-confirmation-CV-TRACE-42-attempt-1")
+    );
+    expect(memory.rows(recruitmentEmailEvents)).toEqual([
+      expect.objectContaining({
+        provider_event_id: "send:email_same",
+        application_id: 42,
+        event_type: "email.sent",
+      }),
+    ]);
     expect(error).not.toHaveBeenCalled();
     // Any other failure of the trace is still logged, without failing the answer.
     memory.failNext(/^insert into "recruitment_email_events"/);
-    retryMocks.sendEmail.mockResolvedValue({ status: "sent", providerEmailId: "email_other", failureCode: null });
-    await expect(sendTrackedCvApplicationConfirmationEmail({ ...confirmation, deliveryAttempt: 2 })).resolves.toMatchObject({ status: "sent" });
-    expect(error).toHaveBeenCalledWith("Recruitment confirmation trace error:", "Error");
+    retryMocks.sendEmail.mockResolvedValue({
+      status: "sent",
+      providerEmailId: "email_other",
+      failureCode: null,
+    });
+    await expect(
+      sendTrackedCvApplicationConfirmationEmail({
+        ...confirmation,
+        deliveryAttempt: 2,
+      })
+    ).resolves.toMatchObject({ status: "sent" });
+    expect(error).toHaveBeenCalledWith(
+      "Recruitment confirmation trace error:",
+      "Error"
+    );
     vi.restoreAllMocks();
     retryMocks.getDb.mockReset();
     retryMocks.sendEmail.mockReset();

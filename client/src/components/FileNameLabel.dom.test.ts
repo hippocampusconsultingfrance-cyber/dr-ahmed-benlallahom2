@@ -19,28 +19,52 @@ afterEach(cleanup);
 function shownParts(name: string, suffix?: string) {
   render(createElement(FileNameLabel, { name, suffix }));
   const label = screen.getByTitle(name);
-  const parts = Array.from(label.children).filter(part => part.getAttribute("aria-hidden") === "true").map(part => part.textContent);
-  const read = Array.from(label.children).filter(part => part.getAttribute("aria-hidden") !== "true").map(part => part.textContent).join("");
+  const parts = Array.from(label.children)
+    .filter(part => part.getAttribute("aria-hidden") === "true")
+    .map(part => part.textContent);
+  const read = Array.from(label.children)
+    .filter(part => part.getAttribute("aria-hidden") !== "true")
+    .map(part => part.textContent)
+    .join("");
   return { text: parts.join(""), parts, read };
 }
 
 describe("nom de fichier choisi par un visiteur", () => {
   it("montre le nom entier, l’extension à part après le début du nom, et le nom entier en info-bulle", () => {
-    const name = "CV_Jean_Dupont_Anesthesiste_Reanimateur_2026_version_finale.pdf";
-    expect(shownParts(name)).toEqual({ text: name, parts: ["CV_Jean_Dupont_Anesthesiste_Reanimateur_2026_version_finale", ".pdf"], read: name });
+    const name =
+      "CV_Jean_Dupont_Anesthesiste_Reanimateur_2026_version_finale.pdf";
+    expect(shownParts(name)).toEqual({
+      text: name,
+      parts: [
+        "CV_Jean_Dupont_Anesthesiste_Reanimateur_2026_version_finale",
+        ".pdf",
+      ],
+      read: name,
+    });
   });
 
   it("garde après l’extension la taille donnée par l’appelant", () => {
-    expect(shownParts("diplome-vera.pdf", " · 2 KB")).toEqual({ text: "diplome-vera.pdf · 2 KB", parts: ["diplome-vera", ".pdf · 2 KB"], read: "diplome-vera.pdf · 2 KB" });
+    expect(shownParts("diplome-vera.pdf", " · 2 KB")).toEqual({
+      text: "diplome-vera.pdf · 2 KB",
+      parts: ["diplome-vera", ".pdf · 2 KB"],
+      read: "diplome-vera.pdf · 2 KB",
+    });
   });
 
   it("ne sépare rien d’un nom sans extension, d’un fichier caché ou d’une « extension » trop longue", () => {
-    expect(shownParts("CV_sans_extension").parts).toEqual(["CV_sans_extension"]);
+    expect(shownParts("CV_sans_extension").parts).toEqual([
+      "CV_sans_extension",
+    ]);
     cleanup();
     expect(shownParts(".profile").parts).toEqual([".profile"]);
     cleanup();
-    expect(shownParts("CV.version_finale_signee").parts).toEqual(["CV.version_finale_signee"]);
+    expect(shownParts("CV.version_finale_signee").parts).toEqual([
+      "CV.version_finale_signee",
+    ]);
     cleanup();
-    expect(shownParts("Lettre.de.motivation.docx").parts).toEqual(["Lettre.de.motivation", ".docx"]);
+    expect(shownParts("Lettre.de.motivation.docx").parts).toEqual([
+      "Lettre.de.motivation",
+      ".docx",
+    ]);
   });
 });

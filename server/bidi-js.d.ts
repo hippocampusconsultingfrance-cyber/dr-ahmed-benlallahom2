@@ -5,7 +5,10 @@ declare module "bidi-js" {
   };
 
   type Bidi = {
-    getEmbeddingLevels(text: string, explicitDirection?: "ltr" | "rtl"): EmbeddingLevels;
+    getEmbeddingLevels(
+      text: string,
+      explicitDirection?: "ltr" | "rtl"
+    ): EmbeddingLevels;
     getMirroredCharacter(char: string): string | null;
   };
 

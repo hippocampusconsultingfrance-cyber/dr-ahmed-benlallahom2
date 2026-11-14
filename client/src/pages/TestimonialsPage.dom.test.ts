@@ -11,7 +11,18 @@ vi.mock("@/lib/trpc", () => ({
     testimonials: {
       list: {
         useQuery: () => ({
-          data: [{ id: 1, authorName: "Dr Claire Martin", specialty: "Anesthésie", content: "Une collaboration remarquable et rigoureuse.", rating: 5, title: "Collaboration", language: "fr", createdAt: CREATED_AT }],
+          data: [
+            {
+              id: 1,
+              authorName: "Dr Claire Martin",
+              specialty: "Anesthésie",
+              content: "Une collaboration remarquable et rigoureuse.",
+              rating: 5,
+              title: "Collaboration",
+              language: "fr",
+              createdAt: CREATED_AT,
+            },
+          ],
           isLoading: false,
           error: null,
         }),
@@ -23,7 +34,9 @@ vi.mock("@/lib/trpc", () => ({
 const { default: TestimonialsPage } = await import("./TestimonialsPage");
 const { ThemeProvider } = await import("@/contexts/ThemeContext");
 const { LanguageProvider } = await import("@/contexts/LanguageContext");
-const { navigationAccessibilityCopy } = await import("@/components/navigationAccessibilityCopy");
+const { navigationAccessibilityCopy } = await import(
+  "@/components/navigationAccessibilityCopy"
+);
 
 afterEach(() => {
   cleanup();
@@ -33,15 +46,27 @@ afterEach(() => {
 describe("repères et structure (PUB-A11Y-01 / PUB-A11Y-02)", () => {
   it("/testimonials a une navigation, un <main> atteignable par le lien d’évitement et un pied de page, et une date lisible", () => {
     localStorage.setItem("language", "fr");
-    render(createElement(ThemeProvider, null, createElement(LanguageProvider, null, createElement(TestimonialsPage))));
+    render(
+      createElement(
+        ThemeProvider,
+        null,
+        createElement(LanguageProvider, null, createElement(TestimonialsPage))
+      )
+    );
 
-    expect(screen.getByRole("navigation", { name: navigationAccessibilityCopy.fr.mainNavigation })).toBeTruthy();
+    expect(
+      screen.getByRole("navigation", {
+        name: navigationAccessibilityCopy.fr.mainNavigation,
+      })
+    ).toBeTruthy();
     const main = screen.getByRole("main");
     expect(main.id).toBe("main-content");
     // Focusable by the skip link only: an explicit tabindex="-1" (a <main> without it already reads -1).
     expect(main.getAttribute("tabindex")).toBe("-1");
     expect(screen.getByRole("contentinfo")).toBeTruthy();
-    const date = screen.getByText(new Date(CREATED_AT).toLocaleDateString("fr"));
+    const date = screen.getByText(
+      new Date(CREATED_AT).toLocaleDateString("fr")
+    );
     expect(main.contains(date)).toBe(true);
     // text-gray-500 n’atteignait pas 4,5:1 sur le fond des cartes.
     expect(date.className).not.toContain("text-gray-500");

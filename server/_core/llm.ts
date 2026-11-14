@@ -1,5 +1,8 @@
 import { ENV } from "./env";
-import { isProcessingDeadlineError, stepTimeoutMs } from "../processingDeadline";
+import {
+  isProcessingDeadlineError,
+  stepTimeoutMs,
+} from "../processingDeadline";
 
 export type Role = "system" | "user" | "assistant" | "tool" | "function";
 
@@ -20,7 +23,12 @@ export type FileContent = {
   type: "file_url";
   file_url: {
     url: string;
-    mime_type?: "audio/mpeg" | "audio/wav" | "application/pdf" | "audio/mp4" | "video/mp4" ;
+    mime_type?:
+      | "audio/mpeg"
+      | "audio/wav"
+      | "application/pdf"
+      | "audio/mp4"
+      | "video/mp4";
   };
 };
 
@@ -314,11 +322,17 @@ const computeBackoffDelay = (
 
 // Time a new try may take once `waitMs` has passed, or null when it would get
 // less than the minimum from the call's budget or the scheduled job's deadline.
-const retryTimeoutMs = (callDeadlineAt: number, waitMs: number): number | null => {
+const retryTimeoutMs = (
+  callDeadlineAt: number,
+  waitMs: number
+): number | null => {
   const callLeftMs = callDeadlineAt - Date.now() - waitMs;
   if (callLeftMs < LLM_REQUEST_MINIMUM_MS) return null;
   try {
-    return stepTimeoutMs("llm", Math.min(LLM_REQUEST_TIMEOUT_MS, callLeftMs), { reserveMs: waitMs, minimumMs: LLM_REQUEST_MINIMUM_MS });
+    return stepTimeoutMs("llm", Math.min(LLM_REQUEST_TIMEOUT_MS, callLeftMs), {
+      reserveMs: waitMs,
+      minimumMs: LLM_REQUEST_MINIMUM_MS,
+    });
   } catch (error) {
     if (isProcessingDeadlineError(error)) return null;
     throw error;
@@ -333,7 +347,9 @@ const fetchWithBackoff = async (
   init: FetchInit
 ): Promise<Response> => {
   const callDeadlineAt = Date.now() + LLM_CALL_BUDGET_MS;
-  let timeoutMs = stepTimeoutMs("llm", LLM_REQUEST_TIMEOUT_MS, { minimumMs: LLM_REQUEST_MINIMUM_MS });
+  let timeoutMs = stepTimeoutMs("llm", LLM_REQUEST_TIMEOUT_MS, {
+    minimumMs: LLM_REQUEST_MINIMUM_MS,
+  });
 
   for (let attempt = 0; ; attempt++) {
     let waitMs: number;
@@ -341,14 +357,18 @@ const fetchWithBackoff = async (
       // The signal also bounds the caller's reading of the answer. It takes
       // whole milliseconds only (a RangeError otherwise, the request never
       // sent): a new try's time, after a jittered pause, has a fraction.
-      const response = await fetch(url, { ...init, signal: AbortSignal.timeout(Math.floor(timeoutMs)) });
+      const response = await fetch(url, {
+        ...init,
+        signal: AbortSignal.timeout(Math.floor(timeoutMs)),
+      });
       if (response.ok || attempt === RETRY_MAX_RETRIES) {
         return response;
       }
 
-      waitMs = computeBackoffDelay(attempt, parseRetryAfter(
-        response.headers.get("retry-after")
-      ));
+      waitMs = computeBackoffDelay(
+        attempt,
+        parseRetryAfter(response.headers.get("retry-after"))
+      );
       const nextTimeoutMs = retryTimeoutMs(callDeadlineAt, waitMs);
       if (nextTimeoutMs === null) return response;
       try {
@@ -415,7 +435,8 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     payload.tool_choice = normalizedToolChoice;
   }
 
-  const resolvedMaxCompletionTokens = max_completion_tokens ?? maxCompletionTokens;
+  const resolvedMaxCompletionTokens =
+    max_completion_tokens ?? maxCompletionTokens;
   if (typeof resolvedMaxCompletionTokens === "number") {
     payload.max_completion_tokens = resolvedMaxCompletionTokens;
   } else {
@@ -477,9 +498,10 @@ export type ModelsResponse = {
 export async function listLLMModels(): Promise<ModelsResponse> {
   assertApiKey();
 
-  const url = ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
-    ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/models`
-    : "https://forge.manus.im/v1/models";
+  const url =
+    ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
+      ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/models`
+      : "https://forge.manus.im/v1/models";
 
   const response = await fetchWithBackoff(url, {
     headers: { authorization: `Bearer ${ENV.forgeApiKey}` },

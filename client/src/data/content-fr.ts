@@ -22,7 +22,11 @@ export const contentFr = {
   // Section Hero
   hero: {
     greeting: "Dr. Ahmed Ben Lallahom",
-    roles: ["Anesthésiste-réanimateur", "Entrepreneur en santé", "Consultant médical"],
+    roles: [
+      "Anesthésiste-réanimateur",
+      "Entrepreneur en santé",
+      "Consultant médical",
+    ],
     description:
       "Anesthésiste-réanimateur et entrepreneur en santé basé en France. J'allie excellence clinique et vision stratégique pour faire avancer la médecine à l'échelle mondiale.",
     bookConsultation: "Réserver une consultation",
@@ -32,7 +36,8 @@ export const contentFr = {
   about: {
     title: "À propos",
     text: "Le Dr Ahmed Ben Lallahom est un anesthésiste-réanimateur avec plus d'une décennie d'expérience clinique de haut niveau en France. Diplômé de la Société européenne d'anesthésiologie et de soins intensifs (DESAIC), il combine une expertise médicale approfondie en évaluation préopératoire, anesthésie avancée et soins postopératoires avec une vision pour l'innovation en santé à travers ses différentes entreprises.",
-    portraitAlt: "Portrait du Dr Ahmed Ben Lallahom, médecin anesthésiste-réanimateur",
+    portraitAlt:
+      "Portrait du Dr Ahmed Ben Lallahom, médecin anesthésiste-réanimateur",
     statsLabels: {
       yearsClinical: "Années de pratique clinique",
       ventures: "Entreprises en santé",
@@ -45,17 +50,34 @@ export const contentFr = {
   values: {
     title: "Valeurs fondamentales",
     items: [
-      { title: "Sécurité du patient", description: "La sécurité est au cœur de chaque décision clinique et stratégique." },
-      { title: "Excellence clinique", description: "Un engagement constant envers les plus hauts standards de soins." },
-      { title: "Médecine fondée sur les preuves", description: "Chaque pratique est guidée par la science et les données probantes." },
-      { title: "Leadership en santé", description: "Transformer les systèmes de santé par l'innovation et le management." },
+      {
+        title: "Sécurité du patient",
+        description:
+          "La sécurité est au cœur de chaque décision clinique et stratégique.",
+      },
+      {
+        title: "Excellence clinique",
+        description:
+          "Un engagement constant envers les plus hauts standards de soins.",
+      },
+      {
+        title: "Médecine fondée sur les preuves",
+        description:
+          "Chaque pratique est guidée par la science et les données probantes.",
+      },
+      {
+        title: "Leadership en santé",
+        description:
+          "Transformer les systèmes de santé par l'innovation et le management.",
+      },
     ],
   },
 
   // Section Expériences
   experiences: {
     title: "Leadership & Entreprises",
-    subtitle: "CEO, co-fondateur et praticien — un parcours à l'intersection de la médecine et de l'entrepreneuriat",
+    subtitle:
+      "CEO, co-fondateur et praticien — un parcours à l'intersection de la médecine et de l'entrepreneuriat",
     items: [
       {
         company: "Hippocampus Consulting",
@@ -105,7 +127,8 @@ export const contentFr = {
   // Section Services
   services: {
     title: "Services",
-    subtitle: "Précision clinique pour les systèmes de santé, les fondateurs et les opérations médicales de haute acuité.",
+    subtitle:
+      "Précision clinique pour les systèmes de santé, les fondateurs et les opérations médicales de haute acuité.",
     items: [
       {
         number: "01",
@@ -155,24 +178,95 @@ export const contentFr = {
   // Section Formation
   education: {
     title: "Formation & certifications",
-    subtitle: "Un parcours académique d'excellence en anesthésie-réanimation, de la Faculté de médecine de Tunis aux diplômes européens.",
+    subtitle:
+      "Un parcours académique d'excellence en anesthésie-réanimation, de la Faculté de médecine de Tunis aux diplômes européens.",
     diplomas: [
-      { year: "2025–2026", title: "Capacité d'évaluation et de traitement de la douleur", institution: "Université de Nantes (en cours)" },
-      { year: "2024", title: "Diplôme universitaire de réanimation péri-opératoire en chirurgie digestive", institution: "Université Paris Cité" },
-      { year: "2023", title: "Diplôme européen d'anesthésie locorégionale (ALR) et prise en charge des douleurs aiguës", institution: "" },
-      { year: "2022", title: "Diplôme européen d'anesthésie-réanimation", institution: "" },
-      { year: "2022", title: "Diplôme universitaire de maintien des compétences en anesthésie pédiatrique", institution: "Sorbonne Université" },
-      { year: "2022", title: "Diplôme universitaire « Traumatismes graves : prise en charge des 24 premières heures »", institution: "Université Paris-Saclay" },
-      { year: "2021", title: "Lauréat des épreuves de vérification des connaissances (PAE)", institution: "Note : 13,83/20" },
-      { year: "2021", title: "Diplôme universitaire de ventilation artificielle", institution: "Université d'Angers" },
-      { year: "2021", title: "Diplôme universitaire des techniques d'épuration extra-rénale", institution: "Université de Strasbourg" },
-      { year: "2020", title: "Diplôme interuniversitaire de réanimation métabolique", institution: "" },
-      { year: "2020", title: "Diplôme de fin de spécialité en anesthésie-réanimation", institution: "" },
-      { year: "2019", title: "Diplôme de formation médicale spécialisée en anesthésie-réanimation", institution: "Sorbonne Université" },
-      { year: "2017", title: "Doctorat d'État en médecine", institution: "Mention très honorable, félicitations du jury et proposition au prix de la meilleure thèse" },
-      { year: "2015–2018", title: "Internat en anesthésie-réanimation", institution: "" },
-      { year: "2013–2014", title: "Externat des hôpitaux de Tunis", institution: "" },
-      { year: "2006–2012", title: "Études de médecine", institution: "Faculté de médecine de Tunis" },
+      {
+        year: "2025–2026",
+        title: "Capacité d'évaluation et de traitement de la douleur",
+        institution: "Université de Nantes (en cours)",
+      },
+      {
+        year: "2024",
+        title:
+          "Diplôme universitaire de réanimation péri-opératoire en chirurgie digestive",
+        institution: "Université Paris Cité",
+      },
+      {
+        year: "2023",
+        title:
+          "Diplôme européen d'anesthésie locorégionale (ALR) et prise en charge des douleurs aiguës",
+        institution: "",
+      },
+      {
+        year: "2022",
+        title: "Diplôme européen d'anesthésie-réanimation",
+        institution: "",
+      },
+      {
+        year: "2022",
+        title:
+          "Diplôme universitaire de maintien des compétences en anesthésie pédiatrique",
+        institution: "Sorbonne Université",
+      },
+      {
+        year: "2022",
+        title:
+          "Diplôme universitaire « Traumatismes graves : prise en charge des 24 premières heures »",
+        institution: "Université Paris-Saclay",
+      },
+      {
+        year: "2021",
+        title: "Lauréat des épreuves de vérification des connaissances (PAE)",
+        institution: "Note : 13,83/20",
+      },
+      {
+        year: "2021",
+        title: "Diplôme universitaire de ventilation artificielle",
+        institution: "Université d'Angers",
+      },
+      {
+        year: "2021",
+        title: "Diplôme universitaire des techniques d'épuration extra-rénale",
+        institution: "Université de Strasbourg",
+      },
+      {
+        year: "2020",
+        title: "Diplôme interuniversitaire de réanimation métabolique",
+        institution: "",
+      },
+      {
+        year: "2020",
+        title: "Diplôme de fin de spécialité en anesthésie-réanimation",
+        institution: "",
+      },
+      {
+        year: "2019",
+        title:
+          "Diplôme de formation médicale spécialisée en anesthésie-réanimation",
+        institution: "Sorbonne Université",
+      },
+      {
+        year: "2017",
+        title: "Doctorat d'État en médecine",
+        institution:
+          "Mention très honorable, félicitations du jury et proposition au prix de la meilleure thèse",
+      },
+      {
+        year: "2015–2018",
+        title: "Internat en anesthésie-réanimation",
+        institution: "",
+      },
+      {
+        year: "2013–2014",
+        title: "Externat des hôpitaux de Tunis",
+        institution: "",
+      },
+      {
+        year: "2006–2012",
+        title: "Études de médecine",
+        institution: "Faculté de médecine de Tunis",
+      },
     ],
   },
 
@@ -189,7 +283,8 @@ export const contentFr = {
       emailPlaceholder: "Votre adresse email",
       message: "Message",
       messagePlaceholder: "Comment puis-je vous aider ?",
-      gdprConsent: "J'accepte la Politique de Confidentialité et autorise le traitement de mes données personnelles",
+      gdprConsent:
+        "J'accepte la Politique de Confidentialité et autorise le traitement de mes données personnelles",
       send: "Envoyer",
     },
   },
@@ -198,7 +293,8 @@ export const contentFr = {
   gdpr: {
     title: "Demande RGPD",
     subtitle: "Exercez vos droits en matière de protection des données",
-    description: "Vous avez le droit d'accéder, de rectifier, de supprimer vos données personnelles ou de vous opposer à leur traitement. Remplissez ce formulaire pour soumettre votre demande.",
+    description:
+      "Vous avez le droit d'accéder, de rectifier, de supprimer vos données personnelles ou de vous opposer à leur traitement. Remplissez ce formulaire pour soumettre votre demande.",
     form: {
       name: "Nom complet",
       namePlaceholder: "Votre nom complet",
@@ -219,18 +315,22 @@ export const contentFr = {
       description: "Description de votre demande",
       descriptionPlaceholder: "Décrivez précisément votre demande RGPD...",
       send: "Soumettre la demande",
-      successMessage: "Votre demande RGPD a été reçue. Nous vous répondrons dans un délai d’un mois après sa réception. Vous allez recevoir par email votre référence et un lien pour confirmer votre adresse.",
+      successMessage:
+        "Votre demande RGPD a été reçue. Nous vous répondrons dans un délai d’un mois après sa réception. Vous allez recevoir par email votre référence et un lien pour confirmer votre adresse.",
     },
     // Lien de confirmation de l’adresse envoyé avec l’accusé de réception (RGPD-13).
     confirmation: {
       title: "Confirmer votre adresse email",
-      description: "Cliquez sur le bouton ci-dessous pour confirmer que l’adresse de votre demande RGPD est bien la vôtre.",
+      description:
+        "Cliquez sur le bouton ci-dessous pour confirmer que l’adresse de votre demande RGPD est bien la vôtre.",
       button: "Confirmer mon adresse",
       confirming: "Confirmation en cours...",
       confirmedTitle: "Adresse confirmée",
-      confirmed: "Merci : l’adresse de votre demande {reference} est confirmée. Nous vous répondrons dans un délai d’un mois après sa réception.",
+      confirmed:
+        "Merci : l’adresse de votre demande {reference} est confirmée. Nous vous répondrons dans un délai d’un mois après sa réception.",
       used: "Ce lien a déjà servi : l’adresse de votre demande est déjà confirmée.",
-      invalid: "Ce lien de confirmation est invalide ou a expiré. Pour compléter votre demande, répondez à l’email d’accusé de réception en indiquant votre référence.",
+      invalid:
+        "Ce lien de confirmation est invalide ou a expiré. Pour compléter votre demande, répondez à l’email d’accusé de réception en indiquant votre référence.",
       error: "La confirmation n’a pas pu être enregistrée. Veuillez réessayer.",
       newRequest: "Faire une autre demande",
     },
@@ -238,7 +338,8 @@ export const contentFr = {
 
   // Footer
   footer: {
-    tagline: "L'excellence clinique au service de l'innovation médicale mondiale.",
+    tagline:
+      "L'excellence clinique au service de l'innovation médicale mondiale.",
     // Colonnes Patients / Recrutement (nav.recruitment) / Informations / Légal (PUB-08).
     patients: "Patients",
     information: "Informations",

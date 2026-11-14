@@ -5,7 +5,8 @@ import { describe, expect, it } from "vitest";
 const root = process.cwd();
 const readText = (file: string) => readFileSync(path.join(root, file), "utf8");
 const readJson = (file: string) => JSON.parse(readText(file));
-const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const escapeRegExp = (value: string) =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 function compareVersions(left: string, right: string): number {
   const a = left.split(".").map(part => Number.parseInt(part, 10));
@@ -18,8 +19,13 @@ function compareVersions(left: string, right: string): number {
 }
 
 function lockedVersions(lockfile: string, packageName: string): string[] {
-  const pattern = new RegExp(`^  '?${escapeRegExp(packageName)}@(\\d+\\.\\d+\\.\\d+)[^:]*'?:`, "gm");
-  return Array.from(new Set(Array.from(lockfile.matchAll(pattern), match => match[1])));
+  const pattern = new RegExp(
+    `^  '?${escapeRegExp(packageName)}@(\\d+\\.\\d+\\.\\d+)[^:]*'?:`,
+    "gm"
+  );
+  return Array.from(
+    new Set(Array.from(lockfile.matchAll(pattern), match => match[1]))
+  );
 }
 
 describe("hygiène des dépendances et du dépôt", () => {
@@ -38,12 +44,23 @@ describe("hygiène des dépendances et du dépôt", () => {
   });
 
   it("garde les overrides du lockfile alignés sur package.json pour que l'installation figée réussisse", () => {
-    const overrides = readJson("package.json").pnpm.overrides as Record<string, string>;
+    const overrides = readJson("package.json").pnpm.overrides as Record<
+      string,
+      string
+    >;
     const lockfile = readText("pnpm-lock.yaml");
-    const lockOverrides = lockfile.match(/^overrides:\n((?: {2}.+\n)+)/m)?.[1] ?? "";
-    expect(lockOverrides.trim().split("\n")).toHaveLength(Object.keys(overrides).length);
+    const lockOverrides =
+      lockfile.match(/^overrides:\n((?: {2}.+\n)+)/m)?.[1] ?? "";
+    expect(lockOverrides.trim().split("\n")).toHaveLength(
+      Object.keys(overrides).length
+    );
     for (const [name, version] of Object.entries(overrides)) {
-      expect(lockOverrides).toMatch(new RegExp(`^  '?${escapeRegExp(name)}'?: ${escapeRegExp(version)}$`, "m"));
+      expect(lockOverrides).toMatch(
+        new RegExp(
+          `^  '?${escapeRegExp(name)}'?: ${escapeRegExp(version)}$`,
+          "m"
+        )
+      );
     }
   });
 
@@ -59,7 +76,10 @@ describe("hygiène des dépendances et du dépôt", () => {
     expect(lockedVersions(lockfile, "vitest").length).toBeGreaterThan(0);
     for (const [name, minimum] of Object.entries(minimumPatched)) {
       for (const version of lockedVersions(lockfile, name)) {
-        expect(compareVersions(version, minimum), `${name}@${version} doit être >= ${minimum}`).toBeGreaterThanOrEqual(0);
+        expect(
+          compareVersions(version, minimum),
+          `${name}@${version} doit être >= ${minimum}`
+        ).toBeGreaterThanOrEqual(0);
       }
     }
   });
@@ -79,6 +99,7 @@ describe("hygiène des dépendances et du dépôt", () => {
       "update-testimonials.mjs",
       "webhook-update.txt",
     ];
-    for (const file of removedFiles) expect(existsSync(path.join(root, file)), file).toBe(false);
+    for (const file of removedFiles)
+      expect(existsSync(path.join(root, file)), file).toBe(false);
   });
 });

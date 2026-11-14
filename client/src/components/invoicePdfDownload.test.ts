@@ -10,15 +10,34 @@ describe("téléchargement de la facture régénérée (EXPL-02)", () => {
 
   it("enregistre le PDF sous son nom et laisse 40 s au navigateur pour le lire avant de libérer son adresse", async () => {
     vi.useFakeTimers();
-    const anchor = { href: "", download: "", style: { display: "" }, click: vi.fn(), remove: vi.fn() };
+    const anchor = {
+      href: "",
+      download: "",
+      style: { display: "" },
+      click: vi.fn(),
+      remove: vi.fn(),
+    };
     vi.stubGlobal("window", globalThis);
-    vi.stubGlobal("document", { createElement: vi.fn(() => anchor), body: { appendChild: vi.fn() } });
-    const createObjectURL = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:facture");
-    const revokeObjectURL = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    vi.stubGlobal("document", {
+      createElement: vi.fn(() => anchor),
+      body: { appendChild: vi.fn() },
+    });
+    const createObjectURL = vi
+      .spyOn(URL, "createObjectURL")
+      .mockReturnValue("blob:facture");
+    const revokeObjectURL = vi
+      .spyOn(URL, "revokeObjectURL")
+      .mockImplementation(() => {});
 
-    downloadInvoicePdf({ filename: "Facture-FAC-2026-000009.pdf", contentBase64: Buffer.from("%PDF-1.4").toString("base64") });
+    downloadInvoicePdf({
+      filename: "Facture-FAC-2026-000009.pdf",
+      contentBase64: Buffer.from("%PDF-1.4").toString("base64"),
+    });
 
-    expect(anchor).toMatchObject({ href: "blob:facture", download: "Facture-FAC-2026-000009.pdf" });
+    expect(anchor).toMatchObject({
+      href: "blob:facture",
+      download: "Facture-FAC-2026-000009.pdf",
+    });
     expect(anchor.click).toHaveBeenCalledOnce();
     const blob = createObjectURL.mock.calls[0]![0] as Blob;
     expect(blob.type).toBe("application/pdf");

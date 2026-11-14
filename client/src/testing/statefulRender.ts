@@ -30,19 +30,32 @@ const store = {
 };
 
 const sameDeps = (left?: readonly unknown[], right?: readonly unknown[]) =>
-  Boolean(left && right && left.length === right.length && left.every((dep, index) => Object.is(dep, right[index])));
+  Boolean(
+    left &&
+      right &&
+      left.length === right.length &&
+      left.every((dep, index) => Object.is(dep, right[index]))
+  );
 
 export function withStatefulHooks<T extends typeof React>(react: T): T {
   function useState(initial: unknown) {
     if (!store.active) return react.useState(initial);
     const index = store.stateCursor++;
-    if (!(index in store.states)) store.states[index] = typeof initial === "function" ? (initial as () => unknown)() : initial;
+    if (!(index in store.states))
+      store.states[index] =
+        typeof initial === "function" ? (initial as () => unknown)() : initial;
     const setState = (next: unknown) => {
-      store.states[index] = typeof next === "function" ? (next as (value: unknown) => unknown)(store.states[index]) : next;
+      store.states[index] =
+        typeof next === "function"
+          ? (next as (value: unknown) => unknown)(store.states[index])
+          : next;
     };
     return [store.states[index], setState];
   }
-  function useEffect(effect: () => void | (() => void), deps?: readonly unknown[]) {
+  function useEffect(
+    effect: () => void | (() => void),
+    deps?: readonly unknown[]
+  ) {
     if (!store.active) return react.useEffect(effect, deps);
     const index = store.effectCursor++;
     const previous = store.effects[index];
@@ -51,7 +64,8 @@ export function withStatefulHooks<T extends typeof React>(react: T): T {
     store.pending.push(() => {
       store.effects[index]!.cleanup?.();
       const cleanup = effect();
-      store.effects[index]!.cleanup = typeof cleanup === "function" ? cleanup : undefined;
+      store.effects[index]!.cleanup =
+        typeof cleanup === "function" ? cleanup : undefined;
     });
   }
   function useRef(initial: unknown) {
@@ -70,15 +84,40 @@ export function withStatefulHooks<T extends typeof React>(react: T): T {
     return value;
   }
   function useCallback(callback: unknown, deps?: readonly unknown[]) {
-    if (!store.active) return react.useCallback(callback as () => void, deps as never);
+    if (!store.active)
+      return react.useCallback(callback as () => void, deps as never);
+    // eslint-disable-next-line react-hooks/rules-of-hooks, react-hooks/exhaustive-deps -- a stand-in for React's hooks, run outside React: useCallback is this useMemo, with its caller's deps
     return useMemo(() => callback, deps);
   }
-  function useReducer(reducer: (state: unknown, action: unknown) => unknown, initialArg: unknown, init?: (arg: unknown) => unknown) {
-    if (!store.active) return react.useReducer(reducer as never, initialArg as never, init as never);
-    const [state, setState] = useState(() => (init ? init(initialArg) : initialArg)) as [unknown, (next: (value: unknown) => unknown) => void];
-    return [state, (action: unknown) => setState(previous => reducer(previous, action))];
+  function useReducer(
+    reducer: (state: unknown, action: unknown) => unknown,
+    initialArg: unknown,
+    init?: (arg: unknown) => unknown
+  ) {
+    if (!store.active)
+      return react.useReducer(
+        reducer as never,
+        initialArg as never,
+        init as never
+      );
+    // eslint-disable-next-line react-hooks/rules-of-hooks -- a stand-in for React's hooks, run outside React: useReducer is this useState
+    const [state, setState] = useState(() =>
+      init ? init(initialArg) : initialArg
+    ) as [unknown, (next: (value: unknown) => unknown) => void];
+    return [
+      state,
+      (action: unknown) => setState(previous => reducer(previous, action)),
+    ];
   }
-  return { ...react, useState, useReducer, useEffect, useRef, useMemo, useCallback } as T;
+  return {
+    ...react,
+    useState,
+    useReducer,
+    useEffect,
+    useRef,
+    useMemo,
+    useCallback,
+  } as T;
 }
 
 /**
@@ -86,7 +125,10 @@ export function withStatefulHooks<T extends typeof React>(react: T): T {
  * `beforeEffects` runs in between, as React attaches refs before running
  * effects: a test puts its fake element in a ref there.
  */
-export function renderStateful<T>(component: () => T, beforeEffects?: (result: T) => void): T {
+export function renderStateful<T>(
+  component: () => T,
+  beforeEffects?: (result: T) => void
+): T {
   store.active = true;
   store.stateCursor = 0;
   store.effectCursor = 0;
@@ -116,7 +158,13 @@ export function resetStatefulHooks() {
 /** Every element of a returned tree (components are not expanded), to reach their props. */
 export function elementsOf(node: unknown): Element[] {
   if (Array.isArray(node)) return node.flatMap(elementsOf);
-  if (!node || typeof node !== "object" || !("props" in node) || !("type" in node)) return [];
+  if (
+    !node ||
+    typeof node !== "object" ||
+    !("props" in node) ||
+    !("type" in node)
+  )
+    return [];
   const element = node as Element;
   return [element, ...elementsOf(element.props.children)];
 }

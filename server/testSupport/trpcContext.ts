@@ -14,11 +14,20 @@ type TestContextOptions = {
   res?: Record<string, unknown>;
 };
 
-export function createTestContext({ user = null, mfaVerified = false, req, res }: TestContextOptions = {}): TrpcContext {
+export function createTestContext({
+  user = null,
+  mfaVerified = false,
+  req,
+  res,
+}: TestContextOptions = {}): TrpcContext {
   return {
     user,
     mfaVerified,
-    req: { protocol: "https", headers: {}, ...req } as unknown as TrpcContext["req"],
+    req: {
+      protocol: "https",
+      headers: {},
+      ...req,
+    } as unknown as TrpcContext["req"],
     res: { clearCookie: vi.fn(), ...res } as unknown as TrpcContext["res"],
   };
 }

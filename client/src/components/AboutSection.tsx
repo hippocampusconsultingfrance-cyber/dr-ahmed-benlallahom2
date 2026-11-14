@@ -14,7 +14,7 @@ function AnimatedCounter({ target }: { target: string }) {
 
   useEffect(() => {
     const observer = new IntersectionObserver(
-      (entries) => {
+      entries => {
         if (entries[0].isIntersecting && !hasAnimated.current) {
           hasAnimated.current = true;
           const duration = 1500;
@@ -39,7 +39,8 @@ function AnimatedCounter({ target }: { target: string }) {
 
   return (
     <span ref={ref} className="stat-monumental">
-      {count}{suffix}
+      {count}
+      {suffix}
     </span>
   );
 }
@@ -73,17 +74,28 @@ export default function AboutSection() {
                 alt={content.about.portraitAlt}
                 className="w-full h-full object-cover object-[50%_35%]"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-background/50 via-transparent to-transparent" aria-hidden="true" />
+              <div
+                className="absolute inset-0 bg-gradient-to-t from-background/50 via-transparent to-transparent"
+                aria-hidden="true"
+              />
               {/* Gold corner accent */}
-              <div className="absolute top-4 right-4 w-12 h-12 border-t-2 border-r-2 rounded-tr-lg" style={{ borderColor: "oklch(0.72 0.1 75 / 0.5)" }} />
-              <div className="absolute bottom-4 left-4 w-12 h-12 border-b-2 border-l-2 rounded-bl-lg" style={{ borderColor: "oklch(0.72 0.1 75 / 0.5)" }} />
+              <div
+                className="absolute top-4 right-4 w-12 h-12 border-t-2 border-r-2 rounded-tr-lg"
+                style={{ borderColor: "oklch(0.72 0.1 75 / 0.5)" }}
+              />
+              <div
+                className="absolute bottom-4 left-4 w-12 h-12 border-b-2 border-l-2 rounded-bl-lg"
+                style={{ borderColor: "oklch(0.72 0.1 75 / 0.5)" }}
+              />
             </div>
           </div>
 
           {/* Content — spans 7 cols */}
           <div className="lg:col-span-7 lg:pl-8 section-heading">
             {/* English kicker on every page, its wording left to the owner (PUB-15): read with an English voice (A11Y-13). */}
-            <span lang="en" className="eyebrow-label mb-5">Clinical leadership</span>
+            <span lang="en" className="eyebrow-label mb-5">
+              Clinical leadership
+            </span>
             <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-bold text-foreground mb-8">
               {content.about.title}
             </h2>
@@ -94,15 +106,29 @@ export default function AboutSection() {
             {/* Monumental Stats — 2x2 grid with strong visual weight */}
             <div className="stat-grid grid grid-cols-2 gap-x-4 sm:gap-x-12 gap-y-4 sm:gap-y-10">
               {[
-                { value: stats.yearsClinical, label: content.about.statsLabels.yearsClinical },
-                { value: stats.ventures, label: content.about.statsLabels.ventures },
-                { value: stats.certifications, label: content.about.statsLabels.certifications },
-                { value: stats.languages, label: content.about.statsLabels.languages },
-              ].map((stat) => (
+                {
+                  value: stats.yearsClinical,
+                  label: content.about.statsLabels.yearsClinical,
+                },
+                {
+                  value: stats.ventures,
+                  label: content.about.statsLabels.ventures,
+                },
+                {
+                  value: stats.certifications,
+                  label: content.about.statsLabels.certifications,
+                },
+                {
+                  value: stats.languages,
+                  label: content.about.statsLabels.languages,
+                },
+              ].map(stat => (
                 <div key={stat.label} className="stat-card">
                   <AnimatedCounter target={stat.value} />
                   {/* A long German compound (« Gesundheitsunternehmen ») breaks, hyphenated, inside its column from 320 px. */}
-                  <p className="text-sm text-muted-foreground mt-2 font-medium [overflow-wrap:anywhere] [&:lang(de)]:hyphens-auto">{stat.label}</p>
+                  <p className="text-sm text-muted-foreground mt-2 font-medium [overflow-wrap:anywhere] [&:lang(de)]:hyphens-auto">
+                    {stat.label}
+                  </p>
                 </div>
               ))}
             </div>

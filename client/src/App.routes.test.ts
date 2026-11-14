@@ -3,13 +3,18 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { renderSitemapXml } from "../../server/routeSeo";
 
-const appSource = readFileSync(resolve(process.cwd(), "client/src/App.tsx"), "utf8");
+const appSource = readFileSync(
+  resolve(process.cwd(), "client/src/App.tsx"),
+  "utf8"
+);
 // Le sitemap est généré au build depuis les routes pré-rendues (SEO-03).
 const sitemap = renderSitemapXml("2026-10-16");
 
 describe("routes publiques Employeurs et recrutement", () => {
   it("expose la page de méthode Hippocampus", () => {
-    expect(appSource).toContain('lazy(() => import("./pages/WhyHippocampusPage"))');
+    expect(appSource).toContain(
+      'lazy(() => import("./pages/WhyHippocampusPage"))'
+    );
     expect(appSource).toContain('path="/why-hippocampus"');
   });
 
@@ -19,7 +24,9 @@ describe("routes publiques Employeurs et recrutement", () => {
       "/recruitment/vvip-offshore",
       "/employers",
       "/why-hippocampus",
-    ].forEach(path => expect(sitemap).toContain(`https://drahmedbenlallahom.com${path}`));
+    ].forEach(path =>
+      expect(sitemap).toContain(`https://drahmedbenlallahom.com${path}`)
+    );
   });
 
   it("référence toutes les ressources publiques indexables dans le sitemap", () => {

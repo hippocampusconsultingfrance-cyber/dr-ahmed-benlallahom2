@@ -7,27 +7,51 @@ const state = vi.hoisted(() => ({
   sentCodes: [] as string[],
   failNextEmail: false,
   securityEvents: [] as Array<Record<string, unknown>>,
-  limits: new Map<string, { windowStartedAt: number; count: number; blockedUntil: number }>(),
+  limits: new Map<
+    string,
+    { windowStartedAt: number; count: number; blockedUntil: number }
+  >(),
 }));
 
 vi.mock("./db", () => ({ getDb: async () => state.memory?.db ?? null }));
-vi.mock("./_core/notification", () => ({ notifyOwner: vi.fn(async () => true) }));
+vi.mock("./_core/notification", () => ({
+  notifyOwner: vi.fn(async () => true),
+}));
 // The limiter and the security journal have their own tests; a faithful JS
 // stand-in keeps these MFA tests independent of their SQL implementation.
 vi.mock("./candidateSecurity", () => ({
-  requestIpHash: (headers: Record<string, unknown>) => typeof headers["x-forwarded-for"] === "string" ? `ip:${headers["x-forwarded-for"]}` : null,
-  logSecurityEvent: vi.fn(async (event: Record<string, unknown>) => { state.securityEvents.push(event); }),
-  enforcePersistentRateLimit: vi.fn(async (policy: { action: string; subject: string; maxAttempts: number; windowMs: number; blockMs: number }) => {
-    const key = `${policy.action}:${policy.subject}`;
-    const now = Date.now();
-    const entry = state.limits.get(key);
-    if (entry?.blockedUntil && entry.blockedUntil > now) throw new Error("candidate_security_rate_limited");
-    const sameWindow = entry && now - entry.windowStartedAt < policy.windowMs;
-    const next = { windowStartedAt: sameWindow ? entry!.windowStartedAt : now, count: sameWindow ? entry!.count + 1 : 1, blockedUntil: 0 };
-    if (next.count > policy.maxAttempts) next.blockedUntil = now + policy.blockMs;
-    state.limits.set(key, next);
-    if (next.blockedUntil) throw new Error("candidate_security_rate_limited");
+  requestIpHash: (headers: Record<string, unknown>) =>
+    typeof headers["x-forwarded-for"] === "string"
+      ? `ip:${headers["x-forwarded-for"]}`
+      : null,
+  logSecurityEvent: vi.fn(async (event: Record<string, unknown>) => {
+    state.securityEvents.push(event);
   }),
+  enforcePersistentRateLimit: vi.fn(
+    async (policy: {
+      action: string;
+      subject: string;
+      maxAttempts: number;
+      windowMs: number;
+      blockMs: number;
+    }) => {
+      const key = `${policy.action}:${policy.subject}`;
+      const now = Date.now();
+      const entry = state.limits.get(key);
+      if (entry?.blockedUntil && entry.blockedUntil > now)
+        throw new Error("candidate_security_rate_limited");
+      const sameWindow = entry && now - entry.windowStartedAt < policy.windowMs;
+      const next = {
+        windowStartedAt: sameWindow ? entry!.windowStartedAt : now,
+        count: sameWindow ? entry!.count + 1 : 1,
+        blockedUntil: 0,
+      };
+      if (next.count > policy.maxAttempts)
+        next.blockedUntil = now + policy.blockMs;
+      state.limits.set(key, next);
+      if (next.blockedUntil) throw new Error("candidate_security_rate_limited");
+    }
+  ),
 }));
 vi.mock("./_core/notifications", () => ({
   sendAdminMfaCodeEmail: vi.fn(async (_email: string, code: string) => {
@@ -39,35 +63,64 @@ vi.mock("./_core/notifications", () => ({
   }),
 }));
 
-import { ADMIN_MFA_COOKIE, ADMIN_MFA_RATE_LIMITS, AdminMfaRateLimitError, isAdminMfaVerified, issueAdminMfaChallenge, revokeCurrentAdminMfaSession, revokeOtherAdminMfaSessions, verifyAdminMfaChallenge } from "./adminMfa";
+import {
+  ADMIN_MFA_COOKIE,
+  ADMIN_MFA_RATE_LIMITS,
+  AdminMfaRateLimitError,
+  isAdminMfaVerified,
+  issueAdminMfaChallenge,
+  revokeCurrentAdminMfaSession,
+  revokeOtherAdminMfaSessions,
+  verifyAdminMfaChallenge,
+} from "./adminMfa";
 
 const OPEN_ID = "user_owner";
 let memory: MemoryPg;
 let ipCounter = 0;
 
 function request(ip: string, cookie?: string) {
-  return { protocol: "https", headers: { "x-forwarded-for": ip, ...(cookie ? { cookie } : {}) } as Record<string, unknown> };
+  return {
+    protocol: "https",
+    headers: { "x-forwarded-for": ip, ...(cookie ? { cookie } : {}) } as Record<
+      string,
+      unknown
+    >,
+  };
 }
 
 function response() {
-  const cookies = new Map<string, { value: string; options: Record<string, unknown> }>();
+  const cookies = new Map<
+    string,
+    { value: string; options: Record<string, unknown> }
+  >();
   const cleared: Array<{ name: string; options: Record<string, unknown> }> = [];
   return {
     cookies,
     cleared,
-    cookie: (name: string, value: string, options: Record<string, unknown>) => cookies.set(name, { value, options }),
-    clearCookie: (name: string, options: Record<string, unknown>) => cleared.push({ name, options }),
+    cookie: (name: string, value: string, options: Record<string, unknown>) =>
+      cookies.set(name, { value, options }),
+    clearCookie: (name: string, options: Record<string, unknown>) =>
+      cleared.push({ name, options }),
   };
 }
 
 async function begin(ip: string) {
-  await issueAdminMfaChallenge({ openId: OPEN_ID, email: "owner@test.local", req: request(ip) });
+  await issueAdminMfaChallenge({
+    openId: OPEN_ID,
+    email: "owner@test.local",
+    req: request(ip),
+  });
   return state.sentCodes.at(-1)!;
 }
 
 async function verify(code: string, ip: string) {
   const res = response();
-  await verifyAdminMfaChallenge({ openId: OPEN_ID, code, req: request(ip), res });
+  await verifyAdminMfaChallenge({
+    openId: OPEN_ID,
+    code,
+    req: request(ip),
+    res,
+  });
   return res;
 }
 
@@ -77,7 +130,8 @@ function wrongCode(code: string) {
 
 describe("double authentification administrateur", () => {
   beforeEach(() => {
-    process.env.CANDIDATE_AUTH_PEPPER ||= "test-pepper-for-admin-mfa-tests-0123456789";
+    process.env.CANDIDATE_AUTH_PEPPER ||=
+      "test-pepper-for-admin-mfa-tests-0123456789";
     memory = createMemoryPg([adminMfaChallenges, adminMfaSessions]);
     state.memory = memory;
     state.sentCodes = [];
@@ -91,17 +145,22 @@ describe("double authentification administrateur", () => {
     const ip = `198.51.100.${ipCounter}`;
     const first = await begin(ip);
     const second = await begin(ip);
-    if (first !== second) await expect(verify(first, ip)).rejects.toThrow("admin_mfa_code_invalid");
+    if (first !== second)
+      await expect(verify(first, ip)).rejects.toThrow("admin_mfa_code_invalid");
     const res = await verify(second, ip);
     expect(res.cookies.get(ADMIN_MFA_COOKIE)?.value).toBeTruthy();
-    expect(memory.rows(adminMfaChallenges).filter(row => row.consumed_at === null)).toHaveLength(0);
+    expect(
+      memory.rows(adminMfaChallenges).filter(row => row.consumed_at === null)
+    ).toHaveLength(0);
   });
 
   it("après 5 erreurs, un nouveau code envoyé est accepté (le défi verrouillé ne masque plus le dernier)", async () => {
     const ip = `198.51.100.${ipCounter}`;
     const locked = await begin(ip);
     for (let attempt = 0; attempt < 5; attempt += 1) {
-      await expect(verify(wrongCode(locked), ip)).rejects.toThrow("admin_mfa_code_invalid");
+      await expect(verify(wrongCode(locked), ip)).rejects.toThrow(
+        "admin_mfa_code_invalid"
+      );
     }
     expect(memory.rows(adminMfaChallenges)[0]!.attempts).toBe(5);
     await expect(verify(locked, ip)).rejects.toThrow("admin_mfa_code_invalid");
@@ -130,21 +189,44 @@ describe("double authentification administrateur", () => {
 
   it("limite l’envoi de codes à 5 par 15 minutes pour un compte et une IP", async () => {
     const ip = `198.51.100.${ipCounter}`;
-    for (let index = 0; index < ADMIN_MFA_RATE_LIMITS.begin.maxAttempts; index += 1) await begin(ip);
+    for (
+      let index = 0;
+      index < ADMIN_MFA_RATE_LIMITS.begin.maxAttempts;
+      index += 1
+    )
+      await begin(ip);
     const sentBefore = state.sentCodes.length;
-    await expect(issueAdminMfaChallenge({ openId: OPEN_ID, email: "owner@test.local", req: request(ip) })).rejects.toBeInstanceOf(AdminMfaRateLimitError);
+    await expect(
+      issueAdminMfaChallenge({
+        openId: OPEN_ID,
+        email: "owner@test.local",
+        req: request(ip),
+      })
+    ).rejects.toBeInstanceOf(AdminMfaRateLimitError);
     expect(state.sentCodes.length).toBe(sentBefore);
-    expect(state.securityEvents.some(event => event.category === "admin_mfa_begin_rate_limited")).toBe(true);
+    expect(
+      state.securityEvents.some(
+        event => event.category === "admin_mfa_begin_rate_limited"
+      )
+    ).toBe(true);
   });
 
   it("limite les vérifications par compte et IP, même avec de nouveaux codes", async () => {
     const ip = `198.51.100.${ipCounter}`;
     let code = await begin(ip);
-    for (let attempt = 0; attempt < ADMIN_MFA_RATE_LIMITS.verify.maxAttempts; attempt += 1) {
+    for (
+      let attempt = 0;
+      attempt < ADMIN_MFA_RATE_LIMITS.verify.maxAttempts;
+      attempt += 1
+    ) {
       if (attempt === 4) code = await begin(ip);
-      await expect(verify(wrongCode(code), ip)).rejects.toThrow("admin_mfa_code_invalid");
+      await expect(verify(wrongCode(code), ip)).rejects.toThrow(
+        "admin_mfa_code_invalid"
+      );
     }
-    await expect(verify(code, ip)).rejects.toBeInstanceOf(AdminMfaRateLimitError);
+    await expect(verify(code, ip)).rejects.toBeInstanceOf(
+      AdminMfaRateLimitError
+    );
   });
 
   it("la déconnexion révoque la session MFA serveur et efface le cookie", async () => {
@@ -156,36 +238,87 @@ describe("double authentification administrateur", () => {
     expect(await isAdminMfaVerified(request(ip, cookie), OPEN_ID)).toBe(true);
 
     const logoutResponse = response();
-    await expect(revokeCurrentAdminMfaSession({ req: request(ip, cookie), res: logoutResponse, openId: OPEN_ID })).resolves.toEqual({ revoked: 1 });
-    expect(logoutResponse.cleared).toEqual([{ name: ADMIN_MFA_COOKIE, options: expect.objectContaining({ httpOnly: true, secure: true, sameSite: "lax", path: "/" }) }]);
+    await expect(
+      revokeCurrentAdminMfaSession({
+        req: request(ip, cookie),
+        res: logoutResponse,
+        openId: OPEN_ID,
+      })
+    ).resolves.toEqual({ revoked: 1 });
+    expect(logoutResponse.cleared).toEqual([
+      {
+        name: ADMIN_MFA_COOKIE,
+        options: expect.objectContaining({
+          httpOnly: true,
+          secure: true,
+          sameSite: "lax",
+          path: "/",
+        }),
+      },
+    ]);
     expect(await isAdminMfaVerified(request(ip, cookie), OPEN_ID)).toBe(false);
     expect(memory.rows(adminMfaSessions)[0]!.revoked_at).not.toBeNull();
   });
 
   it("« Révoquer toutes les autres sessions » ferme les preuves des autres appareils et garde celle de ce navigateur (ADM-14)", async () => {
-    const cookieOf = async (ip: string) => `${ADMIN_MFA_COOKIE}=${(await verify(await begin(ip), ip)).cookies.get(ADMIN_MFA_COOKIE)!.value}`;
+    const cookieOf = async (ip: string) =>
+      `${ADMIN_MFA_COOKIE}=${(await verify(await begin(ip), ip)).cookies.get(ADMIN_MFA_COOKIE)!.value}`;
     const thisBrowser = await cookieOf(`198.51.100.${ipCounter}`);
     const lostPhone = await cookieOf(`203.0.113.${ipCounter}`);
     const oldLaptop = await cookieOf(`192.0.2.${ipCounter}`);
     // Another administrator's proof is not this account's to close, and an expired one is not counted.
     memory.seed(adminMfaSessions, [
-      { open_id: "user_other_admin", token_hash: "f".repeat(64), expires_at: new Date(Date.now() + 60_000) },
-      { open_id: OPEN_ID, token_hash: "e".repeat(64), expires_at: new Date(Date.now() - 60_000) },
+      {
+        open_id: "user_other_admin",
+        token_hash: "f".repeat(64),
+        expires_at: new Date(Date.now() + 60_000),
+      },
+      {
+        open_id: OPEN_ID,
+        token_hash: "e".repeat(64),
+        expires_at: new Date(Date.now() - 60_000),
+      },
     ]);
 
-    await expect(revokeOtherAdminMfaSessions({ openId: OPEN_ID, req: request("198.51.100.1", thisBrowser) })).resolves.toBe(2);
-    expect(memory.rows(adminMfaSessions).find(row => row.token_hash === "e".repeat(64))!.revoked_at).toBeNull();
-    expect(await isAdminMfaVerified(request("198.51.100.1", thisBrowser), OPEN_ID)).toBe(true);
-    expect(await isAdminMfaVerified(request("203.0.113.1", lostPhone), OPEN_ID)).toBe(false);
-    expect(await isAdminMfaVerified(request("192.0.2.1", oldLaptop), OPEN_ID)).toBe(false);
-    expect(memory.rows(adminMfaSessions).find(row => row.open_id === "user_other_admin")!.revoked_at).toBeNull();
+    await expect(
+      revokeOtherAdminMfaSessions({
+        openId: OPEN_ID,
+        req: request("198.51.100.1", thisBrowser),
+      })
+    ).resolves.toBe(2);
+    expect(
+      memory
+        .rows(adminMfaSessions)
+        .find(row => row.token_hash === "e".repeat(64))!.revoked_at
+    ).toBeNull();
+    expect(
+      await isAdminMfaVerified(request("198.51.100.1", thisBrowser), OPEN_ID)
+    ).toBe(true);
+    expect(
+      await isAdminMfaVerified(request("203.0.113.1", lostPhone), OPEN_ID)
+    ).toBe(false);
+    expect(
+      await isAdminMfaVerified(request("192.0.2.1", oldLaptop), OPEN_ID)
+    ).toBe(false);
+    expect(
+      memory
+        .rows(adminMfaSessions)
+        .find(row => row.open_id === "user_other_admin")!.revoked_at
+    ).toBeNull();
     // Nothing more to close the second time.
-    await expect(revokeOtherAdminMfaSessions({ openId: OPEN_ID, req: request("198.51.100.1", thisBrowser) })).resolves.toBe(0);
+    await expect(
+      revokeOtherAdminMfaSessions({
+        openId: OPEN_ID,
+        req: request("198.51.100.1", thisBrowser),
+      })
+    ).resolves.toBe(0);
   });
 
   it("la déconnexion sans cookie efface quand même le cookie et ne touche pas la base", async () => {
     const res = response();
-    await expect(revokeCurrentAdminMfaSession({ req: request("192.0.2.1"), res })).resolves.toEqual({ revoked: 0 });
+    await expect(
+      revokeCurrentAdminMfaSession({ req: request("192.0.2.1"), res })
+    ).resolves.toEqual({ revoked: 0 });
     expect(res.cleared).toHaveLength(1);
     expect(memory.statements).toHaveLength(0);
   });

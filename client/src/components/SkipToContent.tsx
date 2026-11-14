@@ -10,7 +10,9 @@ export const skipToContentCopy = {
 
 type MainTarget = Pick<HTMLElement, "id" | "tabIndex" | "focus">;
 
-export function getMainContentTarget(root: { querySelector: (selector: string) => MainTarget | null }) {
+export function getMainContentTarget(root: {
+  querySelector: (selector: string) => MainTarget | null;
+}) {
   const main = root.querySelector('main, [role="main"]');
   if (!main) return null;
   if (!main.id) main.id = "main-content";

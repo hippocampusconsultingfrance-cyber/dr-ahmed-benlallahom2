@@ -13,11 +13,35 @@ export default function BlogPostPage() {
   const [, params] = useRoute("/blog/:slug");
   const slug = params?.slug || "";
 
-  const { data: post, isLoading, error } = trpc.blog.getBySlug.useQuery({ slug });
+  const {
+    data: post,
+    isLoading,
+    error,
+  } = trpc.blog.getBySlug.useQuery({ slug });
 
   const breadcrumbItems = [
-    { label: language === "fr" ? "Accueil" : language === "en" ? "Home" : language === "de" ? "Startseite" : "首页", href: "/" },
-    { label: language === "fr" ? "Actualités" : language === "en" ? "News" : language === "de" ? "Nachrichten" : "新闻", href: "/blog" },
+    {
+      label:
+        language === "fr"
+          ? "Accueil"
+          : language === "en"
+            ? "Home"
+            : language === "de"
+              ? "Startseite"
+              : "首页",
+      href: "/",
+    },
+    {
+      label:
+        language === "fr"
+          ? "Actualités"
+          : language === "en"
+            ? "News"
+            : language === "de"
+              ? "Nachrichten"
+              : "新闻",
+      href: "/blog",
+    },
     { label: post?.title || "..." },
   ];
 
@@ -66,13 +90,14 @@ export default function BlogPostPage() {
     );
   }
 
-  const seoDescription = language === "fr"
-    ? `Article médical : ${post.title}. Veille et réflexion autour de l’anesthésie-réanimation et de la santé.`
-    : language === "de"
-      ? `Medizinischer Artikel: ${post.title}. Aktuelle Einblicke in Anästhesie, Intensivmedizin und Gesundheit.`
-      : language === "zh"
-        ? `医学文章：${post.title}。麻醉、重症监护与健康领域的专业动态。`
-        : `Medical article: ${post.title}. Insights and medical watch in anesthesia, critical care and health.`;
+  const seoDescription =
+    language === "fr"
+      ? `Article médical : ${post.title}. Veille et réflexion autour de l’anesthésie-réanimation et de la santé.`
+      : language === "de"
+        ? `Medizinischer Artikel: ${post.title}. Aktuelle Einblicke in Anästhesie, Intensivmedizin und Gesundheit.`
+        : language === "zh"
+          ? `医学文章：${post.title}。麻醉、重症监护与健康领域的专业动态。`
+          : `Medical article: ${post.title}. Insights and medical watch in anesthesia, critical care and health.`;
 
   return (
     <div className="min-h-screen bg-background">
@@ -86,7 +111,9 @@ export default function BlogPostPage() {
           "@type": "Article",
           headline: post.title,
           datePublished: new Date(post.createdAt).toISOString(),
-          dateModified: new Date(post.updatedAt || post.createdAt).toISOString(),
+          dateModified: new Date(
+            post.updatedAt || post.createdAt
+          ).toISOString(),
           image: post.coverImage ? [post.coverImage] : undefined,
           mainEntityOfPage: `https://drahmedbenlallahom.com/blog/${post.slug}`,
         }}
@@ -109,11 +136,20 @@ export default function BlogPostPage() {
           <div className="flex items-center gap-4 text-sm text-muted-foreground mb-4">
             <span className="flex items-center gap-1">
               <Calendar className="w-4 h-4" />
-              {new Date(post.createdAt).toLocaleDateString(language === "fr" ? "fr-FR" : language === "de" ? "de-DE" : language === "zh" ? "zh-CN" : "en-US", {
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-              })}
+              {new Date(post.createdAt).toLocaleDateString(
+                language === "fr"
+                  ? "fr-FR"
+                  : language === "de"
+                    ? "de-DE"
+                    : language === "zh"
+                      ? "zh-CN"
+                      : "en-US",
+                {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                }
+              )}
             </span>
             <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs capitalize">
               {post.category}
@@ -144,7 +180,13 @@ export default function BlogPostPage() {
             <Link href="/blog">
               <span className="text-primary hover:underline flex items-center gap-2 cursor-pointer">
                 <ArrowLeft className="w-4 h-4" />
-                {language === "fr" ? "Retour aux actualités" : language === "en" ? "Back to news" : language === "de" ? "Zurück zu Nachrichten" : "返回新闻"}
+                {language === "fr"
+                  ? "Retour aux actualités"
+                  : language === "en"
+                    ? "Back to news"
+                    : language === "de"
+                      ? "Zurück zu Nachrichten"
+                      : "返回新闻"}
               </span>
             </Link>
           </div>

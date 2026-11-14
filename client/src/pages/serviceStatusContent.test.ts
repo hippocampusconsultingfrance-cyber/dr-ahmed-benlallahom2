@@ -12,7 +12,9 @@ describe("contenus des états de service", () => {
   });
 
   it("distingue clairement la maintenance d’un incident", () => {
-    expect(getServiceStatusContent("maintenance", "fr").title).toContain("maintenance");
+    expect(getServiceStatusContent("maintenance", "fr").title).toContain(
+      "maintenance"
+    );
     expect(getServiceStatusContent("error", "fr").title).toContain("technique");
   });
 });

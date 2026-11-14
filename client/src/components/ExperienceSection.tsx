@@ -1,22 +1,42 @@
 import { useLanguage } from "@/contexts/LanguageContext";
 import { venturesFr } from "@/data/ventures-fr";
 import { venturesEn } from "@/data/ventures-en";
-import { Briefcase, Stethoscope, Building2, Globe, Brain, HeartPulse, ArrowRight } from "lucide-react";
+import {
+  Briefcase,
+  Stethoscope,
+  Building2,
+  Globe,
+  Brain,
+  HeartPulse,
+  ArrowRight,
+} from "lucide-react";
 import { Link } from "wouter";
 
-const experienceIcons = [Building2, HeartPulse, Globe, Brain, Briefcase, Stethoscope];
+const experienceIcons = [
+  Building2,
+  HeartPulse,
+  Globe,
+  Brain,
+  Briefcase,
+  Stethoscope,
+];
 
 export default function ExperienceSection() {
   const { content, language } = useLanguage();
   const ventures = language === "fr" ? venturesFr : venturesEn;
 
   return (
-    <section id="experience" className="experience-section py-28 sm:py-36 relative">
+    <section
+      id="experience"
+      className="experience-section py-28 sm:py-36 relative"
+    >
       <div className="container">
         {/* Header — right-aligned for asymmetry */}
         <div className="section-heading max-w-2xl ml-auto text-right mb-16">
           {/* English kicker on every page, its wording left to the owner (PUB-15): read with an English voice (A11Y-13). */}
-          <span lang="en" className="eyebrow-label justify-end mb-5">Medical ventures</span>
+          <span lang="en" className="eyebrow-label justify-end mb-5">
+            Medical ventures
+          </span>
           <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-bold text-foreground mb-4">
             {content.experiences.title}
           </h2>
@@ -47,12 +67,21 @@ export default function ExperienceSection() {
                       <Icon className="w-5 h-5 text-primary" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-lg text-foreground leading-tight group-hover:text-primary transition-colors">{exp.company}</h3>
-                      <p className="text-sm font-semibold mt-0.5" style={{ color: "oklch(0.72 0.1 75)" }}>{exp.role}</p>
+                      <h3 className="font-semibold text-lg text-foreground leading-tight group-hover:text-primary transition-colors">
+                        {exp.company}
+                      </h3>
+                      <p
+                        className="text-sm font-semibold mt-0.5"
+                        style={{ color: "oklch(0.72 0.1 75)" }}
+                      >
+                        {exp.role}
+                      </p>
                     </div>
                   </div>
-                                      <ArrowRight aria-hidden="true" className="venture-arrow w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all duration-200 shrink-0 mt-2" />
-
+                  <ArrowRight
+                    aria-hidden="true"
+                    className="venture-arrow w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all duration-200 shrink-0 mt-2"
+                  />
                 </div>
                 <p className="text-muted-foreground text-sm leading-relaxed mb-5">
                   {exp.description}

@@ -79,28 +79,28 @@ Comparer toujours l’adresse sans tenir compte de la casse (`lower(email)`).
 
 Base de données (Neon) :
 
-| Table | Colonne | Données | Effacement |
-| --- | --- | --- | --- |
-| `contact_messages` | `email` | nom, email, téléphone, message | « Effacer / anonymiser » ou « Supprimer » |
-| `medical_questions` | `email` | identité, coordonnées, question, réponse, version publique | « Effacer / anonymiser » ou « Supprimer » |
-| `medical_question_audit_logs` | `medical_question_id` | journal de la question | avec la question |
-| `gdpr_requests` | `email` | la demande elle-même | conservée (§ 4) |
-| `appointments` | `customer_email` | identité, coordonnées, motif, date, montant, statuts | anonymisation des rendez-vous passés, annulés ou abandonnés |
-| `appointment_invoices` | `appointment_id` | numéro et dates de facture | conservé (§ 4) |
-| `appointment_fulfillment_jobs` | `appointment_id` | état des envois après paiement, sans identité, sauf l’adresse essayée par un email au patient que garde l’alerte de son échec tant qu’elle attend de partir | purgé 30 jours après l’envoi ; l’adresse disparaît dès que l’alerte part, abandonne ou est close (remboursement, effacement) |
-| `cv_applications` et tables liées | `email` | candidature, CV, analyses, historique | « Effacer le dossier candidat » |
-| `candidate_accounts`, `candidate_sessions`, `candidate_documents` | `email` / `candidate_id` | espace candidat et coffre | avec le dossier candidat ; un espace sans candidature est effacé après 2 ans d’inactivité, sinon le supprimer dans Neon |
-| `client_briefs` | `email` | besoin d’un employeur (contact, organisation) | pas d’écran : vérifier et supprimer dans Neon |
-| `security_events` | `actor_reference` | journal technique, parfois une empreinte ou une adresse | purgé après 90 jours |
-| `users` | `email` | comptes administrateurs uniquement | sans objet pour un patient |
+| Table                                                             | Colonne                  | Données                                                                                                                                                     | Effacement                                                                                                                   |
+| ----------------------------------------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `contact_messages`                                                | `email`                  | nom, email, téléphone, message                                                                                                                              | « Effacer / anonymiser » ou « Supprimer »                                                                                    |
+| `medical_questions`                                               | `email`                  | identité, coordonnées, question, réponse, version publique                                                                                                  | « Effacer / anonymiser » ou « Supprimer »                                                                                    |
+| `medical_question_audit_logs`                                     | `medical_question_id`    | journal de la question                                                                                                                                      | avec la question                                                                                                             |
+| `gdpr_requests`                                                   | `email`                  | la demande elle-même                                                                                                                                        | conservée (§ 4)                                                                                                              |
+| `appointments`                                                    | `customer_email`         | identité, coordonnées, motif, date, montant, statuts                                                                                                        | anonymisation des rendez-vous passés, annulés ou abandonnés                                                                  |
+| `appointment_invoices`                                            | `appointment_id`         | numéro et dates de facture                                                                                                                                  | conservé (§ 4)                                                                                                               |
+| `appointment_fulfillment_jobs`                                    | `appointment_id`         | état des envois après paiement, sans identité, sauf l’adresse essayée par un email au patient que garde l’alerte de son échec tant qu’elle attend de partir | purgé 30 jours après l’envoi ; l’adresse disparaît dès que l’alerte part, abandonne ou est close (remboursement, effacement) |
+| `cv_applications` et tables liées                                 | `email`                  | candidature, CV, analyses, historique                                                                                                                       | « Effacer le dossier candidat »                                                                                              |
+| `candidate_accounts`, `candidate_sessions`, `candidate_documents` | `email` / `candidate_id` | espace candidat et coffre                                                                                                                                   | avec le dossier candidat ; un espace sans candidature est effacé après 2 ans d’inactivité, sinon le supprimer dans Neon      |
+| `client_briefs`                                                   | `email`                  | besoin d’un employeur (contact, organisation)                                                                                                               | pas d’écran : vérifier et supprimer dans Neon                                                                                |
+| `security_events`                                                 | `actor_reference`        | journal technique, parfois une empreinte ou une adresse                                                                                                     | purgé après 90 jours                                                                                                         |
+| `users`                                                           | `email`                  | comptes administrateurs uniquement                                                                                                                          | sans objet pour un patient                                                                                                   |
 
 Stockage de fichiers (Vercel Blob) :
 
-| Préfixe | Contenu | Effacement |
-| --- | --- | --- |
-| `invoices/<numéro>-<référence>.pdf` | factures PDF émises | conservées 10 ans (§ 4) ; aucune suppression automatique n’est encore prévue au-delà |
-| `recruitment/quarantine/`, `recruitment/cv/` | CV déposés | par l’effacement du dossier candidat |
-| `candidate-documents/quarantine/<id du compte>/` | coffre candidat (chiffré) | par l’effacement du dossier candidat |
+| Préfixe                                          | Contenu                   | Effacement                                                                           |
+| ------------------------------------------------ | ------------------------- | ------------------------------------------------------------------------------------ |
+| `invoices/<numéro>-<référence>.pdf`              | factures PDF émises       | conservées 10 ans (§ 4) ; aucune suppression automatique n’est encore prévue au-delà |
+| `recruitment/quarantine/`, `recruitment/cv/`     | CV déposés                | par l’effacement du dossier candidat                                                 |
+| `candidate-documents/quarantine/<id du compte>/` | coffre candidat (chiffré) | par l’effacement du dossier candidat                                                 |
 
 Hors du site : Resend (historique des emails envoyés), Stripe (paiements),
 Google Drive (copies de CV, effacées avec le dossier candidat) et les
@@ -141,16 +141,16 @@ Chaque nuit, la tâche `security-posture` applique les durées de la politique
 de confidentialité (`server/personalDataRetention.ts`), par lots et dans un
 budget de temps ; ce qui reste passe la nuit suivante :
 
-| Données | Durée |
-| --- | --- |
-| Journal de sécurité, codes et sessions de double authentification | 90 jours (ou dès expiration pour les codes et sessions) |
-| Sessions de l’espace candidat | dès expiration |
-| Envois après paiement terminés | 30 jours après l’envoi |
-| Demandes RGPD closes | 1 an après la réponse |
-| Messages de contact | 3 ans après le dernier message de la personne |
-| Questions santé et leur journal | 3 ans après le dernier échange ; une question publiée avec accord ne garde que sa version publique anonymisée |
-| Rendez-vous | réduits au minimum comptable 3 ans après la consultation |
-| Motif de la consultation (`request_details`) | vidé 90 jours après la consultation (durée à confirmer par le responsable) |
+| Données                                                           | Durée                                                                                                         |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Journal de sécurité, codes et sessions de double authentification | 90 jours (ou dès expiration pour les codes et sessions)                                                       |
+| Sessions de l’espace candidat                                     | dès expiration                                                                                                |
+| Envois après paiement terminés                                    | 30 jours après l’envoi                                                                                        |
+| Demandes RGPD closes                                              | 1 an après la réponse                                                                                         |
+| Messages de contact                                               | 3 ans après le dernier message de la personne                                                                 |
+| Questions santé et leur journal                                   | 3 ans après le dernier échange ; une question publiée avec accord ne garde que sa version publique anonymisée |
+| Rendez-vous                                                       | réduits au minimum comptable 3 ans après la consultation                                                      |
+| Motif de la consultation (`request_details`)                      | vidé 90 jours après la consultation (durée à confirmer par le responsable)                                    |
 
 Le recrutement a sa propre tâche (`recruitment-retention`) : 2 ans après la
 dernière activité du candidat.

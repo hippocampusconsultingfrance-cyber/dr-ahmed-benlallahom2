@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { getActiveAdminTabLabel, type AdminTabOption } from "./adminDashboardMobileTabs";
+import {
+  getActiveAdminTabLabel,
+  type AdminTabOption,
+} from "./adminDashboardMobileTabs";
 
 describe("sélecteur mobile du tableau de bord", () => {
   const tabs: AdminTabOption<"overview" | "recruitment">[] = [
@@ -9,6 +12,8 @@ describe("sélecteur mobile du tableau de bord", () => {
 
   it("retourne le libellé de l’onglet courant et un repli sûr", () => {
     expect(getActiveAdminTabLabel(tabs, "recruitment")).toBe("Candidatures");
-    expect(getActiveAdminTabLabel(tabs, "unknown" as never)).toBe("Vue d’ensemble");
+    expect(getActiveAdminTabLabel(tabs, "unknown" as never)).toBe(
+      "Vue d’ensemble"
+    );
   });
 });

@@ -22,7 +22,13 @@ export const ROBOTS_NOINDEX = "noindex, follow";
 /** Pages privées hors table (espace candidat, confirmation…) : rien à suivre ni archiver. */
 export const ROBOTS_PRIVATE = "noindex, nofollow, noarchive";
 
-export type ShareImage = { url: string; width: number; height: number; type: string; alt: string };
+export type ShareImage = {
+  url: string;
+  width: number;
+  height: number;
+  type: string;
+  alt: string;
+};
 
 /** Image de partage raster 1200x630 (SEO-01) : LinkedIn, Facebook, WhatsApp et X n'affichent pas les SVG. */
 export const DEFAULT_SHARE_IMAGE: ShareImage = {
@@ -43,23 +49,28 @@ export type RouteMetadata = {
 export const STATIC_ROUTE_METADATA: Readonly<Record<string, RouteMetadata>> = {
   "/": {
     title: "Dr. Ahmed Ben Lallahom | Médecine et Conseil",
-    description: "Anesthésiste-réanimateur, entrepreneur en santé et consultant médical basé en France.",
+    description:
+      "Anesthésiste-réanimateur, entrepreneur en santé et consultant médical basé en France.",
   },
   "/booking": {
     title: "Réserver une consultation | Dr. Ben Lallahom",
-    description: "Réservez en ligne une consultation de conseil en santé avec le Dr. Ahmed Ben Lallahom.",
+    description:
+      "Réservez en ligne une consultation de conseil en santé avec le Dr. Ahmed Ben Lallahom.",
   },
   "/questions-anesthesie": {
     title: "Questions santé | Anesthésie et opération",
-    description: "Posez une question générale sur l’anesthésie ou une opération et recevez une réponse relue par email.",
+    description:
+      "Posez une question générale sur l’anesthésie ou une opération et recevez une réponse relue par email.",
   },
   "/recruitment": {
     title: "Recrutement santé international | Hippocampus",
-    description: "Découvrez les opportunités internationales pour professionnels médicaux et paramédicaux.",
+    description:
+      "Découvrez les opportunités internationales pour professionnels médicaux et paramédicaux.",
   },
   "/recruitment/standard": {
     title: "Candidature santé internationale | Hippocampus",
-    description: "Déposez votre candidature pour des opportunités médicales et paramédicales internationales.",
+    description:
+      "Déposez votre candidature pour des opportunités médicales et paramédicales internationales.",
   },
   "/recruitment/unsubscribe": {
     title: "Préférences recrutement | Hippocampus Consulting",
@@ -68,44 +79,53 @@ export const STATIC_ROUTE_METADATA: Readonly<Record<string, RouteMetadata>> = {
   },
   "/recruitment/vvip-offshore": {
     title: "Missions santé offshore et Moyen-Orient | Hippocampus",
-    description: "Postulez pour des missions médicales spécialisées offshore, industrielles et au Moyen-Orient.",
+    description:
+      "Postulez pour des missions médicales spécialisées offshore, industrielles et au Moyen-Orient.",
   },
   "/employers": {
     title: "Recruter des soignants | Hippocampus Consulting",
-    description: "Confiez votre besoin de recrutement médical ou paramédical international à Hippocampus Consulting.",
+    description:
+      "Confiez votre besoin de recrutement médical ou paramédical international à Hippocampus Consulting.",
   },
   "/why-hippocampus": {
     title: "Pourquoi Hippocampus Consulting | Employeurs",
-    description: "Méthode, confidentialité et accompagnement pour vos recrutements médicaux internationaux.",
+    description:
+      "Méthode, confidentialité et accompagnement pour vos recrutements médicaux internationaux.",
   },
   // Publiée uniquement si les témoignages sont réactivés (LEGAL-08, shared/publicFeatures.ts).
   ...(isPublicTestimonialsEnabled()
     ? {
         "/testimonials": {
           title: "Témoignages de partenaires | Dr. Ben Lallahom",
-          description: "Découvrez les témoignages de partenaires ayant collaboré avec le Dr. Ahmed Ben Lallahom.",
+          description:
+            "Découvrez les témoignages de partenaires ayant collaboré avec le Dr. Ahmed Ben Lallahom.",
         },
       }
     : {}),
   "/gdpr": {
     title: "Protection des données | Dr. Ben Lallahom",
-    description: "Consultez les informations de protection des données personnelles et RGPD du site.",
+    description:
+      "Consultez les informations de protection des données personnelles et RGPD du site.",
   },
   "/legal": {
     title: "Mentions légales | Dr. Ben Lallahom",
-    description: "Consultez les mentions légales et conditions d’utilisation du site Dr. Ahmed Ben Lallahom.",
+    description:
+      "Consultez les mentions légales et conditions d’utilisation du site Dr. Ahmed Ben Lallahom.",
   },
   "/faq": {
     title: "Questions fréquentes | Dr. Ben Lallahom",
-    description: "Retrouvez les informations pratiques sur la consultation, la réservation et Hippocampus Consulting.",
+    description:
+      "Retrouvez les informations pratiques sur la consultation, la réservation et Hippocampus Consulting.",
   },
   "/resources": {
     title: "Ressources médicales institutionnelles | Dr. Ben Lallahom",
-    description: "Une sélection de portails institutionnels de santé pour prolonger votre information, sans remplacer un avis médical.",
+    description:
+      "Une sélection de portails institutionnels de santé pour prolonger votre information, sans remplacer un avis médical.",
   },
   "/press": {
     title: "Presse et publications | Dr. Ben Lallahom",
-    description: "Informations institutionnelles vérifiables sur le parcours et les activités du Dr. Ahmed Ben Lallahom.",
+    description:
+      "Informations institutionnelles vérifiables sur le parcours et les activités du Dr. Ahmed Ben Lallahom.",
   },
   "/search": {
     title: "Recherche | Dr. Ben Lallahom",
@@ -132,7 +152,9 @@ export function canonicalUrlFor(path: string): string {
   return `${SITE_ORIGIN}${path}`;
 }
 
-export function getStaticRouteMetadata(url: string): (RouteMetadata & { canonicalPath: string }) | null {
+export function getStaticRouteMetadata(
+  url: string
+): (RouteMetadata & { canonicalPath: string }) | null {
   const pathname = normalizePathname(url);
   const known = STATIC_ROUTE_METADATA[pathname];
   return known ? { ...known, canonicalPath: pathname } : null;
@@ -160,8 +182,14 @@ export type ResolvedSeo = {
  * <head> appliqué par SEOHead après hydratation. Pour une route publique connue, la table
  * ci-dessus fait foi (en français) ; sinon les props de la page sont utilisées.
  */
-export function resolveClientSeo(pathname: string, language: string, props: ClientSeoProps): ResolvedSeo {
-  const image = props.ogImage ? { ...DEFAULT_SHARE_IMAGE, url: props.ogImage } : DEFAULT_SHARE_IMAGE;
+export function resolveClientSeo(
+  pathname: string,
+  language: string,
+  props: ClientSeoProps
+): ResolvedSeo {
+  const image = props.ogImage
+    ? { ...DEFAULT_SHARE_IMAGE, url: props.ogImage }
+    : DEFAULT_SHARE_IMAGE;
   const meta = getStaticRouteMetadata(pathname);
   if (meta) {
     const french = language === "fr";

@@ -24,9 +24,20 @@ import { useEffect } from "react";
  */
 export const homeSeo = {
   fr: STATIC_ROUTE_METADATA["/"],
-  en: { title: "Dr. Ahmed Ben Lallahom | Medicine and Consulting", description: "Anesthesiologist-intensivist, healthcare entrepreneur and medical consultant based in France." },
-  de: { title: "Dr. Ahmed Ben Lallahom | Medizin und Beratung", description: "Anästhesist und Intensivmediziner, Unternehmer im Gesundheitswesen und medizinischer Berater mit Sitz in Frankreich." },
-  zh: { title: "Dr. Ahmed Ben Lallahom | 医学与咨询", description: "常驻法国的麻醉学家和重症医学专家、医疗保健企业家及医学顾问。" },
+  en: {
+    title: "Dr. Ahmed Ben Lallahom | Medicine and Consulting",
+    description:
+      "Anesthesiologist-intensivist, healthcare entrepreneur and medical consultant based in France.",
+  },
+  de: {
+    title: "Dr. Ahmed Ben Lallahom | Medizin und Beratung",
+    description:
+      "Anästhesist und Intensivmediziner, Unternehmer im Gesundheitswesen und medizinischer Berater mit Sitz in Frankreich.",
+  },
+  zh: {
+    title: "Dr. Ahmed Ben Lallahom | 医学与咨询",
+    description: "常驻法国的麻醉学家和重症医学专家、医疗保健企业家及医学顾问。",
+  },
 } as const;
 
 export default function Home() {
@@ -41,7 +52,9 @@ export default function Home() {
       scrollToSectionTop(document.getElementById(targetId), "auto");
     };
 
-    const initialScrollTimers = [0, 180, 500].map(delay => window.setTimeout(scrollToHashTarget, delay));
+    const initialScrollTimers = [0, 180, 500].map(delay =>
+      window.setTimeout(scrollToHashTarget, delay)
+    );
     window.addEventListener("hashchange", scrollToHashTarget);
     return () => {
       initialScrollTimers.forEach(timer => window.clearTimeout(timer));
@@ -51,7 +64,11 @@ export default function Home() {
 
   return (
     <div ref={revealRef} className="min-h-screen bg-background">
-      <SEOHead title={seo.title} description={seo.description} ogUrl="https://drahmedbenlallahom.com" />
+      <SEOHead
+        title={seo.title}
+        description={seo.description}
+        ogUrl="https://drahmedbenlallahom.com"
+      />
       <Navigation />
       <main>
         <HeroSection />

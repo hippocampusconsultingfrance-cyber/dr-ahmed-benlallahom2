@@ -1,12 +1,20 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { elementsOf, renderStateful, resetStatefulHooks } from "@/testing/statefulRender";
+import {
+  elementsOf,
+  renderStateful,
+  resetStatefulHooks,
+} from "@/testing/statefulRender";
 
 // ADM-02 dans l’onglet Candidatures : le champ de recherche part au serveur
 // après la pause de frappe, avec les autres filtres, depuis la première page.
 
-vi.mock("react", async importOriginal => (await import("@/testing/statefulRender")).withStatefulHooks(await importOriginal()));
+vi.mock("react", async importOriginal =>
+  (await import("@/testing/statefulRender")).withStatefulHooks(
+    await importOriginal()
+  )
+);
 
 const view = vi.hoisted(() => ({
   requests: [] as Array<Record<string, unknown>>,
@@ -14,30 +22,92 @@ const view = vi.hoisted(() => ({
 }));
 
 const dossier = (id: number, lastName: string) => ({
-  id, trackingId: `CV${id}`, firstName: "Dr", lastName, email: `${lastName}@test.local`, phone: null, specialty: "Anesthésie", targetCountries: "[]", languages: "[]",
-  diplomaCountry: null, availability: null, mobility: null, certifications: null, yearsExperience: null, message: null, status: "new",
-  aiScore: null, aiSummary: null, aiStrengths: null, aiWeaknesses: null, aiExtractedSkills: null, aiMatchReasoning: null, aiAnalyzedAt: null,
-  analysisStatus: "queued", analysisAttempts: 1, analysisLastError: null, analysisModel: null, analysisPromptVersion: null, extractionWarnings: null,
-  driveExport: null, emailDelivery: null, candidatePortalActive: false,
+  id,
+  trackingId: `CV${id}`,
+  firstName: "Dr",
+  lastName,
+  email: `${lastName}@test.local`,
+  phone: null,
+  specialty: "Anesthésie",
+  targetCountries: "[]",
+  languages: "[]",
+  diplomaCountry: null,
+  availability: null,
+  mobility: null,
+  certifications: null,
+  yearsExperience: null,
+  message: null,
+  status: "new",
+  aiScore: null,
+  aiSummary: null,
+  aiStrengths: null,
+  aiWeaknesses: null,
+  aiExtractedSkills: null,
+  aiMatchReasoning: null,
+  aiAnalyzedAt: null,
+  analysisStatus: "queued",
+  analysisAttempts: 1,
+  analysisLastError: null,
+  analysisModel: null,
+  analysisPromptVersion: null,
+  extractionWarnings: null,
+  driveExport: null,
+  emailDelivery: null,
+  candidatePortalActive: false,
 });
 
 const mutation = () => ({ mutate: vi.fn(), isPending: false });
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() } }));
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
+}));
 vi.mock("./Candidate360Dialog", () => ({ default: () => null }));
 vi.mock("@/lib/trpc", () => ({
   trpc: {
-    useUtils: () => ({ admin: { recruitment: { list: { invalidate: vi.fn() } } } }),
+    useUtils: () => ({
+      admin: { recruitment: { list: { invalidate: vi.fn() } } },
+    }),
     useQueries: (build: (t: unknown) => unknown[]) => {
       view.requests = [];
-      const t = { admin: { recruitment: { list: (input: Record<string, unknown>) => { view.requests.push(input); return input; } } } };
-      return build(t).map(() => ({ data: view.page, isLoading: false, error: null, refetch: vi.fn() }));
+      const t = {
+        admin: {
+          recruitment: {
+            list: (input: Record<string, unknown>) => {
+              view.requests.push(input);
+              return input;
+            },
+          },
+        },
+      };
+      return build(t).map(() => ({
+        data: view.page,
+        isLoading: false,
+        error: null,
+        refetch: vi.fn(),
+      }));
     },
     admin: {
       recruitment: {
-        profiles: { list: { useQuery: () => ({ data: [], refetch: vi.fn() }) }, create: { useMutation: mutation }, delete: { useMutation: mutation } },
-        detail: { useQuery: () => ({ data: undefined, isLoading: true, isFetching: false, error: null, refetch: vi.fn() }) },
+        profiles: {
+          list: { useQuery: () => ({ data: [], refetch: vi.fn() }) },
+          create: { useMutation: mutation },
+          delete: { useMutation: mutation },
+        },
+        detail: {
+          useQuery: () => ({
+            data: undefined,
+            isLoading: true,
+            isFetching: false,
+            error: null,
+            refetch: vi.fn(),
+          }),
+        },
         driveExport: {
-          status: { useQuery: () => ({ data: { connected: true, lastError: null, failedExports: 0 }, refetch: vi.fn() }) },
+          status: {
+            useQuery: () => ({
+              data: { connected: true, lastError: null, failedExports: 0 },
+              refetch: vi.fn(),
+            }),
+          },
           retry: { useMutation: mutation },
           retryAllFailed: { useMutation: mutation },
         },
@@ -60,12 +130,17 @@ const { default: AdminLoadMore } = await import("./AdminLoadMore");
 const { ADMIN_SEARCH_DELAY_MS } = await import("./adminSearch");
 
 const render = () => renderStateful(RecruitmentTab) as ReactElement;
-const propsOf = (tree: ReactElement, type: unknown) => elementsOf(tree).find(element => element.type === type)!.props;
-const sent = () => view.requests.map(({ search, offset }) => ({ search, offset }));
+const propsOf = (tree: ReactElement, type: unknown) =>
+  elementsOf(tree).find(element => element.type === type)!.props;
+const sent = () =>
+  view.requests.map(({ search, offset }) => ({ search, offset }));
 
 beforeEach(() => {
   vi.useFakeTimers();
-  view.page = { items: [dossier(1, "Dupont"), dossier(2, "Martin")], total: 120 };
+  view.page = {
+    items: [dossier(1, "Dupont"), dossier(2, "Martin")],
+    total: 120,
+  };
 });
 afterEach(() => {
   resetStatefulHooks();
@@ -77,64 +152,112 @@ describe("ADM-02 — recherche dans les candidatures", () => {
     let tree = render();
     (propsOf(tree, AdminLoadMore).onLoadMore as () => void)();
     tree = render();
-    expect(sent()).toEqual([{ search: undefined, offset: 0 }, { search: undefined, offset: 50 }]);
+    expect(sent()).toEqual([
+      { search: undefined, offset: 0 },
+      { search: undefined, offset: 50 },
+    ]);
 
-    (propsOf(tree, AdminSearchField).onChange as (value: string) => void)("dupont jean");
+    (propsOf(tree, AdminSearchField).onChange as (value: string) => void)(
+      "dupont jean"
+    );
     tree = render();
     // Still typing: the pages already loaded stay as they are.
-    expect(sent()).toEqual([{ search: undefined, offset: 0 }, { search: undefined, offset: 50 }]);
+    expect(sent()).toEqual([
+      { search: undefined, offset: 0 },
+      { search: undefined, offset: 50 },
+    ]);
     expect(propsOf(tree, AdminSearchField).value).toBe("dupont jean");
     expect(propsOf(tree, AdminSearchField).status).toBe("");
 
     vi.advanceTimersByTime(ADMIN_SEARCH_DELAY_MS);
     tree = render();
-    expect(view.requests).toEqual([{ search: "dupont jean", limit: 50, offset: 0 }]);
-    expect(renderToStaticMarkup(tree)).toContain("2 sur 120 candidature(s) pour « dupont jean »");
+    expect(view.requests).toEqual([
+      { search: "dupont jean", limit: 50, offset: 0 },
+    ]);
+    expect(renderToStaticMarkup(tree)).toContain(
+      "2 sur 120 candidature(s) pour « dupont jean »"
+    );
     // The same count is read out to screen readers.
-    expect(propsOf(tree, AdminSearchField).status).toBe("2 sur 120 candidature(s) pour « dupont jean »");
+    expect(propsOf(tree, AdminSearchField).status).toBe(
+      "2 sur 120 candidature(s) pour « dupont jean »"
+    );
   });
 
   it("garde les autres filtres avec la recherche, et la croix revient à la liste complète", () => {
     let tree = render();
-    const status = elementsOf(tree).find(element => element.type === "select" && element.props.value === "")!;
-    (status.props.onChange as (event: { target: { value: string } }) => void)({ target: { value: "shortlisted" } });
+    const status = elementsOf(tree).find(
+      element => element.type === "select" && element.props.value === ""
+    )!;
+    (status.props.onChange as (event: { target: { value: string } }) => void)({
+      target: { value: "shortlisted" },
+    });
     tree = render();
-    (propsOf(tree, AdminSearchField).onChange as (value: string) => void)("CV1");
+    (propsOf(tree, AdminSearchField).onChange as (value: string) => void)(
+      "CV1"
+    );
     render();
     vi.advanceTimersByTime(ADMIN_SEARCH_DELAY_MS);
-    tree = render();
-    expect(view.requests).toEqual([{ status: "shortlisted", search: "CV1", limit: 50, offset: 0 }]);
+    render();
+    expect(view.requests).toEqual([
+      { status: "shortlisted", search: "CV1", limit: 50, offset: 0 },
+    ]);
 
     view.page = { items: [], total: 0 };
     tree = render();
-    expect(renderToStaticMarkup(tree)).toContain("Aucune candidature ne correspond à « CV1 » avec ces filtres.");
-    expect(propsOf(tree, AdminSearchField).status).toBe("Aucun résultat pour « CV1 »");
+    expect(renderToStaticMarkup(tree)).toContain(
+      "Aucune candidature ne correspond à « CV1 » avec ces filtres."
+    );
+    expect(propsOf(tree, AdminSearchField).status).toBe(
+      "Aucun résultat pour « CV1 »"
+    );
 
     (propsOf(tree, AdminSearchField).onClear as () => void)();
     tree = render();
-    expect(view.requests).toEqual([{ status: "shortlisted", limit: 50, offset: 0 }]);
-    expect(propsOf(tree, AdminSearchField)).toMatchObject({ value: "", status: "" });
+    expect(view.requests).toEqual([
+      { status: "shortlisted", limit: 50, offset: 0 },
+    ]);
+    expect(propsOf(tree, AdminSearchField)).toMatchObject({
+      value: "",
+      status: "",
+    });
   });
 
   it("dit quand un profil de matching n’a pu être vérifié que sur les premiers dossiers de la liste", () => {
     expect(renderToStaticMarkup(render())).not.toContain("Profil appliqué");
 
-    view.page = { items: [dossier(1, "Dupont")], total: 1, profileScanLimit: 10_000 } as typeof view.page;
-    expect(renderToStaticMarkup(render())).toMatch(/Profil appliqué aux 10\s000 premières candidatures de la liste seulement : ajoutez un filtre \(statut, spécialité, pays\)/);
+    view.page = {
+      items: [dossier(1, "Dupont")],
+      total: 1,
+      profileScanLimit: 10_000,
+    } as typeof view.page;
+    expect(renderToStaticMarkup(render())).toMatch(
+      /Profil appliqué aux 10\s000 premières candidatures de la liste seulement : ajoutez un filtre \(statut, spécialité, pays\)/
+    );
 
     // No match within the limit: the matching dossiers may lie beyond it, so the
     // empty state keeps the warning.
-    view.page = { items: [], total: 0, profileScanLimit: 10_000 } as typeof view.page;
+    view.page = {
+      items: [],
+      total: 0,
+      profileScanLimit: 10_000,
+    } as typeof view.page;
     const empty = renderToStaticMarkup(render());
-    expect(empty).toMatch(/Profil appliqué aux 10\s000 premières candidatures de la liste seulement/);
+    expect(empty).toMatch(
+      /Profil appliqué aux 10\s000 premières candidatures de la liste seulement/
+    );
     expect(empty).toContain("Aucune candidature ne correspond aux filtres.");
   });
 });
 
 describe("ADM-20 — filtres saisis de la liste", () => {
   const typeIn = (tree: ReactElement, placeholder: string, value: string) => {
-    const input = elementsOf(tree).find(element => element.type === "input" && element.props.placeholder === placeholder)!;
-    (input.props.onChange as (event: { target: { value: string } }) => void)({ target: { value } });
+    const input = elementsOf(tree).find(
+      element =>
+        element.type === "input" && element.props.placeholder === placeholder
+    )!;
+    (input.props.onChange as (event: { target: { value: string } }) => void)({
+      target: { value },
+    });
   };
 
   it("n’interroge le serveur qu’une fois la frappe en pause, pour la spécialité, le pays, la langue, la certification et le score", () => {
@@ -150,7 +273,9 @@ describe("ADM-20 — filtres saisis de la liste", () => {
     }
     vi.advanceTimersByTime(1);
     render();
-    expect(view.requests).toEqual([{ specialty: "anesthésie", limit: 50, offset: 0 }]);
+    expect(view.requests).toEqual([
+      { specialty: "anesthésie", limit: 50, offset: 0 },
+    ]);
 
     let tree = render();
     typeIn(tree, "Ex. Allemagne", "Qatar");
@@ -158,12 +283,30 @@ describe("ADM-20 — filtres saisis de la liste", () => {
     typeIn(tree, "Ex. ACLS, ATLS", "ACLS");
     typeIn(tree, "Ex. 80", "70");
     render();
-    expect(view.requests).toEqual([{ specialty: "anesthésie", limit: 50, offset: 0 }]);
+    expect(view.requests).toEqual([
+      { specialty: "anesthésie", limit: 50, offset: 0 },
+    ]);
     vi.advanceTimersByTime(ADMIN_SEARCH_DELAY_MS);
     tree = render();
-    expect(view.requests).toEqual([{ country: "Qatar", specialty: "anesthésie", language: "arabe", certification: "ACLS", minimumScore: 70, limit: 50, offset: 0 }]);
+    expect(view.requests).toEqual([
+      {
+        country: "Qatar",
+        specialty: "anesthésie",
+        language: "arabe",
+        certification: "ACLS",
+        minimumScore: 70,
+        limit: 50,
+        offset: 0,
+      },
+    ]);
     // The typed values stay in their fields meanwhile.
-    expect(elementsOf(tree).find(element => element.type === "input" && element.props.placeholder === "Ex. anesthésie")!.props.value).toBe("anesthésie");
+    expect(
+      elementsOf(tree).find(
+        element =>
+          element.type === "input" &&
+          element.props.placeholder === "Ex. anesthésie"
+      )!.props.value
+    ).toBe("anesthésie");
   });
 });
 
@@ -171,12 +314,20 @@ describe("IA-02 — aide des langues requises d’un profil de matching", () => 
   it("donne les autres noms d’une langue chacun dans sa langue, pour un lecteur d’écran", () => {
     // ADM-20: the profiles' form is folded behind « Gérer les profils », above the list.
     const folded = render();
-    expect(renderToStaticMarkup(folded)).not.toContain("recruitment-profile-languages-help");
-    const manage = elementsOf(folded).find(element => element.props["aria-controls"] === "recruitment-profiles-panel")!;
+    expect(renderToStaticMarkup(folded)).not.toContain(
+      "recruitment-profile-languages-help"
+    );
+    const manage = elementsOf(folded).find(
+      element => element.props["aria-controls"] === "recruitment-profiles-panel"
+    )!;
     expect(manage.props["aria-expanded"]).toBe(false);
     (manage.props.onClick as () => void)();
     const markup = renderToStaticMarkup(render());
-    expect(markup).toContain('aria-describedby="recruitment-profile-languages-help"');
-    expect(markup).toContain('(<span lang="en">French</span>, <span lang="de">Englisch</span>, <span lang="zh">阿拉伯语</span>…)');
+    expect(markup).toContain(
+      'aria-describedby="recruitment-profile-languages-help"'
+    );
+    expect(markup).toContain(
+      '(<span lang="en">French</span>, <span lang="de">Englisch</span>, <span lang="zh">阿拉伯语</span>…)'
+    );
   });
 });

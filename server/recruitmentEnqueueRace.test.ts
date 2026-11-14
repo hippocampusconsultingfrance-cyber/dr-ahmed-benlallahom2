@@ -18,7 +18,10 @@ function enqueueDatabase(reads: JobRead[], jobRowCounts: number[]) {
   let readIndex = 0;
   let jobWriteIndex = 0;
   const jobWrites: Array<{ values: Record<string, unknown>; where: SQL }> = [];
-  const applicationWrites: Array<{ values: Record<string, unknown>; where: SQL }> = [];
+  const applicationWrites: Array<{
+    values: Record<string, unknown>;
+    where: SQL;
+  }> = [];
   const db = {
     select: vi.fn((selection: SelectedFields) => {
       if (readIndex >= reads.length) return queryBuilder.select(selection);
@@ -26,7 +29,9 @@ function enqueueDatabase(reads: JobRead[], jobRowCounts: number[]) {
         from: (table: unknown) => {
           expect(table).toBe(cvProcessingJobs);
           return {
-            where: () => ({ orderBy: () => ({ limit: async () => [reads[readIndex++]] }) }),
+            where: () => ({
+              orderBy: () => ({ limit: async () => [reads[readIndex++]] }),
+            }),
           };
         },
       };
@@ -44,7 +49,9 @@ function enqueueDatabase(reads: JobRead[], jobRowCounts: number[]) {
         },
       }),
     })),
-    insert: vi.fn(() => { throw new Error("unexpected insert"); }),
+    insert: vi.fn(() => {
+      throw new Error("unexpected insert");
+    }),
   };
   database.getDb.mockResolvedValue(db);
   return { db, jobWrites, applicationWrites };
@@ -56,17 +63,27 @@ describe("relance concurrente de l’analyse CV", () => {
   it("n’écrase pas le job qu’un worker vient de revendiquer", async () => {
     const selected = { id: 7, status: "retry" as const, attempts: 1 };
     const { db, jobWrites, applicationWrites } = enqueueDatabase(
-      [selected, { id: 7, status: "running", attempts: 2 }], [0],
+      [selected, { id: 7, status: "running", attempts: 2 }],
+      [0]
     );
 
-    const result = await enqueueCvAnalysis(42, new Date("2026-10-07T06:00:00Z"));
+    const result = await enqueueCvAnalysis(
+      42,
+      new Date("2026-10-07T06:00:00Z")
+    );
 
-    expect(result).toEqual({ queued: false, accelerated: false, alreadyRunning: true });
+    expect(result).toEqual({
+      queued: false,
+      accelerated: false,
+      alreadyRunning: true,
+    });
     expect(jobWrites).toHaveLength(1);
     const { sql, params } = dialect.sqlToQuery(jobWrites[0].where);
     expect(sql).toContain('"job_status" =');
     expect(sql).toContain('"attempts" =');
-    expect(params).toEqual(expect.arrayContaining([selected.id, selected.status, selected.attempts]));
+    expect(params).toEqual(
+      expect.arrayContaining([selected.id, selected.status, selected.attempts])
+    );
     expect(applicationWrites).toHaveLength(0);
     expect(db.insert).not.toHaveBeenCalled();
   });
@@ -75,15 +92,24 @@ describe("relance concurrente de l’analyse CV", () => {
     const selected = { id: 8, status: "queued" as const, attempts: 1 };
     const { jobWrites, applicationWrites } = enqueueDatabase([selected], [1]);
 
-    const result = await enqueueCvAnalysis(43, new Date("2026-10-07T06:00:00Z"));
+    const result = await enqueueCvAnalysis(
+      43,
+      new Date("2026-10-07T06:00:00Z")
+    );
 
-    expect(result).toEqual({ queued: false, accelerated: true, alreadyRunning: false });
+    expect(result).toEqual({
+      queued: false,
+      accelerated: true,
+      alreadyRunning: false,
+    });
     expect(jobWrites).toHaveLength(1);
     expect(applicationWrites).toHaveLength(1);
     const { sql, params } = dialect.sqlToQuery(applicationWrites[0].where);
     expect(sql).toContain('exists (select "id" from "cv_processing_jobs"');
     expect(sql).toContain('"cv_processing_jobs"."job_status" =');
     expect(sql).toContain('"cv_processing_jobs"."attempts" =');
-    expect(params).toEqual(expect.arrayContaining([43, selected.id, "queued", selected.attempts]));
+    expect(params).toEqual(
+      expect.arrayContaining([43, selected.id, "queued", selected.attempts])
+    );
   });
 });

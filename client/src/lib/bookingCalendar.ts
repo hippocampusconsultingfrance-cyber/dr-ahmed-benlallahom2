@@ -13,11 +13,18 @@ export type BookingCalendarEvent = {
 };
 
 function icsUtc(date: Date): string {
-  return date.toISOString().replace(/\.\d{3}Z$/, "Z").replace(/[-:]/g, "");
+  return date
+    .toISOString()
+    .replace(/\.\d{3}Z$/, "Z")
+    .replace(/[-:]/g, "");
 }
 
 function escapeIcsText(value: string): string {
-  return value.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+  return value
+    .replace(/\\/g, "\\\\")
+    .replace(/;/g, "\\;")
+    .replace(/,/g, "\\,")
+    .replace(/\r?\n/g, "\\n");
 }
 
 /** Lines of at most 75 octets (RFC 5545 §3.1), continued by a leading space, without splitting a character. */
@@ -40,8 +47,13 @@ function foldIcsLine(line: string): string {
   return parts.join("\r\n ");
 }
 
-export function buildBookingIcs(event: BookingCalendarEvent, now: Date = new Date()): string {
-  const end = new Date(event.start.getTime() + event.durationMinutes * 60 * 1000);
+export function buildBookingIcs(
+  event: BookingCalendarEvent,
+  now: Date = new Date()
+): string {
+  const end = new Date(
+    event.start.getTime() + event.durationMinutes * 60 * 1000
+  );
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
@@ -63,7 +75,9 @@ export function buildBookingIcs(event: BookingCalendarEvent, now: Date = new Dat
 
 /** Hands the .ics to the browser as a download (opened by the calendar app on phones). */
 export function downloadBookingIcs(content: string, fileName: string) {
-  const url = URL.createObjectURL(new Blob([content], { type: "text/calendar;charset=utf-8" }));
+  const url = URL.createObjectURL(
+    new Blob([content], { type: "text/calendar;charset=utf-8" })
+  );
   const link = document.createElement("a");
   link.href = url;
   link.download = fileName;

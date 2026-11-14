@@ -4,7 +4,13 @@ const { storagePutOnce } = vi.hoisted(() => ({ storagePutOnce: vi.fn() }));
 
 vi.mock("./storage.js", () => ({ storagePutOnce }));
 
-import { buildInvoiceContent, formatInvoiceAmount, generateInvoicePDF, renderInvoicePDF, type InvoiceData } from "./invoice";
+import {
+  buildInvoiceContent,
+  formatInvoiceAmount,
+  generateInvoicePDF,
+  renderInvoicePDF,
+  type InvoiceData,
+} from "./invoice";
 import { resolveInvoiceSeller } from "./invoiceSeller";
 import { HIPPOCAMPUS_LEGAL } from "../shared/legalIdentity";
 
@@ -44,7 +50,11 @@ describe("génération de facture PDF", () => {
   beforeEach(() => {
     process.env.TZ = "UTC";
     storagePutOnce.mockClear();
-    storagePutOnce.mockResolvedValue({ key: "invoices/FAC-2026-000042-APTTEST000001.pdf", url: "https://storage.test/invoice.pdf", uploaded: true });
+    storagePutOnce.mockResolvedValue({
+      key: "invoices/FAC-2026-000042-APTTEST000001.pdf",
+      url: "https://storage.test/invoice.pdf",
+      uploaded: true,
+    });
   });
   afterEach(() => {
     if (originalTz === undefined) delete process.env.TZ;
@@ -55,13 +65,22 @@ describe("génération de facture PDF", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     try {
       vi.setSystemTime(new Date("2026-10-12T06:20:00.000Z"));
-      const first = await generateInvoicePDF(nightInvoice, resolveInvoiceSeller({}));
+      const first = await generateInvoicePDF(
+        nightInvoice,
+        resolveInvoiceSeller({})
+      );
       // Retry by the next daily cron, one day later.
       vi.setSystemTime(new Date("2026-10-13T06:20:07.000Z"));
-      const retry = await generateInvoicePDF(nightInvoice, resolveInvoiceSeller({}));
+      const retry = await generateInvoicePDF(
+        nightInvoice,
+        resolveInvoiceSeller({})
+      );
       expect(retry.buffer.equals(first.buffer)).toBe(true);
       // Same exact key on every attempt (no random suffix): the copy stored first is kept, never a second one.
-      expect(storagePutOnce.mock.calls.map(([key]) => key)).toEqual(["invoices/FAC-2026-000042-APTTEST000001.pdf", "invoices/FAC-2026-000042-APTTEST000001.pdf"]);
+      expect(storagePutOnce.mock.calls.map(([key]) => key)).toEqual([
+        "invoices/FAC-2026-000042-APTTEST000001.pdf",
+        "invoices/FAC-2026-000042-APTTEST000001.pdf",
+      ]);
     } finally {
       vi.useRealTimers();
     }
@@ -70,38 +89,82 @@ describe("génération de facture PDF", () => {
   it("ne reconstruit pas une facture dont la copie archivée n’a pas pu être vérifiée : stockage indisponible, elle n’est rendue qu’au nouvel essai (EXPL-02)", async () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     // Vercel Blob cannot say whether the invoice was stored at its issue (head() fails).
-    storagePutOnce.mockRejectedValueOnce(Object.assign(new Error("storage_check_failed"), { code: "storage_service_unavailable" }));
-    await expect(generateInvoicePDF({ ...nightInvoice, customerEmail: "adresse.corrigee@example.test" }, resolveInvoiceSeller({}))).rejects.toThrow("storage_check_failed");
+    storagePutOnce.mockRejectedValueOnce(
+      Object.assign(new Error("storage_check_failed"), {
+        code: "storage_service_unavailable",
+      })
+    );
+    await expect(
+      generateInvoicePDF(
+        { ...nightInvoice, customerEmail: "adresse.corrigee@example.test" },
+        resolveInvoiceSeller({})
+      )
+    ).rejects.toThrow("storage_check_failed");
 
     // None stored yet, and its upload fails: the invoice just built is the one issued.
-    storagePutOnce.mockRejectedValueOnce(Object.assign(new Error("storage_upload_failed"), { code: "storage_service_unavailable" }));
-    const unstored = await generateInvoicePDF(nightInvoice, resolveInvoiceSeller({}));
+    storagePutOnce.mockRejectedValueOnce(
+      Object.assign(new Error("storage_upload_failed"), {
+        code: "storage_service_unavailable",
+      })
+    );
+    const unstored = await generateInvoicePDF(
+      nightInvoice,
+      resolveInvoiceSeller({})
+    );
     expect(unstored.buffer.subarray(0, 5).toString()).toBe("%PDF-");
     expect(unstored.url).toBe("");
   });
 
   it("à sa première émission, une facture est rendue même quand le stockage ne peut pas être vérifié : aucune copie d’un numéro tout juste attribué n’existe (EXPL-02)", async () => {
-    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    storagePutOnce.mockRejectedValueOnce(Object.assign(new Error("storage_check_failed"), { code: "storage_store_suspended" }));
-    const issued = await generateInvoicePDF(nightInvoice, resolveInvoiceSeller({}), { issuedNow: true });
-    expect(issued.buffer.equals(await renderInvoicePDF(nightInvoice, resolveInvoiceSeller({})))).toBe(true);
+    const error = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    storagePutOnce.mockRejectedValueOnce(
+      Object.assign(new Error("storage_check_failed"), {
+        code: "storage_store_suspended",
+      })
+    );
+    const issued = await generateInvoicePDF(
+      nightInvoice,
+      resolveInvoiceSeller({}),
+      { issuedNow: true }
+    );
+    expect(
+      issued.buffer.equals(
+        await renderInvoicePDF(nightInvoice, resolveInvoiceSeller({}))
+      )
+    ).toBe(true);
     expect(issued.url).toBe("");
     // The cause is named in the log, not only the error's class.
-    expect(error).toHaveBeenCalledWith(expect.any(String), "storage_check_failed", "storage_store_suspended");
+    expect(error).toHaveBeenCalledWith(
+      expect.any(String),
+      "storage_check_failed",
+      "storage_store_suspended"
+    );
   });
 
   it("produit un PDF A4 stockable sous son numéro de facture", async () => {
-    const invoice = await generateInvoicePDF(nightInvoice, resolveInvoiceSeller({}));
+    const invoice = await generateInvoicePDF(
+      nightInvoice,
+      resolveInvoiceSeller({})
+    );
 
     expect(invoice.buffer.subarray(0, 5).toString()).toBe("%PDF-");
     expect(invoice.buffer.length).toBeGreaterThan(1_000);
-    expect(storagePutOnce).toHaveBeenCalledWith("invoices/FAC-2026-000042-APTTEST000001.pdf", expect.any(Buffer), "application/pdf");
+    expect(storagePutOnce).toHaveBeenCalledWith(
+      "invoices/FAC-2026-000042-APTTEST000001.pdf",
+      expect.any(Buffer),
+      "application/pdf"
+    );
   });
 
   it("imprime l’heure de Paris, le numéro séquentiel et l’identité du vendeur même avec TZ=UTC", async () => {
     expect(new Date(nightInvoice.appointmentDate).getHours()).toBe(22); // processus réellement en UTC
 
-    const invoice = await generateInvoicePDF(nightInvoice, resolveInvoiceSeller({}));
+    const invoice = await generateInvoicePDF(
+      nightInvoice,
+      resolveInvoiceSeller({})
+    );
     const text = await pdfText(invoice.buffer);
 
     expect(text).toContain("FAC-2026-000042");
@@ -123,23 +186,38 @@ describe("génération de facture PDF", () => {
   });
 
   it("n’invente aucune mention de TVA : la ligne vient uniquement de INVOICE_VAT_MENTION", () => {
-    const withoutVat = buildInvoiceContent(nightInvoice, resolveInvoiceSeller({}));
+    const withoutVat = buildInvoiceContent(
+      nightInvoice,
+      resolveInvoiceSeller({})
+    );
     expect(withoutVat.vatLines).toEqual([]);
     expect(withoutVat.sellerLines.join("\n")).not.toMatch(/TVA/);
 
-    const withVat = buildInvoiceContent(nightInvoice, resolveInvoiceSeller({
-      INVOICE_VAT_MENTION: "Mention TVA validée par l’expert-comptable",
-      INVOICE_SELLER_VAT_NUMBER: "FR00TEST",
-    }));
-    expect(withVat.vatLines).toEqual(["Mention TVA validée par l’expert-comptable"]);
-    expect(withVat.sellerLines).toContain("N° TVA intracommunautaire : FR00TEST");
+    const withVat = buildInvoiceContent(
+      nightInvoice,
+      resolveInvoiceSeller({
+        INVOICE_VAT_MENTION: "Mention TVA validée par l’expert-comptable",
+        INVOICE_SELLER_VAT_NUMBER: "FR00TEST",
+      })
+    );
+    expect(withVat.vatLines).toEqual([
+      "Mention TVA validée par l’expert-comptable",
+    ]);
+    expect(withVat.sellerLines).toContain(
+      "N° TVA intracommunautaire : FR00TEST"
+    );
   });
 
   it("permet de remplacer l’identité du vendeur par variables d’environnement", () => {
-    const seller = resolveInvoiceSeller({ INVOICE_SELLER_NAME: "Autre entité", INVOICE_SELLER_ADDRESS: "1 rue Test, 75001 Paris" });
+    const seller = resolveInvoiceSeller({
+      INVOICE_SELLER_NAME: "Autre entité",
+      INVOICE_SELLER_ADDRESS: "1 rue Test, 75001 Paris",
+    });
     const content = buildInvoiceContent(nightInvoice, seller);
     expect(content.sellerLines[0]).toBe("Autre entité");
-    expect(content.sellerLines).toContain("Siège social : 1 rue Test, 75001 Paris");
+    expect(content.sellerLines).toContain(
+      "Siège social : 1 rue Test, 75001 Paris"
+    );
     expect(content.sellerLines).toContain(HIPPOCAMPUS_LEGAL.rcs);
   });
 

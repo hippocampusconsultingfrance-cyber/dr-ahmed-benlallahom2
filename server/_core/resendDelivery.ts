@@ -1,5 +1,10 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { pauseWithinDeadline, startFitsDeadline, startFitsDeadlineAfter, waitFitsDeadline } from "../processingDeadline";
+import {
+  pauseWithinDeadline,
+  startFitsDeadline,
+  startFitsDeadlineAfter,
+  waitFitsDeadline,
+} from "../processingDeadline";
 
 /**
  * How the app reads a Resend refusal (ABUS-03), shared by the emails of
@@ -21,27 +26,44 @@ import { pauseWithinDeadline, startFitsDeadline, startFitsDeadlineAfter, waitFit
  *   the sending configuration (API key, sender); resendRefusedThisMessage
  *   tells them apart.
  */
-export type ResendDeliveryFailureCode = "provider_rejected" | "delivery_exception" | "rate_limited" | "quota";
+export type ResendDeliveryFailureCode =
+  | "provider_rejected"
+  | "delivery_exception"
+  | "rate_limited"
+  | "quota";
 
 type ResendError = { name?: string; statusCode?: number | null };
 
-const RESEND_QUOTA_ERRORS = new Set(["daily_quota_exceeded", "monthly_quota_exceeded"]);
+const RESEND_QUOTA_ERRORS = new Set([
+  "daily_quota_exceeded",
+  "monthly_quota_exceeded",
+]);
 
-export function resendDeliveryFailureCode(error: ResendError): ResendDeliveryFailureCode {
-  const statusCode = typeof error.statusCode === "number" ? error.statusCode : null;
+export function resendDeliveryFailureCode(
+  error: ResendError
+): ResendDeliveryFailureCode {
+  const statusCode =
+    typeof error.statusCode === "number" ? error.statusCode : null;
   const providerErrorName = typeof error.name === "string" ? error.name : null;
-  if (providerErrorName && RESEND_QUOTA_ERRORS.has(providerErrorName)) return "quota";
-  if (providerErrorName === "rate_limit_exceeded" || statusCode === 429) return "rate_limited";
-  return statusCode === null
-    || statusCode === 408
-    || statusCode >= 500
-    || providerErrorName === "concurrent_idempotent_requests"
+  if (providerErrorName && RESEND_QUOTA_ERRORS.has(providerErrorName))
+    return "quota";
+  if (providerErrorName === "rate_limit_exceeded" || statusCode === 429)
+    return "rate_limited";
+  return statusCode === null ||
+    statusCode === 408 ||
+    statusCode >= 500 ||
+    providerErrorName === "concurrent_idempotent_requests"
     ? "delivery_exception"
     : "provider_rejected";
 }
 
 // The sending configuration, not one message: refused for every email until corrected.
-const RESEND_CONFIGURATION_ERRORS = new Set(["missing_api_key", "invalid_api_key", "restricted_api_key", "invalid_from_address"]);
+const RESEND_CONFIGURATION_ERRORS = new Set([
+  "missing_api_key",
+  "invalid_api_key",
+  "restricted_api_key",
+  "invalid_from_address",
+]);
 
 /**
  * Whether a provider_rejected refusal is about this very message (an address
@@ -53,8 +75,10 @@ const RESEND_CONFIGURATION_ERRORS = new Set(["missing_api_key", "invalid_api_key
 export function resendRefusedThisMessage(error: ResendError): boolean {
   if (resendDeliveryFailureCode(error) !== "provider_rejected") return false;
   const providerErrorName = typeof error.name === "string" ? error.name : null;
-  return (error.statusCode === 400 || error.statusCode === 422)
-    && !(providerErrorName && RESEND_CONFIGURATION_ERRORS.has(providerErrorName));
+  return (
+    (error.statusCode === 400 || error.statusCode === 422) &&
+    !(providerErrorName && RESEND_CONFIGURATION_ERRORS.has(providerErrorName))
+  );
 }
 
 /**
@@ -64,13 +88,23 @@ export function resendRefusedThisMessage(error: ResendError): boolean {
  * right away); a longer delay is left to the later retries. Mutable so tests
  * can shorten it.
  */
-export const resendRateLimitRetry = { defaultDelayMs: 1_000, maxDelayMs: 5_000 };
+export const resendRateLimitRetry = {
+  defaultDelayMs: 1_000,
+  maxDelayMs: 5_000,
+};
 
-export function resendRetryAfterMs(headers: Record<string, string> | null | undefined): number | null {
+export function resendRetryAfterMs(
+  headers: Record<string, string> | null | undefined
+): number | null {
   const header = headers?.["retry-after"];
   const seconds = header === undefined ? Number.NaN : Number(header);
-  const delayMs = Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : resendRateLimitRetry.defaultDelayMs;
-  return delayMs <= resendRateLimitRetry.maxDelayMs && waitFitsDeadline(delayMs) ? delayMs : null;
+  const delayMs =
+    Number.isFinite(seconds) && seconds >= 0
+      ? seconds * 1000
+      : resendRateLimitRetry.defaultDelayMs;
+  return delayMs <= resendRateLimitRetry.maxDelayMs && waitFitsDeadline(delayMs)
+    ? delayMs
+    : null;
 }
 
 /**
@@ -81,7 +115,11 @@ export function resendRetryAfterMs(headers: Record<string, string> | null | unde
  * processing's next run an owner security alert of this category whose slot
  * came too late (deferAlertToNextRun); true once queued.
  */
-type SendSlot = { wait: (mayStart: () => boolean) => Promise<boolean>; longestWaitMs: () => number; deferAlert?: (category: string) => Promise<boolean> };
+type SendSlot = {
+  wait: (mayStart: () => boolean) => Promise<boolean>;
+  longestWaitMs: () => number;
+  deferAlert?: (category: string) => Promise<boolean>;
+};
 const sendSlotStorage = new AsyncLocalStorage<SendSlot>();
 
 /**
@@ -92,7 +130,10 @@ const sendSlotStorage = new AsyncLocalStorage<SendSlot>();
  * an owner failure alert (alertSendSlot), wait for `sendSlot` as well, so they
  * do not leave right after a send of the instance.
  */
-export function runWithSendSlot<T>(sendSlot: SendSlot, run: () => Promise<T>): Promise<T> {
+export function runWithSendSlot<T>(
+  sendSlot: SendSlot,
+  run: () => Promise<T>
+): Promise<T> {
   return sendSlotStorage.run(sendSlot, run);
 }
 
@@ -101,7 +142,9 @@ export function runWithSendSlot<T>(sendSlot: SendSlot, run: () => Promise<T>): P
  * false, the try given up and the slot left to the next send, when `mayStart`
  * says it no longer starts, before the wait or at the slot.
  */
-export async function sendSlotBeforeNewTry(mayStart: () => boolean): Promise<boolean> {
+export async function sendSlotBeforeNewTry(
+  mayStart: () => boolean
+): Promise<boolean> {
   if (!mayStart()) return false;
   const sendSlot = sendSlotStorage.getStore();
   return !sendSlot || sendSlot.wait(mayStart);
@@ -133,7 +176,10 @@ export async function pauseBeforeNewTry(waitMs: number): Promise<boolean> {
 export async function alertSendSlot(): Promise<boolean> {
   const sendSlot = sendSlotStorage.getStore();
   if (!sendSlot) return true;
-  return startFitsDeadlineAfter(sendSlot.longestWaitMs()) && sendSlot.wait(startFitsDeadline);
+  return (
+    startFitsDeadlineAfter(sendSlot.longestWaitMs()) &&
+    sendSlot.wait(startFitsDeadline)
+  );
 }
 
 /**
@@ -156,9 +202,18 @@ export const RESEND_QUOTA_SECURITY_CATEGORY = "resend_quota_exceeded";
  * answers with its rate limit and that delay is short enough for a request.
  * A network error is thrown as before.
  */
-export async function sendWithRateLimitRetry<T extends { error: ResendError | null; headers?: Record<string, string> | null }>(send: () => Promise<T>): Promise<T> {
+export async function sendWithRateLimitRetry<
+  T extends {
+    error: ResendError | null;
+    headers?: Record<string, string> | null;
+  },
+>(send: () => Promise<T>): Promise<T> {
   const response = await send();
-  if (!response.error || resendDeliveryFailureCode(response.error) !== "rate_limited") return response;
+  if (
+    !response.error ||
+    resendDeliveryFailureCode(response.error) !== "rate_limited"
+  )
+    return response;
   const retryAfterMs = resendRetryAfterMs(response.headers);
   if (retryAfterMs === null) return response;
   if (!(await pauseBeforeNewTry(retryAfterMs))) return response;
@@ -170,12 +225,28 @@ export async function sendWithRateLimitRetry<T extends { error: ResendError | nu
  * payment emails included: it is logged as a high-severity security event,
  * which the daily security review reports by name. Any other error is left alone.
  */
-export async function reportResendQuotaError(error: ResendError, emailKind: string) {
-  if (typeof error.name !== "string" || !RESEND_QUOTA_ERRORS.has(error.name)) return;
+export async function reportResendQuotaError(
+  error: ResendError,
+  emailKind: string
+) {
+  if (typeof error.name !== "string" || !RESEND_QUOTA_ERRORS.has(error.name))
+    return;
   try {
     const { logSecurityEvent } = await import("../candidateSecurity");
-    await logSecurityEvent({ actorKind: "system", category: RESEND_QUOTA_SECURITY_CATEGORY, outcome: "failed", severity: "high", metadata: { quota: error.name === "monthly_quota_exceeded" ? "monthly" : "daily", emailKind } });
+    await logSecurityEvent({
+      actorKind: "system",
+      category: RESEND_QUOTA_SECURITY_CATEGORY,
+      outcome: "failed",
+      severity: "high",
+      metadata: {
+        quota: error.name === "monthly_quota_exceeded" ? "monthly" : "daily",
+        emailKind,
+      },
+    });
   } catch (logError) {
-    console.error("resend_quota_report_failed", logError instanceof Error ? logError.name : "UnknownError");
+    console.error(
+      "resend_quota_report_failed",
+      logError instanceof Error ? logError.name : "UnknownError"
+    );
   }
 }

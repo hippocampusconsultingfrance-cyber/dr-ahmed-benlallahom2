@@ -4,9 +4,17 @@ import { scrollToSectionTop } from "./scrollToSection";
 afterEach(() => vi.unstubAllGlobals());
 
 /** A section and its offset parents, as the browser lays them out (offsetTop ignores transforms). */
-function sectionAt(offsetTop: number, parentOffsetTop: number, measuredTop: number) {
+function sectionAt(
+  offsetTop: number,
+  parentOffsetTop: number,
+  measuredTop: number
+) {
   const main = { offsetTop: parentOffsetTop, offsetParent: null };
-  return { offsetTop, offsetParent: main, getBoundingClientRect: () => ({ top: measuredTop }) } as unknown as HTMLElement;
+  return {
+    offsetTop,
+    offsetParent: main,
+    getBoundingClientRect: () => ({ top: measuredTop }),
+  } as unknown as HTMLElement;
 }
 
 describe("défilement vers une section de l'accueil (PUB-01)", () => {

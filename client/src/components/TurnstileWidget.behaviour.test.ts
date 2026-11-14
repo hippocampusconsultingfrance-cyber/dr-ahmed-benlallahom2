@@ -1,35 +1,71 @@
 import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { elementsOf, renderStateful, resetStatefulHooks } from "@/testing/statefulRender";
+import {
+  elementsOf,
+  renderStateful,
+  resetStatefulHooks,
+} from "@/testing/statefulRender";
 
 // Le widget Turnstile monté avec un faux script Cloudflare : un défi en cours
 // survit aux re-rendus du formulaire, l’envoi reste bloqué sans jeton, et un
 // échec rend le jeton au formulaire (null) avec un bouton pour relancer.
 
-vi.mock("react", async importOriginal => (await import("@/testing/statefulRender")).withStatefulHooks(await importOriginal()));
-vi.mock("@/contexts/LanguageContext", () => ({ useLanguage: () => ({ language: "fr" }) }));
+vi.mock("react", async importOriginal =>
+  (await import("@/testing/statefulRender")).withStatefulHooks(
+    await importOriginal()
+  )
+);
+vi.mock("@/contexts/LanguageContext", () => ({
+  useLanguage: () => ({ language: "fr" }),
+}));
 
-type Options = { sitekey: string; callback: (token: string) => void; "error-callback": (code?: string) => boolean; "expired-callback": () => void };
-const turnstile = vi.hoisted(() => ({ renders: [] as Options[], removed: [] as string[] }));
+type Options = {
+  sitekey: string;
+  callback: (token: string) => void;
+  "error-callback": (code?: string) => boolean;
+  "expired-callback": () => void;
+};
+const turnstile = vi.hoisted(() => ({
+  renders: [] as Options[],
+  removed: [] as string[],
+}));
 
-const { TurnstileWidget, TurnstileLoadError } = await import("./TurnstileWidget");
+const { TurnstileWidget, TurnstileLoadError } = await import(
+  "./TurnstileWidget"
+);
 const { getTurnstileWidgetCopy } = await import("@/lib/publicFormCopy");
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the props of any element of the tree, read and called as each test needs
 type Element = { type: unknown; props: Record<string, any> };
 let submitListeners: Array<(event: { preventDefault: () => void }) => void>;
 let headScripts: Array<{ id: string; src: string }>;
 
 function mount(onToken: (token: string | null) => void) {
-  return renderStateful(() => TurnstileWidget({ onToken }) as ReactElement, tree => {
-    // As React would: the challenge container is attached before the effects run.
-    const container = (elementsOf(tree) as Element[]).find(element => element.props.ref && "current" in element.props.ref)!;
-    container.props.ref.current ??= {
-      closest: () => ({
-        addEventListener: (type: string, listener: (event: { preventDefault: () => void }) => void) => { if (type === "submit") submitListeners.push(listener); },
-        removeEventListener: (type: string, listener: unknown) => { if (type === "submit") submitListeners = submitListeners.filter(item => item !== listener); },
-      }),
-    };
-  });
+  return renderStateful(
+    () => TurnstileWidget({ onToken }) as ReactElement,
+    tree => {
+      // As React would: the challenge container is attached before the effects run.
+      const container = (elementsOf(tree) as Element[]).find(
+        element => element.props.ref && "current" in element.props.ref
+      )!;
+      container.props.ref.current ??= {
+        closest: () => ({
+          addEventListener: (
+            type: string,
+            listener: (event: { preventDefault: () => void }) => void
+          ) => {
+            if (type === "submit") submitListeners.push(listener);
+          },
+          removeEventListener: (type: string, listener: unknown) => {
+            if (type === "submit")
+              submitListeners = submitListeners.filter(
+                item => item !== listener
+              );
+          },
+        }),
+      };
+    }
+  );
 }
 const submitForm = () => {
   const event = { preventDefault: vi.fn() };
@@ -37,8 +73,18 @@ const submitForm = () => {
   return event.preventDefault;
 };
 /** The Cloudflare script is already on the page (another form loaded it): the challenge renders at once. */
-const useLoadedScript = () => vi.stubGlobal("document", { getElementById: () => ({ addEventListener: vi.fn(), removeEventListener: vi.fn() }), head: { appendChild: vi.fn() } });
-const loadError = (tree: ReactElement) => (elementsOf(tree) as Element[]).find(element => element.type === TurnstileLoadError);
+const useLoadedScript = () =>
+  vi.stubGlobal("document", {
+    getElementById: () => ({
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }),
+    head: { appendChild: vi.fn() },
+  });
+const loadError = (tree: ReactElement) =>
+  (elementsOf(tree) as Element[]).find(
+    element => element.type === TurnstileLoadError
+  );
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -49,14 +95,23 @@ beforeEach(() => {
   vi.stubEnv("VITE_TURNSTILE_SITE_KEY", "test-site-key");
   vi.stubGlobal("window", {
     turnstile: {
-      render: (_container: unknown, options: Options) => { turnstile.renders.push(options); return `widget-${turnstile.renders.length}`; },
+      render: (_container: unknown, options: Options) => {
+        turnstile.renders.push(options);
+        return `widget-${turnstile.renders.length}`;
+      },
       remove: (id: string) => turnstile.removed.push(id),
     },
   });
   vi.stubGlobal("document", {
     getElementById: () => null,
-    createElement: () => ({ addEventListener: vi.fn(), removeEventListener: vi.fn() }),
-    head: { appendChild: (script: { id: string; src: string }) => headScripts.push(script) },
+    createElement: () => ({
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }),
+    head: {
+      appendChild: (script: { id: string; src: string }) =>
+        headScripts.push(script),
+    },
   });
 });
 afterEach(() => {
@@ -69,7 +124,11 @@ afterEach(() => {
 describe("garde-fous Turnstile des parcours publics", () => {
   it("charge le script Cloudflare une fois et rend un défi avec la clé du site", () => {
     mount(vi.fn());
-    expect(headScripts).toEqual([expect.objectContaining({ src: "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" })]);
+    expect(headScripts).toEqual([
+      expect.objectContaining({
+        src: "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit",
+      }),
+    ]);
   });
 
   it("préserve le challenge actif lors des re-rendus sans l’invalider avant sa fin", () => {
@@ -116,7 +175,9 @@ describe("garde-fous Turnstile des parcours publics", () => {
     expect(submitForm()).toHaveBeenCalledTimes(1);
 
     const retry = loadError(mount(onToken))!;
-    expect(retry.props.copy.loadError).toContain("L’envoi reste bloqué afin de protéger vos données");
+    expect(retry.props.copy.loadError).toContain(
+      "L’envoi reste bloqué afin de protéger vos données"
+    );
     retry.props.onRetry();
     mount(onToken);
     expect(turnstile.removed).toEqual(["widget-1"]);
@@ -124,9 +185,17 @@ describe("garde-fous Turnstile des parcours publics", () => {
   });
 
   it("dit, dans chaque langue, que l’envoi reste bloqué tant que la vérification échoue", () => {
-    expect(getTurnstileWidgetCopy("fr").loadError).toContain("L’envoi reste bloqué afin de protéger vos données");
-    expect(getTurnstileWidgetCopy("en").loadError).toContain("Sending stays blocked to protect your data");
-    expect(getTurnstileWidgetCopy("de").loadError).toContain("Zum Schutz Ihrer Daten bleibt das Senden gesperrt");
-    expect(getTurnstileWidgetCopy("zh").loadError).toContain("为保护您的数据，发送仍被阻止");
+    expect(getTurnstileWidgetCopy("fr").loadError).toContain(
+      "L’envoi reste bloqué afin de protéger vos données"
+    );
+    expect(getTurnstileWidgetCopy("en").loadError).toContain(
+      "Sending stays blocked to protect your data"
+    );
+    expect(getTurnstileWidgetCopy("de").loadError).toContain(
+      "Zum Schutz Ihrer Daten bleibt das Senden gesperrt"
+    );
+    expect(getTurnstileWidgetCopy("zh").loadError).toContain(
+      "为保护您的数据，发送仍被阻止"
+    );
   });
 });

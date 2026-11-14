@@ -1,4 +1,12 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import {
   VVIP_CUSTOM_SPECIALTY_MAX_LENGTH,
   VVIP_ENVIRONMENTS,
@@ -21,7 +29,13 @@ const state = vi.hoisted(() => {
     stored: [] as string[],
     dbAvailable: true,
     // Applications already on file with the same CV checksum (duplicate check).
-    sameCvApplications: [] as Array<{ id: number; trackingId: string; email: string; specialty: string; targetCountries: string }>,
+    sameCvApplications: [] as Array<{
+      id: number;
+      trackingId: string;
+      email: string;
+      specialty: string;
+      targetCountries: string;
+    }>,
     verifyTurnstile: vi.fn(async () => undefined),
     enforceRateLimit: vi.fn(async () => undefined),
   };
@@ -30,46 +44,63 @@ process.env.CANDIDATE_AUTH_PEPPER ||= TEST_PEPPER;
 
 // Duplicate check answered from state.sameCvApplications, and the INSERT … RETURNING id gives a new application.
 const fakeDb = {
-  select: () => ({ from: () => ({ where: () => ({ limit: async () => state.sameCvApplications }) }) }),
-  execute: async (query: unknown) => { state.executed.push(query); return { rows: [{ id: 41 }] }; },
+  select: () => ({
+    from: () => ({
+      where: () => ({ limit: async () => state.sameCvApplications }),
+    }),
+  }),
+  execute: async (query: unknown) => {
+    state.executed.push(query);
+    return { rows: [{ id: 41 }] };
+  },
 };
-vi.mock("./db", () => ({ getDb: async () => (state.dbAvailable ? fakeDb : null) }));
+vi.mock("./db", () => ({
+  getDb: async () => (state.dbAvailable ? fakeDb : null),
+}));
 // Turnstile and the rate limit are simulated; the REC-03 test makes each of them refuse once.
 vi.mock("./candidateTurnstile", async importOriginal => ({
-  ...await importOriginal<typeof import("./candidateTurnstile")>(),
+  ...(await importOriginal<typeof import("./candidateTurnstile")>()),
   verifyCandidateTurnstile: state.verifyTurnstile,
 }));
 vi.mock("./candidateSecurity", async importOriginal => ({
-  ...await importOriginal<typeof import("./candidateSecurity")>(),
+  ...(await importOriginal<typeof import("./candidateSecurity")>()),
   enforcePersistentRateLimit: state.enforceRateLimit,
   logSecurityEvent: vi.fn(async () => undefined),
 }));
-vi.mock("./_core/notification", () => ({ notifyOwner: vi.fn(async () => true) }));
+vi.mock("./_core/notification", () => ({
+  notifyOwner: vi.fn(async () => true),
+}));
 vi.mock("@clerk/express", () => ({
-  clerkMiddleware: () => (_req: unknown, _res: unknown, next: () => void) => next(),
+  clerkMiddleware: () => (_req: unknown, _res: unknown, next: () => void) =>
+    next(),
   getAuth: () => ({ userId: null }),
   clerkClient: { users: { getUser: vi.fn() } },
 }));
 vi.mock("./storage", () => ({
-  storagePut: vi.fn(async (key: string) => { state.stored.push(key); return { key, url: `https://blob.test/${key}` }; }),
+  storagePut: vi.fn(async (key: string) => {
+    state.stored.push(key);
+    return { key, url: `https://blob.test/${key}` };
+  }),
   storageGetSignedUrl: vi.fn(async (key: string) => `https://blob.test/${key}`),
 }));
 vi.mock("./recruitmentEmailTrace", async importOriginal => ({
-  ...await importOriginal<typeof import("./recruitmentEmailTrace")>(),
-  sendTrackedCvApplicationConfirmationEmail: vi.fn(async (input: { trackingId: string }) => {
-    state.confirmations.push(input.trackingId);
-  }),
+  ...(await importOriginal<typeof import("./recruitmentEmailTrace")>()),
+  sendTrackedCvApplicationConfirmationEmail: vi.fn(
+    async (input: { trackingId: string }) => {
+      state.confirmations.push(input.trackingId);
+    }
+  ),
 }));
 vi.mock("./recruitmentProcessingWorker", async importOriginal => ({
-  ...await importOriginal<typeof import("./recruitmentProcessingWorker")>(),
+  ...(await importOriginal<typeof import("./recruitmentProcessingWorker")>()),
   countWaitingCvAnalyses: vi.fn(async () => 0),
 }));
 vi.mock("./recruitmentProcessing", async importOriginal => ({
-  ...await importOriginal<typeof import("./recruitmentProcessing")>(),
+  ...(await importOriginal<typeof import("./recruitmentProcessing")>()),
   enqueueCvAnalysis: vi.fn(async () => undefined),
 }));
 vi.mock("./googleDriveExport", async importOriginal => ({
-  ...await importOriginal<typeof import("./googleDriveExport")>(),
+  ...(await importOriginal<typeof import("./googleDriveExport")>()),
   enqueueCvGoogleDriveExport: vi.fn(async () => undefined),
 }));
 
@@ -84,7 +115,9 @@ beforeAll(async () => {
   baseUrl = listening.baseUrl;
   close = () => new Promise(resolve => listening.server.close(() => resolve()));
 });
-afterAll(async () => { await close(); });
+afterAll(async () => {
+  await close();
+});
 beforeEach(() => {
   state.confirmations.length = 0;
   state.executed.length = 0;
@@ -96,10 +129,26 @@ beforeEach(() => {
 
 const allEnvironments = VVIP_ENVIRONMENTS.map(environment => environment.value);
 
-function vvipBody(specialty: string, cv: Buffer = validPdfBuffer(), environments: string[] = allEnvironments, targetCountries: string[] = ["Qatar"]) {
+function vvipBody(
+  specialty: string,
+  cv: Buffer = validPdfBuffer(),
+  environments: string[] = allEnvironments,
+  targetCountries: string[] = ["Qatar"]
+) {
   return buildVvipApplicationFormData({
-    form: { ...createInitialForm(), firstName: "Amira", lastName: "Haddad", email: "amira@example.test", environments, targetCountries, yearsExperience: "12", certifications: "ATLS, ACLS, HUET, BOSIET" },
-    cv: new File([new Uint8Array(cv)], "cv-amira.pdf", { type: "application/pdf" }),
+    form: {
+      ...createInitialForm(),
+      firstName: "Amira",
+      lastName: "Haddad",
+      email: "amira@example.test",
+      environments,
+      targetCountries,
+      yearsExperience: "12",
+      certifications: "ATLS, ACLS, HUET, BOSIET",
+    },
+    cv: new File([new Uint8Array(cv)], "cv-amira.pdf", {
+      type: "application/pdf",
+    }),
     specialty,
     diplomaCountry: "MA",
     turnstileToken: "turnstile-token-accepted-by-the-mock",
@@ -108,26 +157,48 @@ function vvipBody(specialty: string, cv: Buffer = validPdfBuffer(), environments
 }
 
 async function apply(body: FormData) {
-  const response = await fetch(`${baseUrl}/api/recruitment/apply`, { method: "POST", body, headers: { "x-forwarded-for": "203.0.113.20" } });
-  return { status: response.status, body: await response.json() as Record<string, unknown> };
+  const response = await fetch(`${baseUrl}/api/recruitment/apply`, {
+    method: "POST",
+    body,
+    headers: { "x-forwarded-for": "203.0.113.20" },
+  });
+  return {
+    status: response.status,
+    body: (await response.json()) as Record<string, unknown>,
+  };
 }
 
 describe("INTL-03 — candidature VVIP avec plusieurs environnements", () => {
-  it.each(["fr", "en", "de", "zh"] as const)("accepte les 4 environnements avec la spécialité la plus longue proposée (%s)", async language => {
-    const longestSpecialty = [...vvipOffshoreCopy[language].specialties].sort((a, b) => b.length - a.length)[0];
-    const result = await apply(vvipBody(longestSpecialty));
+  it.each(["fr", "en", "de", "zh"] as const)(
+    "accepte les 4 environnements avec la spécialité la plus longue proposée (%s)",
+    async language => {
+      const longestSpecialty = [...vvipOffshoreCopy[language].specialties].sort(
+        (a, b) => b.length - a.length
+      )[0];
+      const result = await apply(vvipBody(longestSpecialty));
 
-    expect(result.status, JSON.stringify(result.body)).toBe(201);
-    expect(result.body.trackingId).toMatch(/^CV[A-Z0-9]{16}$/);
-    // The confirmation email no longer repeats the specialty (MAIL-01): check what is stored instead.
-    expect(state.confirmations).toEqual([result.body.trackingId]);
-    const storedValues = state.executed.flatMap(query => new PgDialect().sqlToQuery(query as SQL).params);
-    expect(storedValues).toContain(`[VVIP / Offshore] ${longestSpecialty}`);
-    expect(storedValues.some(value => typeof value === "string" && allEnvironments.every(environment => value.includes(environment)))).toBe(true);
-  });
+      expect(result.status, JSON.stringify(result.body)).toBe(201);
+      expect(result.body.trackingId).toMatch(/^CV[A-Z0-9]{16}$/);
+      // The confirmation email no longer repeats the specialty (MAIL-01): check what is stored instead.
+      expect(state.confirmations).toEqual([result.body.trackingId]);
+      const storedValues = state.executed.flatMap(
+        query => new PgDialect().sqlToQuery(query as SQL).params
+      );
+      expect(storedValues).toContain(`[VVIP / Offshore] ${longestSpecialty}`);
+      expect(
+        storedValues.some(
+          value =>
+            typeof value === "string" &&
+            allEnvironments.every(environment => value.includes(environment))
+        )
+      ).toBe(true);
+    }
+  );
 
   it("accepte une « Autre spécialité » saisie jusqu’à la limite du champ", async () => {
-    const result = await apply(vvipBody("R".repeat(VVIP_CUSTOM_SPECIALTY_MAX_LENGTH)));
+    const result = await apply(
+      vvipBody("R".repeat(VVIP_CUSTOM_SPECIALTY_MAX_LENGTH))
+    );
     expect(result.status, JSON.stringify(result.body)).toBe(201);
   });
 
@@ -135,18 +206,39 @@ describe("INTL-03 — candidature VVIP avec plusieurs environnements", () => {
     const cv = validPdfBuffer();
     const specialty = "Médecin urgentiste (ATLS / ACLS)";
     const [middleEast, , mining] = allEnvironments;
-    state.sameCvApplications = [{ id: 7, trackingId: "CVPREVIOUSVVIP001", email: "amira@example.test", specialty: `[VVIP / Offshore] ${specialty}`, targetCountries: JSON.stringify(["Qatar"]) }];
+    state.sameCvApplications = [
+      {
+        id: 7,
+        trackingId: "CVPREVIOUSVVIP001",
+        email: "amira@example.test",
+        specialty: `[VVIP / Offshore] ${specialty}`,
+        targetCountries: JSON.stringify(["Qatar"]),
+      },
+    ];
 
-    const sameCountries = await apply(vvipBody(specialty, cv, [middleEast], ["Qatar"]));
-    expect(sameCountries).toEqual({ status: 200, body: { success: true, duplicate: true, trackingId: "CVPREVIOUSVVIP001" } });
+    const sameCountries = await apply(
+      vvipBody(specialty, cv, [middleEast], ["Qatar"])
+    );
+    expect(sameCountries).toEqual({
+      status: 200,
+      body: { success: true, duplicate: true, trackingId: "CVPREVIOUSVVIP001" },
+    });
     expect(notifyOwner).not.toHaveBeenCalled();
 
-    const otherCountries = await apply(vvipBody(specialty, cv, [middleEast, mining], ["Qatar", "Oman"]));
-    expect(otherCountries.status, JSON.stringify(otherCountries.body)).toBe(201);
+    const otherCountries = await apply(
+      vvipBody(specialty, cv, [middleEast, mining], ["Qatar", "Oman"])
+    );
+    expect(otherCountries.status, JSON.stringify(otherCountries.body)).toBe(
+      201
+    );
     expect(otherCountries.body.trackingId).not.toBe("CVPREVIOUSVVIP001");
-    const storedValues = state.executed.flatMap(query => new PgDialect().sqlToQuery(query as SQL).params);
+    const storedValues = state.executed.flatMap(
+      query => new PgDialect().sqlToQuery(query as SQL).params
+    );
     expect(storedValues).toContain(JSON.stringify(["Qatar", "Oman"]));
-    expect(storedValues).toContain(createHash("sha256").update(cv).digest("hex"));
+    expect(storedValues).toContain(
+      createHash("sha256").update(cv).digest("hex")
+    );
     expect(notifyOwner).toHaveBeenCalledTimes(1);
     expect(vi.mocked(notifyOwner).mock.calls[0][0].content).toContain(mining);
   });
@@ -156,15 +248,32 @@ describe("INTL-03 — candidature VVIP avec plusieurs environnements", () => {
     const specialty = "Médecin urgentiste (ATLS / ACLS)";
     const [, rigs, mining] = allEnvironments;
     // Received for Qatar with « Moyen-Orient »: the environments are not stored, the countries are.
-    state.sameCvApplications = [{ id: 7, trackingId: "CVPREVIOUSVVIP001", email: "amira@example.test", specialty: `[VVIP / Offshore] ${specialty}`, targetCountries: JSON.stringify(["Qatar"]) }];
+    state.sameCvApplications = [
+      {
+        id: 7,
+        trackingId: "CVPREVIOUSVVIP001",
+        email: "amira@example.test",
+        specialty: `[VVIP / Offshore] ${specialty}`,
+        targetCountries: JSON.stringify(["Qatar"]),
+      },
+    ];
 
-    const otherEnvironments = await apply(vvipBody(specialty, cv, [rigs, mining], ["Qatar"]));
+    const otherEnvironments = await apply(
+      vvipBody(specialty, cv, [rigs, mining], ["Qatar"])
+    );
 
     // Like a standard application sent again with other languages or another message.
-    expect(otherEnvironments).toEqual({ status: 200, body: { success: true, duplicate: true, trackingId: "CVPREVIOUSVVIP001" } });
+    expect(otherEnvironments).toEqual({
+      status: 200,
+      body: { success: true, duplicate: true, trackingId: "CVPREVIOUSVVIP001" },
+    });
     expect(state.confirmations).toEqual(["CVPREVIOUSVVIP001"]);
     expect(state.stored).toEqual([]);
-    expect(state.executed.map(query => new PgDialect().sqlToQuery(query as SQL).sql).filter(text => text.includes("INSERT INTO cv_applications"))).toEqual([]);
+    expect(
+      state.executed
+        .map(query => new PgDialect().sqlToQuery(query as SQL).sql)
+        .filter(text => text.includes("INSERT INTO cv_applications"))
+    ).toEqual([]);
     expect(notifyOwner).not.toHaveBeenCalled();
   });
 
@@ -175,15 +284,23 @@ describe("INTL-03 — candidature VVIP avec plusieurs environnements", () => {
       const result = await apply(vvipBody(tooLong));
 
       expect(result.status).toBe(400);
-      expect(result.body.error).toBe("Les informations de candidature sont invalides.");
+      expect(result.body.error).toBe(
+        "Les informations de candidature sont invalides."
+      );
       expect(result.body.code).toBe("recruitment_application_invalid");
       expect(state.stored).toHaveLength(0);
       const logged = warn.mock.calls.map(call => call.join(" ")).join("\n");
-      expect(logged).toContain("Recruitment application rejected: specialty:too_big");
+      expect(logged).toContain(
+        "Recruitment application rejected: specialty:too_big"
+      );
       expect(logged).not.toContain("confidentielle");
 
-      expect(vvipSubmissionErrorMessage(result.body, "fr")).toBe("Les informations de candidature sont invalides.");
-      expect(vvipSubmissionErrorMessage(result.body, "en")).toBe("The application details are invalid.");
+      expect(vvipSubmissionErrorMessage(result.body, "fr")).toBe(
+        "Les informations de candidature sont invalides."
+      );
+      expect(vvipSubmissionErrorMessage(result.body, "en")).toBe(
+        "The application details are invalid."
+      );
     } finally {
       warn.mockRestore();
     }
@@ -193,16 +310,44 @@ describe("INTL-03 — candidature VVIP avec plusieurs environnements", () => {
 describe("REC-11 — candidature VVIP sans données inventées, email du propriétaire sans libellé interne", () => {
   /** The first ten columns of the INSERT, all bound parameters, from tracking_id to years_experience. */
   function storedApplication() {
-    const insert = state.executed.map(query => new PgDialect().sqlToQuery(query as SQL)).find(query => query.sql.includes("INSERT INTO cv_applications"))!;
-    const [, , , , , specialty, diplomaCountry, targetCountries, languages, yearsExperience] = insert.params;
-    return { specialty, diplomaCountry, targetCountries, languages, yearsExperience };
+    const insert = state.executed
+      .map(query => new PgDialect().sqlToQuery(query as SQL))
+      .find(query => query.sql.includes("INSERT INTO cv_applications"))!;
+    const [
+      ,
+      ,
+      ,
+      ,
+      ,
+      specialty,
+      diplomaCountry,
+      targetCountries,
+      languages,
+      yearsExperience,
+    ] = insert.params;
+    return {
+      specialty,
+      diplomaCountry,
+      targetCountries,
+      languages,
+      yearsExperience,
+    };
   }
 
   it("enregistre les pays et les langues du candidat, aucune expérience non saisie, le pays du diplôme en code", async () => {
     const [middleEast, rigs] = allEnvironments;
     const body = buildVvipApplicationFormData({
-      form: { ...createInitialForm(), firstName: "Amira", lastName: "Haddad", email: "amira@example.test", environments: [middleEast, rigs], targetCountries: ["Qatar", "Oman"] },
-      cv: new File([new Uint8Array(validPdfBuffer())], "cv-amira.pdf", { type: "application/pdf" }),
+      form: {
+        ...createInitialForm(),
+        firstName: "Amira",
+        lastName: "Haddad",
+        email: "amira@example.test",
+        environments: [middleEast, rigs],
+        targetCountries: ["Qatar", "Oman"],
+      },
+      cv: new File([new Uint8Array(validPdfBuffer())], "cv-amira.pdf", {
+        type: "application/pdf",
+      }),
       specialty: "Médecin urgentiste (ATLS / ACLS)",
       diplomaCountry: "MA",
       turnstileToken: "turnstile-token-accepted-by-the-mock",
@@ -212,15 +357,23 @@ describe("REC-11 — candidature VVIP sans données inventées, email du propri�
 
     expect(result.status, JSON.stringify(result.body)).toBe(201);
     // The pathway stays marked in the specialty until the owner decides on a column of its own.
-    expect(storedApplication()).toEqual({ specialty: "[VVIP / Offshore] Médecin urgentiste (ATLS / ACLS)", diplomaCountry: "MA", targetCountries: JSON.stringify(["Qatar", "Oman"]), languages: "[]", yearsExperience: null });
+    expect(storedApplication()).toEqual({
+      specialty: "[VVIP / Offshore] Médecin urgentiste (ATLS / ACLS)",
+      diplomaCountry: "MA",
+      targetCountries: JSON.stringify(["Qatar", "Oman"]),
+      languages: "[]",
+      yearsExperience: null,
+    });
     const content = String(vi.mocked(notifyOwner).mock.calls[0][0].content);
-    expect(content.split("\n")).toEqual(expect.arrayContaining([
-      "**Parcours:** VVIP & Offshore",
-      "**Spécialité:** Médecin urgentiste (ATLS / ACLS)",
-      `**Environnements:** ${middleEast}, ${rigs}`,
-      "**Pays du diplôme:** Maroc",
-      "**Pays ciblés:** Qatar, Oman",
-    ]));
+    expect(content.split("\n")).toEqual(
+      expect.arrayContaining([
+        "**Parcours:** VVIP & Offshore",
+        "**Spécialité:** Médecin urgentiste (ATLS / ACLS)",
+        `**Environnements:** ${middleEast}, ${rigs}`,
+        "**Pays du diplôme:** Maroc",
+        "**Pays ciblés:** Qatar, Oman",
+      ])
+    );
     expect(content).not.toContain("[VVIP / Offshore]");
   });
 
@@ -241,13 +394,20 @@ describe("REC-03 — refus de la vraie route affichés par la page VVIP, traduit
   const translatedLanguages = ["en", "de", "zh"] as const;
 
   /** Each refusal must give, in every other language, its own message: not the generic one, not the French text. */
-  function expectDistinctTranslations(refusals: Array<Record<string, unknown>>) {
+  function expectDistinctTranslations(
+    refusals: Array<Record<string, unknown>>
+  ) {
     for (const language of translatedLanguages) {
       const t = vvipOffshoreCopy[language];
-      const shown = refusals.map(body => vvipSubmissionErrorMessage(body, language));
+      const shown = refusals.map(body =>
+        vvipSubmissionErrorMessage(body, language)
+      );
       expect(new Set(shown).size, language).toBe(refusals.length);
       for (const [index, message] of shown.entries()) {
-        expect([t.genericError, t.fileError], `${language}: ${String(refusals[index].code)}`).not.toContain(message);
+        expect(
+          [t.genericError, t.fileError],
+          `${language}: ${String(refusals[index].code)}`
+        ).not.toContain(message);
         expect(message).not.toBe(refusals[index].error);
       }
     }
@@ -256,20 +416,47 @@ describe("REC-03 — refus de la vraie route affichés par la page VVIP, traduit
   it("anti-robot à renouveler, limite de tentatives, service indisponible", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     try {
-      state.verifyTurnstile.mockRejectedValueOnce(new Error("candidate_turnstile_invalid"));
+      state.verifyTurnstile.mockRejectedValueOnce(
+        new Error("candidate_turnstile_invalid")
+      );
       const securityCheck = await apply(vvipBody(specialty));
-      state.enforceRateLimit.mockRejectedValueOnce(new Error("candidate_security_rate_limited"));
+      state.enforceRateLimit.mockRejectedValueOnce(
+        new Error("candidate_security_rate_limited")
+      );
       const rateLimited = await apply(vvipBody(specialty));
       state.dbAvailable = false;
       const unavailable = await apply(vvipBody(specialty));
 
-      expect([securityCheck.status, rateLimited.status, unavailable.status]).toEqual([400, 400, 503]);
-      expect([securityCheck.body.code, rateLimited.body.code, unavailable.body.code]).toEqual(["recruitment_security_check_required", "recruitment_rate_limited", "recruitment_service_unavailable"]);
+      expect([
+        securityCheck.status,
+        rateLimited.status,
+        unavailable.status,
+      ]).toEqual([400, 400, 503]);
+      expect([
+        securityCheck.body.code,
+        rateLimited.body.code,
+        unavailable.body.code,
+      ]).toEqual([
+        "recruitment_security_check_required",
+        "recruitment_rate_limited",
+        "recruitment_service_unavailable",
+      ]);
       expect(state.stored).toHaveLength(0);
-      for (const result of [securityCheck, rateLimited, unavailable]) expect(vvipSubmissionErrorMessage(result.body, "fr")).toBe(result.body.error);
-      expectDistinctTranslations([securityCheck.body, rateLimited.body, unavailable.body]);
-      expect(vvipSubmissionErrorMessage(securityCheck.body, "en")).toBe("The security check must be renewed before sending.");
-      expect(vvipSubmissionErrorMessage(rateLimited.body, "en")).toBe("Too many attempts have been made. Wait one hour before trying again.");
+      for (const result of [securityCheck, rateLimited, unavailable])
+        expect(vvipSubmissionErrorMessage(result.body, "fr")).toBe(
+          result.body.error
+        );
+      expectDistinctTranslations([
+        securityCheck.body,
+        rateLimited.body,
+        unavailable.body,
+      ]);
+      expect(vvipSubmissionErrorMessage(securityCheck.body, "en")).toBe(
+        "The security check must be renewed before sending."
+      );
+      expect(vvipSubmissionErrorMessage(rateLimited.body, "en")).toBe(
+        "Too many attempts have been made. Wait one hour before trying again."
+      );
     } finally {
       warn.mockRestore();
     }
@@ -277,20 +464,35 @@ describe("REC-03 — refus de la vraie route affichés par la page VVIP, traduit
 
   it("donne le motif précis d’un CV refusé : plus de 25 pages, mot de passe, contenu actif, contenu invalide", async () => {
     // Padded like validPdfBuffer: the API refuses a file under 256 bytes before reading it.
-    const padded = (content: string) => Buffer.from(content.padEnd(2048, " "), "latin1");
+    const padded = (content: string) =>
+      Buffer.from(content.padEnd(2048, " "), "latin1");
     const pdf = (body: string) => padded(`%PDF-1.7\n${body}\n%%EOF\n`);
     const page = "<< /Type /Page >>\n";
     const refusals = [];
-    for (const cv of [pdf(page.repeat(30)), pdf(`${page}/Encrypt 5 0 R`), pdf(`${page}/OpenAction << /JS (app.alert(1)) >>`), padded("not a PDF at all")]) {
+    for (const cv of [
+      pdf(page.repeat(30)),
+      pdf(`${page}/Encrypt 5 0 R`),
+      pdf(`${page}/OpenAction << /JS (app.alert(1)) >>`),
+      padded("not a PDF at all"),
+    ]) {
       const result = await apply(vvipBody(specialty, cv));
       expect(result.status, JSON.stringify(result.body)).toBe(400);
-      expect(vvipSubmissionErrorMessage(result.body, "fr")).toBe(result.body.error);
+      expect(vvipSubmissionErrorMessage(result.body, "fr")).toBe(
+        result.body.error
+      );
       refusals.push(result.body);
     }
 
-    expect(refusals.map(body => body.code)).toEqual(["cv_validation_pdf_page_limit_exceeded", "cv_validation_pdf_encrypted", "cv_validation_pdf_active_content", "cv_validation_signature_invalid"]);
+    expect(refusals.map(body => body.code)).toEqual([
+      "cv_validation_pdf_page_limit_exceeded",
+      "cv_validation_pdf_encrypted",
+      "cv_validation_pdf_active_content",
+      "cv_validation_signature_invalid",
+    ]);
     expect(state.stored).toHaveLength(0);
     expectDistinctTranslations(refusals);
-    expect(vvipSubmissionErrorMessage(refusals[0], "en")).toBe("The CV must not exceed 25 pages.");
+    expect(vvipSubmissionErrorMessage(refusals[0], "en")).toBe(
+      "The CV must not exceed 25 pages."
+    );
   });
 });

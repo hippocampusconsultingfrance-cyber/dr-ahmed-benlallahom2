@@ -75,7 +75,8 @@ export function injectRouteSeoHead(template: string, head: string): string {
 
 /** Place le <noscript> en fin de <body>, hors de #root que React remplit seul. */
 export function injectNoscript(html: string, noscript: string): string {
-  if (!html.includes("</body>")) throw new Error("Le shell SPA ne contient pas de </body>.");
+  if (!html.includes("</body>"))
+    throw new Error("Le shell SPA ne contient pas de </body>.");
   return html.replace("</body>", () => `  ${noscript}\n  </body>`);
 }
 
@@ -87,12 +88,18 @@ export function buildPrerenderedPages(template: string): PrerenderedPage[] {
     ...getPrerenderRoutes().map(route => ({
       route,
       file: prerenderFileForRoute(route),
-      html: injectNoscript(injectRouteSeoHead(template, renderRouteSeoHead(route)), renderRouteNoscript(route)),
+      html: injectNoscript(
+        injectRouteSeoHead(template, renderRouteSeoHead(route)),
+        renderRouteNoscript(route)
+      ),
     })),
     {
       route: "(repli SPA)",
       file: SPA_FALLBACK_FILE,
-      html: injectNoscript(injectRouteSeoHead(template, renderFallbackSeoHead()), renderFallbackNoscript()),
+      html: injectNoscript(
+        injectRouteSeoHead(template, renderFallbackSeoHead()),
+        renderFallbackNoscript()
+      ),
     },
     { route: "(gabarit Express)", file: SPA_TEMPLATE_FILE, html: template },
   ];
@@ -121,7 +128,11 @@ export async function prerenderRouteSeo(
     await mkdir(path.dirname(target), { recursive: true });
     await writeFile(target, page.html, "utf8");
   }
-  await writeFile(path.join(distPath, SITEMAP_FILE), renderSitemapXml(buildDate()), "utf8");
+  await writeFile(
+    path.join(distPath, SITEMAP_FILE),
+    renderSitemapXml(buildDate()),
+    "utf8"
+  );
   return pages;
 }
 

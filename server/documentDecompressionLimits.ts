@@ -1,5 +1,13 @@
 import { constants, inflateRawSync, inflateSync } from "node:zlib";
-import { containsStream, pdfScanWork, readPdfStreamDictionaries, streamDictionaryText, UNCLEAR_PDF_STRUCTURE, type PdfScanWork, type PdfStreamDictionaries } from "./pdfStreamDictionaries";
+import {
+  containsStream,
+  pdfScanWork,
+  readPdfStreamDictionaries,
+  streamDictionaryText,
+  UNCLEAR_PDF_STRUCTURE,
+  type PdfScanWork,
+  type PdfStreamDictionaries,
+} from "./pdfStreamDictionaries";
 
 /**
  * Bounds applied before and during text extraction, so a small upload cannot
@@ -69,10 +77,16 @@ export const DOCUMENT_DECOMPRESSION_LIMITS = {
   extractedTextMaxChars: 200_000,
 } as const;
 
-export type DocumentDecompressionLimits = { [Key in keyof typeof DOCUMENT_DECOMPRESSION_LIMITS]: number };
+export type DocumentDecompressionLimits = {
+  [Key in keyof typeof DOCUMENT_DECOMPRESSION_LIMITS]: number;
+};
 
 function isBufferTooLarge(error: unknown) {
-  return error instanceof RangeError || (error instanceof Error && (error as NodeJS.ErrnoException).code === "ERR_BUFFER_TOO_LARGE");
+  return (
+    error instanceof RangeError ||
+    (error instanceof Error &&
+      (error as NodeJS.ErrnoException).code === "ERR_BUFFER_TOO_LARGE")
+  );
 }
 
 export type DocxArchiveInspection = {
@@ -89,25 +103,37 @@ export type DocxArchiveInspection = {
  * refused (never needed by a CV produced by a word processor). `onEntry`
  * receives each entry once inflated within those bounds.
  */
-export function inspectDocxArchive(buffer: Buffer, limits: DocumentDecompressionLimits = DOCUMENT_DECOMPRESSION_LIMITS, onEntry?: (name: string, content: Buffer) => void): DocxArchiveInspection {
+export function inspectDocxArchive(
+  buffer: Buffer,
+  limits: DocumentDecompressionLimits = DOCUMENT_DECOMPRESSION_LIMITS,
+  onEntry?: (name: string, content: Buffer) => void
+): DocxArchiveInspection {
   const invalid = () => new Error("cv_validation_docx_container_invalid");
   const searchStart = Math.max(0, buffer.length - 22 - 0xffff);
   let eocd = -1;
   for (let offset = buffer.length - 22; offset >= searchStart; offset -= 1) {
-    if (buffer.readUInt32LE(offset) === 0x06054b50) { eocd = offset; break; }
+    if (buffer.readUInt32LE(offset) === 0x06054b50) {
+      eocd = offset;
+      break;
+    }
   }
   if (eocd < 0) throw invalid();
   const entryCount = buffer.readUInt16LE(eocd + 10);
   const directoryOffset = buffer.readUInt32LE(eocd + 16);
   if (entryCount === 0xffff || directoryOffset === 0xffffffff) throw invalid();
-  if (entryCount > limits.docxMaxEntries) throw new Error("cv_validation_docx_decompressed_size_exceeded");
+  if (entryCount > limits.docxMaxEntries)
+    throw new Error("cv_validation_docx_decompressed_size_exceeded");
 
   const entryNames: string[] = [];
   const relationships: string[] = [];
   let uncompressedBytes = 0;
   let cursor = directoryOffset;
   for (let index = 0; index < entryCount; index += 1) {
-    if (cursor + 46 > buffer.length || buffer.readUInt32LE(cursor) !== 0x02014b50) throw invalid();
+    if (
+      cursor + 46 > buffer.length ||
+      buffer.readUInt32LE(cursor) !== 0x02014b50
+    )
+      throw invalid();
     const flags = buffer.readUInt16LE(cursor + 8);
     const method = buffer.readUInt16LE(cursor + 10);
     const compressedSize = buffer.readUInt32LE(cursor + 20);
@@ -118,9 +144,18 @@ export function inspectDocxArchive(buffer: Buffer, limits: DocumentDecompression
     const name = buffer.toString("utf8", cursor + 46, cursor + 46 + nameLength);
     cursor += 46 + nameLength + extraLength + commentLength;
     if (flags & 0x1) throw new Error("cv_validation_docx_encrypted");
-    if (compressedSize === 0xffffffff || localOffset === 0xffffffff) throw invalid();
-    if (localOffset + 30 > buffer.length || buffer.readUInt32LE(localOffset) !== 0x04034b50) throw invalid();
-    const dataStart = localOffset + 30 + buffer.readUInt16LE(localOffset + 26) + buffer.readUInt16LE(localOffset + 28);
+    if (compressedSize === 0xffffffff || localOffset === 0xffffffff)
+      throw invalid();
+    if (
+      localOffset + 30 > buffer.length ||
+      buffer.readUInt32LE(localOffset) !== 0x04034b50
+    )
+      throw invalid();
+    const dataStart =
+      localOffset +
+      30 +
+      buffer.readUInt16LE(localOffset + 26) +
+      buffer.readUInt16LE(localOffset + 28);
     if (dataStart + compressedSize > buffer.length) throw invalid();
     const data = buffer.subarray(dataStart, dataStart + compressedSize);
     const remaining = limits.docxMaxUncompressedBytes - uncompressedBytes;
@@ -129,16 +164,21 @@ export function inspectDocxArchive(buffer: Buffer, limits: DocumentDecompression
       content = data;
     } else if (method === 8) {
       try {
-        content = inflateRawSync(data, { maxOutputLength: Math.max(1, remaining) });
+        content = inflateRawSync(data, {
+          maxOutputLength: Math.max(1, remaining),
+        });
       } catch (error) {
-        if (isBufferTooLarge(error)) throw new Error("cv_validation_docx_decompressed_size_exceeded");
+        if (isBufferTooLarge(error))
+          // eslint-disable-next-line preserve-caught-error -- the refusal's code is all that is said of it; zlib's error adds nothing
+          throw new Error("cv_validation_docx_decompressed_size_exceeded");
         throw invalid();
       }
     } else {
       throw invalid();
     }
     uncompressedBytes += content.length;
-    if (uncompressedBytes > limits.docxMaxUncompressedBytes) throw new Error("cv_validation_docx_decompressed_size_exceeded");
+    if (uncompressedBytes > limits.docxMaxUncompressedBytes)
+      throw new Error("cv_validation_docx_decompressed_size_exceeded");
     entryNames.push(name);
     if (/\.rels$/i.test(name)) relationships.push(content.toString("utf8"));
     onEntry?.(name, content);
@@ -150,13 +190,25 @@ const INFLATE_OVERFLOW = Symbol("inflate_overflow");
 
 /** zlib header (RFC 1950), what pdf.js requires at the start of Flate data. */
 function startsWithZlibHeader(data: Buffer) {
-  return data.length >= 2 && (data[0]! & 0x0f) === 8 && data[0]! >> 4 <= 7 && ((data[0]! << 8) | data[1]!) % 31 === 0;
+  return (
+    data.length >= 2 &&
+    (data[0]! & 0x0f) === 8 &&
+    data[0]! >> 4 <= 7 &&
+    ((data[0]! << 8) | data[1]!) % 31 === 0
+  );
 }
 
 /** Inflates at most `cap` bytes; null when the data is not valid zlib. Trailing bytes are ignored; `read` counts the input bytes used. */
-function inflateWithCap(data: Buffer, cap: number): { output: Buffer; read: number } | typeof INFLATE_OVERFLOW | null {
+function inflateWithCap(
+  data: Buffer,
+  cap: number
+): { output: Buffer; read: number } | typeof INFLATE_OVERFLOW | null {
   try {
-    const result = inflateSync(data, { maxOutputLength: Math.max(1, cap), finishFlush: constants.Z_SYNC_FLUSH, info: true }) as unknown as { buffer: Buffer; engine: { bytesWritten: number } };
+    const result = inflateSync(data, {
+      maxOutputLength: Math.max(1, cap),
+      finishFlush: constants.Z_SYNC_FLUSH,
+      info: true,
+    }) as unknown as { buffer: Buffer; engine: { bytesWritten: number } };
     return { output: result.buffer, read: result.engine.bytesWritten };
   } catch (error) {
     return isBufferTooLarge(error) ? INFLATE_OVERFLOW : null;
@@ -185,10 +237,21 @@ function inflatedBeforeError(data: Buffer, cap: number, measures: Allowance) {
 }
 
 /** Inflation of a stream's data: its output, `corruptBytes` when the data turned out corrupt (see inflatedBeforeError), or an overflow of the cap. */
-type StreamInflation = { output: Buffer; read: number } | { corruptBytes: number } | typeof INFLATE_OVERFLOW;
+type StreamInflation =
+  | { output: Buffer; read: number }
+  | { corruptBytes: number }
+  | typeof INFLATE_OVERFLOW;
 
-function inflateOrMeasure(data: Buffer, cap: number, measures: Allowance): StreamInflation {
-  return inflateWithCap(data, cap) ?? { corruptBytes: inflatedBeforeError(data, cap, measures) };
+function inflateOrMeasure(
+  data: Buffer,
+  cap: number,
+  measures: Allowance
+): StreamInflation {
+  return (
+    inflateWithCap(data, cap) ?? {
+      corruptBytes: inflatedBeforeError(data, cap, measures),
+    }
+  );
 }
 
 /**
@@ -200,22 +263,38 @@ function inflateOrMeasure(data: Buffer, cap: number, measures: Allowance): Strea
  * (`data`), at most `pdfMaxOverlappingStreams` times: 2,000 such streams
  * chained through empty zlib blocks took 5 s on 4 MB.
  */
-function inflateStreamData(window: Buffer, data: Buffer, cap: number, overlaps: Allowance, measures: Allowance): StreamInflation {
+function inflateStreamData(
+  window: Buffer,
+  data: Buffer,
+  cap: number,
+  overlaps: Allowance,
+  measures: Allowance
+): StreamInflation {
   const read = inflateOrMeasure(window, cap, measures);
-  if (read === INFLATE_OVERFLOW || "corruptBytes" in read || read.read < window.length || window.length === data.length) return read;
-  if (++overlaps.count > overlaps.max) throw new Error("cv_validation_pdf_stream_count_exceeded");
+  if (
+    read === INFLATE_OVERFLOW ||
+    "corruptBytes" in read ||
+    read.read < window.length ||
+    window.length === data.length
+  )
+    return read;
+  if (++overlaps.count > overlaps.max)
+    throw new Error("cv_validation_pdf_stream_count_exceeded");
   return inflateOrMeasure(data, cap, measures);
 }
 
 /** Plain integer value of a dictionary key; null when absent or indirect (`7 0 R`). */
 function directInteger(dictionary: string, key: string) {
-  const match = new RegExp(`/${key}\\s+(\\d+)(\\s+\\d+\\s+R\\b)?`).exec(dictionary);
+  const match = new RegExp(`/${key}\\s+(\\d+)(\\s+\\d+\\s+R\\b)?`).exec(
+    dictionary
+  );
   return match && !match[2] ? Number(match[1]) : null;
 }
 
 /** What ends a name (`/A/B`, `/A B`): white-space as \s reads it in a latin1 string, the PDF delimiters and NUL. */
 const ENDS_PDF_NAME = new Uint8Array(256);
-for (const char of "\t\n\v\f\r \xa0<>[]()%{}\0") ENDS_PDF_NAME[char.charCodeAt(0)] = 1;
+for (const char of "\t\n\v\f\r \xa0<>[]()%{}\0")
+  ENDS_PDF_NAME[char.charCodeAt(0)] = 1;
 
 /** Value of a hexadecimal digit, -1 for any other character. */
 function hexValue(code: number) {
@@ -255,7 +334,10 @@ export function decodePdfNames(text: string) {
 
 /** pdf.js reads an object stream from its /N and /First entries, whatever its /Type says. */
 function isObjectStreamDictionary(names: string) {
-  return /\/Type\s*\/ObjStm\b/.test(names) || (/\/First\b/.test(names) && /\/N\b/.test(names));
+  return (
+    /\/Type\s*\/ObjStm\b/.test(names) ||
+    (/\/First\b/.test(names) && /\/N\b/.test(names))
+  );
 }
 
 const PDF_NAME_END = "(?=[\\0\\t\\n\\f\\r /<>\\[\\]()%{}]|$)";
@@ -264,7 +346,9 @@ const PDF_SPACE = "[\\0\\t\\n\\f\\r ]*";
 const FILTER_KEY = new RegExp(`/(?:Filter|F)${PDF_NAME_END}`);
 const DECODE_PARMS_KEY = new RegExp(`/(?:DecodeParms|DP)${PDF_NAME_END}`);
 const FLATE_NAME = `/(?:FlateDecode|Fl)${PDF_NAME_END}`;
-const FLATE_ONLY_VALUE = new RegExp(`^${PDF_SPACE}(?:${FLATE_NAME}|\\[${PDF_SPACE}(?:${FLATE_NAME}${PDF_SPACE})+\\])`);
+const FLATE_ONLY_VALUE = new RegExp(
+  `^${PDF_SPACE}(?:${FLATE_NAME}|\\[${PDF_SPACE}(?:${FLATE_NAME}${PDF_SPACE})+\\])`
+);
 
 /** Flate, alone or chained, without /DecodeParms. */
 function isFlateOnly(names: string) {
@@ -287,7 +371,8 @@ type PlainValue =
   | { kind: "integers"; entries: Map<string, number> };
 
 /** A token of a plain dictionary, followed by white-space or a delimiter. */
-const PLAIN_TOKEN = /[\0\t\n\f\r ]*(\/[A-Za-z0-9]+|\d+|<<|>>|\[|\]|R)(?=[\0\t\n\f\r /<>[\]]|$)/;
+const PLAIN_TOKEN =
+  /[\0\t\n\f\r ]*(\/[A-Za-z0-9]+|\d+|<<|>>|\[|\]|R)(?=[\0\t\n\f\r /<>[\]]|$)/;
 const INTEGER = /^\d+$/;
 
 /**
@@ -321,18 +406,22 @@ function plainDictionaryEntries(text: string): Map<string, PlainValue> | null {
     if (first === undefined) return null;
     if (first.startsWith("/")) return { kind: "name", name: first };
     if (INTEGER.test(first)) {
-      if (!INTEGER.test(tokens[index] ?? "") || tokens[index + 1] !== "R") return { kind: "integer" };
+      if (!INTEGER.test(tokens[index] ?? "") || tokens[index + 1] !== "R")
+        return { kind: "integer" };
       index += 2;
       return { kind: "reference" };
     }
     if (first === "[") {
-      for (let item = tokens[index++]; item !== "]"; item = tokens[index++]) if (!item?.startsWith("/")) return null;
+      for (let item = tokens[index++]; item !== "]"; item = tokens[index++])
+        if (!item?.startsWith("/")) return null;
       return { kind: "names" };
     }
     if (first !== "<<") return null;
     const entries = entriesUntilEnd(() => {
       const integer = tokens[index++];
-      return integer !== undefined && INTEGER.test(integer) ? Number(integer) : null;
+      return integer !== undefined && INTEGER.test(integer)
+        ? Number(integer)
+        : null;
     });
     return entries && { kind: "integers", entries };
   };
@@ -360,17 +449,30 @@ function flatePredictor(dictionary: string): PngPredictor | null | undefined {
   if (filterKeys.length !== 1 || parmsKeys.length !== 1) return undefined;
   const filter = entries.get(filterKeys[0]!)!;
   const parms = entries.get(parmsKeys[0]!)!;
-  if (filter.kind !== "name" || (filter.name !== "/FlateDecode" && filter.name !== "/Fl") || parms.kind !== "integers") return undefined;
-  const parameter = (key: string, fallback: number) => parms.entries.get(key) || fallback;
+  if (
+    filter.kind !== "name" ||
+    (filter.name !== "/FlateDecode" && filter.name !== "/Fl") ||
+    parms.kind !== "integers"
+  )
+    return undefined;
+  const parameter = (key: string, fallback: number) =>
+    parms.entries.get(key) || fallback;
   const predictor = parameter("/Predictor", 1);
   if (predictor <= 1) return null;
   if (predictor < 10 || predictor > 15) return undefined;
   const colors = parameter("/Colors", 1);
-  const bits = (parms.entries.has("/BPC") ? parms.entries.get("/BPC") : parms.entries.get("/BitsPerComponent")) || 8;
+  const bits =
+    (parms.entries.has("/BPC")
+      ? parms.entries.get("/BPC")
+      : parms.entries.get("/BitsPerComponent")) || 8;
   const columns = parameter("/Columns", 1);
   // Beyond 32-bit integers, pdf.js's row size wraps around.
-  if (colors * bits > 1 << 20 || columns * colors * bits > 1 << 30) return undefined;
-  return { pixelBytes: (colors * bits + 7) >> 3, rowBytes: (columns * colors * bits + 7) >> 3 };
+  if (colors * bits > 1 << 20 || columns * colors * bits > 1 << 30)
+    return undefined;
+  return {
+    pixelBytes: (colors * bits + 7) >> 3,
+    rowBytes: (columns * colors * bits + 7) >> 3,
+  };
 }
 
 /**
@@ -380,17 +482,28 @@ function flatePredictor(dictionary: string): PngPredictor | null | undefined {
  * so that a huge /Columns allocates nothing. Null for another row type,
  * which pdf.js cannot read either.
  */
-function undoPngPredictor(data: Buffer, { pixelBytes, rowBytes }: PngPredictor): Buffer | null {
+function undoPngPredictor(
+  data: Buffer,
+  { pixelBytes, rowBytes }: PngPredictor
+): Buffer | null {
   const output = Buffer.alloc(data.length);
   let end = 0;
-  for (let at = 0, length = 0; at + 1 < data.length; at += rowBytes + 1, length += rowBytes) {
+  for (
+    let at = 0, length = 0;
+    at + 1 < data.length;
+    at += rowBytes + 1, length += rowBytes
+  ) {
     const type = data[at]!;
     if (type > 4) return null;
     const rawLength = Math.min(rowBytes, data.length - at - 1);
     for (let index = 0; index < rawLength; index += 1) {
-      const left = index >= pixelBytes ? output[length + index - pixelBytes]! : 0;
+      const left =
+        index >= pixelBytes ? output[length + index - pixelBytes]! : 0;
       const up = length > 0 ? output[length - rowBytes + index]! : 0;
-      const upLeft = length > 0 && index >= pixelBytes ? output[length - rowBytes + index - pixelBytes]! : 0;
+      const upLeft =
+        length > 0 && index >= pixelBytes
+          ? output[length - rowBytes + index - pixelBytes]!
+          : 0;
       let predicted = 0;
       if (type === 1) predicted = left;
       else if (type === 2) predicted = up;
@@ -400,7 +513,12 @@ function undoPngPredictor(data: Buffer, { pixelBytes, rowBytes }: PngPredictor):
         const toLeft = Math.abs(estimate - left);
         const toUp = Math.abs(estimate - up);
         const toUpLeft = Math.abs(estimate - upLeft);
-        predicted = toLeft <= toUp && toLeft <= toUpLeft ? left : toUp <= toUpLeft ? up : upLeft;
+        predicted =
+          toLeft <= toUp && toLeft <= toUpLeft
+            ? left
+            : toUp <= toUpLeft
+              ? up
+              : upLeft;
       }
       output[length + index] = (predicted + data[at + 1 + index]!) & 0xff;
     }
@@ -418,14 +536,28 @@ const OBJECT_STREAM_HEADER = /^\s*\d+\s+\d+\s/;
  * as they are (`raw`). Flate is decoded, with its PNG predictor if
  * /DecodeParms has one.
  */
-function readableObjectStream(dictionary: string, names: string, inflated: Buffer | null, raw: string, work: PdfScanWork) {
+function readableObjectStream(
+  dictionary: string,
+  names: string,
+  inflated: Buffer | null,
+  raw: string,
+  work: PdfScanWork
+) {
   if (!FILTER_KEY.test(names)) return raw;
-  const predictor = DECODE_PARMS_KEY.test(names) ? flatePredictor(dictionary) : isFlateOnly(names) ? null : undefined;
+  const predictor = DECODE_PARMS_KEY.test(names)
+    ? flatePredictor(dictionary)
+    : isFlateOnly(names)
+      ? null
+      : undefined;
   if (!inflated || predictor === undefined) return null;
   const decoded = predictor ? undoPngPredictor(inflated, predictor) : inflated;
   if (!decoded) return null;
   const content = decoded.toString("latin1");
-  if (!OBJECT_STREAM_HEADER.test(content.slice(0, 64)) || containsStream(content, work)) return null;
+  if (
+    !OBJECT_STREAM_HEADER.test(content.slice(0, 64)) ||
+    containsStream(content, work)
+  )
+    return null;
   return content;
 }
 
@@ -453,7 +585,8 @@ function valueReachFinder(values: PdfStreamDictionaries["values"]) {
   let next = 0;
   let furthest = -1;
   return (start: number, end: number) => {
-    for (; next < values.length && values[next]!.start < end; next += 1) furthest = Math.max(furthest, values[next]!.end);
+    for (; next < values.length && values[next]!.start < end; next += 1)
+      furthest = Math.max(furthest, values[next]!.end);
     return furthest > start;
   };
 }
@@ -498,10 +631,23 @@ export type PdfSearchedPart =
  * /stream[^\r\n]*\n/ took minutes on 4 MB of "stream stream…" without an end
  * of line.
  */
-export function assertPdfDecompressionWithinLimits(buffer: Buffer, limits: Pick<DocumentDecompressionLimits, "pdfMaxInflatedBytes" | "pdfMaxImagePixels" | "pdfImageProbeBytes" | "pdfMaxProbedImageBytes" | "pdfMaxStreams" | "pdfMaxOverlappingStreams" | "pdfMaxMeasuredCorruptStreams"> = DOCUMENT_DECOMPRESSION_LIMITS) {
+export function assertPdfDecompressionWithinLimits(
+  buffer: Buffer,
+  limits: Pick<
+    DocumentDecompressionLimits,
+    | "pdfMaxInflatedBytes"
+    | "pdfMaxImagePixels"
+    | "pdfImageProbeBytes"
+    | "pdfMaxProbedImageBytes"
+    | "pdfMaxStreams"
+    | "pdfMaxOverlappingStreams"
+    | "pdfMaxMeasuredCorruptStreams"
+  > = DOCUMENT_DECOMPRESSION_LIMITS
+) {
   const source = buffer.toString("latin1");
   const nextLineEnd = lineEndFinder(source);
-  const exceeded = () => new Error("cv_validation_pdf_decompressed_size_exceeded");
+  const exceeded = () =>
+    new Error("cv_validation_pdf_decompressed_size_exceeded");
   const work = pdfScanWork(source);
   const dictionaries = readPdfStreamDictionaries(source, work);
   let inflatedBytes = 0;
@@ -513,7 +659,7 @@ export function assertPdfDecompressionWithinLimits(buffer: Buffer, limits: Pick<
   // Start of the raw bytes not yet in `parts`.
   let searchedFrom = 0;
   const reachedByValue = valueReachFinder(dictionaries.values);
-  for (let at = source.indexOf("stream"); at !== -1;) {
+  for (let at = source.indexOf("stream"); at !== -1; ) {
     const lineEnd = nextLineEnd(at + 6);
     // No end of line left: no keyword further on starts stream data either.
     if (lineEnd === -1) break;
@@ -526,23 +672,50 @@ export function assertPdfDecompressionWithinLimits(buffer: Buffer, limits: Pick<
       if (source.slice(Math.max(0, at - 3), at) !== "end") keywords.push(at);
     }
     if (keywords.length === 0) continue;
-    if (++streams > limits.pdfMaxStreams) throw new Error("cv_validation_pdf_stream_count_exceeded");
+    if (++streams > limits.pdfMaxStreams)
+      throw new Error("cv_validation_pdf_stream_count_exceeded");
     const data = buffer.subarray(dataStart);
     // Up to the next "stream" keyword, `at` (see inflateStreamData).
     const window = at === -1 ? data : buffer.subarray(dataStart, at + 6);
-    const dictionary = streamDictionaryText(source, keywords, dictionaries, work);
+    const dictionary = streamDictionaryText(
+      source,
+      keywords,
+      dictionaries,
+      work
+    );
     const unclear = dictionary === UNCLEAR_PDF_STRUCTURE;
-    const names = typeof dictionary === "string" ? decodePdfNames(dictionary) : "";
+    const names =
+      typeof dictionary === "string" ? decodePdfNames(dictionary) : "";
     const dataEnd = at === -1 ? source.length : at;
     if (typeof dictionary === "string") {
-      parts.push({ kind: "bytes", text: source.slice(searchedFrom, dataStart) });
+      parts.push({
+        kind: "bytes",
+        text: source.slice(searchedFrom, dataStart),
+      });
       searchedFrom = reachedByValue(dataStart, dataEnd) ? dataStart : dataEnd;
     }
     // A dictionary that reads two ways may be an object stream's.
     const objectStream = unclear || isObjectStreamDictionary(names);
     const pushObjectStream = (inflated: Buffer | null) => {
-      const content = typeof dictionary === "string" ? readableObjectStream(dictionary, names, inflated, source.slice(dataStart, dataEnd), work) : null;
-      parts.push(content === null ? { kind: "unreadable" } : { kind: "objects", text: content, first: directInteger(names, "First") });
+      const content =
+        typeof dictionary === "string"
+          ? readableObjectStream(
+              dictionary,
+              names,
+              inflated,
+              source.slice(dataStart, dataEnd),
+              work
+            )
+          : null;
+      parts.push(
+        content === null
+          ? { kind: "unreadable" }
+          : {
+              kind: "objects",
+              text: content,
+              first: directInteger(names, "First"),
+            }
+      );
     };
     if (!startsWithZlibHeader(data)) {
       if (objectStream) pushObjectStream(null);
@@ -552,14 +725,22 @@ export function assertPdfDecompressionWithinLimits(buffer: Buffer, limits: Pick<
       const width = directInteger(names, "Width");
       const height = directInteger(names, "Height");
       if (width !== null && height !== null) {
-        if (width * height > limits.pdfMaxImagePixels) throw new Error("cv_validation_pdf_image_too_large");
+        if (width * height > limits.pdfMaxImagePixels)
+          throw new Error("cv_validation_pdf_image_too_large");
         const declaredBytes = width * height * 8 + 65_536;
         if (declaredBytes > limits.pdfImageProbeBytes) continue;
         // The probes share one budget: 67 images of 62 KB, each inflating to its declared 64 MB, took 5 s.
         if (declaredBytes <= limits.pdfMaxProbedImageBytes - probedImageBytes) {
-          const probe = inflateStreamData(window, data, declaredBytes, overlaps, measures);
+          const probe = inflateStreamData(
+            window,
+            data,
+            declaredBytes,
+            overlaps,
+            measures
+          );
           if (probe === INFLATE_OVERFLOW) throw exceeded();
-          probedImageBytes += "corruptBytes" in probe ? probe.corruptBytes : probe.output.length;
+          probedImageBytes +=
+            "corruptBytes" in probe ? probe.corruptBytes : probe.output.length;
           continue;
         }
       }
@@ -569,7 +750,9 @@ export function assertPdfDecompressionWithinLimits(buffer: Buffer, limits: Pick<
     while (startsWithZlibHeader(layer)) {
       const cap = limits.pdfMaxInflatedBytes - inflatedBytes;
       // The first layer is read from the file, the next ones from memory.
-      const inflated = decoded ? inflateOrMeasure(layer, cap, measures) : inflateStreamData(window, data, cap, overlaps, measures);
+      const inflated = decoded
+        ? inflateOrMeasure(layer, cap, measures)
+        : inflateStreamData(window, data, cap, overlaps, measures);
       if (inflated === INFLATE_OVERFLOW) throw exceeded();
       if ("corruptBytes" in inflated) {
         inflatedBytes += inflated.corruptBytes;
@@ -587,18 +770,24 @@ export function assertPdfDecompressionWithinLimits(buffer: Buffer, limits: Pick<
 }
 
 /** An XFA form (/XFA) carries its own scripts, which Acrobat runs. */
-const PDF_ACTIVE_CONTENT = /\/(?:JavaScript|JS|Launch|EmbeddedFiles?|RichMedia|ImportData|SubmitForm|XFA)\b/;
+const PDF_ACTIVE_CONTENT =
+  /\/(?:JavaScript|JS|Launch|EmbeddedFiles?|RichMedia|ImportData|SubmitForm|XFA)\b/;
 const PAGE_DICTIONARY = /\/Type\s*\/Page\b/;
 const PAGE_DICTIONARIES = new RegExp(PAGE_DICTIONARY.source, "g");
 /** An object header ("12 0 obj", group 1 the object number), its end (group 2) or a page dictionary. */
-const OBJECT_BOUND_OR_PAGE = new RegExp(`(?<![0-9])([0-9]+)[\\0\\t\\n\\f\\r ]+[0-9]+[\\0\\t\\n\\f\\r ]*obj${PDF_NAME_END}|(endobj)|${PAGE_DICTIONARY.source}`);
+const OBJECT_BOUND_OR_PAGE = new RegExp(
+  `(?<![0-9])([0-9]+)[\\0\\t\\n\\f\\r ]+[0-9]+[\\0\\t\\n\\f\\r ]*obj${PDF_NAME_END}|(endobj)|${PAGE_DICTIONARY.source}`
+);
 /** Objects of object streams told apart by their header, per file: past that, the pages of an object stream are counted one by one. */
 const MAX_INDEXED_PACKED_OBJECTS = 100_000;
 /** "number offset" pair of an object stream header. */
 const OBJECT_STREAM_PAIR = /[\0\t\n\f\r ]*([0-9]+)[\0\t\n\f\r ]+([0-9]+)/;
 
 /** Number and text of each object of an object stream, from its "number offset" pairs before /First; null when they do not read plainly. */
-function packedObjects({ text, first }: { text: string; first: number | null }, budget: { objects: number }) {
+function packedObjects(
+  { text, first }: { text: string; first: number | null },
+  budget: { objects: number }
+) {
   if (first === null || first > text.length) return null;
   const header = text.slice(0, first);
   const pair = new RegExp(OBJECT_STREAM_PAIR.source, "y");
@@ -606,12 +795,18 @@ function packedObjects({ text, first }: { text: string; first: number | null }, 
   let read = 0;
   for (let match = pair.exec(header); match; match = pair.exec(header)) {
     if (--budget.objects < 0) return null;
-    objects.push({ number: Number(match[1]), offset: first + Number(match[2]) });
+    objects.push({
+      number: Number(match[1]),
+      offset: first + Number(match[2]),
+    });
     read = pair.lastIndex;
   }
   if (!/^[\0\t\n\f\r ]*$/.test(header.slice(read))) return null;
   objects.sort((left, right) => left.offset - right.offset);
-  return objects.map((object, index) => ({ number: object.number, text: text.slice(object.offset, objects[index + 1]?.offset ?? text.length) }));
+  return objects.map((object, index) => ({
+    number: object.number,
+    text: text.slice(object.offset, objects[index + 1]?.offset ?? text.length),
+  }));
 }
 
 /**
@@ -634,7 +829,11 @@ function countPageObjects(parts: PdfSearchedPart[], decoded: string[]) {
     if (part.kind === "bytes") {
       const found = new RegExp(OBJECT_BOUND_OR_PAGE.source, "g");
       let object: number | null = null;
-      for (let match = found.exec(decoded[index]!); match; match = found.exec(decoded[index]!)) {
+      for (
+        let match = found.exec(decoded[index]!);
+        match;
+        match = found.exec(decoded[index]!)
+      ) {
         if (match[1] !== undefined) object = Number(match[1]);
         else if (match[2] !== undefined) object = null;
         else if (object === null) unnumbered += 1;
@@ -642,7 +841,11 @@ function countPageObjects(parts: PdfSearchedPart[], decoded: string[]) {
       }
     } else if (part.kind === "objects") {
       const objects = packedObjects(part, budget);
-      if (objects) objects.forEach(object => { if (PAGE_DICTIONARY.test(decodePdfNames(object.text))) pages.add(object.number); });
+      if (objects)
+        objects.forEach(object => {
+          if (PAGE_DICTIONARY.test(decodePdfNames(object.text)))
+            pages.add(object.number);
+        });
       else unnumbered += decoded[index]!.match(PAGE_DICTIONARIES)?.length ?? 0;
     }
   });
@@ -666,20 +869,38 @@ export type PdfStructureInspection = {
  * (LibreOffice writes one to open the first page); a JavaScript one is found
  * by /JS.
  */
-export function inspectPdfStructure(buffer: Buffer, limits: Pick<DocumentDecompressionLimits, "pdfMaxInflatedBytes" | "pdfMaxImagePixels" | "pdfImageProbeBytes" | "pdfMaxProbedImageBytes" | "pdfMaxStreams" | "pdfMaxOverlappingStreams" | "pdfMaxMeasuredCorruptStreams"> = DOCUMENT_DECOMPRESSION_LIMITS): PdfStructureInspection {
+export function inspectPdfStructure(
+  buffer: Buffer,
+  limits: Pick<
+    DocumentDecompressionLimits,
+    | "pdfMaxInflatedBytes"
+    | "pdfMaxImagePixels"
+    | "pdfImageProbeBytes"
+    | "pdfMaxProbedImageBytes"
+    | "pdfMaxStreams"
+    | "pdfMaxOverlappingStreams"
+    | "pdfMaxMeasuredCorruptStreams"
+  > = DOCUMENT_DECOMPRESSION_LIMITS
+): PdfStructureInspection {
   const { parts } = assertPdfDecompressionWithinLimits(buffer, limits);
-  const decoded = parts.map(part => part.kind === "unreadable" ? "" : decodePdfNames(part.text));
+  const decoded = parts.map(part =>
+    part.kind === "unreadable" ? "" : decodePdfNames(part.text)
+  );
   const text = decoded.join("\n");
   return {
     encrypted: /\/Encrypt\b/.test(text),
     activeContent: PDF_ACTIVE_CONTENT.test(text),
-    unreadableObjectStreams: parts.filter(part => part.kind === "unreadable").length,
+    unreadableObjectStreams: parts.filter(part => part.kind === "unreadable")
+      .length,
     pageCount: countPageObjects(parts, decoded),
   };
 }
 
 /** Keeps the stored and analysed text bounded. */
-export function truncateExtractedText(text: string, maxChars: number = DOCUMENT_DECOMPRESSION_LIMITS.extractedTextMaxChars) {
+export function truncateExtractedText(
+  text: string,
+  maxChars: number = DOCUMENT_DECOMPRESSION_LIMITS.extractedTextMaxChars
+) {
   if (text.length <= maxChars) return { text, truncated: false };
   return { text: text.slice(0, maxChars), truncated: true };
 }

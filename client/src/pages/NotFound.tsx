@@ -12,18 +12,29 @@ export const notFoundSeo = { noIndex: true } as const;
 export default function NotFound() {
   const { language } = useLanguage();
 
-  const content: Record<string, { title: string; subtitle: string; description: string; goHome: string; goBack: string }> = {
+  const content: Record<
+    string,
+    {
+      title: string;
+      subtitle: string;
+      description: string;
+      goHome: string;
+      goBack: string;
+    }
+  > = {
     fr: {
       title: "404",
       subtitle: "Page introuvable",
-      description: "La page que vous recherchez n'existe pas ou a été déplacée.",
+      description:
+        "La page que vous recherchez n'existe pas ou a été déplacée.",
       goHome: "Retour à l'accueil",
       goBack: "Page précédente",
     },
     en: {
       title: "404",
       subtitle: "Page Not Found",
-      description: "The page you are looking for doesn't exist or has been moved.",
+      description:
+        "The page you are looking for doesn't exist or has been moved.",
       goHome: "Go Home",
       goBack: "Go Back",
     },
@@ -47,13 +58,22 @@ export default function NotFound() {
 
   return (
     <div className="relative min-h-screen bg-background flex items-center justify-center px-4">
-          <SEOHead title={`${c.subtitle} | Dr. Ahmed Ben Lallahom`} description={c.description} ogUrl="https://drahmedbenlallahom.com/404" {...notFoundSeo} />
+      <SEOHead
+        title={`${c.subtitle} | Dr. Ahmed Ben Lallahom`}
+        description={c.description}
+        ogUrl="https://drahmedbenlallahom.com/404"
+        {...notFoundSeo}
+      />
       {/* Background pattern */}
       <div className="absolute inset-0 diagnostic-grid opacity-30" />
       <LanguageMenu className="absolute right-4 top-4 z-10 sm:right-6 sm:top-6" />
 
       {/* Cible du lien d'évitement ; le titre est « Page introuvable », « 404 » n'est qu'un décor (A11Y-15). */}
-      <main id="main-content" tabIndex={-1} className="relative text-center max-w-lg">
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="relative text-center max-w-lg"
+      >
         {/* Large 404 number */}
         <div className="relative mb-6" aria-hidden="true">
           <p className="stat-monumental text-[8rem] sm:text-[12rem] leading-none select-none opacity-20">
@@ -95,13 +115,21 @@ export default function NotFound() {
 
         {/* Raccourcis vers les parcours principaux (PUB-28). */}
         <nav className="mt-10" aria-labelledby="not-found-shortcuts-title">
-          <h2 id="not-found-shortcuts-title" className="text-sm font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          <h2
+            id="not-found-shortcuts-title"
+            className="text-sm font-semibold uppercase tracking-[0.16em] text-muted-foreground"
+          >
             {publicShortcuts.title[language]}
           </h2>
           <ul className="mt-4 flex flex-wrap justify-center gap-x-5 gap-y-3 text-sm font-medium">
             {publicShortcuts.links.map(link => (
               <li key={link.href}>
-                <Link href={link.href} className="text-primary underline-offset-4 hover:underline">{link.label[language]}</Link>
+                <Link
+                  href={link.href}
+                  className="text-primary underline-offset-4 hover:underline"
+                >
+                  {link.label[language]}
+                </Link>
               </li>
             ))}
           </ul>

@@ -40,7 +40,8 @@ export function createTrpcLinks(url = "/api/trpc"): TRPCLink<AppRouter>[] {
   };
   return [
     splitLink({
-      condition: operation => operation.type === "query" && querySentAsPost(operation.path),
+      condition: operation =>
+        operation.type === "query" && querySentAsPost(operation.path),
       true: httpBatchLink({ ...options, methodOverride: "POST" }),
       false: httpBatchLink(options),
     }),

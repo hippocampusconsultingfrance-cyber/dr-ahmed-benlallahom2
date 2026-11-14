@@ -42,7 +42,9 @@ export function candidateDeviceLabel(userAgent: unknown): string | null {
 const LABELS = new Set([
   ...BROWSERS.map(([, browser]) => browser),
   ...SYSTEMS.map(([, system]) => system),
-  ...BROWSERS.flatMap(([, browser]) => SYSTEMS.map(([, system]) => `${browser} (${system})`)),
+  ...BROWSERS.flatMap(([, browser]) =>
+    SYSTEMS.map(([, system]) => `${browser} (${system})`)
+  ),
 ]);
 
 /**
@@ -51,7 +53,9 @@ const LABELS = new Set([
  * "Navigateur inconnu": it is named as a new one would be, without changing
  * what is stored.
  */
-export function readableCandidateDeviceLabel(stored: string | null): string | null {
+export function readableCandidateDeviceLabel(
+  stored: string | null
+): string | null {
   if (stored === null || LABELS.has(stored)) return stored;
   return candidateDeviceLabel(stored);
 }

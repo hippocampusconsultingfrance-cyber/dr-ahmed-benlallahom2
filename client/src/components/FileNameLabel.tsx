@@ -32,9 +32,10 @@ function fitToEllipsis(base: HTMLElement) {
     return range.getBoundingClientRect().width;
   };
   let fits = 0;
-  for (let low = 1, high = text.length; low <= high;) {
+  for (let low = 1, high = text.length; low <= high; ) {
     const middle = (low + high) >> 1;
-    if (widthTo(middle) + ellipsis <= base.clientWidth) [fits, low] = [middle, middle + 1];
+    if (widthTo(middle) + ellipsis <= base.clientWidth)
+      [fits, low] = [middle, middle + 1];
     else high = middle - 1;
   }
   if (fits) base.style.maxWidth = `${Math.ceil(widthTo(fits) + ellipsis)}px`;
@@ -51,7 +52,15 @@ function fitToEllipsis(base: HTMLElement) {
  * grid holds it. Screen readers get the whole name in one piece, not the two
  * boxes the browser would read with a space between them.
  */
-export default function FileNameLabel({ name, suffix = "", className = "" }: { name: string; suffix?: string; className?: string }) {
+export default function FileNameLabel({
+  name,
+  suffix = "",
+  className = "",
+}: {
+  name: string;
+  suffix?: string;
+  className?: string;
+}) {
   const extension = fileNameExtension(name);
   const labelRef = useRef<HTMLSpanElement>(null);
   const baseRef = useRef<HTMLSpanElement>(null);
@@ -76,9 +85,25 @@ export default function FileNameLabel({ name, suffix = "", className = "" }: { n
       observer.disconnect();
     };
   }, [name, suffix, followed]);
-  return <span ref={labelRef} title={name} className={`flex w-full min-w-0 contain-inline-size ${className}`}>
-    <span ref={baseRef} aria-hidden="true" className="truncate">{extension ? name.slice(0, -extension.length) : name}</span>
-    {followed && <span aria-hidden="true" className="shrink-0 whitespace-pre">{extension}{suffix}</span>}
-    <span className="sr-only">{name}{suffix}</span>
-  </span>;
+  return (
+    <span
+      ref={labelRef}
+      title={name}
+      className={`flex w-full min-w-0 contain-inline-size ${className}`}
+    >
+      <span ref={baseRef} aria-hidden="true" className="truncate">
+        {extension ? name.slice(0, -extension.length) : name}
+      </span>
+      {followed && (
+        <span aria-hidden="true" className="shrink-0 whitespace-pre">
+          {extension}
+          {suffix}
+        </span>
+      )}
+      <span className="sr-only">
+        {name}
+        {suffix}
+      </span>
+    </span>
+  );
 }

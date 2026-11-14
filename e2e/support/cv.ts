@@ -3,7 +3,11 @@ import PDFDocument from "pdfkit";
 /** A one-page PDF CV with real text, as a candidate would send it. */
 export function cvPdf(lines: string[]): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    const document = new PDFDocument({ size: "A4", margin: 56, info: { Title: "CV" } });
+    const document = new PDFDocument({
+      size: "A4",
+      margin: 56,
+      info: { Title: "CV" },
+    });
     const chunks: Buffer[] = [];
     document.on("data", chunk => chunks.push(chunk));
     document.on("end", () => resolve(Buffer.concat(chunks)));

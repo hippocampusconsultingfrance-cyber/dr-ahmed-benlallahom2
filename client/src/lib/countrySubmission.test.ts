@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { countryCodeOf, countryLabel, resolveCountryForSubmission, WORLDWIDE_COUNTRY_CODES } from "./countrySubmission";
+import {
+  countryCodeOf,
+  countryLabel,
+  resolveCountryForSubmission,
+  WORLDWIDE_COUNTRY_CODES,
+} from "./countrySubmission";
 
-const countries = [{ code: "FR", label: "France" }, { code: "TN", label: "Tunisie" }];
+const countries = [
+  { code: "FR", label: "France" },
+  { code: "TN", label: "Tunisie" },
+];
 
 describe("resolveCountryForSubmission", () => {
   it("conserve le pays contrôlé par React lorsqu’il est présent", () => {
@@ -23,7 +31,15 @@ describe("resolveCountryForSubmission", () => {
 
 describe("EN-11 — pays du diplôme enregistré en code ISO", () => {
   it("donne le même code pour le pays nommé dans chaque langue des formulaires, et pour le code lui-même", () => {
-    for (const name of ["Tunisie", "Tunisia", "Tunesien", "突尼斯", "TN", " tunisie "]) expect(countryCodeOf(name), name).toBe("TN");
+    for (const name of [
+      "Tunisie",
+      "Tunisia",
+      "Tunesien",
+      "突尼斯",
+      "TN",
+      " tunisie ",
+    ])
+      expect(countryCodeOf(name), name).toBe("TN");
     expect(countryCodeOf("Allemagne")).toBe("DE");
     expect(countryCodeOf("Deutschland")).toBe("DE");
     // Typographic or plain apostrophe, as a pasted name may come.
@@ -32,7 +48,8 @@ describe("EN-11 — pays du diplôme enregistré en code ISO", () => {
   });
 
   it("ne reconnaît ni un pays inconnu, ni un code hors de la liste, ni une valeur vide", () => {
-    for (const value of ["Atlantis", "ZZ", "tn-", "", "   ", null, undefined]) expect(countryCodeOf(value), String(value)).toBeNull();
+    for (const value of ["Atlantis", "ZZ", "tn-", "", "   ", null, undefined])
+      expect(countryCodeOf(value), String(value)).toBeNull();
   });
 
   it("nomme un code dans la langue de l’écran, et traduit un nom enregistré avant EN-11", () => {
@@ -52,7 +69,11 @@ describe("EN-11 — pays du diplôme enregistré en code ISO", () => {
   it("reconnaît chaque pays de la liste sous son nom français, anglais, allemand et chinois", () => {
     expect(WORLDWIDE_COUNTRY_CODES).toHaveLength(249);
     for (const code of WORLDWIDE_COUNTRY_CODES) {
-      for (const language of ["fr", "en", "de", "zh"]) expect(countryCodeOf(countryLabel(code, language)), `${code} ${language}`).toBe(code);
+      for (const language of ["fr", "en", "de", "zh"])
+        expect(
+          countryCodeOf(countryLabel(code, language)),
+          `${code} ${language}`
+        ).toBe(code);
     }
   });
 });

@@ -9,9 +9,17 @@ const root = path.resolve(import.meta.dirname, "../..");
  * ports are taken.
  */
 export function e2eSettings(environment: NodeJS.ProcessEnv = process.env) {
-  const databaseUrl = environment.E2E_DATABASE_URL?.trim() || "postgresql://postgres:postgres@127.0.0.1:5432/e2e";
-  if (!/^(?:localhost|127(?:\.\d{1,3}){3}|\[::1\])$/i.test(new URL(databaseUrl).hostname)) {
-    throw new Error("e2e: E2E_DATABASE_URL must name a PostgreSQL of this machine, which every run empties");
+  const databaseUrl =
+    environment.E2E_DATABASE_URL?.trim() ||
+    "postgresql://postgres:postgres@127.0.0.1:5432/e2e";
+  if (
+    !/^(?:localhost|127(?:\.\d{1,3}){3}|\[::1\])$/i.test(
+      new URL(databaseUrl).hostname
+    )
+  ) {
+    throw new Error(
+      "e2e: E2E_DATABASE_URL must name a PostgreSQL of this machine, which every run empties"
+    );
   }
   const appPort = Number(environment.E2E_APP_PORT || 4310);
   return {
@@ -47,7 +55,8 @@ export const E2E_ENVIRONMENT = Object.freeze({
   TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA",
   BLOB_READ_WRITE_TOKEN: "vercel_blob_rw_e2estore_e2esecret",
   CANDIDATE_AUTH_PEPPER: "e2e_pepper_for_the_end_to_end_scenarios",
-  CANDIDATE_DOCUMENT_ENCRYPTION_KEY: "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=",
+  CANDIDATE_DOCUMENT_ENCRYPTION_KEY:
+    "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=",
   CRON_SECRET: "e2e_cron_secret_for_the_end_to_end_scenarios",
   AI_GATEWAY_API_KEY: "e2e_ai_gateway_key",
   GOOGLE_DRIVE_CLIENT_ID: "e2e-client-id.apps.googleusercontent.com",

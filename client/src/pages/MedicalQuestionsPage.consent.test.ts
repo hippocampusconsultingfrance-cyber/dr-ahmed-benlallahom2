@@ -1,7 +1,11 @@
 import { createElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { elementsOf, renderStateful, resetStatefulHooks } from "@/testing/statefulRender";
+import {
+  elementsOf,
+  renderStateful,
+  resetStatefulHooks,
+} from "@/testing/statefulRender";
 
 // Question santé posée comme par un patient : consentement explicite au
 // traitement de données de santé et prise en compte de l’avertissement
@@ -9,49 +13,87 @@ import { elementsOf, renderStateful, resetStatefulHooks } from "@/testing/statef
 // transmise telle que choisie, anti-robot obligatoire ; encadrés urgence et
 // confidentialité rendus comme des notes (PUB-A11Y-02).
 
-vi.mock("react", async importOriginal => (await import("@/testing/statefulRender")).withStatefulHooks(await importOriginal()));
+vi.mock("react", async importOriginal =>
+  (await import("@/testing/statefulRender")).withStatefulHooks(
+    await importOriginal()
+  )
+);
 
 const state = vi.hoisted(() => ({ mutate: vi.fn() }));
-vi.mock("@/contexts/LanguageContext", () => ({ useLanguage: () => ({ language: "fr", content: { hero: { bookConsultation: "Réserver" } } }) }));
+vi.mock("@/contexts/LanguageContext", () => ({
+  useLanguage: () => ({
+    language: "fr",
+    content: { hero: { bookConsultation: "Réserver" } },
+  }),
+}));
 vi.mock("@/components/Navigation", () => ({ default: () => null }));
 vi.mock("@/components/Footer", () => ({ default: () => null }));
 vi.mock("@/components/SEOHead", () => ({ SEOHead: () => null }));
-vi.mock("@/components/TurnstileWidget", () => ({ TurnstileWidget: function TurnstileWidget() { return null; } }));
+vi.mock("@/components/TurnstileWidget", () => ({
+  TurnstileWidget: function TurnstileWidget() {
+    return null;
+  },
+}));
 vi.mock("@/lib/trpc", () => ({
   trpc: {
     medicalQuestions: {
       published: { useQuery: () => ({ isLoading: false, data: [] }) },
-      submit: { useMutation: () => ({ isPending: false, mutate: state.mutate }) },
+      submit: {
+        useMutation: () => ({ isPending: false, mutate: state.mutate }),
+      },
     },
   },
 }));
 
-const { default: MedicalQuestionsPage } = await import("./MedicalQuestionsPage");
+const { default: MedicalQuestionsPage } = await import(
+  "./MedicalQuestionsPage"
+);
 const { TurnstileWidget } = await import("@/components/TurnstileWidget");
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the props of any element of the tree, read and called as each test needs
 type Element = { type: unknown; props: Record<string, any> };
 const textOf = (node: unknown): string => {
-  if (node === null || node === undefined || typeof node === "boolean") return "";
+  if (node === null || node === undefined || typeof node === "boolean")
+    return "";
   if (typeof node === "string" || typeof node === "number") return String(node);
   if (Array.isArray(node)) return node.map(textOf).join("");
-  if (typeof node === "object" && "props" in (node as object)) return textOf((node as Element).props.children);
+  if (typeof node === "object" && "props" in (node as object))
+    return textOf((node as Element).props.children);
   return "";
 };
-const elements = () => elementsOf(renderStateful(MedicalQuestionsPage as () => ReactElement)) as Element[];
-const byId = (id: string) => elements().find(element => element.props.id === id)!;
+const elements = () =>
+  elementsOf(
+    renderStateful(MedicalQuestionsPage as () => ReactElement)
+  ) as Element[];
+const byId = (id: string) =>
+  elements().find(element => element.props.id === id)!;
 /** The three consent boxes, in the order of the form: health data, publication, emergency. */
-const consents = () => elements().filter(element => typeof element.type === "function" && (element.type as { name: string }).name === "Consent");
-const submit = () => elements().find(element => element.type === "form")!.props.onSubmit({ preventDefault: vi.fn() });
+const consents = () =>
+  elements().filter(
+    element =>
+      typeof element.type === "function" &&
+      (element.type as { name: string }).name === "Consent"
+  );
+const submit = () =>
+  elements()
+    .find(element => element.type === "form")!
+    .props.onSubmit({ preventDefault: vi.fn() });
 
 function fillQuestion() {
   byId("medical-question-firstName").props.onChange("Jeanne");
   byId("medical-question-lastName").props.onChange("Martin");
   byId("medical-question-email").props.onChange("jeanne@test.local");
   byId("medical-question-phone").props.onChange("+33 6 12 34 56 78");
-  byId("medical-question-text").props.onChange({ target: { value: "Puis-je garder mes lunettes jusqu’au bloc opératoire ?" } });
+  byId("medical-question-text").props.onChange({
+    target: { value: "Puis-je garder mes lunettes jusqu’au bloc opératoire ?" },
+  });
 }
-const tick = (index: number, checked = true) => consents()[index]!.props.onChange(checked);
-const solveChallenge = (token = "single-use-token") => elements().find(element => element.type === TurnstileWidget)!.props.onToken(token);
+const tick = (index: number, checked = true) =>
+  consents()[index]!.props.onChange(checked);
+const solveChallenge = (token = "single-use-token") =>
+  elements()
+    .find(element => element.type === TurnstileWidget)!
+    .props.onToken(token);
 
 beforeEach(() => {
   state.mutate.mockClear();
@@ -67,9 +109,12 @@ describe("question santé : consentements avant l’envoi", () => {
   it("demande un consentement explicite pour les données de santé et l’avertissement d’urgence, la publication restant facultative", () => {
     const [health, publication, urgency] = consents();
     expect(consents()).toHaveLength(3);
-    expect(textOf(health!.props.children)).toContain("qui peut contenir des informations sur ma santé");
+    expect(textOf(health!.props.children)).toContain(
+      "qui peut contenir des informations sur ma santé"
+    );
     // The boxes as rendered: only the two required ones are announced as required.
-    const markup = (consent: Element) => renderToStaticMarkup(createElement(consent.type as never, consent.props));
+    const markup = (consent: Element) =>
+      renderToStaticMarkup(createElement(consent.type as never, consent.props));
     expect(markup(health!)).toContain('aria-required="true"');
     expect(markup(urgency!)).toContain('aria-required="true"');
     expect(markup(publication!)).not.toContain("aria-required");
@@ -104,11 +149,19 @@ describe("question santé : consentements avant l’envoi", () => {
     solveChallenge();
     submit();
     expect(state.mutate).toHaveBeenCalledTimes(1);
-    expect(state.mutate.mock.calls[0]![0]).toMatchObject({ privacyConsent: true, urgencyAcknowledged: true, publicationConsent: false, turnstileToken: "single-use-token", language: "fr" });
+    expect(state.mutate.mock.calls[0]![0]).toMatchObject({
+      privacyConsent: true,
+      urgencyAcknowledged: true,
+      publicationConsent: false,
+      turnstileToken: "single-use-token",
+      language: "fr",
+    });
 
     tick(1);
     submit();
-    expect(state.mutate.mock.calls[1]![0]).toMatchObject({ publicationConsent: true });
+    expect(state.mutate.mock.calls[1]![0]).toMatchObject({
+      publicationConsent: true,
+    });
   });
 });
 

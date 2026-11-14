@@ -7,10 +7,16 @@
  * reads as the limit itself. Shared by the application form and the
  * candidate's vault.
  */
-export function fileSizeLabel(bytes: number, locale: string, units: { kilobytes: string; megabytes: string }, maxBytes = Number.POSITIVE_INFINITY) {
+export function fileSizeLabel(
+  bytes: number,
+  locale: string,
+  units: { kilobytes: string; megabytes: string },
+  maxBytes = Number.POSITIVE_INFINITY
+) {
   const kilobytes = bytes > 0 ? Math.max(1, Math.round(bytes / 1024)) : 0;
-  if (kilobytes < 1024) return `${kilobytes.toLocaleString(locale)} ${units.kilobytes}`;
+  if (kilobytes < 1024)
+    return `${kilobytes.toLocaleString(locale)}\u00a0${units.kilobytes}`;
   const megabytes = bytes / (1024 * 1024);
   const shown = bytes > maxBytes ? Math.ceil(megabytes * 100) / 100 : megabytes;
-  return `${shown.toLocaleString(locale, { maximumFractionDigits: 2 })} ${units.megabytes}`;
+  return `${shown.toLocaleString(locale, { maximumFractionDigits: 2 })}\u00a0${units.megabytes}`;
 }

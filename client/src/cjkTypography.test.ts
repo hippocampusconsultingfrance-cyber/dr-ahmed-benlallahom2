@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const css = readFileSync(resolve(process.cwd(), "client/src/index.css"), "utf8");
+const css = readFileSync(
+  resolve(process.cwd(), "client/src/index.css"),
+  "utf8"
+);
 
 describe("CJK typography", () => {
   it("uses a dedicated Chinese fallback stack without changing the Latin defaults", () => {

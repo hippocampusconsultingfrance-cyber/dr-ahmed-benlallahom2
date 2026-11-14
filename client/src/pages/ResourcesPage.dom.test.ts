@@ -1,6 +1,12 @@
 // @vitest-environment happy-dom
 import { createElement } from "react";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 // Page Ressources montée par React dans un DOM, avec les vrais contextes de thème et de langue.
@@ -10,7 +16,13 @@ const { LanguageProvider } = await import("@/contexts/LanguageContext");
 
 function mount(language: "fr" | "en") {
   localStorage.setItem("language", language);
-  return render(createElement(ThemeProvider, null, createElement(LanguageProvider, null, createElement(ResourcesPage))));
+  return render(
+    createElement(
+      ThemeProvider,
+      null,
+      createElement(LanguageProvider, null, createElement(ResourcesPage))
+    )
+  );
 }
 
 const cards = () => within(screen.getByRole("main")).queryAllByRole("article");
@@ -36,10 +48,17 @@ describe("annonce des ressources filtrées (A11Y-20)", () => {
     expect(screen.getByRole("status")).toBe(status);
     expect(status.textContent).toBe("1 ressource");
 
-    fireEvent.change(screen.getByRole("textbox", { name: "Rechercher une ressource" }), { target: { value: "zzzz" } });
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Rechercher une ressource" }),
+      { target: { value: "zzzz" } }
+    );
     expect(cards()).toEqual([]);
-    expect(status.textContent).toBe("Aucune ressource ne correspond à cette recherche.");
-    expect(screen.getByRole("main").querySelectorAll("[aria-live]")).toHaveLength(0);
+    expect(status.textContent).toBe(
+      "Aucune ressource ne correspond à cette recherche."
+    );
+    expect(
+      screen.getByRole("main").querySelectorAll("[aria-live]")
+    ).toHaveLength(0);
   });
 
   it("compte les ressources en anglais", () => {

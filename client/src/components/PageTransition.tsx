@@ -11,8 +11,11 @@ import { useLocation } from "wouter";
 function focusPageHeading(root: HTMLElement, timeoutMs = 10_000) {
   const focusHeading = () => {
     const active = root.ownerDocument.activeElement;
-    if (active && active !== root.ownerDocument.body && root.contains(active)) return true;
-    const target = root.querySelector<HTMLElement>("h1") ?? root.querySelector<HTMLElement>("main");
+    if (active && active !== root.ownerDocument.body && root.contains(active))
+      return true;
+    const target =
+      root.querySelector<HTMLElement>("h1") ??
+      root.querySelector<HTMLElement>("main");
     if (!target) return false;
     if (!target.hasAttribute("tabindex")) target.tabIndex = -1;
     target.focus({ preventScroll: true });
@@ -52,5 +55,9 @@ export default function PageTransition({ children }: { children: ReactNode }) {
     return focusPageHeading(pageRef.current);
   }, [location]);
 
-  return <div key={location} ref={pageRef} className="page-transition">{children}</div>;
+  return (
+    <div key={location} ref={pageRef} className="page-transition">
+      {children}
+    </div>
+  );
 }

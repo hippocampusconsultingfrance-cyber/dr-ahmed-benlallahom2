@@ -3,7 +3,10 @@ import { readFile } from "node:fs/promises";
 
 describe("briefs Employeurs multilingues", () => {
   it("localise les statuts, actions et résultats de shortlist dans les quatre langues actives", async () => {
-    const source = await readFile(new URL("./EmployerBriefsTab.tsx", import.meta.url), "utf8");
+    const source = await readFile(
+      new URL("./EmployerBriefsTab.tsx", import.meta.url),
+      "utf8"
+    );
     expect(source).toContain("const briefCopy = {");
     expect(source).toContain("const { language } = useLanguage();");
     expect(source).toContain("copy.statuses");

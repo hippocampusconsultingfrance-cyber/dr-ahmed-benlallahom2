@@ -13,7 +13,10 @@ export const VVIP_SPECIALTY_PREFIX = "[VVIP / Offshore] ";
 export const VVIP_PATHWAY_LABEL = "VVIP & Offshore";
 
 /** Whether an application is a VVIP / offshore one, and its specialty without the prefix that marks it. */
-export function recruitmentPathway(specialty: string): { vvip: boolean; specialty: string } {
+export function recruitmentPathway(specialty: string): {
+  vvip: boolean;
+  specialty: string;
+} {
   return specialty.startsWith(VVIP_SPECIALTY_PREFIX)
     ? { vvip: true, specialty: specialty.slice(VVIP_SPECIALTY_PREFIX.length) }
     : { vvip: false, specialty };

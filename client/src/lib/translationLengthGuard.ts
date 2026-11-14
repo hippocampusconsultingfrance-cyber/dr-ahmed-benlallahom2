@@ -6,7 +6,7 @@ export type TranslationLengthIssue = {
 
 export function findTranslationLengthIssues(
   labels: Record<string, string>,
-  maxLength: number,
+  maxLength: number
 ): TranslationLengthIssue[] {
   return Object.entries(labels)
     .filter(([, value]) => value.length > maxLength)

@@ -23,7 +23,10 @@ export const ADMIN_TABS = [
 export type AdminTab = (typeof ADMIN_TABS)[number];
 
 function isAdminTab(value: unknown): value is AdminTab {
-  return typeof value === "string" && (ADMIN_TABS as readonly string[]).includes(value);
+  return (
+    typeof value === "string" &&
+    (ADMIN_TABS as readonly string[]).includes(value)
+  );
 }
 
 /**
@@ -37,15 +40,22 @@ const ADMIN_REFERENCE_PATTERN = /^[A-Za-z0-9-]{1,40}$/;
 export function adminPath(tab: AdminTab, reference?: string | null): string {
   const params = new URLSearchParams();
   if (tab !== "overview") params.set("tab", tab);
-  if (reference && ADMIN_REFERENCE_PATTERN.test(reference)) params.set("ref", reference);
+  if (reference && ADMIN_REFERENCE_PATTERN.test(reference))
+    params.set("ref", reference);
   const search = params.toString();
   return search ? `/admin?${search}` : "/admin";
 }
 
 /** The section and the reference an address of the dashboard names; the overview for a missing or unknown section. */
-export function adminLocationOf(search: string): { tab: AdminTab; reference: string } {
+export function adminLocationOf(search: string): {
+  tab: AdminTab;
+  reference: string;
+} {
   const params = new URLSearchParams(search);
   const tab = params.get("tab");
   const reference = params.get("ref") ?? "";
-  return { tab: isAdminTab(tab) ? tab : "overview", reference: ADMIN_REFERENCE_PATTERN.test(reference) ? reference : "" };
+  return {
+    tab: isAdminTab(tab) ? tab : "overview",
+    reference: ADMIN_REFERENCE_PATTERN.test(reference) ? reference : "",
+  };
 }

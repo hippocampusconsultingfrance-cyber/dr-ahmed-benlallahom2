@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { PUBLIC_FEATURES, isPublicTestimonialsEnabled } from "../shared/publicFeatures";
+import {
+  PUBLIC_FEATURES,
+  isPublicTestimonialsEnabled,
+} from "../shared/publicFeatures";
 import { createTestContext } from "./testSupport/trpcContext";
 
 const getDbMock = vi.fn();
@@ -19,18 +22,31 @@ describe("témoignages masqués du site public (M22 / LEGAL-08)", () => {
     getDbMock.mockReset();
     const caller = appRouter.createCaller(createTestContext());
 
-    await expect(caller.testimonials.list({ language: "fr" })).resolves.toEqual([]);
-    await expect(caller.testimonials.list({ language: "en", featured: 1 })).resolves.toEqual([]);
+    await expect(caller.testimonials.list({ language: "fr" })).resolves.toEqual(
+      []
+    );
+    await expect(
+      caller.testimonials.list({ language: "en", featured: 1 })
+    ).resolves.toEqual([]);
     expect(getDbMock).not.toHaveBeenCalled();
   });
 
   it("ne pré-rendent pas /testimonials : la route répond 404 et n'est pas dans le sitemap", async () => {
-    const { getPrerenderRoutes, getRouteSeo, renderSitemapXml } = await import("./routeSeo");
-    const { buildPrerenderedPages } = await import("../scripts/prerender-route-seo");
+    const { getPrerenderRoutes, getRouteSeo, renderSitemapXml } = await import(
+      "./routeSeo"
+    );
+    const { buildPrerenderedPages } = await import(
+      "../scripts/prerender-route-seo"
+    );
 
     expect(getPrerenderRoutes()).not.toContain("/testimonials");
-    expect(getRouteSeo("/testimonials")).toMatchObject({ notFound: true, noIndex: true });
-    const files = buildPrerenderedPages("<html><head><!--route-seo--></head><body></body></html>").map(page => page.file);
+    expect(getRouteSeo("/testimonials")).toMatchObject({
+      notFound: true,
+      noIndex: true,
+    });
+    const files = buildPrerenderedPages(
+      "<html><head><!--route-seo--></head><body></body></html>"
+    ).map(page => page.file);
     expect(files).not.toContain("testimonials.html");
     expect(renderSitemapXml("2026-10-16")).not.toContain("/testimonials");
   });

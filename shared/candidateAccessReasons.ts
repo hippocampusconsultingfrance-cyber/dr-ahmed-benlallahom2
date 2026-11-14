@@ -21,6 +21,11 @@ export const CANDIDATE_ACCESS_REASONS = [
 
 export type CandidateAccessReason = (typeof CANDIDATE_ACCESS_REASONS)[number];
 
-export function isCandidateAccessReason(value: unknown): value is CandidateAccessReason {
-  return typeof value === "string" && (CANDIDATE_ACCESS_REASONS as readonly string[]).includes(value);
+export function isCandidateAccessReason(
+  value: unknown
+): value is CandidateAccessReason {
+  return (
+    typeof value === "string" &&
+    (CANDIDATE_ACCESS_REASONS as readonly string[]).includes(value)
+  );
 }

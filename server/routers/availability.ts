@@ -1,9 +1,17 @@
 import { publicProcedure, router } from "../_core/trpc";
 import { z } from "zod";
 import { getDb } from "../db";
-import { appointments, availabilitySlots, blockedDates } from "../../drizzle/schema";
+import {
+  appointments,
+  availabilitySlots,
+  blockedDates,
+} from "../../drizzle/schema";
 import { eq, and, gte, lt } from "drizzle-orm";
-import { parisDateKey, calendarDateInput, getParisDateRange } from "./parisTime";
+import {
+  parisDateKey,
+  calendarDateInput,
+  getParisDateRange,
+} from "./parisTime";
 import { occupiesSlot } from "./appointments";
 
 // Availability / Calendar
@@ -11,7 +19,10 @@ export const availabilityRouter = router({
   getSlots: publicProcedure.query(async () => {
     const db = await getDb();
     if (!db) return [];
-    return await db.select().from(availabilitySlots).where(eq(availabilitySlots.isActive, 1));
+    return await db
+      .select()
+      .from(availabilitySlots)
+      .where(eq(availabilitySlots.isActive, 1));
   }),
 
   // Public : seulement les dates à venir, jamais le motif (note interne).
@@ -39,10 +50,10 @@ export const availabilityRouter = router({
           and(
             gte(appointments.appointmentDate, start),
             lt(appointments.appointmentDate, end),
-            occupiesSlot(),
+            occupiesSlot()
           )
         );
 
       return results.map(r => r.appointmentDate);
-  }),
+    }),
 });

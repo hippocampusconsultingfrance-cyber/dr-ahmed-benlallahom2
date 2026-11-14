@@ -1,11 +1,30 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { Download, FileCheck2, FileWarning, RotateCcw, ShieldCheck, UserRound } from "lucide-react";
+import {
+  Download,
+  FileCheck2,
+  FileWarning,
+  RotateCcw,
+  ShieldCheck,
+  UserRound,
+} from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
 import { canRequestCandidateDocumentReanalysis } from "@shared/candidateDocumentReanalysis";
 import { hiddenTextFlagLabel } from "@shared/candidateDocumentHiddenText";
@@ -18,29 +37,290 @@ import { useLanguage } from "@/contexts/LanguageContext";
 
 const candidateDocumentsCopy = {
   fr: {
-    vault: "Coffre candidat", title: "Revue humaine des documents", intro: "L’IA fournit une synthèse indicative. Vérifiez toujours le fichier original avant de valider, refuser ou archiver un document.", filter: "État", needsReview: "À revoir", analyzing: "En analyse", awaitingAnalysis: "Analyse en attente", uploaded: "Reçus", reviewed: "Validés", rejected: "Refusés", archived: "Archivés", all: "Tous", loading: "Chargement sécurisé des documents candidats", candidate: "Candidat", kb: "Ko", summaryAvailable: "Synthèse disponible", humanReviewRequired: "Revue humaine requise", rerun: "Relancer l’IA", open: "Ouvrir", aiSummary: "Synthèse IA d’aide à la revue", aiUnavailable: "Analyse non disponible : une revue humaine est requise.", model: "Modèle", notProvided: "non renseigné", flags: "Points à vérifier", invisibleTextFlag: "{count} caractère(s) de texte invisible écarté(s) de l’analyse", unverifiableTextFlag: "{count} caractère(s) non vérifiable(s) écarté(s) de l’analyse", hiddenTextExcerpt: "extrait : « {excerpt} »", hiddenTextCompare: "ouvrir le document pour le comparer", reviewNote: "Note interne obligatoire (jamais visible par le candidat, qui ne voit que le statut)", reviewPlaceholder: "Ex. Original vérifié, date d’expiration confirmée…", approve: "Valider", reject: "Refuser", archive: "Archiver", reviewedNote: "Document vérifié par revue humaine.", reviewSaved: "Revue du document enregistrée", analysisQueued: "Analyse relancée : le document repasse dans la file sécurisée.", empty: "Aucun document ne correspond à ce filtre.", noteRequired: "Saisissez la note interne : elle est obligatoire pour refuser ou archiver un document.", confirmReject: "Refuser le document « {name} » de {candidate} ?\n\nNote interne : « {note} »\n\nLe candidat ne voit que le statut du document, jamais cette note.", confirmArchive: "Archiver le document « {name} » de {candidate} ?\n\nNote interne : « {note} »\n\nLe candidat ne voit que le statut du document, jamais cette note.", loadError: "Impossible de charger les documents candidats", retry: "Réessayer", viewApplication: "Voir la candidature", documentCount: "{count} document(s) affiché(s)", categories: { identity_document: "Pièce d’identité", medical_license: "Autorisation / licence médicale", diploma: "Diplôme", certificate: "Certificat professionnel", professional_insurance: "Assurance professionnelle", vaccination_record: "Justificatif de vaccination", criminal_record: "Casier / extrait judiciaire", employment_evidence: "Attestation d’emploi", proof_of_address: "Justificatif de domicile", other: "Autre document" },
+    vault: "Coffre candidat",
+    title: "Revue humaine des documents",
+    intro:
+      "L’IA fournit une synthèse indicative. Vérifiez toujours le fichier original avant de valider, refuser ou archiver un document.",
+    filter: "État",
+    needsReview: "À revoir",
+    analyzing: "En analyse",
+    awaitingAnalysis: "Analyse en attente",
+    uploaded: "Reçus",
+    reviewed: "Validés",
+    rejected: "Refusés",
+    archived: "Archivés",
+    all: "Tous",
+    loading: "Chargement sécurisé des documents candidats",
+    candidate: "Candidat",
+    kb: "Ko",
+    summaryAvailable: "Synthèse disponible",
+    humanReviewRequired: "Revue humaine requise",
+    rerun: "Relancer l’IA",
+    open: "Ouvrir",
+    aiSummary: "Synthèse IA d’aide à la revue",
+    aiUnavailable: "Analyse non disponible : une revue humaine est requise.",
+    model: "Modèle",
+    notProvided: "non renseigné",
+    flags: "Points à vérifier",
+    invisibleTextFlag:
+      "{count} caractère(s) de texte invisible écarté(s) de l’analyse",
+    unverifiableTextFlag:
+      "{count} caractère(s) non vérifiable(s) écarté(s) de l’analyse",
+    hiddenTextExcerpt: "extrait : « {excerpt} »",
+    hiddenTextCompare: "ouvrir le document pour le comparer",
+    reviewNote:
+      "Note interne obligatoire (jamais visible par le candidat, qui ne voit que le statut)",
+    reviewPlaceholder: "Ex. Original vérifié, date d’expiration confirmée…",
+    approve: "Valider",
+    reject: "Refuser",
+    archive: "Archiver",
+    reviewedNote: "Document vérifié par revue humaine.",
+    reviewSaved: "Revue du document enregistrée",
+    analysisQueued:
+      "Analyse relancée : le document repasse dans la file sécurisée.",
+    empty: "Aucun document ne correspond à ce filtre.",
+    noteRequired:
+      "Saisissez la note interne : elle est obligatoire pour refuser ou archiver un document.",
+    confirmReject:
+      "Refuser le document « {name} » de {candidate} ?\n\nNote interne : « {note} »\n\nLe candidat ne voit que le statut du document, jamais cette note.",
+    confirmArchive:
+      "Archiver le document « {name} » de {candidate} ?\n\nNote interne : « {note} »\n\nLe candidat ne voit que le statut du document, jamais cette note.",
+    loadError: "Impossible de charger les documents candidats",
+    retry: "Réessayer",
+    viewApplication: "Voir la candidature",
+    documentCount: "{count} document(s) affiché(s)",
+    categories: {
+      identity_document: "Pièce d’identité",
+      medical_license: "Autorisation / licence médicale",
+      diploma: "Diplôme",
+      certificate: "Certificat professionnel",
+      professional_insurance: "Assurance professionnelle",
+      vaccination_record: "Justificatif de vaccination",
+      criminal_record: "Casier / extrait judiciaire",
+      employment_evidence: "Attestation d’emploi",
+      proof_of_address: "Justificatif de domicile",
+      other: "Autre document",
+    },
   },
   en: {
-    vault: "Candidate vault", title: "Human document review", intro: "AI provides an indicative summary. Always verify the original file before approving, rejecting, or archiving a document.", filter: "Status", needsReview: "Needs review", analyzing: "Being analysed", awaitingAnalysis: "Analysis pending", uploaded: "Received", reviewed: "Approved", rejected: "Rejected", archived: "Archived", all: "All", loading: "Securely loading candidate documents", candidate: "Candidate", kb: "KB", summaryAvailable: "Summary available", humanReviewRequired: "Human review required", rerun: "Rerun AI", open: "Open", aiSummary: "AI summary for review support", aiUnavailable: "Analysis unavailable: human review is required.", model: "Model", notProvided: "not provided", flags: "Items to verify", invisibleTextFlag: "{count} character(s) of invisible text left out of the analysis", unverifiableTextFlag: "{count} character(s) that could not be verified left out of the analysis", hiddenTextExcerpt: "excerpt: “{excerpt}”", hiddenTextCompare: "open the document to compare", reviewNote: "Mandatory internal note (never shown to the candidate, who only sees the status)", reviewPlaceholder: "e.g. Original verified, expiry date confirmed…", approve: "Approve", reject: "Reject", archive: "Archive", reviewedNote: "Document verified by human review.", reviewSaved: "Document review saved", analysisQueued: "Analysis restarted: the document is back in the secure queue.", empty: "No document matches this filter.", noteRequired: "Enter the internal note: it is required to reject or archive a document.", confirmReject: "Reject the document “{name}” from {candidate}?\n\nInternal note: “{note}”\n\nThe candidate only sees the document’s status, never this note.", confirmArchive: "Archive the document “{name}” from {candidate}?\n\nInternal note: “{note}”\n\nThe candidate only sees the document’s status, never this note.", loadError: "Candidate documents could not be loaded", retry: "Try again", viewApplication: "View application", documentCount: "{count} document(s) shown", categories: { identity_document: "Identity document", medical_license: "Medical licence / authorisation", diploma: "Diploma", certificate: "Professional certificate", professional_insurance: "Professional insurance", vaccination_record: "Vaccination record", criminal_record: "Criminal record / extract", employment_evidence: "Employment evidence", proof_of_address: "Proof of address", other: "Other document" },
+    vault: "Candidate vault",
+    title: "Human document review",
+    intro:
+      "AI provides an indicative summary. Always verify the original file before approving, rejecting, or archiving a document.",
+    filter: "Status",
+    needsReview: "Needs review",
+    analyzing: "Being analysed",
+    awaitingAnalysis: "Analysis pending",
+    uploaded: "Received",
+    reviewed: "Approved",
+    rejected: "Rejected",
+    archived: "Archived",
+    all: "All",
+    loading: "Securely loading candidate documents",
+    candidate: "Candidate",
+    kb: "KB",
+    summaryAvailable: "Summary available",
+    humanReviewRequired: "Human review required",
+    rerun: "Rerun AI",
+    open: "Open",
+    aiSummary: "AI summary for review support",
+    aiUnavailable: "Analysis unavailable: human review is required.",
+    model: "Model",
+    notProvided: "not provided",
+    flags: "Items to verify",
+    invisibleTextFlag:
+      "{count} character(s) of invisible text left out of the analysis",
+    unverifiableTextFlag:
+      "{count} character(s) that could not be verified left out of the analysis",
+    hiddenTextExcerpt: "excerpt: “{excerpt}”",
+    hiddenTextCompare: "open the document to compare",
+    reviewNote:
+      "Mandatory internal note (never shown to the candidate, who only sees the status)",
+    reviewPlaceholder: "e.g. Original verified, expiry date confirmed…",
+    approve: "Approve",
+    reject: "Reject",
+    archive: "Archive",
+    reviewedNote: "Document verified by human review.",
+    reviewSaved: "Document review saved",
+    analysisQueued:
+      "Analysis restarted: the document is back in the secure queue.",
+    empty: "No document matches this filter.",
+    noteRequired:
+      "Enter the internal note: it is required to reject or archive a document.",
+    confirmReject:
+      "Reject the document “{name}” from {candidate}?\n\nInternal note: “{note}”\n\nThe candidate only sees the document’s status, never this note.",
+    confirmArchive:
+      "Archive the document “{name}” from {candidate}?\n\nInternal note: “{note}”\n\nThe candidate only sees the document’s status, never this note.",
+    loadError: "Candidate documents could not be loaded",
+    retry: "Try again",
+    viewApplication: "View application",
+    documentCount: "{count} document(s) shown",
+    categories: {
+      identity_document: "Identity document",
+      medical_license: "Medical licence / authorisation",
+      diploma: "Diploma",
+      certificate: "Professional certificate",
+      professional_insurance: "Professional insurance",
+      vaccination_record: "Vaccination record",
+      criminal_record: "Criminal record / extract",
+      employment_evidence: "Employment evidence",
+      proof_of_address: "Proof of address",
+      other: "Other document",
+    },
   },
   de: {
-    vault: "Kandidaten-Tresor", title: "Manuelle Dokumentenprüfung", intro: "Die KI liefert eine indikative Zusammenfassung. Prüfen Sie immer die Originaldatei, bevor Sie ein Dokument freigeben, ablehnen oder archivieren.", filter: "Status", needsReview: "Zu prüfen", analyzing: "In Analyse", awaitingAnalysis: "Analyse ausstehend", uploaded: "Eingegangen", reviewed: "Freigegeben", rejected: "Abgelehnt", archived: "Archiviert", all: "Alle", loading: "Kandidatendokumente werden sicher geladen", candidate: "Kandidat", kb: "KB", summaryAvailable: "Zusammenfassung verfügbar", humanReviewRequired: "Manuelle Prüfung erforderlich", rerun: "KI erneut starten", open: "Öffnen", aiSummary: "KI-Zusammenfassung zur Prüfungsunterstützung", aiUnavailable: "Analyse nicht verfügbar: eine manuelle Prüfung ist erforderlich.", model: "Modell", notProvided: "nicht angegeben", flags: "Zu prüfende Punkte", invisibleTextFlag: "{count} Zeichen unsichtbarer Text von der Analyse ausgeschlossen", unverifiableTextFlag: "{count} nicht überprüfbare Zeichen von der Analyse ausgeschlossen", hiddenTextExcerpt: "Auszug: „{excerpt}“", hiddenTextCompare: "Dokument zum Vergleich öffnen", reviewNote: "Verbindliche interne Notiz (für den Kandidaten nie sichtbar, er sieht nur den Status)", reviewPlaceholder: "z. B. Original geprüft, Ablaufdatum bestätigt…", approve: "Freigeben", reject: "Ablehnen", archive: "Archivieren", reviewedNote: "Dokument durch manuelle Prüfung bestätigt.", reviewSaved: "Dokumentenprüfung gespeichert", analysisQueued: "Analyse erneut gestartet: Das Dokument ist wieder in der sicheren Warteschlange.", empty: "Kein Dokument entspricht diesem Filter.", noteRequired: "Geben Sie die interne Notiz ein: Sie ist zum Ablehnen oder Archivieren eines Dokuments erforderlich.", confirmReject: "Dokument „{name}“ von {candidate} ablehnen?\n\nInterne Notiz: „{note}“\n\nDer Kandidat sieht nur den Status des Dokuments, nie diese Notiz.", confirmArchive: "Dokument „{name}“ von {candidate} archivieren?\n\nInterne Notiz: „{note}“\n\nDer Kandidat sieht nur den Status des Dokuments, nie diese Notiz.", loadError: "Die Kandidatendokumente konnten nicht geladen werden", retry: "Erneut versuchen", viewApplication: "Bewerbung ansehen", documentCount: "{count} Dokument(e) angezeigt", categories: { identity_document: "Identitätsdokument", medical_license: "Medizinische Zulassung / Lizenz", diploma: "Diplom", certificate: "Berufszertifikat", professional_insurance: "Berufshaftpflicht", vaccination_record: "Impfnachweis", criminal_record: "Führungszeugnis / Auszug", employment_evidence: "Beschäftigungsnachweis", proof_of_address: "Adressnachweis", other: "Anderes Dokument" },
+    vault: "Kandidaten-Tresor",
+    title: "Manuelle Dokumentenprüfung",
+    intro:
+      "Die KI liefert eine indikative Zusammenfassung. Prüfen Sie immer die Originaldatei, bevor Sie ein Dokument freigeben, ablehnen oder archivieren.",
+    filter: "Status",
+    needsReview: "Zu prüfen",
+    analyzing: "In Analyse",
+    awaitingAnalysis: "Analyse ausstehend",
+    uploaded: "Eingegangen",
+    reviewed: "Freigegeben",
+    rejected: "Abgelehnt",
+    archived: "Archiviert",
+    all: "Alle",
+    loading: "Kandidatendokumente werden sicher geladen",
+    candidate: "Kandidat",
+    kb: "KB",
+    summaryAvailable: "Zusammenfassung verfügbar",
+    humanReviewRequired: "Manuelle Prüfung erforderlich",
+    rerun: "KI erneut starten",
+    open: "Öffnen",
+    aiSummary: "KI-Zusammenfassung zur Prüfungsunterstützung",
+    aiUnavailable:
+      "Analyse nicht verfügbar: eine manuelle Prüfung ist erforderlich.",
+    model: "Modell",
+    notProvided: "nicht angegeben",
+    flags: "Zu prüfende Punkte",
+    invisibleTextFlag:
+      "{count} Zeichen unsichtbarer Text von der Analyse ausgeschlossen",
+    unverifiableTextFlag:
+      "{count} nicht überprüfbare Zeichen von der Analyse ausgeschlossen",
+    hiddenTextExcerpt: "Auszug: „{excerpt}“",
+    hiddenTextCompare: "Dokument zum Vergleich öffnen",
+    reviewNote:
+      "Verbindliche interne Notiz (für den Kandidaten nie sichtbar, er sieht nur den Status)",
+    reviewPlaceholder: "z. B. Original geprüft, Ablaufdatum bestätigt…",
+    approve: "Freigeben",
+    reject: "Ablehnen",
+    archive: "Archivieren",
+    reviewedNote: "Dokument durch manuelle Prüfung bestätigt.",
+    reviewSaved: "Dokumentenprüfung gespeichert",
+    analysisQueued:
+      "Analyse erneut gestartet: Das Dokument ist wieder in der sicheren Warteschlange.",
+    empty: "Kein Dokument entspricht diesem Filter.",
+    noteRequired:
+      "Geben Sie die interne Notiz ein: Sie ist zum Ablehnen oder Archivieren eines Dokuments erforderlich.",
+    confirmReject:
+      "Dokument „{name}“ von {candidate} ablehnen?\n\nInterne Notiz: „{note}“\n\nDer Kandidat sieht nur den Status des Dokuments, nie diese Notiz.",
+    confirmArchive:
+      "Dokument „{name}“ von {candidate} archivieren?\n\nInterne Notiz: „{note}“\n\nDer Kandidat sieht nur den Status des Dokuments, nie diese Notiz.",
+    loadError: "Die Kandidatendokumente konnten nicht geladen werden",
+    retry: "Erneut versuchen",
+    viewApplication: "Bewerbung ansehen",
+    documentCount: "{count} Dokument(e) angezeigt",
+    categories: {
+      identity_document: "Identitätsdokument",
+      medical_license: "Medizinische Zulassung / Lizenz",
+      diploma: "Diplom",
+      certificate: "Berufszertifikat",
+      professional_insurance: "Berufshaftpflicht",
+      vaccination_record: "Impfnachweis",
+      criminal_record: "Führungszeugnis / Auszug",
+      employment_evidence: "Beschäftigungsnachweis",
+      proof_of_address: "Adressnachweis",
+      other: "Anderes Dokument",
+    },
   },
   zh: {
-    vault: "候选人资料库", title: "人工审核文件", intro: "AI 仅提供辅助摘要。在批准、拒绝或归档文件前，请始终核验原始文件。", filter: "状态", needsReview: "待人工审核", analyzing: "分析中", awaitingAnalysis: "等待分析", uploaded: "已接收", reviewed: "已批准", rejected: "已拒绝", archived: "已归档", all: "全部", loading: "正在安全加载候选人文件", candidate: "候选人", kb: "KB", summaryAvailable: "摘要可用", humanReviewRequired: "需要人工审核", rerun: "重新运行 AI", open: "打开", aiSummary: "AI 审核辅助摘要", aiUnavailable: "分析不可用：需要人工审核。", model: "模型", notProvided: "未提供", flags: "待核验项目", invisibleTextFlag: "已从分析中排除 {count} 个不可见文字字符", unverifiableTextFlag: "已从分析中排除 {count} 个无法核实的字符", hiddenTextExcerpt: "摘录：“{excerpt}”", hiddenTextCompare: "请打开文件进行比对", reviewNote: "必填内部备注（候选人不可见，仅能看到状态）", reviewPlaceholder: "例如：已核验原件，已确认到期日期…", approve: "批准", reject: "拒绝", archive: "归档", reviewedNote: "文件已由人工审核确认。", reviewSaved: "文件审核已保存", analysisQueued: "分析已重新启动：文件已回到安全队列。", empty: "没有文件符合此筛选条件。", noteRequired: "请填写内部备注：拒绝或归档文件时必须填写。", confirmReject: "拒绝 {candidate} 的文件“{name}”？\n\n内部备注：“{note}”\n\n候选人只能看到文件状态，看不到此备注。", confirmArchive: "归档 {candidate} 的文件“{name}”？\n\n内部备注：“{note}”\n\n候选人只能看到文件状态，看不到此备注。", loadError: "无法加载候选人文件", retry: "重试", viewApplication: "查看申请", documentCount: "显示 {count} 份文件", categories: { identity_document: "身份证明文件", medical_license: "医疗执照 / 授权", diploma: "学历证书", certificate: "专业证书", professional_insurance: "职业保险", vaccination_record: "疫苗接种证明", criminal_record: "无犯罪记录 / 摘要", employment_evidence: "工作证明", proof_of_address: "地址证明", other: "其他文件" },
+    vault: "候选人资料库",
+    title: "人工审核文件",
+    intro: "AI 仅提供辅助摘要。在批准、拒绝或归档文件前，请始终核验原始文件。",
+    filter: "状态",
+    needsReview: "待人工审核",
+    analyzing: "分析中",
+    awaitingAnalysis: "等待分析",
+    uploaded: "已接收",
+    reviewed: "已批准",
+    rejected: "已拒绝",
+    archived: "已归档",
+    all: "全部",
+    loading: "正在安全加载候选人文件",
+    candidate: "候选人",
+    kb: "KB",
+    summaryAvailable: "摘要可用",
+    humanReviewRequired: "需要人工审核",
+    rerun: "重新运行 AI",
+    open: "打开",
+    aiSummary: "AI 审核辅助摘要",
+    aiUnavailable: "分析不可用：需要人工审核。",
+    model: "模型",
+    notProvided: "未提供",
+    flags: "待核验项目",
+    invisibleTextFlag: "已从分析中排除 {count} 个不可见文字字符",
+    unverifiableTextFlag: "已从分析中排除 {count} 个无法核实的字符",
+    hiddenTextExcerpt: "摘录：“{excerpt}”",
+    hiddenTextCompare: "请打开文件进行比对",
+    reviewNote: "必填内部备注（候选人不可见，仅能看到状态）",
+    reviewPlaceholder: "例如：已核验原件，已确认到期日期…",
+    approve: "批准",
+    reject: "拒绝",
+    archive: "归档",
+    reviewedNote: "文件已由人工审核确认。",
+    reviewSaved: "文件审核已保存",
+    analysisQueued: "分析已重新启动：文件已回到安全队列。",
+    empty: "没有文件符合此筛选条件。",
+    noteRequired: "请填写内部备注：拒绝或归档文件时必须填写。",
+    confirmReject:
+      "拒绝 {candidate} 的文件“{name}”？\n\n内部备注：“{note}”\n\n候选人只能看到文件状态，看不到此备注。",
+    confirmArchive:
+      "归档 {candidate} 的文件“{name}”？\n\n内部备注：“{note}”\n\n候选人只能看到文件状态，看不到此备注。",
+    loadError: "无法加载候选人文件",
+    retry: "重试",
+    viewApplication: "查看申请",
+    documentCount: "显示 {count} 份文件",
+    categories: {
+      identity_document: "身份证明文件",
+      medical_license: "医疗执照 / 授权",
+      diploma: "学历证书",
+      certificate: "专业证书",
+      professional_insurance: "职业保险",
+      vaccination_record: "疫苗接种证明",
+      criminal_record: "无犯罪记录 / 摘要",
+      employment_evidence: "工作证明",
+      proof_of_address: "地址证明",
+      other: "其他文件",
+    },
   },
 } as const;
 
-type Copy = typeof candidateDocumentsCopy[keyof typeof candidateDocumentsCopy];
+type Copy =
+  (typeof candidateDocumentsCopy)[keyof typeof candidateDocumentsCopy];
 
 /** What « Valider » saves when no note is typed, in every language: never the note of a refusal or an archiving (ADM-11). */
-const GENERIC_REVIEW_NOTES: ReadonlySet<string> = new Set(Object.values(candidateDocumentsCopy).map(copy => copy.reviewedNote));
+const GENERIC_REVIEW_NOTES: ReadonlySet<string> = new Set(
+  Object.values(candidateDocumentsCopy).map(copy => copy.reviewedNote)
+);
 
 /** The flags of a document, the text left out before the AI read it in the admin's language (IA-01). */
-function documentFlagsLabel(aiFlags: string, aiExtractedData: string | null, copy: Copy) {
-  const wording = { invisible: copy.invisibleTextFlag, unverifiable: copy.unverifiableTextFlag, excerpt: copy.hiddenTextExcerpt, compare: copy.hiddenTextCompare };
+function documentFlagsLabel(
+  aiFlags: string,
+  aiExtractedData: string | null,
+  copy: Copy
+) {
+  const wording = {
+    invisible: copy.invisibleTextFlag,
+    unverifiable: copy.unverifiableTextFlag,
+    excerpt: copy.hiddenTextExcerpt,
+    compare: copy.hiddenTextCompare,
+  };
   try {
-    return (JSON.parse(aiFlags) as string[]).map(flag => hiddenTextFlagLabel(flag, aiExtractedData, wording) ?? flag).join(" · ");
+    return (JSON.parse(aiFlags) as string[])
+      .map(flag => hiddenTextFlagLabel(flag, aiExtractedData, wording) ?? flag)
+      .join(" · ");
   } catch {
     return aiFlags;
   }
@@ -56,49 +336,328 @@ function analysisStatusLabel(status: string, copy: Copy) {
 }
 
 /** ADM-19: the documents of the list by candidate, each candidate where their latest document is. */
-function documentsByCandidate<T extends { candidateId: number }>(documents: readonly T[]) {
+function documentsByCandidate<T extends { candidateId: number }>(
+  documents: readonly T[]
+) {
   const groups = new Map<number, T[]>();
-  for (const document of documents) groups.set(document.candidateId, [...(groups.get(document.candidateId) ?? []), document]);
+  for (const document of documents)
+    groups.set(document.candidateId, [
+      ...(groups.get(document.candidateId) ?? []),
+      document,
+    ]);
   return Array.from(groups.values());
 }
 
 export default function CandidateDocumentsAdminTab() {
   const { language } = useLanguage();
-  const copy = candidateDocumentsCopy[language as keyof typeof candidateDocumentsCopy] ?? candidateDocumentsCopy.fr;
+  const copy =
+    candidateDocumentsCopy[language as keyof typeof candidateDocumentsCopy] ??
+    candidateDocumentsCopy.fr;
   const utils = trpc.useUtils();
   const [filter, setFilter] = useState<string>("needs_review");
   const [notes, setNotes] = useState<Record<number, string>>({});
-  const list = trpc.admin.candidateDocuments.list.useQuery({ status: filter === "all" ? undefined : filter as "uploaded" | "validating" | "analyzing" | "needs_review" | "reviewed" | "rejected" | "archived" });
-  const review = trpc.admin.candidateDocuments.review.useMutation({ onSuccess: () => { toast.success(copy.reviewSaved); utils.admin.candidateDocuments.list.invalidate(); }, onError: error => toast.error(error.message) });
-  const reanalyze = trpc.admin.candidateDocuments.reanalyze.useMutation({ onSuccess: () => { toast.success(copy.analysisQueued); utils.admin.candidateDocuments.list.invalidate(); }, onError: error => toast.error(error.message) });
-  const download = trpc.admin.candidateDocuments.download.useMutation({ onSuccess: data => window.open(data.url, "_blank", "noopener,noreferrer"), onError: error => toast.error(error.message) });
+  const list = trpc.admin.candidateDocuments.list.useQuery({
+    status:
+      filter === "all"
+        ? undefined
+        : (filter as
+            | "uploaded"
+            | "validating"
+            | "analyzing"
+            | "needs_review"
+            | "reviewed"
+            | "rejected"
+            | "archived"),
+  });
+  const review = trpc.admin.candidateDocuments.review.useMutation({
+    onSuccess: () => {
+      toast.success(copy.reviewSaved);
+      utils.admin.candidateDocuments.list.invalidate();
+    },
+    onError: error => toast.error(error.message),
+  });
+  const reanalyze = trpc.admin.candidateDocuments.reanalyze.useMutation({
+    onSuccess: () => {
+      toast.success(copy.analysisQueued);
+      utils.admin.candidateDocuments.list.invalidate();
+    },
+    onError: error => toast.error(error.message),
+  });
+  const download = trpc.admin.candidateDocuments.download.useMutation({
+    onSuccess: data => window.open(data.url, "_blank", "noopener,noreferrer"),
+    onError: error => toast.error(error.message),
+  });
 
   // ADM-11: refusing or archiving takes the note in the field (no wording put in for the admin, nor
   // the generic one an earlier « Valider » saved: selected, it is replaced as the note is typed), once confirmed.
-  function closeReview(item: NonNullable<typeof list.data>[number], status: "rejected" | "archived") {
+  function closeReview(
+    item: NonNullable<typeof list.data>[number],
+    status: "rejected" | "archived"
+  ) {
     const note = (notes[item.id] ?? item.reviewNotes ?? "").trim();
     if (!note || GENERIC_REVIEW_NOTES.has(note)) {
       toast.error(copy.noteRequired);
-      const field = window.document.getElementById(`candidate-document-note-${item.id}`) as HTMLInputElement | null;
+      const field = window.document.getElementById(
+        `candidate-document-note-${item.id}`
+      ) as HTMLInputElement | null;
       field?.focus();
       field?.select();
       return;
     }
-    const candidate = [item.firstName, item.lastName].filter(Boolean).join(" ") || item.candidateEmail;
-    const message = (status === "rejected" ? copy.confirmReject : copy.confirmArchive).replace("{name}", () => item.originalName).replace("{candidate}", () => candidate).replace("{note}", () => note);
+    const candidate =
+      [item.firstName, item.lastName].filter(Boolean).join(" ") ||
+      item.candidateEmail;
+    const message = (
+      status === "rejected" ? copy.confirmReject : copy.confirmArchive
+    )
+      .replace("{name}", () => item.originalName)
+      .replace("{candidate}", () => candidate)
+      .replace("{note}", () => note);
     if (!window.confirm(message)) return;
     review.mutate({ id: item.id, status, notes: note });
   }
 
-  return <section className="space-y-6"><div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">{copy.vault}</p><h2 className="mt-1 text-2xl font-bold text-foreground">{copy.title}</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">{copy.intro}</p></div><div className="w-full sm:w-56"><Label htmlFor="candidate-document-filter">{copy.filter}</Label><Select value={filter} onValueChange={setFilter}><SelectTrigger id="candidate-document-filter" className="mt-2"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="needs_review">{copy.needsReview}</SelectItem><SelectItem value="analyzing">{copy.analyzing}</SelectItem><SelectItem value="uploaded">{copy.uploaded}</SelectItem><SelectItem value="reviewed">{copy.reviewed}</SelectItem><SelectItem value="rejected">{copy.rejected}</SelectItem><SelectItem value="archived">{copy.archived}</SelectItem><SelectItem value="all">{copy.all}</SelectItem></SelectContent></Select></div></div>
-    {/* ADM-10: a vault that could not be read is not shown as an empty one. */}
-    {list.isLoading ? <PublicContentSkeleton label={copy.loading} /> : list.error ? <AdminErrorState title={copy.loadError} description={list.error.message} onRetry={() => void list.refetch()} retrying={list.isFetching} retryLabel={copy.retry} headingLevel={3} /> : documentsByCandidate(list.data ?? []).map(documents => {
-      const [first] = documents;
-      const applications = Array.from(new Set(documents.map(document => document.applicationTrackingId).filter((reference): reference is string => Boolean(reference))));
-      // ADM-19: a candidate's documents together, under their name, with the application they go with (/admin?tab=recruitment&ref=…, ADM-09).
-      return <section key={first.candidateId} aria-labelledby={`candidate-documents-${first.candidateId}`} className="space-y-3"><div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between"><div className="min-w-0 wrap-anywhere"><h3 id={`candidate-documents-${first.candidateId}`} className="font-semibold text-foreground">{[first.firstName, first.lastName].filter(Boolean).join(" ") || copy.candidate}</h3><p className="text-sm text-muted-foreground">{first.candidateEmail} · {copy.documentCount.replace("{count}", String(documents.length))}</p></div>{applications.length > 0 && <div className="flex flex-wrap gap-2">{applications.map(reference => <Link key={reference} href={adminPath("recruitment", reference)} className={buttonVariants({ variant: "outline", size: "sm" })}><UserRound aria-hidden="true" />{copy.viewApplication}<span className="font-mono text-xs text-muted-foreground">{reference}</span></Link>)}</div>}</div>
-      {documents.map(document => <Card key={document.id} className="border-border bg-card"><CardHeader className="gap-3 border-b border-border/70 pb-4 sm:flex-row sm:items-start sm:justify-between"><div className="min-w-0"><CardTitle className="text-base wrap-anywhere">{copy.categories[document.category as keyof typeof copy.categories] || document.category}{document.categoryOtherLabel ? ` · ${document.categoryOtherLabel}` : ""}</CardTitle><CardDescription className="mt-1 wrap-anywhere">{document.originalName} · {(document.sizeBytes / 1024).toFixed(0)} {copy.kb}</CardDescription></div><div className="flex flex-wrap gap-2"><AdminBadge tone="info" className="rounded-full px-3 py-1">{analysisStatusLabel(document.analysisStatus, copy)}</AdminBadge><Button variant="outline" size="sm" onClick={() => reanalyze.mutate({ id: document.id })} disabled={reanalyze.isPending || !canRequestCandidateDocumentReanalysis(document)}><RotateCcw />{copy.rerun}</Button><Button variant="outline" size="sm" onClick={() => download.mutate({ id: document.id })} disabled={download.isPending}><Download />{copy.open}</Button></div></CardHeader><CardContent className="grid gap-5 pt-5 lg:grid-cols-[1.1fr_0.9fr]"><div className="min-w-0 wrap-anywhere"><div className="rounded-xl border border-cyan-950/60 bg-cyan-950/15 p-4"><div className="flex items-center gap-2 text-sm font-semibold text-cyan-800 dark:text-cyan-100"><ShieldCheck size={17} />{copy.aiSummary}</div><p className="mt-2 text-sm leading-6 text-muted-foreground">{document.aiSummary || copy.aiUnavailable}</p>{/* IA-06: no « confidence » for a document whose authenticity nothing checks: only the model that read it. */}{document.aiConfidence !== null && <p className="mt-3 text-xs text-cyan-800 dark:text-cyan-200">{copy.model}: {document.aiModel || copy.notProvided}</p>}</div>{document.aiFlags && <p className="mt-3 flex gap-2 text-xs text-amber-700 dark:text-amber-400"><FileWarning size={15} />{copy.flags}: {documentFlagsLabel(document.aiFlags, document.aiExtractedData, copy)}</p>}</div><div className="min-w-0 space-y-3"><Label htmlFor={`candidate-document-note-${document.id}`}>{copy.reviewNote}</Label><Input id={`candidate-document-note-${document.id}`} value={notes[document.id] ?? document.reviewNotes ?? ""} onChange={event => setNotes(current => ({ ...current, [document.id]: event.target.value }))} placeholder={copy.reviewPlaceholder} /><div className="flex flex-wrap gap-2"><Button size="sm" onClick={() => review.mutate({ id: document.id, status: "reviewed", notes: notes[document.id] ?? document.reviewNotes ?? copy.reviewedNote })} disabled={review.isPending}><FileCheck2 />{copy.approve}</Button><Button size="sm" variant="destructive" onClick={() => closeReview(document, "rejected")} disabled={review.isPending}>{copy.reject}</Button><Button size="sm" variant="outline" onClick={() => closeReview(document, "archived")} disabled={review.isPending}>{copy.archive}</Button></div></div></CardContent></Card>)}</section>;
-    })}
-    {!list.isLoading && !list.error && !list.data?.length && <Card className="border-dashed"><CardContent className="py-14 text-center text-muted-foreground">{copy.empty}</CardContent></Card>}
-  </section>;
+  return (
+    <section className="space-y-6">
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">
+            {copy.vault}
+          </p>
+          <h2 className="mt-1 text-2xl font-bold text-foreground">
+            {copy.title}
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
+            {copy.intro}
+          </p>
+        </div>
+        <div className="w-full sm:w-56">
+          <Label htmlFor="candidate-document-filter">{copy.filter}</Label>
+          <Select value={filter} onValueChange={setFilter}>
+            <SelectTrigger id="candidate-document-filter" className="mt-2">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="needs_review">{copy.needsReview}</SelectItem>
+              <SelectItem value="analyzing">{copy.analyzing}</SelectItem>
+              <SelectItem value="uploaded">{copy.uploaded}</SelectItem>
+              <SelectItem value="reviewed">{copy.reviewed}</SelectItem>
+              <SelectItem value="rejected">{copy.rejected}</SelectItem>
+              <SelectItem value="archived">{copy.archived}</SelectItem>
+              <SelectItem value="all">{copy.all}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      {/* ADM-10: a vault that could not be read is not shown as an empty one. */}
+      {list.isLoading ? (
+        <PublicContentSkeleton label={copy.loading} />
+      ) : list.error ? (
+        <AdminErrorState
+          title={copy.loadError}
+          description={list.error.message}
+          onRetry={() => void list.refetch()}
+          retrying={list.isFetching}
+          retryLabel={copy.retry}
+          headingLevel={3}
+        />
+      ) : (
+        documentsByCandidate(list.data ?? []).map(documents => {
+          const [first] = documents;
+          const applications = Array.from(
+            new Set(
+              documents
+                .map(document => document.applicationTrackingId)
+                .filter((reference): reference is string => Boolean(reference))
+            )
+          );
+          // ADM-19: a candidate's documents together, under their name, with the application they go with (/admin?tab=recruitment&ref=…, ADM-09).
+          return (
+            <section
+              key={first.candidateId}
+              aria-labelledby={`candidate-documents-${first.candidateId}`}
+              className="space-y-3"
+            >
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div className="min-w-0 wrap-anywhere">
+                  <h3
+                    id={`candidate-documents-${first.candidateId}`}
+                    className="font-semibold text-foreground"
+                  >
+                    {[first.firstName, first.lastName]
+                      .filter(Boolean)
+                      .join(" ") || copy.candidate}
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    {first.candidateEmail} ·{" "}
+                    {copy.documentCount.replace(
+                      "{count}",
+                      String(documents.length)
+                    )}
+                  </p>
+                </div>
+                {applications.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {applications.map(reference => (
+                      <Link
+                        key={reference}
+                        href={adminPath("recruitment", reference)}
+                        className={buttonVariants({
+                          variant: "outline",
+                          size: "sm",
+                        })}
+                      >
+                        <UserRound aria-hidden="true" />
+                        {copy.viewApplication}
+                        <span className="font-mono text-xs text-muted-foreground">
+                          {reference}
+                        </span>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {documents.map(document => (
+                <Card key={document.id} className="border-border bg-card">
+                  <CardHeader className="gap-3 border-b border-border/70 pb-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <CardTitle className="text-base wrap-anywhere">
+                        {copy.categories[
+                          document.category as keyof typeof copy.categories
+                        ] || document.category}
+                        {document.categoryOtherLabel
+                          ? ` · ${document.categoryOtherLabel}`
+                          : ""}
+                      </CardTitle>
+                      <CardDescription className="mt-1 wrap-anywhere">
+                        {document.originalName} ·{" "}
+                        {(document.sizeBytes / 1024).toFixed(0)} {copy.kb}
+                      </CardDescription>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <AdminBadge
+                        tone="info"
+                        className="rounded-full px-3 py-1"
+                      >
+                        {analysisStatusLabel(document.analysisStatus, copy)}
+                      </AdminBadge>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => reanalyze.mutate({ id: document.id })}
+                        disabled={
+                          reanalyze.isPending ||
+                          !canRequestCandidateDocumentReanalysis(document)
+                        }
+                      >
+                        <RotateCcw />
+                        {copy.rerun}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => download.mutate({ id: document.id })}
+                        disabled={download.isPending}
+                      >
+                        <Download />
+                        {copy.open}
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="grid gap-5 pt-5 lg:grid-cols-[1.1fr_0.9fr]">
+                    <div className="min-w-0 wrap-anywhere">
+                      <div className="rounded-xl border border-cyan-950/60 bg-cyan-950/15 p-4">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-cyan-800 dark:text-cyan-100">
+                          <ShieldCheck size={17} />
+                          {copy.aiSummary}
+                        </div>
+                        <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                          {document.aiSummary || copy.aiUnavailable}
+                        </p>
+                        {/* IA-06: no « confidence » for a document whose authenticity nothing checks: only the model that read it. */}
+                        {document.aiConfidence !== null && (
+                          <p className="mt-3 text-xs text-cyan-800 dark:text-cyan-200">
+                            {copy.model}: {document.aiModel || copy.notProvided}
+                          </p>
+                        )}
+                      </div>
+                      {document.aiFlags && (
+                        <p className="mt-3 flex gap-2 text-xs text-amber-700 dark:text-amber-400">
+                          <FileWarning size={15} />
+                          {copy.flags}:{" "}
+                          {documentFlagsLabel(
+                            document.aiFlags,
+                            document.aiExtractedData,
+                            copy
+                          )}
+                        </p>
+                      )}
+                    </div>
+                    <div className="min-w-0 space-y-3">
+                      <Label htmlFor={`candidate-document-note-${document.id}`}>
+                        {copy.reviewNote}
+                      </Label>
+                      <Input
+                        id={`candidate-document-note-${document.id}`}
+                        value={notes[document.id] ?? document.reviewNotes ?? ""}
+                        onChange={event =>
+                          setNotes(current => ({
+                            ...current,
+                            [document.id]: event.target.value,
+                          }))
+                        }
+                        placeholder={copy.reviewPlaceholder}
+                      />
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() =>
+                            review.mutate({
+                              id: document.id,
+                              status: "reviewed",
+                              notes:
+                                notes[document.id] ??
+                                document.reviewNotes ??
+                                copy.reviewedNote,
+                            })
+                          }
+                          disabled={review.isPending}
+                        >
+                          <FileCheck2 />
+                          {copy.approve}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => closeReview(document, "rejected")}
+                          disabled={review.isPending}
+                        >
+                          {copy.reject}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => closeReview(document, "archived")}
+                          disabled={review.isPending}
+                        >
+                          {copy.archive}
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </section>
+          );
+        })
+      )}
+      {!list.isLoading && !list.error && !list.data?.length && (
+        <Card className="border-dashed">
+          <CardContent className="py-14 text-center text-muted-foreground">
+            {copy.empty}
+          </CardContent>
+        </Card>
+      )}
+    </section>
+  );
 }

@@ -11,19 +11,52 @@ export const footerBrandLogoAltCopy = {
   de: "Logo von Dr. Ahmed Ben Lallahom",
   zh: "Ahmed Ben Lallahom 医生标志",
 } as const;
-const footerResourcesCopy = { fr: "Ressources médicales", en: "Medical resources", de: "Medizinische Ressourcen", zh: "医疗资源" } as const;
-const footerPressCopy = { fr: "Presse & publications", en: "Press & publications", de: "Presse & Veröffentlichungen", zh: "媒体与出版" } as const;
+const footerResourcesCopy = {
+  fr: "Ressources médicales",
+  en: "Medical resources",
+  de: "Medizinische Ressourcen",
+  zh: "医疗资源",
+} as const;
+const footerPressCopy = {
+  fr: "Presse & publications",
+  en: "Press & publications",
+  de: "Presse & Veröffentlichungen",
+  zh: "媒体与出版",
+} as const;
 export const footerLandmarkCopy = {
   footer: { fr: "Pied de page", en: "Footer", de: "Fußzeile", zh: "页脚" },
-  sections: { fr: "Rubriques du site", en: "Site sections", de: "Bereiche der Website", zh: "网站栏目" },
-  legal: { fr: "Informations légales", en: "Legal information", de: "Rechtliche Informationen", zh: "法律信息" },
+  sections: {
+    fr: "Rubriques du site",
+    en: "Site sections",
+    de: "Bereiche der Website",
+    zh: "网站栏目",
+  },
+  legal: {
+    fr: "Informations légales",
+    en: "Legal information",
+    de: "Rechtliche Informationen",
+    zh: "法律信息",
+  },
 } as const;
-export const footerGdprCopy = { fr: "Exercer mes droits RGPD", en: "Exercise my GDPR rights", de: "Meine DSGVO-Rechte ausüben", zh: "行使我的 GDPR 权利" } as const;
+export const footerGdprCopy = {
+  fr: "Exercer mes droits RGPD",
+  en: "Exercise my GDPR rights",
+  de: "Meine DSGVO-Rechte ausüben",
+  zh: "行使我的 GDPR 权利",
+} as const;
 
-const linkClass = "block text-sm text-muted-foreground hover:text-primary transition-colors";
-const headingClass = "font-semibold text-foreground mb-4 text-sm uppercase tracking-wide";
+const linkClass =
+  "block text-sm text-muted-foreground hover:text-primary transition-colors";
+const headingClass =
+  "font-semibold text-foreground mb-4 text-sm uppercase tracking-wide";
 
-function FooterColumn({ title, children }: { title: string; children: ReactNode }) {
+function FooterColumn({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
   return (
     <div>
       <h2 className={headingClass}>{title}</h2>
@@ -34,14 +67,27 @@ function FooterColumn({ title, children }: { title: string; children: ReactNode 
 
 export default function Footer() {
   const { content, language } = useLanguage();
-  const logoAlt = footerBrandLogoAltCopy[language as keyof typeof footerBrandLogoAltCopy] ?? footerBrandLogoAltCopy.fr;
-  const resourcesLabel = footerResourcesCopy[language as keyof typeof footerResourcesCopy] ?? footerResourcesCopy.fr;
-  const pressLabel = footerPressCopy[language as keyof typeof footerPressCopy] ?? footerPressCopy.fr;
-  const gdprLabel = footerGdprCopy[language as keyof typeof footerGdprCopy] ?? footerGdprCopy.fr;
-  const landmarkLanguage = (language in footerLandmarkCopy.footer ? language : "fr") as keyof typeof footerLandmarkCopy.footer;
+  const logoAlt =
+    footerBrandLogoAltCopy[language as keyof typeof footerBrandLogoAltCopy] ??
+    footerBrandLogoAltCopy.fr;
+  const resourcesLabel =
+    footerResourcesCopy[language as keyof typeof footerResourcesCopy] ??
+    footerResourcesCopy.fr;
+  const pressLabel =
+    footerPressCopy[language as keyof typeof footerPressCopy] ??
+    footerPressCopy.fr;
+  const gdprLabel =
+    footerGdprCopy[language as keyof typeof footerGdprCopy] ??
+    footerGdprCopy.fr;
+  const landmarkLanguage = (
+    language in footerLandmarkCopy.footer ? language : "fr"
+  ) as keyof typeof footerLandmarkCopy.footer;
 
   return (
-    <footer className="relative border-t border-border/20 bg-card/30" aria-label={footerLandmarkCopy.footer[landmarkLanguage]}>
+    <footer
+      className="relative border-t border-border/20 bg-card/30"
+      aria-label={footerLandmarkCopy.footer[landmarkLanguage]}
+    >
       {/* ECG divider top */}
       <div className="ecg-divider absolute top-0 left-0 right-0" />
 
@@ -92,13 +138,18 @@ export default function Footer() {
             </address>
           </div>
 
-          <nav className="grid gap-10 sm:grid-cols-3" aria-label={footerLandmarkCopy.sections[landmarkLanguage]}>
+          <nav
+            className="grid gap-10 sm:grid-cols-3"
+            aria-label={footerLandmarkCopy.sections[landmarkLanguage]}
+          >
             <FooterColumn title={content.footer.patients}>
               {/* Réservation depuis toutes les pages (PUB-02) : un lien classique ouvre /booking en haut de page. */}
               <a className={linkClass} href="/booking">
                 {content.hero.bookConsultation}
               </a>
-              <a className={linkClass} href="/questions-anesthesie">{content.nav.healthQuestions}</a>
+              <a className={linkClass} href="/questions-anesthesie">
+                {content.nav.healthQuestions}
+              </a>
               <Link href="/faq" className={linkClass}>
                 FAQ
               </Link>
@@ -108,9 +159,15 @@ export default function Footer() {
             </FooterColumn>
 
             <FooterColumn title={content.nav.recruitment}>
-              <a className={linkClass} href="/recruitment">{content.footer.apply}</a>
-              <a className={linkClass} href="/employers">{content.nav.employers}</a>
-              <a className={linkClass} href="/candidate/access">{content.footer.candidatePortal}</a>
+              <a className={linkClass} href="/recruitment">
+                {content.footer.apply}
+              </a>
+              <a className={linkClass} href="/employers">
+                {content.nav.employers}
+              </a>
+              <a className={linkClass} href="/candidate/access">
+                {content.footer.candidatePortal}
+              </a>
             </FooterColumn>
 
             <FooterColumn title={content.footer.information}>
@@ -119,7 +176,7 @@ export default function Footer() {
                 { id: "services", label: content.nav.services },
                 { id: "education", label: content.nav.education },
                 { id: "contact", label: content.nav.contact },
-              ].map((item) => (
+              ].map(item => (
                 <a
                   key={item.id}
                   className={linkClass}
@@ -158,10 +215,16 @@ export default function Footer() {
         {/* Bottom bar */}
         <div className="mt-14 pt-6 border-t border-border/20 flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-xs text-muted-foreground">
-            © {new Date().getFullYear()} {siteConfig.name}. {content.footer.rights}
+            © {new Date().getFullYear()} {siteConfig.name}.{" "}
+            {content.footer.rights}
           </p>
           {/* Mini ECG signature */}
-          <svg className="w-24 h-6 opacity-30" viewBox="0 0 96 24" fill="none" aria-hidden="true">
+          <svg
+            className="w-24 h-6 opacity-30"
+            viewBox="0 0 96 24"
+            fill="none"
+            aria-hidden="true"
+          >
             <path
               d="M0 12 L20 12 L28 12 L32 4 L36 20 L40 8 L44 14 L48 12 L96 12"
               stroke="oklch(0.75 0.15 220)"

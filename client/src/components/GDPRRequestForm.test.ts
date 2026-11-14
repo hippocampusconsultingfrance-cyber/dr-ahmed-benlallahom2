@@ -15,6 +15,6 @@ describe("GDPR request translations", () => {
   it("uses stable unique identifiers for every labeled field", () => {
     const ids = Object.values(gdprFieldIds);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(ids.every((id) => id.startsWith("gdpr-request-"))).toBe(true);
+    expect(ids.every(id => id.startsWith("gdpr-request-"))).toBe(true);
   });
 });

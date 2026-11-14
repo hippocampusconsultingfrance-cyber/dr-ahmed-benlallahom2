@@ -8,20 +8,32 @@ import { STATIC_ROUTE_METADATA } from "@shared/routeMetadata";
 // hydraté reprend la table partagée en français et les props dans les autres
 // langues, sans balise meta keywords, que Google ignore (SEOP-05).
 const { SEOHead, OG_LOCALES } = await import("./SEOHead");
-const { LanguageProvider, useLanguage } = await import("@/contexts/LanguageContext");
+const { LanguageProvider, useLanguage } = await import(
+  "@/contexts/LanguageContext"
+);
 const { homeSeo } = await import("@/pages/Home");
 
-const meta = (name: string) => document.head.querySelector<HTMLMetaElement>(`meta[name="${name}"]`)?.content;
-const property = (name: string) => document.head.querySelector<HTMLMetaElement>(`meta[property="${name}"]`)?.content;
+const meta = (name: string) =>
+  document.head.querySelector<HTMLMetaElement>(`meta[name="${name}"]`)?.content;
+const property = (name: string) =>
+  document.head.querySelector<HTMLMetaElement>(`meta[property="${name}"]`)
+    ?.content;
 
 function mountHome(language: "fr" | "en") {
   localStorage.setItem("language", language);
   window.history.replaceState(null, "", "/");
-  return render(createElement(LanguageProvider, null, createElement(SEOHead, {
-    title: "Dr. Ahmed Ben Lallahom | Anaesthesia and Health",
-    description: "Anaesthesiologist and healthcare entrepreneur based in France.",
-    ogUrl: "https://drahmedbenlallahom.com",
-  })));
+  return render(
+    createElement(
+      LanguageProvider,
+      null,
+      createElement(SEOHead, {
+        title: "Dr. Ahmed Ben Lallahom | Anaesthesia and Health",
+        description:
+          "Anaesthesiologist and healthcare entrepreneur based in France.",
+        ogUrl: "https://drahmedbenlallahom.com",
+      })
+    )
+  );
 }
 
 afterEach(() => {
@@ -34,13 +46,16 @@ describe("<head> hydraté par SEOHead", () => {
   it.each([
     ["fr", STATIC_ROUTE_METADATA["/"].description],
     ["en", "Anaesthesiologist and healthcare entrepreneur based in France."],
-  ] as const)("n'ajoute aucune balise meta keywords (%s)", (language, description) => {
-    mountHome(language);
+  ] as const)(
+    "n'ajoute aucune balise meta keywords (%s)",
+    (language, description) => {
+      mountHome(language);
 
-    expect(meta("description")).toBe(description);
-    expect(meta("robots")).toBe("index, follow, max-image-preview:large");
-    expect(document.head.querySelector('meta[name="keywords"]')).toBeNull();
-  });
+      expect(meta("description")).toBe(description);
+      expect(meta("robots")).toBe("index, follow, max-image-preview:large");
+      expect(document.head.querySelector('meta[name="keywords"]')).toBeNull();
+    }
+  );
 });
 
 describe("accueil dans la langue affichée (EN-10)", () => {
@@ -49,7 +64,11 @@ describe("accueil dans la langue affichée (EN-10)", () => {
   function HomeHead() {
     const { language, setLanguage } = useLanguage();
     switchTo = setLanguage;
-    return createElement(SEOHead, { title: homeSeo[language].title, description: homeSeo[language].description, ogUrl: "https://drahmedbenlallahom.com" });
+    return createElement(SEOHead, {
+      title: homeSeo[language].title,
+      description: homeSeo[language].description,
+      ogUrl: "https://drahmedbenlallahom.com",
+    });
   }
 
   it("passe titre, description et og:locale dans la langue choisie sur place, et retrouve en français ceux de la page pré-rendue", () => {

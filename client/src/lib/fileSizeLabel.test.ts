@@ -8,7 +8,7 @@ import { fileSizeLabel } from "./fileSizeLabel";
 
 const inVault = (bytes: number, language: keyof typeof candidatePortalCopy) => {
   const copy = candidatePortalCopy[language];
-  return fileSizeLabel(bytes, copy.locale, copy).replace(/ /g, " ");
+  return fileSizeLabel(bytes, copy.locale, copy).replace(/\u00a0/g, " ");
 };
 
 describe("taille d’un document du coffre du candidat", () => {
@@ -32,7 +32,11 @@ describe("taille d’un document du coffre du candidat", () => {
   it("arrondit au-dessus de la limite donnée, et à deux décimales au plus en dessous", () => {
     const limit = 4 * 1024 * 1024;
     const units = { kilobytes: "Ko", megabytes: "Mo" };
-    expect(fileSizeLabel(limit + 1, "fr-FR", units, limit).replace(/ /g, " ")).toBe("4,01 Mo");
-    expect(fileSizeLabel(limit + 1, "fr-FR", units).replace(/ /g, " ")).toBe("4 Mo");
+    expect(
+      fileSizeLabel(limit + 1, "fr-FR", units, limit).replace(/\u00a0/g, " ")
+    ).toBe("4,01 Mo");
+    expect(
+      fileSizeLabel(limit + 1, "fr-FR", units).replace(/\u00a0/g, " ")
+    ).toBe("4 Mo");
   });
 });
