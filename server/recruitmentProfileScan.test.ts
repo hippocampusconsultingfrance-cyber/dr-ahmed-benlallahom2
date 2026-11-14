@@ -406,7 +406,7 @@ describe("Candidatures — profil de matching et filtres de la liste (IA-02)", (
     ]],
   ];
   const QUALIFIED_LANGUAGES = [["Anglais", ", ", "Darija", "Darijaphone"], ["English", ", ", "Teochew", "Teochewphone"], ["Englisch", ", ", "Tigrinisch", "Tigrinophone"], ["英语", "，", "上海话", "Shanghaiphone"]] as const;
-  const seedSpeakers = (prefix: string) => {
+  const seedSpeakers = (prefix: string, others: ReadonlyArray<readonly [lastName: string, languages: string[]]> = []) => {
     const dossier = (lastName: string, languages: string[]) => ({
       tracking_id: `${prefix}${lastName}`, first_name: "Dr", last_name: lastName, email: `${prefix.toLowerCase()}${lastName.toLowerCase()}@test.local`, specialty: "Anesthésie-réanimation",
       target_countries: JSON.stringify(["Émirats arabes unis"]), languages: JSON.stringify(languages), analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION,
@@ -415,6 +415,7 @@ describe("Candidatures — profil de matching et filtres de la liste (IA-02)", (
     memory.seed(cvApplications, [
       dossier("Anglophone", ["English"]), ...QUALIFIED_LANGUAGES.map(([, , name, speaker]) => dossier(speaker, ["English", name])),
       dossier("Sinophone", ["English", "中文"]), dossier("Neerlandophone", ["English", "Français", "Nederlands"]), dossier("Arabophone", ["English", "Français", "Arabic"]),
+      ...others.map(([lastName, languages]) => dossier(lastName, languages)),
     ]);
   };
   // The Langue filter, a profile as the page splits it at its commas, a mission: the dossiers each keeps, by their names.
@@ -484,6 +485,26 @@ describe("Candidatures — profil de matching et filtres de la liste (IA-02)", (
     await expectKept("英语 – 迪拜，中文", ["Sinophone"]);
     await expectKept("英语 – 迪拜，潮州话", []);
     await expectKept("英语和白话", []);
+  });
+
+  it("lit le nom chinois en 文 ou 话 d’une langue qu’Intl.DisplayNames nomme hors des listes comme une exigence, et un mot courant en 话 comme un mot : la mission, le profil et le filtre Langue (IA02-R8-NOM-CHINOIS-HORS-LISTES-PERDU, IA02-R8-MOTS-ORDINAIRES-RESTANTS)", async () => {
+    seedSpeakers("CVR8ZH", [["Latiniste", ["English", "拉丁文"]], ["Sanskritiste", ["English", "梵文"]]]);
+    const everyone = ["Anglophone", "Arabophone", "Darijaphone", "Latiniste", "Neerlandophone", "Sanskritiste", "Shanghaiphone", "Sinophone", "Teochewphone", "Tigrinophone"];
+    // Before (ebc5768): 拉丁文 (Latin) and 梵文 (Sanskrit) were everyday words after the places a dash opened or after 和, and the
+    // speaker of English alone met the texts; b81633b kept them, as 拉丁语 and 梵语 still are.
+    await expectKept("英语 – 迪拜，拉丁文", ["Latiniste"]);
+    await expectKept("英语和梵文", ["Sanskritiste"]);
+    await expectKept("英语 – 利雅得，医学拉丁文", ["Latiniste"]);
+    await expectKept("英语 – 听说读写和巴利文", []);
+    await expectKept("英语 – 迪拜，平话", []);
+    // Before (ebc5768, as b81633b): 恭维话 (compliments), 大白话 and 明白话 (plain words) were a language nobody spoke.
+    await expectKept("英语 – 迪拜，恭维话", everyone);
+    await expectKept("英语和大白话", everyone);
+    await expectKept("英语 – 听说读写和明白话", everyone);
+    // 维文, 白话 and 官话 starting a word, or after a place, are still a language's name.
+    await expectKept("英语 – 迪拜，维文", []);
+    await expectKept("英语 – 迪拜，广东白话", []);
+    await expectKept("英语和官话", []);
   });
 
   it("ne lit les langues tirées du CV, et leurs citations, que pour un profil qui exige des langues (IA-02)", async () => {

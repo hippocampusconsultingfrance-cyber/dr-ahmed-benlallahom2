@@ -217,6 +217,21 @@ describe("matching mission–candidat", () => {
     }
   });
 
+  it("lit le nom chinois en 文 ou 话 d’une langue qu’Intl.DisplayNames nomme hors des listes comme une exigence, et un mot courant en 话 comme un mot (IA02-R8-NOM-CHINOIS-HORS-LISTES-PERDU, IA02-R8-MOTS-ORDINAIRES-RESTANTS)", () => {
+    const candidate = { specialty: "Anesthésie-réanimation", targetCountries: '["Émirats arabes unis"]' };
+    const match = (requiredLanguages: string, declared: string[]) =>
+      computeBriefCandidateMatch({ specialtyNeeded: "Anesthésie-réanimation", country: "Émirats arabes unis", requiredCertifications: null, requiredLanguages }, { ...candidate, languageFacts: languageFacts(JSON.stringify(declared), []) });
+    // Before (ebc5768): English gave 15 language points of 15, 拉丁文 (Latin), 梵文 (Sanskrit), 巴利文 (Pali) or 平话 read as everyday words.
+    for (const [required, name] of [["英语 – 迪拜，拉丁文", "拉丁文"], ["英语和梵文", "梵文"], ["英语 – 流利及巴利文", "巴利文"], ["英语 – 迪拜，平话", "平话"]] as const) {
+      expect(match(required, ["English"]).breakdown.languages, required).toBeLessThan(15);
+      expect(match(required, ["English", name]).breakdown.languages, required).toBe(15);
+    }
+    // Before (ebc5768, as b81633b): English gave 8 language points of 15, 恭维话, 大白话 or 打官话 read as a language nobody spoke.
+    for (const required of ["英语 – 迪拜，恭维话", "英语和大白话", "英语 – 迪拜，明白话", "英语 – 迪拜，打官话"]) {
+      expect(match(required, ["English"]).breakdown.languages, required).toBe(15);
+    }
+  });
+
   it("une certification déclarée par le candidat compte, elle aussi, une fois confirmée", () => {
     const declaredOnly = computeBriefCandidateMatch(brief, { ...anaesthetist, certificationFacts: certificationFacts("ACLS, ATLS", []) });
     expect(declaredOnly.breakdown.certifications).toBe(0);

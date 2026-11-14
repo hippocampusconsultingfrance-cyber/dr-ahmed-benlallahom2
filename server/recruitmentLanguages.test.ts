@@ -876,6 +876,60 @@ describe("langues du recrutement comparées par code (IA-02)", () => {
     }
   });
 
+  it.each(CHINESE_CONTEXTS)("lit %s le nom chinois en 文 ou 话 d’une langue qu’Intl.DisplayNames nomme hors des listes comme une exigence, et 白话, 官话 et 平话 dès qu’ils ouvrent un mot ou suivent un lieu (IA02-R8-NOM-CHINOIS-HORS-LISTES-PERDU)", (_, write) => {
+    // Before (ebc5768): 拉丁文, 梵文, 巴利文, 平话... were everyday words, and the language was lost after the places a dash opened
+    // or after 和, 及, 与; b81633b kept them. X文 and X话 are a language's name when X语 is one: 拉丁语, 梵语, 巴利语, 吴语.
+    for (const name of [
+      "拉丁文", "拉丁话", "医学拉丁文", "梵文", "巴利文", "阿拉米文", "科普特文", "罗兴亚文", "吉普赛文", "夏威夷文", "世界文", "吴话", "满文", "和田文",
+      "史瓦希里文", "阿維斯塔文", "平话", "桂南平话", "西南官话", "中原官话", "广东白话", "白話", "官話", "维文", "新疆维文", "蒙文",
+    ]) {
+      const required = write(name);
+      for (const requirements of [recruitmentLanguageRequirements(required), recruitmentLanguageListRequirements([required])]) {
+        expect(requirements, required).toHaveLength(2);
+        expect(requirements.every(requirement => meetsRequiredLanguage(["English"], requirement)), required).toBe(false);
+        expect(requirements.every(requirement => meetsRequiredLanguage(["English", name], requirement)), required).toBe(true);
+      }
+    }
+  });
+
+  it.each(CHINESE_CONTEXTS)("lit %s un mot courant qui finit par un nom de peuple d’un caractère, par 白话 ou par 官话 comme « compliments » ou « franc-parler » : il qualifie la langue (IA02-R8-MOTS-ORDINAIRES-RESTANTS)", (_, write) => {
+    // Before (ebc5768, as b81633b): 恭维话 (compliments: 维 of 维文 at the end of 恭维), 大白话 and 明白话 (plain words), 打官话
+    // (officialese) were a language nobody spoke; daf844a and ac75d5a read one requirement met by English.
+    for (const word of ["恭维话", "大白话", "明白话", "打官话", "说大白话", "讲明白话"]) {
+      const required = write(word);
+      for (const requirements of [recruitmentLanguageRequirements(required), recruitmentLanguageListRequirements([required])]) {
+        expect(requirements.map(requirement => requirement.text), required).toEqual([required]);
+        expect(meetsRequiredLanguage(["English"], requirements[0]!), required).toBe(true);
+      }
+    }
+  });
+
+  it("lit le nom chinois en 文 ou 话 de chaque langue qu’Intl.DisplayNames nomme en chinois, codes de deux et de trois lettres, comme une exigence (IA02-R8-NOM-CHINOIS-HORS-LISTES-PERDU)", () => {
+    // Every language this host's Intl.DisplayNames names in simplified or traditional Chinese (拉丁语, 阿维斯塔语, 吴语; 拉丁文,
+    // 史瓦希里文): written with 文 or 话 after the places a dash opened, and with 话 after 和, English alone does not meet the text.
+    // A name of the table's languages within it (古英文, 中古英文) is that language; one split at a conjunction within it, not
+    // at its start, is the known risk (奈及利亞皮欽話, Nigerian Pidgin in traditional characters, after 和). Should a newer ICU name
+    // more languages in Chinese, each one this test lists is to be added to CHINESE_NAMED_LANGUAGE_CODES.
+    const letters = "abcdefghijklmnopqrstuvwxyz";
+    const codes = Array.from(letters).flatMap(first => Array.from(letters).flatMap(second => [first + second, ...Array.from(letters, third => first + second + third)]));
+    const lost: string[] = [];
+    for (const locale of ["zh", "zh-Hant"]) {
+      const display = new Intl.DisplayNames([locale], { type: "language", fallback: "none" });
+      for (const code of codes) {
+        if (["mis", "mul", "und", "zxx"].includes(code)) continue;
+        const name = (display.of(code) ?? "").replace(/[(（][^)）]*[)）]/g, "").trim();
+        const stem = name.slice(0, -1);
+        if (!/^\p{Script=Han}+$/u.test(name) || !"语語话話文言".includes(name.at(-1)!) || "语語话話文言".includes(stem.at(-1)!) || "国國".includes(stem)) continue;
+        if (recruitmentLanguageCodes(name).length) continue;
+        const written = [`英语 – 迪拜，${stem}文`, `英语 – 迪拜，${stem}话`, ...(/^.+[和及与與]/u.test(stem) ? [] : [`英语和${stem}话`])];
+        for (const required of written) {
+          if (recruitmentLanguageRequirements(required).every(requirement => meetsRequiredLanguage(["English"], requirement))) lost.push(`${code} ${required}`);
+        }
+      }
+    }
+    expect(lost).toEqual([]);
+  });
+
   it("sans Intl.DisplayNames (un navigateur ou un Node.js sans ses données), garde les noms de sa propre liste et ce qui qualifie une langue (IA-02)", async () => {
     vi.stubGlobal("Intl", { ...Intl, DisplayNames: undefined });
     vi.resetModules();
