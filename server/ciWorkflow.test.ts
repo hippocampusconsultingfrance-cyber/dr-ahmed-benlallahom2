@@ -1264,9 +1264,10 @@ import tseslint from "typescript-eslint";
 
 // ESLint (CODE-04): its recommended rules and typescript-eslint's, without those that need the
 // types (\`pnpm check\` reads them), on the site's code, its tests, scripts and end-to-end
-// scenarios, and the two rules of React's hooks on the React code. \`pnpm lint\` fails on any
-// warning; a rule turned off on one line says why there. server/ciWorkflow.test.ts lists this
-// file as it is.
+// scenarios, the database schema (drizzle/schema.ts) and the configuration files at the root,
+// this one included, and the two rules of React's hooks on the React code. \`pnpm lint\` fails on
+// any warning; a rule turned off on one line says why there. server/ciWorkflow.test.ts lists
+// this file as it is.
 export default defineConfig(
   // The build, the table scripts/generate-docx-font-metrics.mjs writes, and the copies of the
   // repository that local tools keep (.claude).
@@ -1280,6 +1281,8 @@ export default defineConfig(
   {
     files: [
       "{client/src,server,shared,scripts,e2e}/**/*.{js,mjs,cjs,ts,mts,cts,tsx}",
+      "drizzle/*.{js,mjs,cjs,ts,mts,cts,tsx}",
+      "*.{js,mjs,cjs,ts,mts,cts,tsx}",
     ],
     extends: [js.configs.recommended, tseslint.configs.recommended],
     languageOptions: { globals: globals.node },
@@ -1338,11 +1341,23 @@ const treeFiles = () =>
       entry.isDirectory() ? filesIn(entry.name) : [entry.name]
     );
 
-/** The files `pnpm lint` reads: the JavaScript and TypeScript of client/src, server, shared, scripts and e2e. */
+/** The files directly in a directory of the root, or in the root itself (`.`), relative to the root. */
+const filesDirectlyIn = (directory: string) =>
+  readdirSync(path.join(root, directory), { withFileTypes: true })
+    .filter(entry => entry.isFile())
+    .map(entry => path.posix.join(directory, entry.name));
+
+/**
+ * The files `pnpm lint` reads: the JavaScript and TypeScript of client/src, server, shared,
+ * scripts and e2e, and those directly in drizzle (the schema, not drizzle-kit's directories)
+ * and in the root (the configuration files, eslint.config.js included).
+ */
 const lintedFiles = () =>
-  filesIn("client/src", "server", "shared", "scripts", "e2e").filter(file =>
-    /\.(?:[cm]?[jt]s|tsx)$/.test(file)
-  );
+  [
+    ...filesIn("client/src", "server", "shared", "scripts", "e2e"),
+    ...filesDirectlyIn("drizzle"),
+    ...filesDirectlyIn("."),
+  ].filter(file => /\.(?:[cm]?[jt]s|tsx)$/.test(file));
 
 /** The one such file left out: the table scripts/generate-docx-font-metrics.mjs writes. */
 const LINT_IGNORED_FILES = ["server/docxFontMetrics.ts"];
@@ -3754,7 +3769,7 @@ describe("intégration continue GitHub", () => {
     ).toThrow(/^knip\.json: issue types ignored/);
   }, 30_000);
 
-  it("lance ESLint sur chaque fichier du code, des tests, des scripts et des scénarios, chaque règle recommandée en erreur, sans commentaire qui coupe une règle au-delà d'une ligne (CODE-04)", async () => {
+  it("lance ESLint sur chaque fichier du code, des tests, des scripts, des scénarios, du schéma et des configurations de la racine, chaque règle recommandée en erreur, sans commentaire qui coupe une règle au-delà d'une ligne (CODE-04)", async () => {
     expect(lintedFiles()).toEqual(
       expect.arrayContaining([
         "client/src/main.tsx",
@@ -3763,6 +3778,12 @@ describe("intégration continue GitHub", () => {
         "shared/textInput.ts",
         "scripts/smoke-built-server.mjs",
         "e2e/support/fixtures.ts",
+        "drizzle/schema.ts",
+        "drizzle.config.ts",
+        "eslint.config.js",
+        "playwright.e2e.config.ts",
+        "vite.config.ts",
+        "vitest.config.ts",
       ])
     );
     await expectEslintLintsEverySource();
@@ -3837,6 +3858,25 @@ describe("intégration continue GitHub", () => {
             : entry
         ),
       ],
+      ...(
+        [
+          ["the schema left out", "drizzle/*.{js,mjs,cjs,ts,mts,cts,tsx}"],
+          [
+            "the root's configuration left out",
+            "*.{js,mjs,cjs,ts,mts,cts,tsx}",
+          ],
+        ] as const
+      ).map(([what, pattern]): [string, Linter.Config[]] => [
+        what,
+        project.map(entry =>
+          entry.files
+            ? {
+                ...entry,
+                files: entry.files.filter(files => files !== pattern),
+              }
+            : entry
+        ),
+      ]),
       [
         "no-explicit-any off",
         [
@@ -3899,7 +3939,7 @@ describe("intégration continue GitHub", () => {
     }
   }, 60_000);
 
-  it("vérifie la mise en forme de chaque fichier du code, des tests, des scripts et des scénarios avec la configuration de Prettier listée (CODE-04)", async () => {
+  it("vérifie la mise en forme de chaque fichier du code, des tests, des scripts, des scénarios, du schéma et des configurations de la racine avec la configuration de Prettier listée (CODE-04)", async () => {
     const files = treeFiles();
     const packageJsons = Object.fromEntries(
       await Promise.all(

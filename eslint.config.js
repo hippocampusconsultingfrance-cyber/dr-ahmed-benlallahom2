@@ -6,9 +6,10 @@ import tseslint from "typescript-eslint";
 
 // ESLint (CODE-04): its recommended rules and typescript-eslint's, without those that need the
 // types (`pnpm check` reads them), on the site's code, its tests, scripts and end-to-end
-// scenarios, and the two rules of React's hooks on the React code. `pnpm lint` fails on any
-// warning; a rule turned off on one line says why there. server/ciWorkflow.test.ts lists this
-// file as it is.
+// scenarios, the database schema (drizzle/schema.ts) and the configuration files at the root,
+// this one included, and the two rules of React's hooks on the React code. `pnpm lint` fails on
+// any warning; a rule turned off on one line says why there. server/ciWorkflow.test.ts lists
+// this file as it is.
 export default defineConfig(
   // The build, the table scripts/generate-docx-font-metrics.mjs writes, and the copies of the
   // repository that local tools keep (.claude).
@@ -22,6 +23,8 @@ export default defineConfig(
   {
     files: [
       "{client/src,server,shared,scripts,e2e}/**/*.{js,mjs,cjs,ts,mts,cts,tsx}",
+      "drizzle/*.{js,mjs,cjs,ts,mts,cts,tsx}",
+      "*.{js,mjs,cjs,ts,mts,cts,tsx}",
     ],
     extends: [js.configs.recommended, tseslint.configs.recommended],
     languageOptions: { globals: globals.node },

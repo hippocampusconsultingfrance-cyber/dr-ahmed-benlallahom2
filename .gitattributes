@@ -1,0 +1,4 @@
+# Text files are kept and checked out with LF line endings, as .prettierrc writes them
+# (`endOfLine: "lf"`), even in a Windows checkout where core.autocrlf would give them CRLF and
+# fail `pnpm format:check`. Git recognises binary files and leaves them as they are.
+* text=auto eol=lf
