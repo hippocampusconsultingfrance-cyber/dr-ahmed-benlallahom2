@@ -182,6 +182,27 @@ describe("matching mission–candidat", () => {
     }
   });
 
+  it("lit chaque mot de qualification dans les quatre langues, un autre nom d’une langue seulement comme un nom à lui, et 和, 及, 与 comme « et » (IA02-R7-PARITE, IA02-R7-ALIAS-DANS-LIEU, IA02-R7-CONJONCTION-CHINOISE)", () => {
+    const candidate = { specialty: "Anesthésie-réanimation", targetCountries: '["Émirats arabes unis"]' };
+    const match = (requiredLanguages: string, declared: string[]) =>
+      computeBriefCandidateMatch({ specialtyNeeded: "Anesthésie-réanimation", country: "Émirats arabes unis", requiredCertifications: null, requiredLanguages }, { ...candidate, languageFacts: languageFacts(JSON.stringify(declared), []) });
+    // Before (ac75d5a): English gave 15 language points of 15, the name after the qualifier, or after 和, lost.
+    for (const [required, name] of [
+      ["Anglais – compétences orales, Darija", "Darija"], ["Anglais – lire, écrire, parler, Darija", "Darija"], ["Anglais – plus de deux ans d'expérience, Darija", "Darija"],
+      ["English – more than two years, Teochew", "Teochew"], ["English – limited working proficiency, Darija", "Darija"], ["Englisch – mehr als zwei Jahre, Tigrinisch", "Tigrinisch"],
+      ["Englisch – beruflicher Gebrauch, Darija", "Darija"], ["英语 – 至少三年，上海话", "上海话"], ["Anglais – 5 ans de pratique, Darija", "Darija"], ["Anglais – usage quotidien, Darija", "Darija"],
+      ["英语和上海话", "上海话"], ["英语 – 流利及潮州话", "潮州话"],
+    ] as const) {
+      expect(match(required, ["English"]).breakdown.languages, required).toBeLessThan(15);
+      expect(match(required, ["English", name]).breakdown.languages, required).toBe(15);
+    }
+    // Before (ac75d5a): « read, write, speak » were three requirements; 国语 in 所在国语言, flamand in « Brabant flamand » and MSA
+    // required Mandarin, Dutch or Arabic. One requirement, met by the language at the head.
+    for (const [required, lead] of [["English – read, write, speak", "English"], ["英语 – 所在国语言", "英语"], ["Français – Brabant flamand", "Français"], ["English – Flemish Region", "English"], ["Français – MSA", "Français"]] as const) {
+      expect(match(required, [lead]).breakdown.languages, required).toBe(15);
+    }
+  });
+
   it("une certification déclarée par le candidat compte, elle aussi, une fois confirmée", () => {
     const declaredOnly = computeBriefCandidateMatch(brief, { ...anaesthetist, certificationFacts: certificationFacts("ACLS, ATLS", []) });
     expect(declaredOnly.breakdown.certifications).toBe(0);

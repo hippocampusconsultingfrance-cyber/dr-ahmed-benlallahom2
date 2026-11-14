@@ -388,6 +388,85 @@ describe("Candidatures — profil de matching et filtres de la liste (IA-02)", (
     }
   });
 
+  // IA02-R7-PARITE: each concept of the closed list in French, English, German and Chinese, after a dash, then a language no list
+  // knows. Before (ac75d5a), in at least one of the four languages, the qualifier was no word of the list and the language written
+  // after it went on with the « places » it opened: Anglophone met the whole text (15 language points of 15, the profile and the filter).
+  const QUALIFIER_CONCEPTS: ReadonlyArray<readonly [concept: string, phrases: readonly (readonly [fr: string, en: string, de: string, zh: string])[]]> = [
+    ["les verbes lire, écrire, parler, comprendre", [["lire, écrire, parler", "read, write, speak", "lesen, schreiben, sprechen", "读，写，说"], ["comprendre", "understand", "verstehen", "听懂"], ["savoir lire et écrire", "able to read and write", "lesen und schreiben können", "能读写"]]],
+    ["les compétences", [["compétences orales", "oral skills", "mündliche Kenntnisse", "口语能力"], ["compétences linguistiques", "language skills", "Sprachkenntnisse", "语言能力"], ["compétence", "competence", "Kompetenz", "能力"]]],
+    ["au moins, minimum", [["au moins trois ans", "at least three years", "mindestens drei Jahre", "至少三年"], ["trois ans minimum", "three years minimum", "drei Jahre mindestens", "最少三年"]]],
+    ["plus de, more than, mehr als, 以上", [["plus de deux ans", "more than two years", "mehr als zwei Jahre", "两年以上"], ["plus de 2 ans", "over 2 years", "über 2 Jahre", "超过2年"], ["plusieurs années", "several years", "mehrere Jahre", "多年"]]],
+    ["la pratique et l’expérience, et de quoi", [["5 ans de pratique", "5 years of practice", "5 Jahre Praxis", "五年实践"], ["expérience de 3 ans", "experience of 3 years", "Erfahrung von 3 Jahren", "3年的经验"]]],
+    ["l’usage professionnel et quotidien", [["usage professionnel", "professional use", "beruflicher Gebrauch", "工作使用"], ["usage quotidien", "daily use", "täglicher Gebrauch", "日常使用"], ["au quotidien", "everyday", "im Alltag", "日常"]]],
+    ["les niveaux de LinkedIn, élevé, à l’aise", [
+      ["notions", "elementary proficiency", "Grundkenntnisse", "初级"], ["compétence professionnelle limitée", "limited working proficiency", "gute Kenntnisse", "有限工作能力"],
+      ["compétence professionnelle", "professional working proficiency", "fließend", "专业工作能力"], ["capacité professionnelle complète", "full professional proficiency", "verhandlungssicher", "全面专业工作能力"],
+      ["niveau élevé", "high level", "hohes Niveau", "高水平"], ["niveau soutenu", "high level", "hohes Niveau", "高水平"], ["à l'aise", "comfortable", "sicher", "自如"],
+      ["à l'aise en conversation", "comfortable in conversation", "sicher im Gespräch", "会话自如"],
+    ]],
+  ];
+  const QUALIFIED_LANGUAGES = [["Anglais", ", ", "Darija", "Darijaphone"], ["English", ", ", "Teochew", "Teochewphone"], ["Englisch", ", ", "Tigrinisch", "Tigrinophone"], ["英语", "，", "上海话", "Shanghaiphone"]] as const;
+  const seedSpeakers = (prefix: string) => {
+    const dossier = (lastName: string, languages: string[]) => ({
+      tracking_id: `${prefix}${lastName}`, first_name: "Dr", last_name: lastName, email: `${prefix.toLowerCase()}${lastName.toLowerCase()}@test.local`, specialty: "Anesthésie-réanimation",
+      target_countries: JSON.stringify(["Émirats arabes unis"]), languages: JSON.stringify(languages), analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION,
+      cv_file_key: `recruitment/cv/${prefix}${lastName}.pdf`, cv_original_name: "cv.pdf", cv_mime_type: "application/pdf", cv_size_bytes: 1000,
+    });
+    memory.seed(cvApplications, [
+      dossier("Anglophone", ["English"]), ...QUALIFIED_LANGUAGES.map(([, , name, speaker]) => dossier(speaker, ["English", name])),
+      dossier("Sinophone", ["English", "中文"]), dossier("Neerlandophone", ["English", "Français", "Nederlands"]), dossier("Arabophone", ["English", "Français", "Arabic"]),
+    ]);
+  };
+  // The Langue filter, a profile as the page splits it at its commas, a mission: the dossiers each keeps, by their names.
+  const kept = async (language: string) => {
+    const filtered = lastNames((await caller().admin.recruitment.list({ language })).items).sort();
+    const [profile] = memory.seed(recruitmentMatchProfiles, [{ name: language, minimum_score: 0, required_languages: JSON.stringify(language.split(",").map(term => term.trim())), active: 1 }]);
+    const profiled = lastNames((await caller().admin.recruitment.list({ profileId: profile!.id as number })).items).sort();
+    const [brief] = memory.seed(clientBriefs, [{ brief_id: `BRIEF-R72-${memory.rows(clientBriefs).length}`, organization_name: "Hôpital", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie-réanimation", country: "Émirats arabes unis", required_languages: language }]);
+    const result = await caller().admin.clientBriefs.candidates({ briefId: brief!.id as number, limit: 50 });
+    const missioned = result.candidates.filter(candidate => candidate.match.breakdown.languages === 15).map(candidate => candidate.lastName).sort();
+    return { filtered, profiled, missioned };
+  };
+  const expectKept = async (language: string, names: string[]) => {
+    expect(await kept(language), language).toEqual({ filtered: [...names].sort(), profiled: [...names].sort(), missioned: [...names].sort() });
+  };
+
+  it.each(QUALIFIER_CONCEPTS)("lit %s dans les quatre langues : un nom de langue écrit après eux reste une exigence, pour la mission, le profil et le filtre Langue (IA02-R7-PARITE)", async (_, phrases) => {
+    seedSpeakers("CVR72P");
+    for (const phrase of phrases) {
+      for (let index = 0; index < QUALIFIED_LANGUAGES.length; index += 1) {
+        const [lead, separator, name, speaker] = QUALIFIED_LANGUAGES[index]!;
+        await expectKept(`${lead} – ${phrase[index]}${separator}${name}`, [speaker]);
+      }
+    }
+    // A qualifier alone is still met by the language it qualifies, in each of the four languages.
+    for (let index = 0; index < QUALIFIED_LANGUAGES.length; index += 1) {
+      await expectKept(`${QUALIFIED_LANGUAGES[index]![0]} – ${phrases[0]![index]}`, ["Anglophone", "Arabophone", "Darijaphone", "Neerlandophone", "Shanghaiphone", "Sinophone", "Teochewphone", "Tigrinophone"]);
+    }
+  });
+
+  it("lit un autre nom d’une langue de la table comme un nom à lui seulement, et 和, 及, 与 comme « et » : la mission, le profil et le filtre Langue (IA02-R7-ALIAS-DANS-LIEU, IA02-R7-CONJONCTION-CHINOISE)", async () => {
+    seedSpeakers("CVR72A");
+    const everyone = ["Anglophone", "Arabophone", "Darijaphone", "Neerlandophone", "Shanghaiphone", "Sinophone", "Teochewphone", "Tigrinophone"];
+    // Before (ac75d5a): Mandarin, Dutch or Arabic was required, and only Sinophone, Neerlandophone or Arabophone met the text.
+    await expectKept("英语 – 所在国语言", everyone);
+    await expectKept("英语 – 熟悉该国语言", everyone);
+    await expectKept("Français – Brabant flamand", ["Arabophone", "Neerlandophone"]);
+    await expectKept("English – Flemish Region", everyone);
+    await expectKept("Français – MSA", ["Arabophone", "Neerlandophone"]);
+    // Before (ac75d5a): Sinophone met « the host country's language preferred » as if it were Mandarin.
+    await expectKept("英语，所在国语言优先", []);
+    // Before (ac75d5a, daf844a, 749519f): 上海话 and 潮州话 were lost after 和, 及, 与, and everyone met these texts.
+    await expectKept("英语和上海话", ["Shanghaiphone"]);
+    await expectKept("英语 – 流利和上海话", ["Shanghaiphone"]);
+    await expectKept("英语 – 流利及上海话", ["Shanghaiphone"]);
+    // What the language is used for, after 与 (with), still qualifies it.
+    await expectKept("英语 – 与患者沟通", everyone);
+    // Before (ac75d5a, daf844a): a language's Chinese name, after the places a dash opened, went on with them.
+    await expectKept("英语 – 迪拜，上海话", ["Shanghaiphone"]);
+    await expectKept("英语 – 迪拜，医学术语", everyone);
+  });
+
   it("ne lit les langues tirées du CV, et leurs citations, que pour un profil qui exige des langues (IA-02)", async () => {
     seedCandidates(0, 3, 3);
     const [byCountry, byLanguage] = memory.seed(recruitmentMatchProfiles, [

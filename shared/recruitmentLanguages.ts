@@ -58,13 +58,17 @@ const FRENCH_OTHER_NAMES: Partial<Record<RecruitmentLanguageCode, readonly strin
  * IA02-R7: the other names a language of the table is usually written
  * under, in the language they are written in (with its inflections) or in
  * none: Castilian and Kastilisch for Spanish; Putonghua, Hochchinesisch and
- * 国语 (國語) for Chinese; 韩国语 (韓國語) for Korean; MSA (Modern Standard
- * Arabic, which names Arabic already), Hocharabisch, Fusha, Khaleeji and
- * Golfarabisch for Arabic; Hochdeutsch for German; Flemish (flamand,
- * Flämisch, 弗拉芒语), Dutch as Belgium writes it, as Intl.DisplayNames names
- * it. They name the language as its names do, but only whole: a word they
+ * 国语 (國語) for Chinese; 韩国语 (韓國語) for Korean; Hocharabisch, Fusha,
+ * Khaleeji and Golfarabisch for Arabic (Modern Standard Arabic names it
+ * already); Hochdeutsch for German; Flemish (flamand, Flämisch, 弗拉芒语),
+ * Dutch as Belgium writes it, as Intl.DisplayNames names it. They name the
+ * language as its names do, but only as a name of their own: a word they
  * start with (« Golf », « Hoch », « Standard », « Flam ») is no language
- * being typed in the Langue filter.
+ * being typed in the Langue filter; a place named with one is no language
+ * (« Brabant flamand », « Flemish Region », below); 国语 is Mandarin only
+ * where 国 starts a word (below: « 所在国语言 » is the host country's
+ * language). Not an acronym that also names other things: « MSA » is also an
+ * insurer, a degree or a certificate (« Français – MSA »).
  */
 const USUAL_OTHER_NAMES: ReadonlyArray<readonly [code: RecruitmentLanguageCode, writtenIn: "fr" | "en" | "de" | "zh" | "other", ...names: string[]]> = [
   ["es", "en", "Castilian"],
@@ -73,7 +77,7 @@ const USUAL_OTHER_NAMES: ReadonlyArray<readonly [code: RecruitmentLanguageCode, 
   ["zh", "de", "Hochchinesisch", "Standardchinesisch"],
   ["zh", "zh", "国语", "國語"],
   ["ko", "zh", "韩国语", "韓國語"],
-  ["ar", "other", "MSA", "Fusha", "Fus'ha", "Fuṣḥā", "Khaleeji", "Khaliji"],
+  ["ar", "other", "Fusha", "Fus'ha", "Fuṣḥā", "Khaleeji", "Khaliji"],
   ["ar", "de", "Hocharabisch", "Standardarabisch", "Golfarabisch"],
   ["de", "de", "Hochdeutsch"],
   ["nl", "fr", "Flamand"],
@@ -140,7 +144,10 @@ function nameForms(folded: string, writtenIn: string) {
  * Intl.DisplayNames names so (« Polynésie française », « French Guiana »,
  * « Französisch-Polynesien », « Îles Turques-et-Caïques »), which are also
  * listed here where it is missing. IA02-R6: the Gulf and the Arab world as
- * they are also written (« golfe arabe », « arabischer Raum »).
+ * they are also written (« golfe arabe », « arabischer Raum »). IA02-R7: the
+ * Flemish places, named with Flemish, another name of Dutch (« Brabant
+ * flamand », « Communauté flamande », « Flemish Region », « Flämische
+ * Region »), as « Communauté française » is.
  */
 const LISTED_NOT_LANGUAGES = [
   "Émirats arabes", "Arabische Emirate", "الإمارات العربية", "المملكة العربية", "Mandarin Oriental",
@@ -155,6 +162,8 @@ const LISTED_NOT_LANGUAGES = [
   "Flandre française", "Pays basque français", "Pays basque espagnol", "Catalogne française", "Communauté française",
   "Suisse italienne", "Suisse allemande", "Italian Switzerland", "italienische Schweiz", "italienischen Schweiz", "französische Schweiz", "französischen Schweiz", "deutsche Schweiz", "deutschen Schweiz",
   "Kurdistan turc", "Turkish Kurdistan", "Türkisch-Kurdistan", "Chypre turque", "Turkish Cyprus", "Chinese Taipei", "Taipei chinois", "Chinesisch Taipeh", "Chinesisch-Taipeh",
+  "Brabant flamand", "Communauté flamande", "Région flamande", "Flemish Brabant", "Flemish Community", "Flemish Region",
+  "Flämisch-Brabant", "Flämische Gemeinschaft", "Flämischen Gemeinschaft", "Flämische Region", "Flämischen Region",
 ];
 
 const LANGUAGE_NAMES = RECRUITMENT_LANGUAGES.flatMap(language =>
@@ -176,7 +185,10 @@ const startsWord = (folded: string, index: number) => index === 0 || !LETTER_OR_
 function namePlaces(folded: string, entry: (typeof LANGUAGE_NAMES)[number]) {
   const places: Array<readonly [number, number]> = [];
   if (!entry.atWordStart) {
-    for (let index = folded.indexOf(entry.folded); index >= 0; index = folded.indexOf(entry.folded, index + 1)) places.push([index, index + entry.folded.length]);
+    for (let index = folded.indexOf(entry.folded); index >= 0; index = folded.indexOf(entry.folded, index + 1)) {
+      if (COUNTRY_CHARACTERS.includes(entry.folded[0]!) && writesCountrysLanguage(folded, index, index + entry.folded.length)) continue;
+      places.push([index, index + entry.folded.length]);
+    }
     return places;
   }
   for (const { stem, ending } of entry.forms) {
@@ -189,6 +201,37 @@ function namePlaces(folded: string, entry: (typeof LANGUAGE_NAMES)[number]) {
 }
 
 const namesLanguage = (folded: string, entry: (typeof LANGUAGE_NAMES)[number]) => namePlaces(folded, entry).length > 0;
+
+/** The Chinese characters for a country (国, 國), that 国语 (國語), Mandarin, starts with. */
+const COUNTRY_CHARACTERS = "国國";
+/** The Chinese conjunctions (和, 及, 与, 與) and 或. */
+const CHINESE_JOINING_CHARACTERS = "和及与與或";
+/** The characters a language's Chinese name ends with: 英语, 上海话, 中文, 方言. */
+const CHINESE_NAME_ENDINGS = "语語话話文言";
+/** Taiwan's Chinese names: 台湾国语 is Taiwanese Mandarin. */
+const TAIWAN_NAMES = ["台湾", "台灣", "臺灣", "臺湾"];
+const HAN_CHARACTER = new RegExp("\\p{Script=Han}", "u");
+
+/**
+ * IA02-R7: whether 国语 (國語) at this place of a folded text, « the language
+ * of the country », is a country's language rather than Mandarin. It is
+ * Mandarin where 国 starts a word: at the text's start, after what is not a
+ * Chinese character, a conjunction, another language's name (« 粤语国语 »)
+ * or a word of the closed list below (« 会说国语 », « 流利的国语 »), and
+ * after 台湾 (台灣, 臺灣), Taiwanese Mandarin. After any other Chinese
+ * character, 国 ends a word for a country or for countries (所在国, 该国,
+ * 驻在国, 东道国, 泰国, 外国, 民国), and before 言 or 文 always (所在国语言,
+ * 工作国语言, 民国语文): the text names that country's language, which no
+ * table names.
+ */
+function writesCountrysLanguage(folded: string, start: number, end: number) {
+  if ("言文".includes(folded[end] ?? " ")) return true;
+  const before = folded[start - 1] ?? " ";
+  if (!HAN_CHARACTER.test(before) || CHINESE_JOINING_CHARACTERS.includes(before) || CHINESE_NAME_ENDINGS.includes(before)) return false;
+  const head = folded.slice(0, start);
+  if (TAIWAN_NAMES.some(name => head.endsWith(name))) return false;
+  return !REQUIREMENT_WORD_FORMS.some(word => !word.spaced && head.endsWith(word.folded));
+}
 
 /**
  * The codes of the languages of the table this folded text names. IA02-R7: a
@@ -224,15 +267,8 @@ function readNotLanguages() {
   for (const locale of OTHER_LANGUAGE_LOCALES) for (const region of regionNames(locale)) add(foldLanguageText(region.name));
   otherLanguageNames ??= readOtherLanguageNames();
   otherLanguageNames.forEach((_, name) => add(name));
-  // IA02-R7: 国语 after a country's Chinese name, or a word for countries, is that country's language or a foreign one, not
-  // Mandarin: « 韩国语 », « 泰國語 », « 外国语 », « 多国语言 ».
-  const countries = [...CHINESE_WORDS_FOR_COUNTRIES, ...["zh", "zh-Hant"].flatMap(regionNames).map(region => region.written)];
-  for (const country of countries) if (country.endsWith("国") || country.endsWith("國")) for (const language of ["语", "語"]) add(foldLanguageText(country + language));
   return Array.from(phrases);
 }
-
-/** The Chinese words for one, several or other countries that end with 国 (國): 外国, 各国, 多国, 两国, 本国, 母国… */
-const CHINESE_WORDS_FOR_COUNTRIES = ["外国", "外國", "各国", "各國", "多国", "多國", "两国", "兩國", "本国", "本國", "母国", "母國", "他国", "他國", "异国", "異國", "邻国", "鄰國", "中国", "中國"];
 
 const OPENING_BRACKETS = "([{（［";
 const CLOSING_BRACKETS = ")]}）］";
@@ -603,15 +639,25 @@ function namesOtherLanguage(text: string) {
  * levels (« et », « and », « und », « ou », « or », « oder », « above »,
  * « höher »), and (IA02-R6) a duration, a level in each of the four
  * languages alike (« 5 ans », « 5 years », « 5 Jahre », « 5年 », « 6 mois »).
- * IA02-R7: the same words in each of the four languages, so that a text is
- * read alike whatever its language: each skill and how it is had (« lu »,
- * « read », « gelesen », « 读 »; « écrit », « written », « geschrieben »,
- * « 写 »; « parlé », « spoken », « gesprochen », « 说 »; « compris »,
- * « understood », « verstanden », « 听懂 »; « lecture », « reading »,
- * « Lesen », « 阅读 »…), a duration written in words as in digits (« deux
- * ans », « two years », « zwei Jahre », « 两年 ») and an experience or a use
- * (« 3 ans d'expérience », « 3 years of practice », « 3 Jahre
- * Berufserfahrung », « 三年工作经验 »).
+ * IA02-R7: the list is written concept by concept, each with its words in
+ * French, English, German and Chinese, so that a text is read alike whatever
+ * its language: what a concept says in one of them, it says in the three
+ * others. Each skill, how it is had and its verb (« lu, écrit, parlé,
+ * compris », « lire, écrire, parler, comprendre », « read, written, spoken,
+ * understood », « read, write, speak, understand », « gelesen, geschrieben,
+ * gesprochen, verstanden », « lesen, schreiben, sprechen, verstehen », « 读,
+ * 写, 说, 听懂 »); the skills themselves (« compétences », « skills »,
+ * « Kenntnisse », « Kompetenz », « 能力 »); a duration in words as in digits,
+ * with how much of it (« au moins », « at least », « mindestens », « 至少 »;
+ * « plus de », « more than », « over », « mehr als », « über », « 以上 »;
+ * « plusieurs années », « several years », « mehrere Jahre », « 多年 »); an
+ * experience, a practice or a use, and of what kind (« 5 ans de pratique »,
+ * « 5 years of practice », « beruflicher Gebrauch », « 日常使用 », « usage
+ * quotidien », « daily use », « täglicher Gebrauch »); the levels as each
+ * language names them, LinkedIn's among them (« compétence professionnelle
+ * limitée », « limited working proficiency », « 有限工作能力 », « capacité
+ * professionnelle complète », « 全面专业工作能力 », « niveau élevé », « high
+ * level », « hohes Niveau », « 高水平 »).
  * In French with their feminine and plural endings, in English their plural
  * but for a word of one or two letters, in German their endings; in Chinese
  * anywhere; a hyphen as a space (« must-have », « near-native »,
@@ -619,28 +665,81 @@ function namesOtherLanguage(text: string) {
  * « Region », « Nadu », « Barat », « Central », « Sud », « Haute »), nor a
  * preposition that says where (« en Corse », « in Afar », « de Dakar »), nor
  * those of a variety (« standard », « littéraire »), nor those of a field or a
- * place of work (« clinique », « clinical », « Klinik », « 临床 »).
+ * place of work (« clinique », « clinical », « Klinik », « 临床 »,
+ * « médical », « medical », « medizinisch », « 医学 »).
  */
+const REQUIREMENT_CONCEPTS: ReadonlyArray<readonly [concept: string, fr: string, en: string, de: string, zh: string]> = [
+  ["required",
+    "obligatoire|obligatoirement|exigé|exigence|exigible|requis|indispensable|impératif|impérative|impérativement|nécessaire|demandé|attendu|essentiel|essentielle",
+    "required|requirement|mandatory|essential|compulsory|must|must have|needed|necessary|expected",
+    "erforderlich|notwendig|zwingend|unbedingt|pflicht|vorausgesetzt|voraussetzung|gefordert|verlangt|erwartet",
+    "必须|必需|必备|要求|需要"],
+  ["preferred, an advantage",
+    "souhaité|souhaitable|apprécié|préféré|préférable|de préférence|recommandé|recherché|plus|atout|avantage|bonus|idéalement|si possible",
+    "preferred|preferable|preferably|desirable|desired|advantage|advantageous|an advantage|plus|nice to have|asset|an asset|recommended|appreciated|considered|ideally|if possible",
+    "wünschenswert|erwünscht|gewünscht|von vorteil|vorteilhaft|bevorzugt|empfohlen|idealerweise|wenn möglich",
+    "优先|者优先|加分|最好|佳|推荐"],
+  ["optional", "facultatif|facultative|optionnel|optionnelle", "optional", "fakultativ|optional", "可选"],
+  ["only", "uniquement|seulement|exclusivement", "only|exclusively", "nur|ausschließlich", "仅|只"],
+  ["at least", "minimum|au minimum|au moins|min", "minimum|at least", "mindestens|wenigstens", "至少|最少|最低"],
+  ["more than, above", "plus de|supérieur", "more than|over|above|higher", "mehr als|über|höher", "以上|超过|高于"],
+  ["equivalent, better", "équivalent|meilleur", "equivalent|better", "gleichwertig|besser", "同等|相当|更好"],
+  ["is, would be, a", "un|une|est|serait|sera|constitue|représente", "is|are|be|would|will|should|an", "ist|sind|wäre|wären|sein|ein", "为|是|者|的"],
+  ["very, strongly", "très|fortement|vivement|absolument|vrai|réel|réelle|véritable", "very|strongly|highly|big|great|strong|absolutely|definitely", "sehr|äußerst|absolut", "非常|很"],
+  ["and, or", "et|ou", "and|or", "und|oder", "和|与|與|及|或"],
+  ["fluent, native, bilingual",
+    "courant|couramment|bilingue|natif|native|natal|maternel|maternelle",
+    "fluent|fluently|fluency|native|native speaker|near native|mother tongue|first language|bilingual",
+    "fließend|verhandlungssicher|muttersprache|muttersprachler|muttersprachlich|auf muttersprachlichem niveau|zweisprachig",
+    "流利|流畅|母语|双语"],
+  ["a level",
+    "niveau|niv|débutant|élémentaire|intermédiaire|avancé|confirmé|expert|scolaire|notions|bases|de base|moyen|moyenne|opérationnel|opérationnelle|limité|complet|élevé|soutenu",
+    "level|basic|basics|beginner|elementary|intermediate|upper intermediate|advanced|expert|limited|full|high",
+    "niveau|anfänger|fortgeschritten|grundkenntnisse|begrenzt|eingeschränkt|hoch|hoh",
+    "水平|一般|基础|初级|中级|高级|有限|全面|高"],
+  ["good, excellent", "bon|bonne|excellent|parfait|parfaitement|correct", "good|excellent|perfect|solid", "gut|ausgezeichnet|perfekt|solide|fundiert", "良好|优秀|好"],
+  ["mastery, skills",
+    "maîtrise|maîtrisé|connaissance|compétence|capacité|aptitude",
+    "proficient|proficiency|knowledge|knowledge of|command|command of|skill|competence|competency|competencies|ability|abilities|capability",
+    "kenntnis|kenntnisse|sprachkenntnis|sprachkenntnisse|kompetenz|fähigkeit|fertigkeit",
+    "熟练|精通|掌握|熟练掌握|能力|技能|具备|具有"],
+  ["professional, working", "professionnel|professionnelle", "professional|full professional|business|working", "beruflich", "专业|工作"],
+  ["daily, conversation", "quotidien|quotidienne|au quotidien|conversation|en conversation|conversationnel|conversationnelle", "daily|everyday|conversation|in conversation|conversational", "täglich|alltäglich|alltag|im alltag|konversation|gespräch|im gespräch", "日常|会话|对话"],
+  ["communication, at ease", "communication|aisance|aisé", "communication|comfortable|confident", "kommunikation|sicher", "沟通|交流|自如"],
+  ["read", "lu|lire|lecture", "read|reading", "gelesen|lesen|leseverstehen", "读|阅读|读写|听说读写"],
+  ["write", "écrit|écrire|écriture", "written|write|writing", "geschrieben|schreiben|schriftlich|schrift|in schrift|in wort und schrift|wort und schrift", "写|写作|书面|书面语"],
+  ["speak", "parlé|parler|oral|expression", "spoken|speak|speaking|oral|verbal", "gesprochen|sprechen|mündlich|wort|in wort", "说|讲|口语"],
+  ["understand", "compris|comprendre|compréhension", "understood|understand|understanding|comprehension", "verstanden|verstehen", "听懂|看懂|听得懂|看得懂|懂|理解"],
+  ["listen", "écoute|écouter", "listening|listen", "hören|hörverstehen", "听|听力"],
+  ["able to", "savoir", "able to", "können|kann", "会|能"],
+  ["use, practice", "usage|utilisation|pratique|de pratique|exercice", "use|of use|usage|practice|of practice", "gebrauch|anwendung|nutzung|praxis", "使用|运用|实践"],
+  ["experience",
+    "expérience|expérience de",
+    "experience|experienced|of experience|experience of",
+    "erfahrung|erfahrung von|berufserfahrung|arbeitserfahrung|praxiserfahrung|berufspraxis",
+    "经验|工作经验|经历"],
+  ["a duration", "an|année|mois|plusieurs", "year|yr|yrs|month|several", "jahr|monat|mehrere", "年|个月|個月|多年"],
+  // The Chinese numerals are digits, read as digits are (DIGIT, below): « 两年 », « 三年 ».
+  ["a number", "deux|trois|quatre|cinq|six|sept|huit|neuf|dix", "one|two|three|four|five|six|seven|eight|nine|ten", "eins|zwei|drei|vier|fünf|sechs|sieben|acht|neun|zehn", ""],
+  ["a test",
+    "test|test de langue|test de niveau|examen|certificat|certificat de langue|certification|certifié|diplôme|attestation|attestation de niveau|attesté|justifié|score",
+    "test|exam|examination|certificate|certification|certified|diploma|score|grade|band",
+    "prüfung|fachsprachprüfung|zertifikat|zertifiziert|nachweis",
+    "考试|证书|成绩|分|级|雅思|托福|托业"],
+  ["the language, its words",
+    "langue|langue de travail|linguistique|terminologie|vocabulaire",
+    "language|working language|linguistic|terminology|vocabulary",
+    "sprache|fachsprache|arbeitssprache|sprachlich|terminologie|fachbegriff|wortschatz",
+    "语言|工作语言|术语|用语|词汇"],
+];
+/** The language tests and their scales, named alike in every language. */
+const LANGUAGE_TEST_NAMES = "toefl|toeic|ielts|oet|pte|celpip|cael|linguaskill|duolingo|cambridge|cae|cpe|fce|bec|tcf|tef|tefaq|delf|dalf|dele|siele|celpe|goethe|testdaf|dsh|telc|ösd|fsp|hsk|hskk|tocfl|jlpt|topik|torfl|cils|celi|plida|actfl|ilr|cefr|cecr|cecrl";
 const REQUIREMENT_WORDS: ReadonlyArray<readonly [writtenIn: "fr" | "en" | "de" | "zh", words: string]> = [
-  ["fr", "obligatoire|obligatoirement|exigé|exigence|exigible|requis|indispensable|impératif|impérative|impérativement|nécessaire|souhaité|souhaitable|apprécié|préféré|préférable|de préférence|recommandé|demandé|recherché|attendu|essentiel|essentielle|facultatif|facultative|optionnel|optionnelle|plus|atout|avantage|bonus|uniquement|seulement|exclusivement|minimum|au minimum|au moins|min|si possible|idéalement"],
-  ["fr", "un|une|est|serait|sera|constitue|représente|fortement|vivement|absolument|vrai|réel|réelle|véritable|et|ou|supérieur|équivalent"],
-  ["fr", "courant|couramment|bilingue|natif|native|maternel|maternelle|langue|langue de travail|niveau|niv|débutant|élémentaire|intermédiaire|avancé|confirmé|expert|scolaire|notions|bases|de base|maîtrise|maîtrisé|connaissance|bon|bonne|très|excellent|parfait|parfaitement|correct|moyen|moyenne|opérationnel|opérationnelle|professionnel|professionnelle|conversation|conversationnel|conversationnelle|communication|lu|écrit|parlé|compris|oral|aisance|aisé|compréhension|expression|lecture|écriture|écoute|usage"],
-  ["fr", "test|test de langue|test de niveau|examen|certificat|certificat de langue|certification|certifié|diplôme|attestation|attestation de niveau|attesté|justifié|score"],
-  ["fr", "an|année|mois|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|expérience|exercice|pratique"],
-  ["en", "required|requirement|mandatory|essential|compulsory|must|must have|needed|necessary|preferred|preferable|preferably|desirable|desired|advantage|advantageous|an advantage|plus|nice to have|asset|an asset|optional|only|recommended|appreciated|considered|expected|ideally|minimum|at least|if possible"],
-  ["en", "is|are|be|would|will|should|an|strongly|highly|very|big|great|strong|absolutely|definitely|and|or|above|higher|better|equivalent"],
-  ["en", "fluent|fluently|fluency|native|native speaker|near native|mother tongue|first language|working language|language|bilingual|basic|basics|beginner|elementary|intermediate|upper intermediate|advanced|proficient|proficiency|working|knowledge|knowledge of|command|command of|professional|full professional|business|conversational|conversation|good|excellent|comfortable|confident|read|spoken|written|understood|verbal|reading|writing|speaking|listening|understanding|comprehension|oral|communication|level|skill"],
-  ["en", "test|exam|examination|certificate|certification|certified|diploma|score|grade|band"],
-  ["en", "year|yr|yrs|month|one|two|three|four|five|six|seven|eight|nine|ten|experience|experienced|of experience|practice|of practice|use|of use|usage"],
-  ["en", "toefl|toeic|ielts|oet|pte|celpip|cael|linguaskill|duolingo|cambridge|cae|cpe|fce|bec|tcf|tef|tefaq|delf|dalf|dele|siele|celpe|goethe|testdaf|dsh|telc|ösd|fsp|hsk|hskk|tocfl|jlpt|topik|torfl|cils|celi|plida|actfl|ilr|cefr|cecr|cecrl"],
-  ["de", "erforderlich|notwendig|zwingend|unbedingt|pflicht|vorausgesetzt|voraussetzung|wünschenswert|erwünscht|gewünscht|von vorteil|vorteilhaft|bevorzugt|nur|mindestens"],
-  ["de", "ist|sind|wäre|wären|sein|ein|und|oder|höher|besser|äußerst|absolut"],
-  ["de", "jahr|monat|eins|zwei|drei|vier|fünf|sechs|sieben|acht|neun|zehn|erfahrung|berufserfahrung|arbeitserfahrung|praxiserfahrung|praxis|berufspraxis|gebrauch|anwendung"],
-  ["de", "fließend|verhandlungssicher|muttersprache|muttersprachler|muttersprachlich|auf muttersprachlichem niveau|zweisprachig|gut|sehr|fundiert|sicher|solide|ausgezeichnet|perfekt|grundkenntnisse|kenntnisse|sprachkenntnis|sprachkenntnisse|fachsprache|arbeitssprache|sprache|niveau|anfänger|fortgeschritten|schriftlich|mündlich|wort|schrift|in wort|in schrift|in wort und schrift|wort und schrift|gelesen|geschrieben|gesprochen|verstanden|lesen|schreiben|sprechen|verstehen|hören|leseverstehen|hörverstehen|konversation|kommunikation|prüfung|fachsprachprüfung|zertifikat|zertifiziert"],
-  ["zh", "必须|必需|必备|要求|需要|优先|者优先|加分|最好|流利|流畅|熟练|精通|掌握|熟练掌握|会|能|使用|运用|者|为|说|讲|听|读|写|听说读写|读写|听懂|看懂|听得懂|看得懂|懂|阅读|写作|听力|理解|沟通|交流|会话|对话|日常|具备|具有|非常|很|母语|双语|一般|良好|优秀|基础|初级|中级|高级|口语|书面|水平|能力|专业|语言|工作语言|以上|级|分|考试|证书|雅思|托福|托业|年|个月|個月|经验|工作经验|经历|实践|工作"],
+  ...REQUIREMENT_CONCEPTS.flatMap(([, fr, en, de, zh]) => [["fr", fr], ["en", en], ["de", de], ["zh", zh]] as const),
+  ["en", LANGUAGE_TEST_NAMES],
 ];
 const REQUIREMENT_WORD_ENDINGS = { fr: "|e|s|es", en: "|s", de: "|e|en|er|es|em", zh: "" } as const;
-const REQUIREMENT_WORD_FORMS = REQUIREMENT_WORDS.flatMap(([writtenIn, words]) => words.split("|").map(word => {
+const REQUIREMENT_WORD_FORMS = REQUIREMENT_WORDS.flatMap(([writtenIn, words]) => words.split("|").filter(Boolean).map(word => {
   const folded = foldLanguageText(word);
   // IA02-R6: no English plural for a word of one or two letters (is, be, an, or): « ans » is the French « an », a year, not « an » + s.
   const endings = writtenIn === "en" && folded.length <= 2 ? "" : REQUIREMENT_WORD_ENDINGS[writtenIn];
@@ -939,12 +1038,40 @@ function codesBeside(text: string, places: readonly RegionName[]) {
  * « C2 »), whatever words are written with it, among the places a dash
  * opened too (IA02-R6-LANGUE-APRES-LIEUX): a language's name is never lost
  * there, at the cost of a place that holds one (« Tamil Nadu », « Somali
- * Region ») read as a requirement of its own after a separator.
+ * Region ») read as a requirement of its own after a separator. IA02-R7: and
+ * a language's Chinese name, which no list knows (below: « 英语 – 迪拜，上海话 »).
  */
 function namesLanguageAmong(part: string, places: readonly RegionName[]) {
   if (codesBeside(part, places).length) return true;
   if (namesOtherLanguage(part)) return !namesRegion(part);
-  return recruitmentLanguagePrefixCodes(part).length > 0 && !isRegionName(part);
+  return (recruitmentLanguagePrefixCodes(part).length > 0 && !isRegionName(part)) || chineseLastWord(part) === "name";
+}
+
+/**
+ * IA02-R7: how a part written in Chinese ends, once the known words a language
+ * is qualified with that end otherwise are set aside (« 上海话优先 »,
+ * « 潮州话流利 », « 会说上海话的 »). A language's Chinese name ends with 语,
+ * 话, 文 or 言, whether a list knows it or not (粤语, 上海话, 潮州话, 台语,
+ * 手语, 中文, 方言): such a last word, outside the closed list, is a
+ * language's name (`name`); a word of the list that ends so is what the
+ * language is used for or how (术语, 用语, 口语, 语言: `qualifier`); any
+ * other Chinese word is a place, a field or a use (迪拜, 患者沟通: `other`);
+ * a part whose last word is not Chinese, or that is wholly the known words a
+ * language is qualified with, is none of them (`none`).
+ */
+function chineseLastWord(part: string): "name" | "qualifier" | "other" | "none" {
+  if (!HAN_CHARACTER.test(part) || saysOnlyQualifiers(part)) return "none";
+  let rest = comparedText(part).core;
+  for (;;) {
+    rest = rest.replace(TRAILING_NOT_WORDS, "");
+    const word = REQUIREMENT_WORD_FORMS.find(form => !form.spaced && rest.endsWith(form.folded));
+    if (word && CHINESE_NAME_ENDINGS.includes(word.folded.at(-1)!)) return "qualifier";
+    if (!word || rest.length <= word.folded.length) break;
+    rest = rest.slice(0, -word.folded.length);
+  }
+  const last = rest.at(-1) ?? "";
+  if (!HAN_CHARACTER.test(last)) return "none";
+  return CHINESE_NAME_ENDINGS.includes(last) ? "name" : "other";
 }
 
 /**
@@ -991,9 +1118,11 @@ function leadsOwnRequirement(part: string) {
  * « Anglais – courant », « Anglais – C1 », nor « Anglais – Wolof »).
  */
 function opensPlaces(requirement: string, places: readonly RegionName[]) {
-  const parts = partsOutsideBrackets(requirement, BETWEEN_NAMES);
+  const parts = partPlaces(requirement, BETWEEN_NAMES);
   const last = parts.at(-1);
-  return parts.length > 1 && last !== undefined && !namesLanguageBesideDash(last, places) && !saysOnlyRequirements(last);
+  if (parts.length < 2 || !last) return false;
+  const part = requirement.slice(last.start, last.end);
+  return !namesLanguageBetween(part, requirement.slice(parts.at(-2)!.end, last.start), places) && !saysOnlyRequirements(part);
 }
 
 /** Whether this text is wholly a region name of Intl.DisplayNames in French, English, German or Chinese (« Russia », « Japan », « Chine »). */
@@ -1018,13 +1147,16 @@ function isRegionName(text: string) {
  * wolof » are one). A name of the table in a place's name names no language
  * (« English – Persian Gulf », « Anglais – Polynésie française »), nor a
  * country's name written in the language of the text (« Englisch – Italien »).
- * Another name of the language beside it is a variety of it (« Arabe – MSA »,
- * « Chinois – Mandarin »: one, IA02-R7).
+ * Another name of the language beside it is a variety of it (« Arabe –
+ * Fusha », « Chinois – Mandarin »: one, IA02-R7). After a Chinese
+ * conjunction, as after « et », « and », « und », a part is a language of its
+ * own also when no list knows it (below: « 英语和上海话 », « 英语 – 流利及潮州话 »:
+ * two, IA02-R7).
  */
 function partsBetweenNames(text: string, places: readonly RegionName[]) {
-  const groups = groupedParts(text, BETWEEN_NAMES, part => namesLanguageBesideDash(part, places));
+  const groups = groupedParts(text, BETWEEN_NAMES, (part, before) => namesLanguageBetween(part, before, places));
   // IA02-R7: a part that names only languages of the table the part before it names, under another of their names, is a
-  // variety of them that qualifies them (« Arabe – MSA », « Chinois – Mandarin »), as « Arabe – Golfe » does.
+  // variety of them that qualifies them (« Arabe – Fusha », « Chinois – Mandarin »), as « Arabe – Golfe » does.
   const merged: typeof groups = [];
   let previous: readonly RecruitmentLanguageCode[] = [];
   for (const group of groups) {
@@ -1045,18 +1177,46 @@ function namesLanguageBesideDash(part: string, places: readonly RegionName[]) {
   return codesBeside(part, places).length > 0 || (namesOtherLanguage(part) && namesOnlyLanguages(part) && !namesRegion(part));
 }
 
+/** A Chinese conjunction, which 和, 及 and 与 also are within a word (埃及, 共和国) or as « with » (« 与患者沟通 »). */
+const CHINESE_CONJUNCTION_WRITTEN = new RegExp(CHINESE_CONJUNCTION.source, "u");
+/** What ends a text after its last word: digits, the Chinese numerals among them (« 上海话三年以上 »), punctuation, spaces. */
+const TRAILING_NOT_WORDS = new RegExp(`(?:[^\\p{L}]|${DIGIT.source})+$`, "u");
+
+/**
+ * Whether a part between a Chinese conjunction or a dash, after these
+ * separators (`before`), names a language: beside a dash, as read above; after
+ * a Chinese conjunction (IA02-R7), as after « et », « and », « und », any part
+ * but one that is wholly the known words a language is qualified with, or a
+ * Chinese phrase whose last word is no language's Chinese name (above):
+ * « 英语和上海话 » and « 英语 – 流利及潮州话 » are two, as « Anglais et
+ * Shimaoré » and « English – fluent and Teochew » are, and « 英语和Darija »
+ * too. 和 and 与 also mean « with », and a Chinese phrase that ends otherwise
+ * says what the language is used for (« 英语 – 与患者沟通 », with the
+ * patients), as « avec les patients » does.
+ */
+function namesLanguageBetween(part: string, before: string, places: readonly RegionName[]) {
+  if (namesLanguageBesideDash(part, places)) return true;
+  if (!CHINESE_CONJUNCTION_WRITTEN.test(before) || saysOnlyQualifiers(part)) return false;
+  // A part that is not wholly qualifiers: a requirement unless it is a Chinese phrase that ends otherwise than a name.
+  const last = chineseLastWord(part);
+  return last === "name" || last === "none";
+}
+
 /** Where each part of a text between these separators lies in it: its start and its end. */
 type PartPlace = { start: number; end: number };
 
 /**
  * The parts of a text between these separators, each that names a language
  * with the parts after it that name none, and the parts before the first one
- * that names one with it: their starts and ends in the text.
+ * that names one with it: their starts and ends in the text. Whether a part
+ * names one is read with the separators written before it.
  */
-function groupedParts(text: string, separator: RegExp, names: (part: string) => boolean) {
+function groupedParts(text: string, separator: RegExp, names: (part: string, before: string) => boolean) {
   const groups: Array<PartPlace & { names: boolean }> = [];
+  let previousEnd = 0;
   for (const { start, end } of partPlaces(text, separator)) {
-    const named = names(text.slice(start, end));
+    const named = names(text.slice(start, end), text.slice(previousEnd, start));
+    previousEnd = end;
     const last = groups.at(-1);
     if (last && (!named || !last.names)) Object.assign(last, { end, names: named || last.names });
     else groups.push({ start, end, names: named });

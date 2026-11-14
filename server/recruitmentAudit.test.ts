@@ -138,6 +138,24 @@ describe("recruitment matching profiles", () => {
     expect(matchesRecruitmentProfile({ ...candidate, languages: ["English"], profile: profile(["English – read", "written", "spoken"]) })).toBe(true);
   });
 
+  it("garde comme exigence, dans un profil saisi avec des virgules, un nom de langue écrit après un mot de qualification de chacune des quatre langues ou après 和, 及, 与, et ne lit un autre nom d’une langue que comme un nom à lui (IA02-R7-PARITE, IA02-R7-ALIAS-DANS-LIEU, IA02-R7-CONJONCTION-CHINOISE)", () => {
+    const candidate = { score: 70, specialty: "Anesthésie-réanimation", targetCountries: ["Émirats arabes unis"], extractedSkills: [] };
+    const profile = (requiredLanguages: string[]) => ({ targetCountry: null, specialty: null, minimumScore: 0, requiredLanguages: JSON.stringify(requiredLanguages), requiredSkills: null });
+    // Before (ac75d5a): the candidate who had only English was in the profile.
+    for (const [required, name] of [
+      [["Anglais – compétences linguistiques", "Shimaoré"], "Shimaoré"], [["Anglais – lire", "écrire", "parler", "Darija"], "Darija"], [["English – at least three years", "Teochew"], "Teochew"],
+      [["English – over 2 years", "Teochew"], "Teochew"], [["Englisch – täglicher Gebrauch", "Tigrinisch"], "Tigrinisch"], [["英语 – 有限工作能力", "上海话"], "上海话"],
+      [["Anglais – capacité professionnelle complète", "Darija"], "Darija"], [["英语 – 流利和上海话"], "上海话"],
+    ] as const) {
+      expect(matchesRecruitmentProfile({ ...candidate, languages: ["English"], profile: profile([...required]) }), required.join(", ")).toBe(false);
+      expect(matchesRecruitmentProfile({ ...candidate, languages: ["English", name], profile: profile([...required]) }), required.join(", ")).toBe(true);
+    }
+    // Before (ac75d5a): « write », « speak » were requirements nobody met; 国语 in 驻在国语言 and « Communauté flamande » named Mandarin and Dutch.
+    for (const [required, lead] of [[["English – read", "write", "speak"], "English"], [["英语 – 驻在国语言"], "英语"], [["Anglais – Communauté flamande"], "Anglais"]] as const) {
+      expect(matchesRecruitmentProfile({ ...candidate, languages: [lead], profile: profile([...required]) }), required.join(", ")).toBe(true);
+    }
+  });
+
   it("handles malformed JSON safely", () => {
     expect(parseRecruitmentJsonArray("not-json")).toEqual([]);
     expect(parseRecruitmentJsonArray(JSON.stringify(["France", 1, null]))).toEqual(["France"]);
